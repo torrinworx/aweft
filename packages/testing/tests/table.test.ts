@@ -49,6 +49,10 @@ test('the intended dependency graph is legal under the table', () => {
 	// The edges the architecture calls for. If a tier is edited so one of these becomes
 	// illegal, this fails rather than the mistake surfacing when the package is written.
 	const intended: ReadonlyArray<readonly [string, string]> = [
+		['core', 'codec'],
+		['sync', 'codec'],
+		['store', 'codec'],
+		['testing', 'codec'],
 		['schema', 'core'],
 		['sync', 'core'],
 		['sync', 'schema'],
@@ -73,6 +77,8 @@ test('the intended dependency graph is legal under the table', () => {
 
 test('the table rejects the edges the architecture forbids', () => {
 	const forbidden: ReadonlyArray<readonly [string, string]> = [
+		['codec', 'core'],
+		['codec', 'testing'],
 		['core', 'schema'],
 		['core', 'store'],
 		['dom', 'server'],
