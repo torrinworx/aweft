@@ -1,0 +1,18 @@
+{
+	"name": "@aweftjs/codec",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"description": "The normative encoding: values, deltas and commits to bytes, and back.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "node --test tests/*.test.ts"
+	},
+	"aweft": {
+		"tier": 1,
+		"branchCoverage": 90
+	}
+}

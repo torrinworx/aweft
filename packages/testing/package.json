@@ -11,6 +11,9 @@
 	"scripts": {
 		"test": "node --test tests/*.test.ts"
 	},
+	"dependencies": {
+		"@aweftjs/codec": "*"
+	},
 	"aweft": {
 		"tier": "integrator",
 		"branchCoverage": 80

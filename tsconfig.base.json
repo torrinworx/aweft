@@ -5,6 +5,11 @@
 		"module": "nodenext",
 		"moduleResolution": "nodenext",
 
+		"baseUrl": ".",
+		"paths": {
+			"@aweftjs/*": ["./packages/*/src/index.ts"]
+		},
+
 		"strict": true,
 		"noUncheckedIndexedAccess": true,
 		"noImplicitOverride": true,
