@@ -14,6 +14,7 @@
 		"deps": "depcruise packages --config .dependency-cruiser.cjs",
 		"fixtures": "node packages/testing/scripts/generate-fixtures.ts",
 		"proofs": "node examples/core/main.ts",
+		"bench": "node bench/derived.ts && node bench/write.ts",
 		"test": "npm run typecheck && npm run deps && node --test --experimental-test-coverage packages/*/tests/*.test.ts && npm run proofs",
 		"gate": "npm test"
 	},
