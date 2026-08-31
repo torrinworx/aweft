@@ -2,6 +2,7 @@
 	"files": [],
 	"references": [
 		{ "path": "packages/codec" },
+		{ "path": "packages/core" },
 		{ "path": "packages/testing" }
 	]
 }

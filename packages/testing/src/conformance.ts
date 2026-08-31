@@ -77,6 +77,25 @@ export const commitToJson = (commit: Commit, bytes: Uint8Array): CommitJson => {
 const withTag = (deltas: readonly Delta[], tag: Uint8Array | undefined): Commit =>
 	tag === undefined ? { deltas } : { deltas, tag };
 
+/**
+ * One reading of the format, as a function.
+ *
+ * The suite is the same for every implementation, and there is more than one: a model that
+ * stores plain data, and a real reactive tree. Both must reach the same document from the same
+ * bytes, which is the point of running the fixtures twice.
+ *
+ * Params:
+ *   initial: the document to start from
+ *   commits: the commits to apply, in order, each whole
+ *
+ * Returns: the document reached. Throws with a stated `reason` when a commit is refused.
+ */
+export type Applier = (initial: DocumentJson, commits: readonly Commit[]) => DocumentJson;
+
+/** The harness's own reading of the specification: plain data, no reactivity. */
+export const modelApplier: Applier = (initial, commits) =>
+	commits.reduce<DocumentJson>(applyCommit, initial);
+
 /** A seed derived from the fixture name, so a failing shuffle is the same one next run. */
 export const seedFrom = (text: string): number => {
 	let h = 0x811c9dc5;
@@ -115,7 +134,7 @@ const fail = (name: string, check: string, actual: unknown, expected: unknown): 
  *
  * Throws: an Error naming the fixture and the check that failed. Returns nothing on success.
  */
-export const checkFixture = (f: Fixture): void => {
+export const checkFixture = (f: Fixture, applier: Applier = modelApplier): void => {
 	const seed = seedFrom(f.name);
 
 	for (const c of f.commits) {
@@ -145,14 +164,14 @@ export const checkFixture = (f: Fixture): void => {
 	];
 
 	for (const [label, reorder] of orders) {
-		let doc = f.initial;
-		for (const c of f.commits) {
+		const commits = f.commits.map((c) => {
 			const decoded = decodeCommit(bytesFromHex(c.bytes));
-			doc = applyCommit(doc, withTag(reorder(decoded.deltas), decoded.tag));
-		}
+			return withTag(reorder(decoded.deltas), decoded.tag);
+		});
 
-		if (canonicalJson(doc) !== canonicalJson(f.final)) {
-			fail(f.name, `applying the deltas ${label} did not reach the stated document`, doc, f.final);
+		const reached = applier(f.initial, commits);
+		if (canonicalJson(reached) !== canonicalJson(f.final)) {
+			fail(f.name, `applying the deltas ${label} did not reach the stated document`, reached, f.final);
 		}
 	}
 };
@@ -168,14 +187,14 @@ export const checkFixture = (f: Fixture): void => {
  * the fixture names. Rejecting for the wrong reason counts as a failure: a format whose
  * implementations disagree about why something is invalid has not been specified.
  */
-export const checkInvalidFixture = (f: InvalidFixture): void => {
+export const checkInvalidFixture = (f: InvalidFixture, applier: Applier = modelApplier): void => {
 	const attempt = (): void => {
 		const commit = decodeCommit(bytesFromHex(f.bytes));
 		if (f.stage === 'decode') return;
 		if (f.initial === undefined) {
 			throw new Error(`${f.name}: an apply-stage fixture must state an initial document`);
 		}
-		applyCommit(f.initial, commit);
+		applier(f.initial, [commit]);
 	};
 
 	let error: { reason?: string; message?: string } | undefined;

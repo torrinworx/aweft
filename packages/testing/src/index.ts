@@ -5,7 +5,9 @@ export { applyCommit, canonicalJson, slotKey, valueFromJson, valueToJson } from 
 export type { DocumentJson, ObservableJson, ValueJson } from './document.ts';
 
 export {
-	checkFixture, checkInvalidFixture, commitToJson, deltaFromJson, deltaToJson, refFromJson,
-	refToJson, seedFrom, shuffle,
+	checkFixture, checkInvalidFixture, commitToJson, deltaFromJson, deltaToJson, modelApplier,
+	refFromJson, refToJson, seedFrom, shuffle,
 } from './conformance.ts';
-export type { CommitJson, DeltaJson, Fixture, InvalidFixture, RefJson } from './conformance.ts';
+export type {
+	Applier, CommitJson, DeltaJson, Fixture, InvalidFixture, RefJson,
+} from './conformance.ts';
