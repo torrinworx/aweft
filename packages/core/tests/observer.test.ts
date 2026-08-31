@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { atomic, createArray, createObject, observer } from '../src/index.ts';
+import { alias, atomic, createArray, createObject, observer } from '../src/index.ts';
 import type { Change } from '../src/index.ts';
 
 interface Block {
@@ -195,4 +195,33 @@ test('two watchers on one commit are each called once, with what they asked for'
 	assert.equal(wide[0]!.deltas.length, 2);
 	assert.equal(tight.length, 1);
 	assert.equal(tight[0]!.deltas.length, 1);
+});
+
+test('a path stops at an alias, so reading and watching agree', () => {
+	const person = createObject<Settings>({ theme: 'dark' });
+	const doc = createObject<Doc>({ settings: person });
+	(doc as Record<string, unknown>).shortcut = alias(person);
+
+	const seen: Change[] = [];
+	observer(doc).path('shortcut', 'theme').watch((change) => seen.push(change));
+
+	assert.equal(observer(doc).path('shortcut').get(), person, 'the alias slot still reads');
+	assert.equal(
+		observer(doc).path('shortcut', 'theme').get(), undefined,
+		'but a path does not cross it, because delivery cannot either',
+	);
+
+	person.theme = 'light';
+	assert.equal(seen.length, 0);
+	assert.equal(observer(doc).path('shortcut', 'theme').get(), undefined, 'still nothing, consistently');
+
+	// The attach path is the one that works, for reading and for watching alike.
+	const viaAttach: Change[] = [];
+	observer(doc).path('settings', 'theme').watch((change) => viaAttach.push(change));
+	person.theme = 'darker';
+
+	assert.equal(observer(doc).path('settings', 'theme').get(), 'darker');
+	assert.equal(viaAttach.length, 1);
+
+	assert.throws(() => observer(doc).path('shortcut', 'theme').set('x'), { reason: 'slot-missing' });
 });

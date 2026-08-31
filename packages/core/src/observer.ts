@@ -18,7 +18,7 @@ export interface Observer {
 	get(): unknown;
 	/** Write the slot the path names. The observable holding it has to exist. */
 	set(value: unknown): void;
-	/** Narrow to a slot, or to whatever observable sits in it. */
+	/** Narrow to a slot, or to whatever observable sits in it. A path stops at an alias. */
 	path(...keys: ScopeKey[]): Observer;
 	/** Drop changes to these slots of whatever the scope reaches. */
 	ignore(...keys: ScopeKey[]): Observer;
@@ -41,8 +41,16 @@ const locate = (base: Node, keys: readonly ScopeKey[]): Resolved => {
 
 	for (let i = 0; i < keys.length - 1; i++) {
 		if (holder === undefined) return { holder: undefined, slot: undefined };
+
 		const cell = holder.slots.get(resolveKey(holder, keys[i]!));
-		holder = cell !== undefined && cell.kind === 'ref' ? cell.node : undefined;
+
+		// A path walks attach edges and stops at an alias. Delivery walks up the attach edges,
+		// so a path that crossed an alias would read a live value that no watcher on it could
+		// ever see change: correct once, then silently stale. To follow an alias, read it and
+		// start a scope at what it names.
+		holder = cell !== undefined && cell.kind === 'ref' && cell.edge === 'attach' && cell.node.parent === holder
+			? cell.node
+			: undefined;
 	}
 
 	if (holder === undefined || keys.length === 0) return { holder, slot: undefined };
