@@ -1,0 +1,7 @@
+{
+	"name": "truncated",
+	"description": "A commit that stops in the middle.",
+	"stage": "decode",
+	"reason": "truncated",
+	"bytes": "818184004c00000000000000000000000182006161"
+}

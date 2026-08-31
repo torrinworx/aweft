@@ -1,0 +1,7 @@
+{
+	"name": "not-a-commit",
+	"description": "Bytes that decode cleanly and are not a commit.",
+	"stage": "decode",
+	"reason": "invalid-commit",
+	"bytes": "706120636f6d6d69742c20686f6e657374"
+}

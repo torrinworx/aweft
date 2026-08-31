@@ -1,0 +1,7 @@
+{
+	"name": "unknown-delta-type",
+	"description": "A fourth kind of change.",
+	"stage": "decode",
+	"reason": "unknown-delta-type",
+	"bytes": "818184034c0000000000000000000000018200616101"
+}

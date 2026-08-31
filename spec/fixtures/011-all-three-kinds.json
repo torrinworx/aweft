@@ -1,0 +1,100 @@
+{
+	"name": "all-three-kinds",
+	"description": "One commit touching an object, an array and a map.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"blocks": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "array"
+					},
+					"presence": {
+						"ref": "AAAAAAAAAAAAAAAD",
+						"kind": "map"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "array",
+				"slots": {
+					"40": "only"
+				}
+			},
+			"AAAAAAAAAAAAAAAD": {
+				"kind": "map",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818384014c000000000000000000000001820066626c6f636b7382014c00000000000000000000000284004c00000000000000000000000282014160667365636f6e6484004c00000000000000000000000382024c0000000000000000000000096765646974696e67",
+			"deltas": [
+				{
+					"type": "replace",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "blocks"
+					},
+					"value": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "array"
+					}
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "array",
+						"key": "60"
+					},
+					"value": "second"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAD",
+					"ref": {
+						"kind": "map",
+						"key": "AAAAAAAAAAAAAAAJ"
+					},
+					"value": "editing"
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"blocks": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "array"
+					},
+					"presence": {
+						"ref": "AAAAAAAAAAAAAAAD",
+						"kind": "map"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "array",
+				"slots": {
+					"40": "only",
+					"60": "second"
+				}
+			},
+			"AAAAAAAAAAAAAAAD": {
+				"kind": "map",
+				"slots": {
+					"AAAAAAAAAAAAAAAJ": "editing"
+				}
+			}
+		}
+	}
+}

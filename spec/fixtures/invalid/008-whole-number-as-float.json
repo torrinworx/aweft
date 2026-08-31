@@ -1,0 +1,7 @@
+{
+	"name": "whole-number-as-float",
+	"description": "Three, written as a float. Two encoders would disagree about one value.",
+	"stage": "decode",
+	"reason": "non-canonical-float",
+	"bytes": "818184004c00000000000000000000000182006161fb4008000000000000"
+}

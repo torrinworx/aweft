@@ -1,0 +1,7 @@
+{
+	"name": "deltas-out-of-order",
+	"description": "The right deltas in the wrong order. Refused rather than sorted, because two byte strings meaning one commit is exactly what the ordering rule exists to prevent.",
+	"stage": "decode",
+	"reason": "deltas-out-of-order",
+	"bytes": "818284004c000000000000000000000002820061610184004c0000000000000000000000018200616101"
+}

@@ -1,0 +1,7 @@
+{
+	"name": "position-ending-in-zero",
+	"description": "A position that ends in a zero byte. Nothing could ever be inserted before it, so the array would have a place it can never grow into.",
+	"stage": "decode",
+	"reason": "invalid-position",
+	"bytes": "818184004c000000000000000000000001820142400001"
+}

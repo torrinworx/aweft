@@ -1,0 +1,92 @@
+{
+	"name": "nested-subtree",
+	"description": "A whole subtree arrives in one commit: the parent slot names the child, and the child fills itself in. Nothing depends on which delta is applied first.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818484004c000000000000000000000001820066626c6f636b7382014c00000000000000000000000284004c0000000000000000000000028201414082004c00000000000000000000000384004c000000000000000000000003820064746578746568656c6c6f84004c0000000000000000000000038200647479706569706172616772617068",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "blocks"
+					},
+					"value": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "array"
+					}
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "array",
+						"key": "40"
+					},
+					"value": {
+						"ref": "AAAAAAAAAAAAAAAD",
+						"kind": "object"
+					}
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAD",
+					"ref": {
+						"kind": "object",
+						"key": "text"
+					},
+					"value": "hello"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAD",
+					"ref": {
+						"kind": "object",
+						"key": "type"
+					},
+					"value": "paragraph"
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"blocks": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "array"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "array",
+				"slots": {
+					"40": {
+						"ref": "AAAAAAAAAAAAAAAD",
+						"kind": "object"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAD": {
+				"kind": "object",
+				"slots": {
+					"text": "hello",
+					"type": "paragraph"
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,43 @@
+{
+	"name": "integrity-tag",
+	"description": "A commit carrying the optional tag. The tag rides along and is not read here.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"title": "a page"
+				}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "828184014c0000000000000000000000018200657469746c656f6120706167652c2072657669736564449f2b41c7",
+			"deltas": [
+				{
+					"type": "replace",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "title"
+					},
+					"value": "a page, revised"
+				}
+			],
+			"tag": "9f2b41c7"
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"title": "a page, revised"
+				}
+			}
+		}
+	}
+}

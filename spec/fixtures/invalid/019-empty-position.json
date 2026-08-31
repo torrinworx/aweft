@@ -1,0 +1,7 @@
+{
+	"name": "empty-position",
+	"description": "A position with no bytes. Nothing sorts before it either.",
+	"stage": "decode",
+	"reason": "invalid-position",
+	"bytes": "818184004c00000000000000000000000182014001"
+}

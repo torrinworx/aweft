@@ -1,0 +1,7 @@
+{
+	"name": "remove-with-value",
+	"description": "A remove carrying what used to be there. Prior values do not ride along.",
+	"stage": "decode",
+	"reason": "unexpected-value",
+	"bytes": "818184024c0000000000000000000000018200616101"
+}

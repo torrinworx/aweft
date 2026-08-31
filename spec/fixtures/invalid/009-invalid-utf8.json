@@ -1,0 +1,7 @@
+{
+	"name": "invalid-utf8",
+	"description": "A slot name that is not text.",
+	"stage": "decode",
+	"reason": "invalid-utf8",
+	"bytes": "818184004c00000000000000000000000162c32801"
+}

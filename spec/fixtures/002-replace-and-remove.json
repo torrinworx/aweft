@@ -1,0 +1,51 @@
+{
+	"name": "replace-and-remove",
+	"description": "The two ways a slot that already exists can change.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"title": "a page",
+					"draft": true
+				}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818283024c000000000000000000000001820065647261667484014c0000000000000000000000018200657469746c656d61206265747465722070616765",
+			"deltas": [
+				{
+					"type": "remove",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "draft"
+					}
+				},
+				{
+					"type": "replace",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "title"
+					},
+					"value": "a better page"
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"title": "a better page"
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,7 @@
+{
+	"name": "duplicate-slot",
+	"description": "Two deltas about one slot. Which one wins would be a merge rule.",
+	"stage": "decode",
+	"reason": "duplicate-slot",
+	"bytes": "818284004c000000000000000000000001820061610184014c0000000000000000000000018200616102"
+}

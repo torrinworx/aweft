@@ -1,0 +1,16 @@
+{
+	"name": "replace-missing",
+	"description": "A replace of a slot that is not there. That is an add.",
+	"stage": "apply",
+	"reason": "slot-missing",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"bytes": "818184014c0000000000000000000000018200657469746c6566612070616765"
+}

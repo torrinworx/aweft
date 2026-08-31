@@ -1,0 +1,18 @@
+{
+	"name": "remove-missing",
+	"description": "A remove of a slot that is not there.",
+	"stage": "apply",
+	"reason": "slot-missing",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"title": "a page"
+				}
+			}
+		}
+	},
+	"bytes": "818183024c0000000000000000000000018200687375627469746c65"
+}

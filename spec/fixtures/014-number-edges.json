@@ -1,0 +1,140 @@
+{
+	"name": "number-edges",
+	"description": "The boundaries of the number rule: whole numbers in the exact range are integers, and everything else is a float.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818b84004c00000000000000000000000182006468616c66fb3fe000000000000084004c00000000000000000000000182006468756765fb7e37e43c8800759c84004c00000000000000000000000182006474696e79fb3e7ad7f29abcaf4884004c0000000000000000000000018200647a65726f0084004c000000000000000000000001820065736d616c6c1784004c0000000000000000000000018200676f6e6542797465181884004c0000000000000000000000018200686e656761746976652084004c00000000000000000000000182006874776f427974657319010084004c00000000000000000000000182006b6265796f6e644578616374fb436000000000000084004c00000000000000000000000182006c6c61726765737445786163741b001fffffffffffff84004c00000000000000000000000182006d736d616c6c65737445786163743b001fffffffffffff",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "half"
+					},
+					"value": 0.5
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "huge"
+					},
+					"value": 1e+300
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "tiny"
+					},
+					"value": 1e-7
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "zero"
+					},
+					"value": 0
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "small"
+					},
+					"value": 23
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "oneByte"
+					},
+					"value": 24
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "negative"
+					},
+					"value": -1
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "twoBytes"
+					},
+					"value": 256
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "beyondExact"
+					},
+					"value": 36028797018963970
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "largestExact"
+					},
+					"value": 9007199254740991
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "smallestExact"
+					},
+					"value": -9007199254740992
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"zero": 0,
+					"small": 23,
+					"oneByte": 24,
+					"twoBytes": 256,
+					"largestExact": 9007199254740991,
+					"smallestExact": -9007199254740992,
+					"negative": -1,
+					"half": 0.5,
+					"tiny": 1e-7,
+					"huge": 1e+300,
+					"beyondExact": 36028797018963970
+				}
+			}
+		}
+	}
+}

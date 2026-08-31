@@ -1,0 +1,7 @@
+{
+	"name": "empty-commit",
+	"description": "A commit saying nothing. Coalescing that cancels out emits nothing at all.",
+	"stage": "decode",
+	"reason": "empty-commit",
+	"bytes": "8180"
+}

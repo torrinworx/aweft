@@ -1,0 +1,7 @@
+{
+	"name": "tagged-value",
+	"description": "A tagged value. There are no tags to agree on.",
+	"stage": "decode",
+	"reason": "unsupported-major",
+	"bytes": "818184004c00000000000000000000000182006161c000"
+}

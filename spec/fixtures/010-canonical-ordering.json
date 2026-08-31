@@ -1,0 +1,100 @@
+{
+	"name": "canonical-ordering",
+	"description": "Deltas handed over in a scrambled order across several observables. The bytes come out in one order, so two encoders agree without agreeing on anything else.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818684004c000000000000000000000001820061610084004c000000000000000000000001820061620184004c0000000000000000000000028200616d0284004c0000000000000000000000028200616e0584004c000000000000000000000003820061790484004c0000000000000000000000038200617a03",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "a"
+					},
+					"value": 0
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "b"
+					},
+					"value": 1
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "object",
+						"key": "m"
+					},
+					"value": 2
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "object",
+						"key": "n"
+					},
+					"value": 5
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAD",
+					"ref": {
+						"kind": "object",
+						"key": "y"
+					},
+					"value": 4
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAD",
+					"ref": {
+						"kind": "object",
+						"key": "z"
+					},
+					"value": 3
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"a": 0,
+					"b": 1
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "object",
+				"slots": {
+					"m": 2,
+					"n": 5
+				}
+			},
+			"AAAAAAAAAAAAAAAD": {
+				"kind": "object",
+				"slots": {
+					"y": 4,
+					"z": 3
+				}
+			}
+		}
+	}
+}

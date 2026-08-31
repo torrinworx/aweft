@@ -1,0 +1,85 @@
+{
+	"name": "commit-sequence",
+	"description": "Three commits in order, each depending on the one before it.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818184004c0000000000000000000000018200657469746c65656472616674",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "title"
+					},
+					"value": "draft"
+				}
+			]
+		},
+		{
+			"bytes": "818284004c0000000000000000000000018200656472616674f584014c0000000000000000000000018200657469746c656f7365636f6e642074686f7567687473",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "draft"
+					},
+					"value": true
+				},
+				{
+					"type": "replace",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "title"
+					},
+					"value": "second thoughts"
+				}
+			]
+		},
+		{
+			"bytes": "818283024c000000000000000000000001820065647261667484014c0000000000000000000000018200657469746c65697075626c6973686564",
+			"deltas": [
+				{
+					"type": "remove",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "draft"
+					}
+				},
+				{
+					"type": "replace",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "title"
+					},
+					"value": "published"
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"title": "published"
+				}
+			}
+		}
+	}
+}

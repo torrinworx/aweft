@@ -1,0 +1,110 @@
+{
+	"name": "map-identity",
+	"description": "A map slot is named by an identity, and holds a reference to state.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"presence": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "map"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "map",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818484004c00000000000000000000000282024c00000000000000000000000a82004c00000000000000000000000b84004c00000000000000000000000282024c00000000000000000000000c82004c00000000000000000000000d84004c00000000000000000000000b820066637572736f72182a84004c00000000000000000000000d820066637572736f7207",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "map",
+						"key": "AAAAAAAAAAAAAAAK"
+					},
+					"value": {
+						"ref": "AAAAAAAAAAAAAAAL",
+						"kind": "object"
+					}
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "map",
+						"key": "AAAAAAAAAAAAAAAM"
+					},
+					"value": {
+						"ref": "AAAAAAAAAAAAAAAN",
+						"kind": "object"
+					}
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAL",
+					"ref": {
+						"kind": "object",
+						"key": "cursor"
+					},
+					"value": 42
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAN",
+					"ref": {
+						"kind": "object",
+						"key": "cursor"
+					},
+					"value": 7
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"presence": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "map"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "map",
+				"slots": {
+					"AAAAAAAAAAAAAAAK": {
+						"ref": "AAAAAAAAAAAAAAAL",
+						"kind": "object"
+					},
+					"AAAAAAAAAAAAAAAM": {
+						"ref": "AAAAAAAAAAAAAAAN",
+						"kind": "object"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAL": {
+				"kind": "object",
+				"slots": {
+					"cursor": 42
+				}
+			},
+			"AAAAAAAAAAAAAAAN": {
+				"kind": "object",
+				"slots": {
+					"cursor": 7
+				}
+			}
+		}
+	}
+}

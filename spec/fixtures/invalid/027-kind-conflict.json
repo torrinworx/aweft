@@ -1,0 +1,16 @@
+{
+	"name": "kind-conflict",
+	"description": "Two deltas in one commit disagreeing about what kind of observable they address. Caught before anything is applied, so the document is left as it was.",
+	"stage": "apply",
+	"reason": "kind-conflict",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"bytes": "818284004c000000000000000000000002820061610184004c0000000000000000000000028201414002"
+}

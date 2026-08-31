@@ -1,0 +1,78 @@
+{
+	"name": "array-positions",
+	"description": "An array is filled by position, and positions order it.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"blocks": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "array"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "array",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818384004c0000000000000000000000028201412065666972737484004c00000000000000000000000282014140667365636f6e6484004c00000000000000000000000282014160657468697264",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "array",
+						"key": "20"
+					},
+					"value": "first"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "array",
+						"key": "40"
+					},
+					"value": "second"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "array",
+						"key": "60"
+					},
+					"value": "third"
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"blocks": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "array"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "array",
+				"slots": {
+					"20": "first",
+					"40": "second",
+					"60": "third"
+				}
+			}
+		}
+	}
+}

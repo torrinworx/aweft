@@ -1,0 +1,7 @@
+{
+	"name": "trailing-bytes",
+	"description": "A whole commit, and then something else.",
+	"stage": "decode",
+	"reason": "trailing-bytes",
+	"bytes": "818184004c000000000000000000000001820061610100"
+}

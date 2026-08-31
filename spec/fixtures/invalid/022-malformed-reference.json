@@ -1,0 +1,7 @@
+{
+	"name": "malformed-reference",
+	"description": "A reference with something extra in it.",
+	"stage": "decode",
+	"reason": "invalid-reference",
+	"bytes": "818184004c0000000000000000000000018200616183004c00000000000000000000000201"
+}

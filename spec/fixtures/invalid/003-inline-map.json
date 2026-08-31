@@ -1,0 +1,7 @@
+{
+	"name": "inline-map",
+	"description": "A value that is a nested structure. Structure is made of observables.",
+	"stage": "decode",
+	"reason": "unsupported-major",
+	"bytes": "818184004c00000000000000000000000182006161a0"
+}

@@ -1,0 +1,108 @@
+{
+	"name": "text-and-bytes",
+	"description": "Text that is not ASCII, and byte strings, including empty ones.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818784004c000000000000000000000001820064f09f9491781e61206b65792074686174206973206e6f742041534349492065697468657284004c000000000000000000000001820065656d7074796084004c0000000000000000000000018200667468726561646cf09fa7b520612073706f6f6c84004c000000000000000000000001820067616363656e74736bc3bc6ec3af63c3b664c3a984004c000000000000000000000001820069636f6d62696e696e676d65cc81206973206e6f7420c3a984004c000000000000000000000001820069736f6d6542797465734400ff7f8084004c00000000000000000000000182006a656d707479427974657340",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "🔑"
+					},
+					"value": "a key that is not ASCII either"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "empty"
+					},
+					"value": ""
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "thread"
+					},
+					"value": "🧵 a spool"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "accents"
+					},
+					"value": "ünïcödé"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "combining"
+					},
+					"value": "é is not é"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "someBytes"
+					},
+					"value": {
+						"bytes": "00ff7f80"
+					}
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "emptyBytes"
+					},
+					"value": {
+						"bytes": ""
+					}
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"empty": "",
+					"accents": "ünïcödé",
+					"thread": "🧵 a spool",
+					"combining": "é is not é",
+					"emptyBytes": {
+						"bytes": ""
+					},
+					"someBytes": {
+						"bytes": "00ff7f80"
+					},
+					"🔑": "a key that is not ASCII either"
+				}
+			}
+		}
+	}
+}

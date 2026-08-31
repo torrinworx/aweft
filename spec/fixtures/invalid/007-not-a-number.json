@@ -1,0 +1,7 @@
+{
+	"name": "not-a-number",
+	"description": "NaN has many spellings and no value, so it has no encoding.",
+	"stage": "decode",
+	"reason": "non-finite-float",
+	"bytes": "818184004c00000000000000000000000182006161fb7ff8000000000000"
+}

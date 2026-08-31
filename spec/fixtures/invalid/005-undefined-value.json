@@ -1,0 +1,7 @@
+{
+	"name": "undefined-value",
+	"description": "There is no undefined. A slot that holds nothing is a slot that was removed.",
+	"stage": "decode",
+	"reason": "unsupported-simple",
+	"bytes": "818184004c00000000000000000000000182006161f7"
+}

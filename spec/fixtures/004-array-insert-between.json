@@ -1,0 +1,73 @@
+{
+	"name": "array-insert-between",
+	"description": "A position exists between any two others, so an insert never renumbers.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"blocks": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "array"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "array",
+				"slots": {
+					"20": "first",
+					"40": "second"
+				}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818284004c00000000000000000000000282014130676265747765656e84004c0000000000000000000000028201422001706a757374206166746572206669727374",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "array",
+						"key": "30"
+					},
+					"value": "between"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "array",
+						"key": "2001"
+					},
+					"value": "just after first"
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"blocks": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "array"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "array",
+				"slots": {
+					"20": "first",
+					"30": "between",
+					"40": "second",
+					"2001": "just after first"
+				}
+			}
+		}
+	}
+}

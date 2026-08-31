@@ -1,0 +1,7 @@
+{
+	"name": "integer-out-of-range",
+	"description": "An integer too large to be exact, offered as an integer.",
+	"stage": "decode",
+	"reason": "integer-out-of-range",
+	"bytes": "818184004c000000000000000000000001820061611b0020000000000000"
+}

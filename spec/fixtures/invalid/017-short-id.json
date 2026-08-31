@@ -1,0 +1,7 @@
+{
+	"name": "short-id",
+	"description": "An id of the wrong width.",
+	"stage": "decode",
+	"reason": "invalid-id",
+	"bytes": "818184004801020304050607088200616101"
+}

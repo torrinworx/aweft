@@ -1,0 +1,18 @@
+{
+	"name": "add-over-existing",
+	"description": "An add to a slot that is already there. That is a replace, and it says so.",
+	"stage": "apply",
+	"reason": "slot-exists",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"title": "a page"
+				}
+			}
+		}
+	},
+	"bytes": "818184004c0000000000000000000000018200657469746c656c616e6f746865722070616765"
+}

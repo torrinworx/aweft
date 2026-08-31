@@ -1,0 +1,7 @@
+{
+	"name": "half-float",
+	"description": "A narrower float than the one form the format has.",
+	"stage": "decode",
+	"reason": "unsupported-simple",
+	"bytes": "818184004c00000000000000000000000182006161f93c00"
+}

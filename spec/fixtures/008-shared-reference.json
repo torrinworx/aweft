@@ -1,0 +1,77 @@
+{
+	"name": "shared-reference",
+	"description": "Two slots naming one observable. State is a graph, not a tree of copies.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818384004c000000000000000000000001820066617574686f7282004c00000000000000000000000284004c000000000000000000000001820068726576696577657282004c00000000000000000000000284004c00000000000000000000000282006668616e646c6567736f6d656f6e65",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "author"
+					},
+					"value": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "object"
+					}
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "reviewer"
+					},
+					"value": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "object"
+					}
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "object",
+						"key": "handle"
+					},
+					"value": "someone"
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"author": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "object"
+					},
+					"reviewer": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "object"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "object",
+				"slots": {
+					"handle": "someone"
+				}
+			}
+		}
+	}
+}

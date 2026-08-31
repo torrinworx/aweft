@@ -1,0 +1,50 @@
+{
+	"name": "empty-observable",
+	"description": "A reference states the kind of what it names, so an observable with no slots is still fully described and a receiver knows how to read the next delta about it.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818184004c0000000000000000000000018200647461677382024c000000000000000000000002",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "tags"
+					},
+					"value": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "map"
+					}
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"tags": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "map"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "map",
+				"slots": {}
+			}
+		}
+	}
+}

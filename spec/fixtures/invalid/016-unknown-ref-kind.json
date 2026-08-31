@@ -1,0 +1,7 @@
+{
+	"name": "unknown-ref-kind",
+	"description": "A fourth kind of observable.",
+	"stage": "decode",
+	"reason": "unknown-ref-kind",
+	"bytes": "818184004c0000000000000000000000018203616101"
+}

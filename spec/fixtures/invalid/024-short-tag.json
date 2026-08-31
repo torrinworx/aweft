@@ -1,0 +1,7 @@
+{
+	"name": "short-tag",
+	"description": "An integrity tag too short to detect anything.",
+	"stage": "decode",
+	"reason": "invalid-tag",
+	"bytes": "828184004c0000000000000000000000018200616101420102"
+}

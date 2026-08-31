@@ -1,0 +1,7 @@
+{
+	"name": "non-canonical-integer",
+	"description": "The delta type is written in a wider head than the value needs.",
+	"stage": "decode",
+	"reason": "non-canonical-integer",
+	"bytes": "81818418004c0000000000000000000000018200616101"
+}

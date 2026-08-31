@@ -1,0 +1,94 @@
+{
+	"name": "object-slots",
+	"description": "Adding one slot of every value kind to an object.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818684004c000000000000000000000001820064626c6f62430102ff84004c000000000000000000000001820065636f756e740384004c000000000000000000000001820065726174696ffb3fe000000000000084004c0000000000000000000000018200657265616479f584004c0000000000000000000000018200657469746c656661207061676584004c0000000000000000000000018200676d697373696e67f6",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "blob"
+					},
+					"value": {
+						"bytes": "0102ff"
+					}
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "count"
+					},
+					"value": 3
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "ratio"
+					},
+					"value": 0.5
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "ready"
+					},
+					"value": true
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "title"
+					},
+					"value": "a page"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "missing"
+					},
+					"value": null
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"title": "a page",
+					"count": 3,
+					"ready": true,
+					"missing": null,
+					"ratio": 0.5,
+					"blob": {
+						"bytes": "0102ff"
+					}
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,7 @@
+{
+	"name": "missing-value",
+	"description": "An add with nothing to add.",
+	"stage": "decode",
+	"reason": "missing-value",
+	"bytes": "818183004c00000000000000000000000182006161"
+}

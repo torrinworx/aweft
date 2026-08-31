@@ -1,0 +1,7 @@
+{
+	"name": "indefinite-length",
+	"description": "The list of deltas does not state how long it is.",
+	"stage": "decode",
+	"reason": "indefinite-length",
+	"bytes": "819f84004c0000000000000000000000018200616101ff"
+}
