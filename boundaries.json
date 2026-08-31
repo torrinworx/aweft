@@ -1,0 +1,20 @@
+{
+	"$comment": "The package boundary table. A package may import from its own tier or any tier below it, never upward, and never across the client/server plane boundary. Integrators compose the whole stack and are exempt from the ordering; nothing may import one. Tooling sits outside the runtime rule. Enforced by checkGraph in @aweftjs/testing, which has its own tests.",
+	"packages": {
+		"core":    { "tier": 1, "plane": "isomorphic" },
+		"schema":  { "tier": 2, "plane": "isomorphic" },
+		"sync":    { "tier": 3, "plane": "isomorphic" },
+		"store":   { "tier": 3, "plane": "isomorphic" },
+		"modules": { "tier": 4, "plane": "isomorphic" },
+		"dom":     { "tier": 5, "plane": "client" },
+		"server":  { "tier": 5, "plane": "server" },
+		"ui":      { "tier": 6, "plane": "client" },
+		"icons":   { "tier": 6, "plane": "client" },
+		"jobs":    { "tier": 6, "plane": "server" },
+
+		"aweft":   { "tier": "integrator", "plane": "isomorphic" },
+		"ssg":     { "tier": "integrator", "plane": "isomorphic" },
+		"testing": { "tier": "integrator", "plane": "isomorphic" },
+		"build":   { "tier": "integrator", "plane": "isomorphic" }
+	}
+}

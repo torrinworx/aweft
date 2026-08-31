@@ -1,0 +1,23 @@
+{
+	"name": "aweft-monorepo",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"engines": {
+		"node": ">=24.12.0"
+	},
+	"workspaces": [
+		"packages/*"
+	],
+	"scripts": {
+		"typecheck": "tsc --build",
+		"deps": "depcruise packages --config .dependency-cruiser.cjs",
+		"test": "npm run typecheck && npm run deps && node --test --experimental-test-coverage packages/*/tests/*.test.ts",
+		"gate": "npm test"
+	},
+	"devDependencies": {
+		"@types/node": "^24.13.3",
+		"dependency-cruiser": "^16.10.0",
+		"typescript": "^5.9.2"
+	}
+}
