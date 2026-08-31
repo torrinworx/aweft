@@ -44,6 +44,10 @@ module.exports = {
 		},
 	],
 	options: {
+		// Count type-only imports. Without this a module reached only by `import type` reads as
+		// an orphan, and a deep import into another package's internals would slip past the rule
+		// above by being a type.
+		tsPreCompilationDeps: true,
 		doNotFollow: { path: 'node_modules' },
 		tsConfig: { fileName: 'tsconfig.base.json' },
 		enhancedResolveOptions: { exportsFields: ['exports'], conditionNames: ['import', 'node'] },
