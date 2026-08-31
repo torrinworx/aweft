@@ -129,6 +129,8 @@ This is the list `AGENTS.md` refers to.
 2. **The wire format.** Anything normative in `spec/`. A change here also needs an entry in
    `spec/CHANGELOG.md`.
 3. **The observable kinds.** Object, array, map, and what each guarantees.
+3b. **Attach edges and aliases.** Where an observable lives, and what a second reference to
+   it does and does not mean.
 4. **Scopes.** How a listener narrows which part of a tree it sees.
 5. **The replication model.** How commits reach another tree, and what happens when one
    cannot be applied.
@@ -187,6 +189,32 @@ The server side of `sync` refuses a remote commit that has no mutation authority
 if that policy is an explicit allow-everything the developer had to type. An authenticated
 client is not an authorized one, and making the check optional by configuration ships the
 hole it exists to close. Local-only trees may skip it.
+
+### Authority is per path, and actions are a pattern built on it
+
+A policy is declarative patterns over paths, and that is the only authority the wire checks.
+An application that wants named intents writes the intent into the document as state, and a
+server-side handler with wider authority reads it and writes the outcome. Both writes pass the
+same validator, so there is one enforcement mechanism rather than two. See design 009.
+
+### One attach edge decides where an observable lives
+
+Every reachable observable has exactly one attach edge; every other reference to it is an
+alias that grants nothing and revokes nothing. This is what makes "where does this live" a
+walk up rather than a search, and it makes privilege escalation and privilege freezing through
+a reference unrepresentable rather than merely guarded against. See design 010 and
+`spec/format.md` section 1.1.
+
+### A refused commit converges the client, then reports
+
+When the server refuses a commit, the client rolls back to the last accepted state and replays
+what was accepted. That is the framework's job, not the application's choice, because anything
+else is a replica fork. The refused commits are then handed to the application as one group,
+with their reasons and prior values, after the document is consistent again.
+
+A refusal refuses the commit and never the connection. A well-behaved client produces refusals
+through ordinary races, and disconnecting turns every race into a full resynchronization at
+the moment the client is busiest. See designs 011 and 012.
 
 ### `store` is not decided
 
