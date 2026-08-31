@@ -10,4 +10,6 @@ export { assertPosition, comparePositions, isValidPosition } from './position.ts
 export {
 	decodeCommit, encodeCommit, isReference, MAX_TAG_BYTES, MIN_TAG_BYTES,
 } from './commit.ts';
-export type { Commit, Delta, DeltaType, ObservableKind, Ref, Reference, Value } from './commit.ts';
+export type {
+	Commit, Delta, DeltaType, EdgeKind, ObservableKind, Ref, Reference, Value,
+} from './commit.ts';

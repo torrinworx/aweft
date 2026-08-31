@@ -9,7 +9,8 @@
 				"slots": {
 					"blocks": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "array"
+						"kind": "array",
+						"edge": "attach"
 					}
 				}
 			},
@@ -55,7 +56,8 @@
 				"slots": {
 					"blocks": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "array"
+						"kind": "array",
+						"edge": "attach"
 					}
 				}
 			},

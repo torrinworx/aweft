@@ -1,0 +1,7 @@
+{
+	"name": "unknown-edge-kind",
+	"description": "A third kind of edge. A reference either attaches or aliases.",
+	"stage": "decode",
+	"reason": "unknown-edge-kind",
+	"bytes": "818184004c000000000000000000000001820061618309004c000000000000000000000002"
+}

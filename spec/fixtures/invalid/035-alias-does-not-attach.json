@@ -1,0 +1,16 @@
+{
+	"name": "alias-does-not-attach",
+	"description": "An alias names an observable without giving it a home, so a delta into it is still refused. This is what makes an alias grant nothing.",
+	"stage": "apply",
+	"reason": "unreachable",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"bytes": "818284004c000000000000000000000001820067736565416c736f8301004c00000000000000000000000584004c0000000000000000000000058200657469746c65676e6f7768657265"
+}

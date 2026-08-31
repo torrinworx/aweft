@@ -1,6 +1,6 @@
 {
 	"name": "shared-reference",
-	"description": "Two slots naming one observable. State is a graph, not a tree of copies.",
+	"description": "Two slots naming one observable. One attaches it, which is where it lives, and the other aliases it. State is a graph, and exactly one edge says where a thing is.",
 	"initial": {
 		"root": "AAAAAAAAAAAAAAAB",
 		"observables": {
@@ -12,7 +12,7 @@
 	},
 	"commits": [
 		{
-			"bytes": "818384004c000000000000000000000001820066617574686f7282004c00000000000000000000000284004c000000000000000000000001820068726576696577657282004c00000000000000000000000284004c00000000000000000000000282006668616e646c6567736f6d656f6e65",
+			"bytes": "818384004c000000000000000000000001820066617574686f728300004c00000000000000000000000284004c00000000000000000000000182006872657669657765728301004c00000000000000000000000284004c00000000000000000000000282006668616e646c6567736f6d656f6e65",
 			"deltas": [
 				{
 					"type": "add",
@@ -23,7 +23,8 @@
 					},
 					"value": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "object"
+						"kind": "object",
+						"edge": "attach"
 					}
 				},
 				{
@@ -35,7 +36,8 @@
 					},
 					"value": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "object"
+						"kind": "object",
+						"edge": "alias"
 					}
 				},
 				{
@@ -58,11 +60,13 @@
 				"slots": {
 					"author": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "object"
+						"kind": "object",
+						"edge": "attach"
 					},
 					"reviewer": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "object"
+						"kind": "object",
+						"edge": "alias"
 					}
 				}
 			},

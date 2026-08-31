@@ -9,7 +9,8 @@
 				"slots": {
 					"presence": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "map"
+						"kind": "map",
+						"edge": "attach"
 					}
 				}
 			},
@@ -21,7 +22,7 @@
 	},
 	"commits": [
 		{
-			"bytes": "818484004c00000000000000000000000282024c00000000000000000000000a82004c00000000000000000000000b84004c00000000000000000000000282024c00000000000000000000000c82004c00000000000000000000000d84004c00000000000000000000000b820066637572736f72182a84004c00000000000000000000000d820066637572736f7207",
+			"bytes": "818484004c00000000000000000000000282024c00000000000000000000000a8300004c00000000000000000000000b84004c00000000000000000000000282024c00000000000000000000000c8300004c00000000000000000000000d84004c00000000000000000000000b820066637572736f72182a84004c00000000000000000000000d820066637572736f7207",
 			"deltas": [
 				{
 					"type": "add",
@@ -32,7 +33,8 @@
 					},
 					"value": {
 						"ref": "AAAAAAAAAAAAAAAL",
-						"kind": "object"
+						"kind": "object",
+						"edge": "attach"
 					}
 				},
 				{
@@ -44,7 +46,8 @@
 					},
 					"value": {
 						"ref": "AAAAAAAAAAAAAAAN",
-						"kind": "object"
+						"kind": "object",
+						"edge": "attach"
 					}
 				},
 				{
@@ -76,7 +79,8 @@
 				"slots": {
 					"presence": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "map"
+						"kind": "map",
+						"edge": "attach"
 					}
 				}
 			},
@@ -85,11 +89,13 @@
 				"slots": {
 					"AAAAAAAAAAAAAAAK": {
 						"ref": "AAAAAAAAAAAAAAAL",
-						"kind": "object"
+						"kind": "object",
+						"edge": "attach"
 					},
 					"AAAAAAAAAAAAAAAM": {
 						"ref": "AAAAAAAAAAAAAAAN",
-						"kind": "object"
+						"kind": "object",
+						"edge": "attach"
 					}
 				}
 			},

@@ -1,7 +1,7 @@
 {
 	"name": "malformed-reference",
-	"description": "A reference with something extra in it.",
+	"description": "A reference missing a part. It states an edge, a kind and an id.",
 	"stage": "decode",
 	"reason": "invalid-reference",
-	"bytes": "818184004c0000000000000000000000018200616183004c00000000000000000000000201"
+	"bytes": "818184004c0000000000000000000000018200616182004c000000000000000000000002"
 }

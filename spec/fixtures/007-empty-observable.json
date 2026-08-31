@@ -12,7 +12,7 @@
 	},
 	"commits": [
 		{
-			"bytes": "818184004c0000000000000000000000018200647461677382024c000000000000000000000002",
+			"bytes": "818184004c000000000000000000000001820064746167738300024c000000000000000000000002",
 			"deltas": [
 				{
 					"type": "add",
@@ -23,7 +23,8 @@
 					},
 					"value": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "map"
+						"kind": "map",
+						"edge": "attach"
 					}
 				}
 			]
@@ -37,7 +38,8 @@
 				"slots": {
 					"tags": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "map"
+						"kind": "map",
+						"edge": "attach"
 					}
 				}
 			},

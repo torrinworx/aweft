@@ -35,7 +35,10 @@ const doc = (root: number, observables: Record<number, ObservableJson>): Documen
 	),
 });
 
-const points = (kind: 'object' | 'array' | 'map', n: number): ValueJson => ({ ref: name(n), kind });
+const points = (kind: 'object' | 'array' | 'map', n: number): ValueJson =>
+	({ ref: name(n), kind, edge: 'attach' });
+const aliases = (kind: 'object' | 'array' | 'map', n: number): ValueJson =>
+	({ ref: name(n), kind, edge: 'alias' });
 const raw = (hex: string): ValueJson => ({ bytes: hex });
 
 const key = (k: string): Ref => ({ kind: 'object', key: k });
@@ -45,7 +48,10 @@ const of = (n: number): Ref => ({ kind: 'map', key: id(n) });
 const add = (n: number, ref: Ref, value: Value): Delta => ({ type: 'add', id: id(n), ref, value });
 const put = (n: number, ref: Ref, value: Value): Delta => ({ type: 'replace', id: id(n), ref, value });
 const gone = (n: number, ref: Ref): Delta => ({ type: 'remove', id: id(n), ref });
-const to = (kind: 'object' | 'array' | 'map', n: number): Value => ({ kind, id: id(n) });
+const to = (kind: 'object' | 'array' | 'map', n: number): Value =>
+	({ edge: 'attach', kind, id: id(n) });
+const alias = (kind: 'object' | 'array' | 'map', n: number): Value =>
+	({ edge: 'alias', kind, id: id(n) });
 
 interface Case {
 	readonly name: string;
@@ -161,18 +167,39 @@ const cases: Case[] = [
 	},
 	{
 		name: 'shared-reference',
-		description: 'Two slots naming one observable. State is a graph, not a tree of copies.',
+		description:
+			'Two slots naming one observable. One attaches it, which is where it lives, and the ' +
+			'other aliases it. State is a graph, and exactly one edge says where a thing is.',
 		initial: doc(1, { 1: obj({}) }),
 		commits: [{
 			deltas: [
 				add(1, key('author'), to('object', 2)),
-				add(1, key('reviewer'), to('object', 2)),
+				add(1, key('reviewer'), alias('object', 2)),
 				add(2, key('handle'), 'someone'),
 			],
 		}],
 		final: doc(1, {
-			1: obj({ author: points('object', 2), reviewer: points('object', 2) }),
+			1: obj({ author: points('object', 2), reviewer: aliases('object', 2) }),
 			2: obj({ handle: 'someone' }),
+		}),
+	},
+	{
+		name: 'move-observable',
+		description:
+			'Moving an observable is one commit that removes its attach edge and adds another. ' +
+			'Both happen together, so it is never in two places and never in none.',
+		initial: doc(1, {
+			1: obj({ drafts: points('array', 2), published: points('array', 3) }),
+			2: arr({ 40: points('object', 4) }),
+			3: arr({}),
+			4: obj({ title: 'a post' }),
+		}),
+		commits: [{ deltas: [gone(2, at('40')), add(3, at('40'), to('object', 4))] }],
+		final: doc(1, {
+			1: obj({ drafts: points('array', 2), published: points('array', 3) }),
+			2: arr({}),
+			3: arr({ 40: points('object', 4) }),
+			4: obj({ title: 'a post' }),
 		}),
 	},
 	{
@@ -187,7 +214,11 @@ const cases: Case[] = [
 		description:
 			'Deltas handed over in a scrambled order across several observables. The bytes come ' +
 			'out in one order, so two encoders agree without agreeing on anything else.',
-		initial: doc(1, { 1: obj({}) }),
+		initial: doc(1, {
+			1: obj({ two: points('object', 2), three: points('object', 3) }),
+			2: obj({}),
+			3: obj({}),
+		}),
 		commits: [{
 			deltas: [
 				add(3, key('z'), 3),
@@ -199,7 +230,7 @@ const cases: Case[] = [
 			],
 		}],
 		final: doc(1, {
-			1: obj({ a: 0, b: 1 }),
+			1: obj({ two: points('object', 2), three: points('object', 3), a: 0, b: 1 }),
 			2: obj({ m: 2, n: 5 }),
 			3: obj({ y: 4, z: 3 }),
 		}),
@@ -449,9 +480,15 @@ const rejections: InvalidFixture[] = [
 	},
 	{
 		name: 'malformed-reference',
-		description: 'A reference with something extra in it.',
+		description: 'A reference missing a part. It states an edge, a kind and an id.',
 		stage: 'decode', reason: 'invalid-reference',
-		bytes: frame([delta(hex(0), ID1, refKey('a'), head(4, 3) + hex(0) + ID2 + hex(1))]),
+		bytes: frame([delta(hex(0), ID1, refKey('a'), head(4, 2) + hex(0) + ID2)]),
+	},
+	{
+		name: 'unknown-edge-kind',
+		description: 'A third kind of edge. A reference either attaches or aliases.',
+		stage: 'decode', reason: 'unknown-edge-kind',
+		bytes: frame([delta(hex(0), ID1, refKey('a'), head(4, 3) + hex(9) + hex(0) + ID2)]),
 	},
 	{
 		name: 'empty-commit',
@@ -509,6 +546,46 @@ const rejections: InvalidFixture[] = [
 		initial: doc(1, { 1: obj({ title: 'a page' }) }),
 		bytes: bytesToHex(encodeCommit({ deltas: [gone(1, key('subtitle'))] })),
 	},
+	{
+		name: 'two-attach-edges-in-one-commit',
+		description:
+			'One commit attaching an observable in two places. Deltas in a commit are unordered, ' +
+			'so there is no defensible way to pick which one wins.',
+		stage: 'apply', reason: 'multiple-attach',
+		initial: doc(1, { 1: obj({}) }),
+		bytes: bytesToHex(encodeCommit({
+			deltas: [add(1, key('a'), to('object', 4)), add(1, key('b'), to('object', 4))],
+		})),
+	},
+	{
+		name: 'second-attach-to-attached',
+		description:
+			'Attaching an observable that already lives somewhere. The second reference had to ' +
+			'be an alias, or the first attach had to be removed in the same commit.',
+		stage: 'apply', reason: 'multiple-attach',
+		initial: doc(1, { 1: obj({ a: points('object', 2) }), 2: obj({ x: 1 }) }),
+		bytes: bytesToHex(encodeCommit({ deltas: [add(1, key('b'), to('object', 2))] })),
+	},
+	{
+		name: 'unattached-target',
+		description:
+			'A delta into an observable with no attach path from the root. It has no place in ' +
+			'the document, so nothing can say who may write it.',
+		stage: 'apply', reason: 'unreachable',
+		initial: doc(1, { 1: obj({}) }),
+		bytes: bytesToHex(encodeCommit({ deltas: [add(9, key('title'), 'from nowhere')] })),
+	},
+	{
+		name: 'alias-does-not-attach',
+		description:
+			'An alias names an observable without giving it a home, so a delta into it is still ' +
+			'refused. This is what makes an alias grant nothing.',
+		stage: 'apply', reason: 'unreachable',
+		initial: doc(1, { 1: obj({}) }),
+		bytes: bytesToHex(encodeCommit({
+			deltas: [add(1, key('seeAlso'), alias('object', 5)), add(5, key('title'), 'nowhere')],
+		})),
+	},
 ];
 
 // --- write them out ------------------------------------------------------------------------
@@ -551,7 +628,12 @@ cases.forEach((c, i) => {
 		final: c.final,
 	};
 
-	checkFixture(fixture);
+	try {
+		checkFixture(fixture);
+	} catch (e) {
+		// Without the name, a failure here says which rule broke but not which fixture broke it.
+		throw new Error(`fixture ${c.name}: ${(e as Error).message}`, { cause: e });
+	}
 	write(root, i + 1, c.name, fixture);
 });
 

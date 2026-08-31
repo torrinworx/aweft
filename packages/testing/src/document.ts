@@ -6,7 +6,7 @@
 // port to another language can reproduce.
 
 import {
-	type Commit, type ObservableKind, type Ref, type Value,
+	type Commit, type EdgeKind, type ObservableKind, type Ref, type Value,
 	bytesFromHex, bytesToHex, codecError, idFromText, idToText, isReference,
 } from '@aweftjs/codec';
 
@@ -16,7 +16,7 @@ export type ValueJson =
 	| number
 	| string
 	| { readonly bytes: string }
-	| { readonly ref: string; readonly kind: ObservableKind };
+	| { readonly ref: string; readonly kind: ObservableKind; readonly edge: EdgeKind };
 
 export interface ObservableJson {
 	readonly kind: ObservableKind;
@@ -30,15 +30,18 @@ export interface DocumentJson {
 
 export const valueToJson = (v: Value): ValueJson => {
 	if (v instanceof Uint8Array) return { bytes: bytesToHex(v) };
-	if (isReference(v)) return { ref: idToText(v.id), kind: v.kind };
+	if (isReference(v)) return { ref: idToText(v.id), kind: v.kind, edge: v.edge };
 	return v;
 };
 
 export const valueFromJson = (v: ValueJson): Value => {
 	if (v === null || typeof v !== 'object') return v;
 	if ('bytes' in v) return bytesFromHex(v.bytes);
-	return { kind: v.kind, id: idFromText(v.ref) };
+	return { edge: v.edge, kind: v.kind, id: idFromText(v.ref) };
 };
+
+const asReference = (v: ValueJson | undefined): { ref: string; edge: EdgeKind } | null =>
+	v !== null && typeof v === 'object' && 'ref' in v ? v : null;
 
 /**
  * The string a slot is filed under in the model.
@@ -90,6 +93,79 @@ export const applyCommit = (doc: DocumentJson, commit: Commit): DocumentJson => 
 		claim(idToText(d.id), d.ref.kind, 'a delta');
 		if (d.value !== undefined && isReference(d.value)) {
 			claim(idToText(d.value.id), d.value.kind, 'a reference');
+		}
+	}
+
+	// An observable has exactly one attach edge, which is where it lives. Counting rather
+	// than checking each delta in turn keeps this independent of the order deltas arrive in,
+	// which matters because a commit is a set.
+	const attached = new Map<string, number>();
+	const bump = (id: string, by: number): void => {
+		attached.set(id, (attached.get(id) ?? 0) + by);
+	};
+
+	for (const o of Object.values(doc.observables)) {
+		for (const value of Object.values(o.slots)) {
+			const r = asReference(value);
+			if (r && r.edge === 'attach') bump(r.ref, 1);
+		}
+	}
+
+	const newEdges: Array<[string, string]> = [];
+
+	for (const d of commit.deltas) {
+		const holder = doc.observables[idToText(d.id)];
+		const displaced = asReference(holder?.slots[slotKey(d.ref)]);
+		if (d.type !== 'add' && displaced && displaced.edge === 'attach') bump(displaced.ref, -1);
+
+		if (d.value !== undefined && isReference(d.value) && d.value.edge === 'attach') {
+			const target = idToText(d.value.id);
+			bump(target, 1);
+			newEdges.push([idToText(d.id), target]);
+		}
+	}
+
+	for (const [id, count] of attached) {
+		if (count > 1) {
+			throw codecError(
+				'multiple-attach',
+				`${id} would have ${count} attach edges, and an observable lives in one place`,
+			);
+		}
+	}
+
+	// Reachability walks attach edges only, and counts the ones this commit adds. Edges the
+	// commit removes are not counted, so a commit may write into a subtree in the same breath
+	// as it detaches it.
+	const edges = new Map<string, string[]>();
+	const link = (from: string, to: string): void => {
+		let list = edges.get(from);
+		if (!list) edges.set(from, list = []);
+		list.push(to);
+	};
+
+	for (const [id, o] of Object.entries(doc.observables)) {
+		for (const value of Object.values(o.slots)) {
+			const r = asReference(value);
+			if (r && r.edge === 'attach') link(id, r.ref);
+		}
+	}
+	for (const [from, to] of newEdges) link(from, to);
+
+	const reachable = new Set([doc.root]);
+	const queue = [doc.root];
+	for (let head = 0; head < queue.length; head++) {
+		for (const to of edges.get(queue[head]!) ?? []) {
+			if (reachable.has(to)) continue;
+			reachable.add(to);
+			queue.push(to);
+		}
+	}
+
+	for (const d of commit.deltas) {
+		const id = idToText(d.id);
+		if (!reachable.has(id)) {
+			throw codecError('unreachable', `${id} has no attach path from the root`);
 		}
 	}
 

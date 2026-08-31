@@ -15,9 +15,18 @@ import { assertPosition } from './position.ts';
 
 export type DeltaType = 'add' | 'replace' | 'remove';
 export type ObservableKind = 'object' | 'array' | 'map';
+export type EdgeKind = 'attach' | 'alias';
 
-/** A value that is another observable is named, never inlined. */
+/**
+ * A value that is another observable is named, never inlined.
+ *
+ * The edge says what this reference means. An observable has exactly one attach edge, which
+ * is where it lives; every other reference to it is an alias. Aliases keep state a graph
+ * without giving an observable a second home, which is what makes a single walk up the attach
+ * edges the whole answer to where something sits.
+ */
 export interface Reference {
+	readonly edge: EdgeKind;
 	readonly kind: ObservableKind;
 	readonly id: Uint8Array;
 }
@@ -45,6 +54,7 @@ export interface Commit {
 
 const DELTA_TYPES = ['add', 'replace', 'remove'] as const;
 const KINDS = ['object', 'array', 'map'] as const;
+const EDGES = ['attach', 'alias'] as const;
 
 export const MIN_TAG_BYTES = 4;
 export const MAX_TAG_BYTES = 32;
@@ -91,7 +101,11 @@ const writeFieldValue = (w: Writer, v: Value): void => {
 	const kind = KINDS.indexOf(v.kind);
 	if (kind < 0) throw codecError('unknown-ref-kind', `${String(v.kind)} is not an observable kind`);
 
-	writeHead(w, 4, 2);
+	const edge = EDGES.indexOf(v.edge);
+	if (edge < 0) throw codecError('unknown-edge-kind', `${String(v.edge)} is not an edge kind`);
+
+	writeHead(w, 4, 3);
+	writeValue(w, edge);
 	writeValue(w, kind);
 	writeValue(w, assertId(v.id));
 };
@@ -191,16 +205,23 @@ const readRef = (raw: CborValue | undefined): Ref => {
 const readFieldValue = (raw: CborValue | undefined): Value => {
 	if (Array.isArray(raw)) {
 		const items = raw as readonly CborValue[];
-		if (items.length !== 2) throw codecError('invalid-reference', 'a reference is a kind and an id');
+		if (items.length !== 3) {
+			throw codecError('invalid-reference', 'a reference is an edge, a kind and an id');
+		}
 
-		const kindIndex = items[0];
+		const edgeIndex = items[0];
+		if (typeof edgeIndex !== 'number' || EDGES[edgeIndex] === undefined) {
+			throw codecError('unknown-edge-kind', `${String(edgeIndex)} is not an edge kind`);
+		}
+
+		const kindIndex = items[1];
 		if (typeof kindIndex !== 'number' || KINDS[kindIndex] === undefined) {
 			throw codecError('unknown-ref-kind', `${String(kindIndex)} is not an observable kind`);
 		}
 
-		const id = items[1];
+		const id = items[2];
 		if (!(id instanceof Uint8Array)) throw codecError('invalid-reference', 'a reference names an id');
-		return { kind: KINDS[kindIndex]!, id: assertId(id) };
+		return { edge: EDGES[edgeIndex]!, kind: KINDS[kindIndex]!, id: assertId(id) };
 	}
 
 	if (raw === undefined) throw codecError('missing-value', 'the value is absent');

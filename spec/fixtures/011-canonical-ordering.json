@@ -6,6 +6,25 @@
 		"observables": {
 			"AAAAAAAAAAAAAAAB": {
 				"kind": "object",
+				"slots": {
+					"two": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "object",
+						"edge": "attach"
+					},
+					"three": {
+						"ref": "AAAAAAAAAAAAAAAD",
+						"kind": "object",
+						"edge": "attach"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "object",
+				"slots": {}
+			},
+			"AAAAAAAAAAAAAAAD": {
+				"kind": "object",
 				"slots": {}
 			}
 		}
@@ -77,6 +96,16 @@
 			"AAAAAAAAAAAAAAAB": {
 				"kind": "object",
 				"slots": {
+					"two": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "object",
+						"edge": "attach"
+					},
+					"three": {
+						"ref": "AAAAAAAAAAAAAAAD",
+						"kind": "object",
+						"edge": "attach"
+					},
 					"a": 0,
 					"b": 1
 				}

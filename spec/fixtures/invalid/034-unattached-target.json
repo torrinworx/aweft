@@ -1,0 +1,16 @@
+{
+	"name": "unattached-target",
+	"description": "A delta into an observable with no attach path from the root. It has no place in the document, so nothing can say who may write it.",
+	"stage": "apply",
+	"reason": "unreachable",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"bytes": "818184004c0000000000000000000000098200657469746c656c66726f6d206e6f7768657265"
+}

@@ -12,7 +12,7 @@ Keywords **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are used in the usual s
 
 ## 1. Model
 
-State is a tree of **observables**. Three kinds exist:
+State is a graph of **observables**. Three kinds exist:
 
 | Kind | Keyed by | Ordering |
 |---|---|---|
@@ -25,6 +25,36 @@ agree on which observable a change refers to without agreeing on where it sits i
 
 A **delta** describes one change to one slot in one observable. A **commit** is a set of
 deltas that took effect together.
+
+### 1.1 Attach edges and aliases
+
+A slot may hold a reference to another observable, and every reference states which kind of
+edge it is:
+
+- an **attach** edge means the observable *lives* there
+- an **alias** names it without giving it a home
+
+Every observable reachable from the root has **exactly one** attach edge. The attach edges
+form a tree, and the aliases are what make the whole thing a graph.
+
+An implementation **MUST** refuse a commit that would give an observable a second attach
+edge. That includes a commit adding two attach edges to one observable, because deltas within
+a commit are unordered and there is no defensible way to choose between them.
+
+An implementation **MUST** refuse a delta whose target has no path of attach edges from the
+root. Reachability is computed against the document before the commit, extended by the attach
+edges the commit adds. Attach edges the commit **removes** are not counted, so a commit may
+write into a subtree in the same breath as it detaches it.
+
+Moving an observable is one commit that removes its old attach edge and adds the new one.
+Both happen together, so it is never in two places and never in none.
+
+*Rationale:* one attach edge means "where does this live" has a single answer, computed by
+walking up rather than by searching. Without it the question is answered by enumerating an
+observable's paths, and with aliases in the graph that count grows past any budget: a document
+of 142 observables produced 36,507 paths, and one of about 2,000 exhausted a 4 GB heap. The
+consequence for the layer above is that a reference can neither widen nor narrow who may write
+what, which makes two classes of privilege bug unrepresentable. See `docs/design/010`.
 
 ---
 
@@ -232,7 +262,8 @@ A value is a primitive or a reference to an observable. There is nothing else. A
 implementation **MUST NOT** inline a structure into a slot.
 
 ```
-reference = [ kind, id ]
+reference = [ edge, kind, id ]
+edge      = 0 attach | 1 alias
 kind      = 0 object | 1 array | 2 map
 ```
 
@@ -240,7 +271,8 @@ kind      = 0 object | 1 array | 2 map
 addressing it, and every change to state is a delta. Carrying the kind on the reference,
 rather than inferring it from the other deltas that mention the id, is what lets an
 observable with no slots be fully described, and lets a receiver read a delta about an
-observable it has not seen yet.
+observable it has not seen yet. The edge is section 1.1, and it costs one byte per reference,
+measured at 0.26% of a representative raw stream and nothing measurable once compressed.
 
 ### 6.5 Refs
 
@@ -345,5 +377,6 @@ Not yet specified, and deliberately not guessed:
   negotiates it. The encoding does not depend on the answer, because a tag is opaque bytes.
 - **Large and exact numbers.** There is no big integer and no decimal type. An application
   needing one carries it as text or as a byte string, and knows it is doing so.
-- **Whether an observable nothing references is this format's problem.** A commit can leave
-  one unreachable. Today that belongs to the layer above.
+- **What becomes of an observable after its attach edge is removed.** It is still in the
+  document and nothing reaches it. Whether it is collected, kept so the detach can be undone,
+  or simply left is not decided here.

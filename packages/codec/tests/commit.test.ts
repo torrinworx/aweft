@@ -36,7 +36,8 @@ test('all three slot kinds survive a round trip', () => {
 test('every value kind survives a round trip', () => {
 	const values: Value[] = [
 		null, true, false, 0, -1, 1.5, 'text', Uint8Array.of(1, 2, 3),
-		{ kind: 'object', id: B }, { kind: 'array', id: C }, { kind: 'map', id: A },
+		{ edge: 'attach', kind: 'object', id: B }, { edge: 'alias', kind: 'array', id: C },
+		{ edge: 'attach', kind: 'map', id: A },
 	];
 
 	for (const [i, value] of values.entries()) {
@@ -136,8 +137,9 @@ test('a delta whose shape is wrong names the rule it broke', () => {
 	reason(() => decodeCommit(encodeValue([[[0, A, [0, 'a']]]])), 'missing-value');
 	reason(() => decodeCommit(encodeValue([[[2, A, [0, 'a'], 1]]])), 'unexpected-value');
 	reason(() => decodeCommit(encodeValue([[[0, A, [0, 1], 1]]])), 'invalid-ref');
-	reason(() => decodeCommit(encodeValue([[[0, A, [0, 'a'], [0, Uint8Array.of(1)]]]])), 'invalid-id');
-	reason(() => decodeCommit(encodeValue([[[0, A, [0, 'a'], [0, B, 1]]]])), 'invalid-reference');
+	reason(() => decodeCommit(encodeValue([[[0, A, [0, 'a'], [0, 0, Uint8Array.of(1)]]]])), 'invalid-id');
+	reason(() => decodeCommit(encodeValue([[[0, A, [0, 'a'], [0, B]]]])), 'invalid-reference');
+	reason(() => decodeCommit(encodeValue([[[0, A, [0, 'a'], [9, 0, B]]]])), 'unknown-edge-kind');
 	reason(() => decodeCommit(encodeValue(['not a commit'])), 'invalid-commit');
 	reason(() => decodeCommit(encodeValue([[[0, A, [0, 'a'], 1]], 'tag'])), 'invalid-tag');
 });

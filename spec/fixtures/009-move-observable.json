@@ -1,0 +1,112 @@
+{
+	"name": "move-observable",
+	"description": "Moving an observable is one commit that removes its attach edge and adds another. Both happen together, so it is never in two places and never in none.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"drafts": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "array",
+						"edge": "attach"
+					},
+					"published": {
+						"ref": "AAAAAAAAAAAAAAAD",
+						"kind": "array",
+						"edge": "attach"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "array",
+				"slots": {
+					"40": {
+						"ref": "AAAAAAAAAAAAAAAE",
+						"kind": "object",
+						"edge": "attach"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAD": {
+				"kind": "array",
+				"slots": {}
+			},
+			"AAAAAAAAAAAAAAAE": {
+				"kind": "object",
+				"slots": {
+					"title": "a post"
+				}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818283024c0000000000000000000000028201414084004c000000000000000000000003820141408300004c000000000000000000000004",
+			"deltas": [
+				{
+					"type": "remove",
+					"id": "AAAAAAAAAAAAAAAC",
+					"ref": {
+						"kind": "array",
+						"key": "40"
+					}
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAD",
+					"ref": {
+						"kind": "array",
+						"key": "40"
+					},
+					"value": {
+						"ref": "AAAAAAAAAAAAAAAE",
+						"kind": "object",
+						"edge": "attach"
+					}
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"drafts": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "array",
+						"edge": "attach"
+					},
+					"published": {
+						"ref": "AAAAAAAAAAAAAAAD",
+						"kind": "array",
+						"edge": "attach"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "array",
+				"slots": {}
+			},
+			"AAAAAAAAAAAAAAAD": {
+				"kind": "array",
+				"slots": {
+					"40": {
+						"ref": "AAAAAAAAAAAAAAAE",
+						"kind": "object",
+						"edge": "attach"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAE": {
+				"kind": "object",
+				"slots": {
+					"title": "a post"
+				}
+			}
+		}
+	}
+}

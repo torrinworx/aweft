@@ -1,0 +1,16 @@
+{
+	"name": "two-attach-edges-in-one-commit",
+	"description": "One commit attaching an observable in two places. Deltas in a commit are unordered, so there is no defensible way to pick which one wins.",
+	"stage": "apply",
+	"reason": "multiple-attach",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"bytes": "818284004c000000000000000000000001820061618300004c00000000000000000000000484004c000000000000000000000001820061628300004c000000000000000000000004"
+}

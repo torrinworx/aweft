@@ -1,0 +1,28 @@
+{
+	"name": "second-attach-to-attached",
+	"description": "Attaching an observable that already lives somewhere. The second reference had to be an alias, or the first attach had to be removed in the same commit.",
+	"stage": "apply",
+	"reason": "multiple-attach",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"a": {
+						"ref": "AAAAAAAAAAAAAAAC",
+						"kind": "object",
+						"edge": "attach"
+					}
+				}
+			},
+			"AAAAAAAAAAAAAAAC": {
+				"kind": "object",
+				"slots": {
+					"x": 1
+				}
+			}
+		}
+	},
+	"bytes": "818184004c000000000000000000000001820061628300004c000000000000000000000002"
+}

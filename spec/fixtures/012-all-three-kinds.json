@@ -9,11 +9,13 @@
 				"slots": {
 					"blocks": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "array"
+						"kind": "array",
+						"edge": "attach"
 					},
 					"presence": {
 						"ref": "AAAAAAAAAAAAAAAD",
-						"kind": "map"
+						"kind": "map",
+						"edge": "attach"
 					}
 				}
 			},
@@ -31,7 +33,7 @@
 	},
 	"commits": [
 		{
-			"bytes": "818384014c000000000000000000000001820066626c6f636b7382014c00000000000000000000000284004c00000000000000000000000282014160667365636f6e6484004c00000000000000000000000382024c0000000000000000000000096765646974696e67",
+			"bytes": "818384014c000000000000000000000001820066626c6f636b738300014c00000000000000000000000284004c00000000000000000000000282014160667365636f6e6484004c00000000000000000000000382024c0000000000000000000000096765646974696e67",
 			"deltas": [
 				{
 					"type": "replace",
@@ -42,7 +44,8 @@
 					},
 					"value": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "array"
+						"kind": "array",
+						"edge": "attach"
 					}
 				},
 				{
@@ -74,11 +77,13 @@
 				"slots": {
 					"blocks": {
 						"ref": "AAAAAAAAAAAAAAAC",
-						"kind": "array"
+						"kind": "array",
+						"edge": "attach"
 					},
 					"presence": {
 						"ref": "AAAAAAAAAAAAAAAD",
-						"kind": "map"
+						"kind": "map",
+						"edge": "attach"
 					}
 				}
 			},
