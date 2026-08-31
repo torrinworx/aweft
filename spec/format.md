@@ -167,12 +167,156 @@ because the two rules above then hold by construction rather than by care.
 
 ## 6. Encoding
 
-The wire encoding is defined by the conformance fixtures in `spec/fixtures/`. An
-implementation conforms when it can decode every fixture to the described state and encode
-the described state to a byte-equal fixture.
+A commit is encoded as a byte string that describes itself. The type set is small on
+purpose: null, booleans, integers, one float width, byte strings, text strings, and arrays.
+There are no maps and no tagged values.
 
-Fixtures are the normative artifact. This prose describes intent; where they disagree, the
-fixtures are correct and the prose is a defect.
+Conformance is stated as byte equality, so the encoding has exactly one spelling for every
+value. A decoder **MUST** refuse any input an encoder would not have produced, and the rest
+of this section is that one rule applied case by case.
+
+*Rationale, measured:* a text encoding cannot meet byte equality across languages. The same
+double prints as `1e-7` from one runtime's JSON and `1e-07` from another's, so two
+conforming implementations would write different bytes for one value. A byte encoding also
+measured smaller on a representative editing stream of 2,000 commits and 10,431 deltas:
+24.9% smaller raw, 11.0% smaller with each frame compressed alone, and 6.0% smaller with one
+compression context across the stream. Size was the tiebreaker. The spelling problem was the
+decision.
+
+### 6.1 Heads
+
+Every item begins with an initial byte: three bits of major type, five bits of additional
+information. Additional information below 24 is the argument itself. The values 24, 25, 26
+and 27 introduce a further 1, 2, 4 or 8 bytes, most significant first. The values 28 to 31
+are not part of the format.
+
+| Major | Holds |
+|---|---|
+| 0 | unsigned integer, the argument |
+| 1 | negative integer, minus one minus the argument |
+| 2 | byte string, the argument is its length |
+| 3 | text string, the argument is its length in bytes |
+| 4 | array, the argument is its number of items |
+| 7 | `f4` false, `f5` true, `f6` null, `fb` float64 |
+
+Majors 5 and 6 are not part of the format.
+
+An encoder **MUST** write every head in the shortest form that holds its argument. A decoder
+**MUST** refuse a wider one, **MUST** refuse an indefinite length, **MUST** refuse bytes
+following the end of the commit, and **MUST** refuse an array whose stated length exceeds
+the bytes remaining.
+
+### 6.2 Numbers
+
+A number that is whole and within plus or minus 2^53 **MUST** be encoded as an integer, in
+the shortest head that holds it. Every other finite number **MUST** be encoded as a float64.
+
+A decoder **MUST** refuse an integer outside that range, which cannot be held exactly, and
+**MUST** refuse a float64 holding a whole number inside it, because the integer form is the
+one an encoder would have written.
+
+NaN and the infinities have no encoding. Negative zero is written as zero: nothing in the
+model tells the two apart, and a second spelling for one value is exactly what section 6
+exists to prevent.
+
+### 6.3 Text
+
+Text is UTF-8. A string holding an unpaired surrogate has no encoding, and an encoder
+**MUST** refuse it rather than substitute a replacement character. Substituting changes the
+value on its way out, and the result still decodes cleanly, so nothing downstream can
+notice.
+
+### 6.4 Values
+
+A value is a primitive or a reference to an observable. There is nothing else. An
+implementation **MUST NOT** inline a structure into a slot.
+
+```
+reference = [ kind, id ]
+kind      = 0 object | 1 array | 2 map
+```
+
+*Rationale:* a structure inlined into a slot would be state that changes without a delta
+addressing it, and every change to state is a delta. Carrying the kind on the reference,
+rather than inferring it from the other deltas that mention the id, is what lets an
+observable with no slots be fully described, and lets a receiver read a delta about an
+observable it has not seen yet.
+
+### 6.5 Refs
+
+```
+ref = [ kind, key ]
+```
+
+| Kind | Key is |
+|---|---|
+| 0 object | a text string |
+| 1 array | a position, section 6.6 |
+| 2 map | an id |
+
+The kind is written rather than inferred. This is section 2.3 made concrete.
+
+### 6.6 Positions
+
+A position is a byte string, ordered as a byte string: bytes are unsigned, and a string that
+is a prefix of another sorts before it.
+
+A position **MUST** be non-empty and **MUST NOT** end in a zero byte. Both rules exist so a
+position can always be produced between any two others. With a trailing zero allowed,
+nothing fits between a key and that key followed by a zero, and the array acquires a place
+it can never grow into.
+
+How a position between two others is chosen is **not specified**. Any choice meeting the two
+rules interoperates, because a receiver orders by comparing positions and never by
+regenerating them.
+
+### 6.7 Deltas
+
+```
+delta = [ type, id, ref ]           when the type is remove
+delta = [ type, id, ref, value ]    otherwise
+type  = 0 add | 1 replace | 2 remove
+```
+
+### 6.8 Commits
+
+```
+commit = [ deltas ]
+commit = [ deltas, tag ]
+```
+
+`deltas` holds at least one delta. `tag` is a byte string of 4 to 32 bytes, section 3.3.
+
+A commit with no deltas **MUST** be refused. Coalescing whose net effect is nothing emits
+nothing at all, not an empty commit.
+
+### 6.9 Canonical order
+
+Within a commit, deltas **MUST** be written in ascending order of the encoding of the
+delta's `id` followed by the encoding of its `ref`, compared as byte strings.
+
+A decoder **MUST** refuse a commit whose deltas are in any other order, rather than sorting
+them. Sorting would mean two byte strings decode to one commit, and re-encoding could then
+not reproduce its input.
+
+Because the order is strict, one comparison also enforces section 3.2's other rule: two
+deltas addressing the same `(id, ref)` compare equal, and equal is not ascending.
+
+### 6.10 Ids
+
+An id is 12 bytes. See `spec/identity.md`.
+
+### 6.11 What a commit does not carry
+
+Left out deliberately:
+
+- **Which document it belongs to.** Section 3.4 confines a commit to one document. Which one
+  is the routing layer's business, and carrying it here would invite a commit to be read
+  without its route.
+- **Where it sits in a causal order.** Section 4 requires commits to be applied in the order
+  the sender emitted them, which is a property of the channel, not of the commit.
+- **A format version.** Versioning is negotiated once, not repeated on every commit. See
+  `spec/CHANGELOG.md`.
 
 ---
 
@@ -180,11 +324,16 @@ fixtures are correct and the prose is a defect.
 
 An implementation conforms when:
 
-1. It decodes every fixture in `spec/fixtures/` to the state each describes.
-2. It encodes each fixture's state to bytes equal to the fixture.
-3. It applies each fixture's commits in generated, shuffled, and reversed order to the same
-   final state.
-4. It rejects each fixture in `spec/fixtures/invalid/` with the stated reason.
+1. It decodes every fixture in `spec/fixtures/` to the deltas that fixture states.
+2. It encodes those deltas to bytes equal to the fixture, whatever order they are handed to
+   it in.
+3. It applies each fixture's commits in generated, shuffled and reversed order, and reaches
+   the document the fixture states.
+4. It refuses each fixture in `spec/fixtures/invalid/`, **for the reason that fixture
+   names**.
+
+Point 4 is stricter than refusing somehow. A format whose implementations disagree about why
+an input is invalid has not been specified, only implemented.
 
 ---
 
@@ -192,6 +341,9 @@ An implementation conforms when:
 
 Not yet specified, and deliberately not guessed:
 
-- The concrete byte encoding. Section 6 defers to fixtures that do not exist yet.
-- The id scheme. See `spec/identity.md`.
-- Whether the integrity tag algorithm is fixed by this specification or negotiated.
+- **The integrity tag algorithm**, and whether this specification fixes it or a connection
+  negotiates it. The encoding does not depend on the answer, because a tag is opaque bytes.
+- **Large and exact numbers.** There is no big integer and no decimal type. An application
+  needing one carries it as text or as a byte string, and knows it is doing so.
+- **Whether an observable nothing references is this format's problem.** A commit can leave
+  one unreachable. Today that belongs to the layer above.
