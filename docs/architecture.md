@@ -171,10 +171,12 @@ generator that a test can replace. `server` produces credentials, in a different
 a different call site, so using an id as a session token is not expressible. See
 `spec/identity.md` and design 005.
 
-### One observable array, with identity opt-in
+### One observable array, and no identity option
 
-There is one array implementation, and tracked identity is a construction option on it. A
-user must never discover at replication time that they picked the wrong array months ago.
+There is one array implementation and it has no identity mode. Every element is addressed by
+an ordered position key, which does not shift when the array is edited elsewhere, so tracking
+identity separately would add a second internal path and buy nothing the addressing does not
+already give. See design 014.
 
 ### Cross-tree bridging is a supported seam, not a reach-in
 
@@ -215,6 +217,24 @@ with their reasons and prior values, after the document is consistent again.
 A refusal refuses the commit and never the connection. A well-behaved client produces refusals
 through ordinary races, and disconnecting turns every race into a full resynchronization at
 the moment the client is busiest. See designs 011 and 012.
+
+### A commit closes with the mutation, or with the atomic block
+
+One mutation is one commit, and `atomic(fn)` makes everything inside it one commit. A block
+that throws rolls back and emits nothing. See design 015.
+
+### The inverse is captured where the prior value is free
+
+Core captures prior values as it applies a change, in both directions, and every change it
+delivers can build the commit that undoes it. Nothing about the wire changes. See decision
+016.
+
+### A scope is a prefix of the path a delta names
+
+A listener narrows what it sees with `path`, `ignore` and `shallow` on an observer chain, and
+a delta is in scope when the path from the observer's base to the delta starts with the
+scope's keys. A scoped watcher sees the deltas in its scope, not the whole commit. See
+design 017.
 
 ### `store` is not decided
 
@@ -535,8 +555,5 @@ Each needs a home before the build order past phase 4 is final.
 - **Sync conflict semantics.** A client mutating an object another client just deleted must
   have a stated outcome. Throwing wedges the connection. "An alternative merge strategy later"
   does not answer what the default does.
-- **Inverse recording.** Forward deltas are not invertible without the prior value, and the
-  prior value is deliberately not on the wire. If undo and time travel are promised, say
-  where the inverse is captured and who keeps it.
 - **Quotas, secrets, and resident processes.** `modules` owns discovery and injection only.
   A platform running other people's code needs all three and none has an owner.
