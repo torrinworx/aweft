@@ -304,11 +304,46 @@ const inScope = (
 	base: number,
 	last: string,
 ): boolean => {
+	if (listener.wild) return wildScope(listener, chain, slots, base, last);
+
+	const reach = base + 1;
+	const keys = listener.keys as readonly (string | number)[];
+	if (keys.length > reach) return false;
+	if (listener.shallow && reach !== keys.length + 1) return false;
+
+	// Step j of the path is the slot chain[base - j] sits in, and the last step is the slot
+	// the delta itself names. Spelled inline: this is the hottest comparison in the stack.
+	for (let j = 0; j < keys.length; j++) {
+		const step = j < base ? slots[base - 1 - j]! : last;
+		if (step !== resolveKey(chain[base - j]!, keys[j]!)) return false;
+	}
+
+	if (listener.ignore.length > 0 && reach > keys.length) {
+		const next = keys.length < base ? slots[base - 1 - keys.length]! : last;
+		const node = chain[base - keys.length]!;
+		for (const key of listener.ignore) {
+			if (next === resolveKey(node, key)) return false;
+		}
+	}
+
+	return true;
+};
+
+/**
+ * The matcher for a scope with a wildcard in it. A wildcard pattern can end at more than
+ * one depth, so this backtracks: any way of consuming the whole pattern that the filters
+ * accept is a match (design 025). Only scopes that use wildcards pay for it.
+ */
+const wildScope = (
+	listener: Listener,
+	chain: readonly Node[],
+	slots: readonly string[],
+	base: number,
+	last: string,
+): boolean => {
 	const reach = base + 1;
 	const keys = listener.keys;
 
-	// Step j of the path is the slot chain[base - j] sits in, and the last step is the slot
-	// the delta itself names.
 	const step = (j: number): string => (j < base ? slots[base - 1 - j]! : last);
 	const holder = (j: number): Node => chain[base - j]!;
 
@@ -327,34 +362,23 @@ const inScope = (
 		return true;
 	};
 
-	if (listener.wild) {
-		// A wildcard pattern can end at more than one depth, so this backtracks: any way of
-		// consuming the whole pattern that a filter accepts is a match (design 025).
-		const fits = (j: number, k: number): boolean => {
-			if (j === keys.length) return accept(k);
-			if (k >= reach) return false;
+	const fits = (j: number, k: number): boolean => {
+		if (j === keys.length) return accept(k);
+		if (k >= reach) return false;
 
-			const key = keys[j]!;
-			if (typeof key !== 'object') {
-				return step(k) === resolveKey(holder(k), key) && fits(j + 1, k + 1);
-			}
-			if ('any' in key) return fits(j + 1, k + 1);
+		const key = keys[j]!;
+		if (typeof key !== 'object') {
+			return step(k) === resolveKey(holder(k), key) && fits(j + 1, k + 1);
+		}
+		if ('any' in key) return fits(j + 1, k + 1);
 
-			for (let m = k; m < reach; m++) {
-				if (step(m) === resolveKey(holder(m), key.deep) && fits(j + 1, m + 1)) return true;
-			}
-			return false;
-		};
-		return fits(0, 0);
-	}
+		for (let m = k; m < reach; m++) {
+			if (step(m) === resolveKey(holder(m), key.deep) && fits(j + 1, m + 1)) return true;
+		}
+		return false;
+	};
 
-	if (keys.length > reach) return false;
-
-	for (let j = 0; j < keys.length; j++) {
-		if (step(j) !== resolveKey(holder(j), keys[j] as string | number)) return false;
-	}
-
-	return accept(keys.length);
+	return fits(0, 0);
 };
 
 const collect = (entry: Entry, out: Map<Listener, Entry[]>): void => {
