@@ -72,4 +72,19 @@ changed here. Recording it because two fixtures did.
 
 15 conformance fixtures and 35 rejection fixtures, replacing the counts recorded above.
 
+### Two rules that existed only in the corpus, written down 2026-09-01
+
+An implementer building a second reading of the format from the prose alone found both of
+these by decoding fixture bytes and working backwards. Nothing normative changed; both rules
+were already enforced and already had fixtures. They were not stated.
+
+- **1.2, an observable's kind is fixed.** Nothing changes an observable's kind, and every
+  mention of an id has to agree about it: the `kind` on a reference, the kind a `ref` implies,
+  and the kind the document already has. A commit whose mentions disagree is refused. Fixture
+  `invalid/028-kind-conflict` was the only place this rule appeared.
+- **The apply-stage refusal vocabulary, in section 7.** `kind-conflict`, `multiple-attach`,
+  `slot-exists`, `slot-missing` and `unreachable`, each pointing at the rule it enforces.
+  Section 7 already made the reason part of conformance without saying what any reason was.
+  A test now holds the table and the corpus to each other, so neither can move alone.
+
 Open: the integrity tag algorithm, and the fate of a detached subtree.

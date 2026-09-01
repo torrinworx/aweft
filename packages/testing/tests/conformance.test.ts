@@ -81,3 +81,24 @@ test('the committed fixtures are the ones the generator produces', () => {
 function pathToUrl(path: string): string {
 	return new URL(`file://${path}`).href;
 }
+
+// The specification names the reasons an apply-stage refusal uses, and a reason that lives
+// only in a fixture is one a second implementation finds by decoding bytes and guessing. That
+// happened: `kind-conflict` was the rule and the token, and neither was written down. So the
+// prose and the corpus are held to each other here rather than trusted to stay in step.
+test('every apply-stage reason is in the specification, and every one there is used', () => {
+	const spec = readFileSync(new URL('../../../spec/format.md', import.meta.url), 'utf8');
+	const section = spec.slice(spec.indexOf('## 7. Conformance'));
+
+	const used = new Set(
+		rejections
+			.map((file) => read<InvalidFixture>(invalidDir, file))
+			.filter((f) => f.stage === 'apply')
+			.map((f) => f.reason),
+	);
+
+	const stated = new Set([...section.matchAll(/^\| `([a-z-]+)` \|/gm)].map((m) => m[1]!));
+
+	assert.deepEqual([...used].sort(), [...stated].sort());
+	assert.ok(used.size > 0, 'no apply-stage fixture found, so this check proves nothing');
+});

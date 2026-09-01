@@ -56,6 +56,23 @@ of 142 observables produced 36,507 paths, and one of about 2,000 exhausted a 4 G
 consequence for the layer above is that a reference can neither widen nor narrow who may write
 what, which makes two classes of privilege bug unrepresentable. See `docs/design/010`.
 
+### 1.2 An observable's kind is fixed
+
+An observable is an object, an array or a map, and it is that one kind for as long as it
+exists. Nothing changes an observable's kind.
+
+Every mention of an id therefore has to agree about its kind: the `kind` on a reference that
+names it, the kind implied by a `ref` addressing it, and the kind it already has in the
+document. An implementation **MUST** refuse a commit in which two mentions of one id
+disagree, including two deltas in the same commit that each introduce the id with a different
+kind.
+
+*Rationale:* section 6.4 carries the kind on the reference so a receiver can read a delta
+about an observable it has not materialized yet. That only works if the kind is a fact about
+the observable rather than an opinion of whoever wrote the delta. Without this rule a commit
+can describe an id as an array in one delta and a map in another, and both readings are
+defensible, so two implementations diverge without either being wrong.
+
 ---
 
 ## 2. Deltas
@@ -366,6 +383,22 @@ An implementation conforms when:
 
 Point 4 is stricter than refusing somehow. A format whose implementations disagree about why
 an input is invalid has not been specified, only implemented.
+
+Every fixture in `spec/fixtures/invalid/` names its reason, and that directory is the complete
+vocabulary. Most reasons belong to decoding, and each one is a **MUST** in section 6 read back
+as a refusal. Five belong to applying, where the bytes are a well formed commit and the
+document is what refuses it:
+
+| reason | the commit was refused because |
+|---|---|
+| `kind-conflict` | two mentions of one id disagree about its kind, section 1.2 |
+| `multiple-attach` | it would give one observable a second attach edge, section 1.1 |
+| `slot-exists` | an `add` names a slot that is already taken, section 2.1 |
+| `slot-missing` | a `replace` or `remove` names a slot that is not there, section 2.1 |
+| `unreachable` | the target has no path of attach edges from the root, section 1.1 |
+
+An implementation that refuses at the wrong stage has also failed point 4. A commit whose
+bytes are well formed **MUST** decode, and be refused when it is applied.
 
 ---
 
