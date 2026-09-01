@@ -6,13 +6,15 @@
 
 import { codecError } from '@aweftjs/codec';
 
-import type { Change, Listener, Node } from './types.ts';
+import type { Change, Listener, Node, Step, WildStep } from './types.ts';
 import { addListener, removeListener, resolveKey, userValue } from './node.ts';
 import { changeOf, write } from './transaction.ts';
 import { nodeOf, toCell } from './value.ts';
 
 /** A step in a path: an object or map slot by name, or an array position by index. */
 export type ScopeKey = string | number;
+
+const isWild = (key: Step): key is WildStep => typeof key === 'object';
 
 /** A scope: what part of the document a listener is about. Narrow it before watching. */
 export interface Observer {
@@ -34,6 +36,13 @@ export interface Observer {
 	/** Keep only changes to the scoped observable's own slots, not to anything below it. */
 	shallow(): Observer;
 	/**
+	 * Match any `count` consecutive steps (design 025). A scope with a wildcard in it names
+	 * many places, so `get` is undefined and `set` throws.
+	 */
+	skip(count?: number): Observer;
+	/** Match the named key at any depth: here, or under any chain of slots (design 025). */
+	tree(key: ScopeKey): Observer;
+	/**
 	 * Call `fn` with each commit that touched this scope. Returns its unsubscribe.
 	 *
 	 * `fn` runs after the whole commit has been applied, so the tree is never read between the
@@ -54,13 +63,15 @@ interface Resolved {
 }
 
 /** Walk a path to the observable holding its last key, without creating anything. */
-const locate = (base: Node, keys: readonly ScopeKey[]): Resolved => {
+const locate = (base: Node, keys: readonly Step[]): Resolved => {
 	let holder: Node | undefined = base;
 
 	for (let i = 0; i < keys.length - 1; i++) {
 		if (holder === undefined) return { holder: undefined, slot: undefined };
 
-		const cell = holder.slots.get(resolveKey(holder, keys[i]!));
+		const key = keys[i]!;
+		if (isWild(key)) return { holder: undefined, slot: undefined };
+		const cell = holder.slots.get(resolveKey(holder, key));
 
 		// A path walks attach edges and stops at an alias. Delivery walks up the attach edges,
 		// so a path that crossed an alias would read a live value that no watcher on it could
@@ -72,36 +83,47 @@ const locate = (base: Node, keys: readonly ScopeKey[]): Resolved => {
 	}
 
 	if (holder === undefined || keys.length === 0) return { holder, slot: undefined };
-	return { holder, slot: resolveKey(holder, keys[keys.length - 1]!) };
+	const last = keys[keys.length - 1]!;
+	if (isWild(last)) return { holder: undefined, slot: undefined };
+	return { holder, slot: resolveKey(holder, last) };
 };
 
 const build = (
 	base: Node,
-	keys: readonly ScopeKey[],
+	keys: readonly Step[],
 	ignored: readonly ScopeKey[],
 	shallow: boolean,
 ): Observer => {
+	const wild = keys.some(isWild);
+
 	const subscribe = (deliver: Listener['deliver']): (() => void) => {
-		const listener: Listener = { base, keys, ignore: ignored, shallow, deliver };
+		const listener: Listener = { base, keys, ignore: ignored, shallow, wild, deliver };
 		addListener(base, listener);
 		return () => removeListener(base, listener);
 	};
 
-	const observer: Observer = {
-		get: () => {
-			const { holder, slot } = locate(base, keys);
-			if (holder === undefined) return undefined;
-			if (slot === undefined) return holder.proxy;
-			return userValue(holder.slots.get(slot));
-		},
+	const get = (): unknown => {
+		if (wild) return undefined;
+		const { holder, slot } = locate(base, keys);
+		if (holder === undefined) return undefined;
+		if (slot === undefined) return holder.proxy;
+		return userValue(holder.slots.get(slot));
+	};
 
-		set: (value) => {
-			const { holder, slot } = locate(base, keys);
-			if (holder === undefined || slot === undefined) {
-				throw codecError('slot-missing', 'nothing holds the slot this path names');
-			}
-			write(holder, slot, toCell(value));
-		},
+	const set = (value: unknown): void => {
+		if (wild) {
+			throw codecError('multi-target', 'a wildcard scope names many places and cannot be written as one');
+		}
+		const { holder, slot } = locate(base, keys);
+		if (holder === undefined || slot === undefined) {
+			throw codecError('slot-missing', 'nothing holds the slot this path names');
+		}
+		write(holder, slot, toCell(value));
+	};
+
+	const observer: Observer = {
+		get,
+		set,
 
 		path: (...more) => build(base, [...keys, ...more], ignored, shallow),
 
@@ -109,11 +131,19 @@ const build = (
 
 		shallow: () => build(base, keys, ignored, true),
 
+		skip: (count = 1) => {
+			const steps: WildStep[] = [];
+			for (let i = 0; i < count; i++) steps.push({ any: true });
+			return build(base, [...keys, ...steps], ignored, shallow);
+		},
+
+		tree: (key) => build(base, [...keys, { deep: key }], ignored, shallow),
+
 		watch: (fn) => subscribe((deltas, inverses) => fn(changeOf(deltas, inverses))),
 
 		effect: (fn) => {
-			const stop = subscribe(() => fn(observer.get()));
-			fn(observer.get());
+			const stop = subscribe(() => fn(get()));
+			fn(get());
 			return stop;
 		},
 	};

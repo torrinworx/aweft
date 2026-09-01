@@ -49,12 +49,20 @@ export interface Node {
 	watchers: number;
 }
 
+/** A wildcard scope step: any one key, or any depth ending at a key (design 025). */
+export type WildStep = { readonly any: true } | { readonly deep: string | number };
+
+/** One step of a scope: a literal key, or a wildcard. */
+export type Step = string | number | WildStep;
+
 /** What a scope narrows to, and who to call. Registered on the observable it was built from. */
 export interface Listener {
 	readonly base: Node;
-	readonly keys: readonly (string | number)[];
+	readonly keys: readonly Step[];
 	readonly ignore: readonly (string | number)[];
 	readonly shallow: boolean;
+	/** Any wildcard in the keys, so delivery knows to take the matcher instead of the walk. */
+	readonly wild: boolean;
 	readonly deliver: (deltas: Delta[], inverses: Delta[]) => void;
 }
 
