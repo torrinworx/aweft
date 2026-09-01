@@ -116,7 +116,7 @@ test('while observed the value is cached; the transform does not run per read', 
 	stop();
 });
 
-test('while unobserved a read computes, and one read settles a shared subgraph once', () => {
+test('while unobserved a shared subgraph costs its size, and only until something is written', () => {
 	const doc = createObject<Doc>({ width: 2 });
 	let runs = 0;
 	const shared = observer(doc).path('width').map((v) => {
@@ -129,8 +129,13 @@ test('while unobserved a read computes, and one read settles a shared subgraph o
 	assert.equal(sum.get(), 7);
 	assert.equal(runs, 1);
 
-	// A second read cannot trust anything: nothing was watching in between.
+	// Nothing has been written since, so the idle cache is still trusted.
 	assert.equal(sum.get(), 7);
+	assert.equal(runs, 1);
+
+	// Any write anywhere moves the write clock, and the next read computes again.
+	doc.width = 3;
+	assert.equal(sum.get(), 9);
 	assert.equal(runs, 2);
 });
 

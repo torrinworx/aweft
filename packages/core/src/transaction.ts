@@ -12,6 +12,7 @@ import {
 } from '@aweftjs/codec';
 
 import type { Cell, Change, Listener, Node } from './types.ts';
+import { stamp } from './clock.ts';
 import {
 	anchorOf, attachNode, cellValue, detachNode, isAncestor, reroot, resolveKey, sameCell,
 	setCell, slotRef,
@@ -447,6 +448,7 @@ const close = (): void => {
 	// Nothing about the block may still be open when user code runs, because that code is free
 	// to mutate, and its mutations are a commit of their own.
 	reset();
+	stamp();
 	dispatch(jobs);
 };
 

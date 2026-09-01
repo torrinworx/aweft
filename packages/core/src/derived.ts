@@ -7,6 +7,7 @@
 
 import { codecError } from '@aweftjs/codec';
 
+import { clock } from './clock.ts';
 import { dispatch } from './transaction.ts';
 
 /**
@@ -79,6 +80,8 @@ export interface Derived<T> {
 interface DNode {
 	readonly sources: readonly Source[];
 	readonly compute: (inputs: readonly unknown[]) => unknown;
+	/** The transform of a one-input node, so its recompute allocates nothing. */
+	readonly one: ((input: unknown) => unknown) | null;
 
 	/** Downstream mark callbacks plus user watchers. Live means either is non-empty. */
 	readonly downstream: Set<() => void>;
@@ -97,6 +100,9 @@ interface DNode {
 	told: number;
 	/** In the pending list already, so a second poke in one burst queues nothing. */
 	queued: boolean;
+	/** The idle cache: trusted while the write clock has not moved past its stamp. */
+	idleAt: number;
+	idleValue: unknown;
 
 	/** unwrap only: the inner chain being followed, and how to let go of it. */
 	inner: Source | null;
@@ -108,9 +114,11 @@ const createDNode = (
 	sources: readonly Source[],
 	compute: (inputs: readonly unknown[]) => unknown,
 	follow = false,
+	one: ((input: unknown) => unknown) | null = null,
 ): DNode => ({
 	sources,
 	compute,
+	one,
 	downstream: new Set(),
 	watchers: new Set(),
 	detached: null,
@@ -121,6 +129,8 @@ const createDNode = (
 	depVersions: sources.map(() => 0),
 	told: 0,
 	queued: false,
+	idleAt: -1,
+	idleValue: undefined,
 	inner: null,
 	innerDetach: null,
 	follow,
@@ -228,11 +238,11 @@ const flush = (): void => {
 // --- pull: settling --------------------------------------------------------------------
 
 const recompute = (node: DNode): void => {
-	const inputs = node.sources.map((source) => source.read());
-
-	// A throw above this line records nothing: a failed compute must not read as a fresh one,
-	// or the stale value before it would be served as though it were the answer.
-	let value = node.compute(inputs);
+	// A throw in the transform records nothing: a failed compute must not read as a fresh
+	// one, or the stale value before it would be served as though it were the answer.
+	let value = node.one !== null
+		? node.one(node.sources[0]!.read())
+		: node.compute(node.sources.map((source) => source.read()));
 
 	// unwrap: when the computed value is itself a chain, follow it, and while live keep the
 	// subscription pointed at whichever inner chain the outer value names right now.
@@ -286,13 +296,10 @@ const settle = (node: DNode): void => {
 
 // --- reading while nothing watches ------------------------------------------------------
 
-// One top-level read settles each node at most once, so a shared subgraph costs its size and
-// not its path count. The cache is valid for the one read and never trusted after it.
-let epoch = 0;
-let reading = 0;
-const epochAt = new WeakMap<DNode, number>();
-const epochValue = new WeakMap<DNode, unknown>();
-
+// An idle node's cache is trusted exactly as long as the write clock has not moved: any
+// commit or cell write anywhere invalidates every idle cache at once. That is conservative
+// on purpose, and it is what makes a shared subgraph cost its size rather than its path
+// count, across sibling reads as well as within one.
 const readOnce = (node: DNode): unknown => {
 	// A live node's cache is maintained by the flush, so it is the answer, not a stale copy.
 	if (node.detached !== null) {
@@ -300,24 +307,20 @@ const readOnce = (node: DNode): unknown => {
 		return node.value;
 	}
 
-	if (reading > 0 && epochAt.get(node) === epoch) return epochValue.get(node);
+	if (node.idleAt === clock()) return node.idleValue;
 
-	reading += 1;
-	if (reading === 1) epoch += 1;
-
-	let value: unknown;
-	try {
-		value = node.compute(node.sources.map((source) => source.read()));
-		if (node.follow) {
-			const inner = sourceOf(value);
-			if (inner !== undefined) value = inner.read();
-		}
-	} finally {
-		reading -= 1;
+	let value = node.one !== null
+		? node.one(node.sources[0]!.read())
+		: node.compute(node.sources.map((source) => source.read()));
+	if (node.follow) {
+		const inner = sourceOf(value);
+		if (inner !== undefined) value = inner.read();
 	}
 
-	epochAt.set(node, epoch);
-	epochValue.set(node, value);
+	// Stamped after computing, so a transform that writes state invalidates what was read
+	// before its write rather than blessing it.
+	node.idleAt = clock();
+	node.idleValue = value;
 	return value;
 };
 
@@ -517,7 +520,7 @@ export const chain = <T>(source: Source): Derived<T> => {
 			if (node === undefined) {
 				// A bare source (a scope or cell watched directly) has no node of its own; a
 				// transparent one gives it the same settle, dedup and flush path as everything else.
-				node = createDNode([source], (inputs) => inputs[0]);
+				node = createDNode([source], (inputs) => inputs[0], false, (input) => input);
 			}
 			goLive(node);
 			node.watchers.add(fn as (value: unknown) => void);
@@ -538,7 +541,7 @@ export const chain = <T>(source: Source): Derived<T> => {
 			return stop;
 		},
 
-		map: (fn) => derive(createDNode([source], (inputs) => fn(inputs[0] as T))),
+		map: (fn) => derive(createDNode([source], (inputs) => fn(inputs[0] as T), false, fn as (input: unknown) => unknown)),
 
 		setter: (fn) => chain({
 			...source,
@@ -546,13 +549,19 @@ export const chain = <T>(source: Source): Derived<T> => {
 			immutable: () => false,
 		}),
 
-		unwrap: () => derive(createDNode([source], (inputs) => inputs[0], true)),
+		unwrap: () => derive(createDNode([source], (inputs) => inputs[0], true, (input) => input)),
 
-		bool: (truthy, falsy) => derive(createDNode([source], (inputs) => (inputs[0] ? truthy : falsy))),
+		bool: (truthy, falsy) => derive(createDNode(
+			[source], (inputs) => (inputs[0] ? truthy : falsy), false, (input) => (input ? truthy : falsy))),
 
-		def: (fallback) => derive(createDNode([source], (inputs) => inputs[0] ?? fallback)),
+		def: (fallback) => derive(createDNode(
+			[source], (inputs) => inputs[0] ?? fallback, false, (input) => input ?? fallback)),
 
-		defined: () => derive(createDNode([source], (inputs) => inputs[0] !== null && inputs[0] !== undefined)),
+		defined: () => derive(createDNode(
+			[source],
+			(inputs) => inputs[0] !== null && inputs[0] !== undefined,
+			false,
+			(input) => input !== null && input !== undefined)),
 
 		selector: (compare) =>
 			selectorFrom(source, (compare as (value: unknown, key: unknown) => boolean) ?? Object.is),

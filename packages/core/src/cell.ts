@@ -4,6 +4,7 @@
 // construction, with the same value surface as everything else. `toCell` refuses to put one
 // in a document slot, which is where the two lifetimes are kept from blurring.
 
+import { stamp } from './clock.ts';
 import { dispatch } from './transaction.ts';
 import { type Derived, type Source, chain, sourceOf } from './derived.ts';
 
@@ -43,6 +44,7 @@ export const mutable = <T>(initial: T): Derived<T> => {
 		write: (next) => {
 			if (Object.is(next, value)) return;
 			value = next as T;
+			stamp();
 			markAll(marks);
 		},
 		immutable: () => false,
@@ -103,6 +105,7 @@ export const timer = (ms: number): Derived<number> => {
 			if (handle === null) {
 				handle = setInterval(() => {
 					ticks += 1;
+					stamp();
 					markAll(marks);
 				}, ms);
 			}
@@ -145,6 +148,7 @@ export const fromEvent = <E>(target: EventEmitting<E>, type: string): Derived<E 
 
 	const handler = (event: E): void => {
 		last = event;
+		stamp();
 		markAll(marks);
 	};
 
