@@ -21,6 +21,21 @@ export { compareBytes as comparePositions } from './bytes.ts';
 export const isValidPosition = (p: Uint8Array): boolean =>
 	p instanceof Uint8Array && p.length > 0 && p[p.length - 1] !== 0;
 
+/**
+ * Check that this is a well formed position, and hand it back.
+ *
+ * Params:
+ *   p: the position key
+ *
+ * Returns: the same bytes, so it can wrap a value on its way into a ref.
+ *
+ * Throws: when it is empty or ends in a zero byte. Both are refused here rather than at the
+ * far end, because a key that breaks either rule leaves an array with a place it can never
+ * grow into and nothing downstream can tell why.
+ *
+ * Example:
+ *   const ref = { kind: 'array', key: assertPosition(position) };
+ */
 export const assertPosition = (p: Uint8Array): Uint8Array => {
 	if (!isValidPosition(p)) {
 		throw codecError('invalid-position', 'a position is non-empty and does not end in a zero byte');

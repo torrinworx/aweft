@@ -13,8 +13,25 @@ import { compareBytes } from './bytes.ts';
 import { assertId } from './id.ts';
 import { assertPosition } from './position.ts';
 
+/**
+ * What a delta does to the slot it names.
+ *
+ * The same three words JSON Patch uses, deliberately: the format is specified for other
+ * languages to implement, and an implementer reading `replace` already knows the semantics.
+ * `add` needs the slot free, `replace` and `remove` need it taken, and a commit that gets
+ * that wrong is refused rather than reconciled.
+ */
 export type DeltaType = 'add' | 'replace' | 'remove';
+
+/** Which of the three kinds an observable is. It is fixed when the observable is made. */
 export type ObservableKind = 'object' | 'array' | 'map';
+
+/**
+ * What a reference to an observable means.
+ *
+ * `attach` is where the observable lives, and it has exactly one. `alias` names it from
+ * somewhere else and moves nothing.
+ */
 export type EdgeKind = 'attach' | 'alias';
 
 /**
@@ -31,6 +48,12 @@ export interface Reference {
 	readonly id: Uint8Array;
 }
 
+/**
+ * Everything a slot can hold: a primitive, or the name of another observable.
+ *
+ * There is no structure here on purpose. A structure inlined into a slot would be state that
+ * changes with no delta addressing it, and every change to state is a delta.
+ */
 export type Value = null | boolean | number | string | Uint8Array | Reference;
 
 /** Which slot within an observable. The kind is carried, so a receiver that has never seen
@@ -40,6 +63,12 @@ export type Ref =
 	| { readonly kind: 'array'; readonly key: Uint8Array }
 	| { readonly kind: 'map'; readonly key: Uint8Array };
 
+/**
+ * One change to one slot.
+ *
+ * The target is `id` plus `ref` and never a path, so a delta means the same thing whatever
+ * else moved in the same commit. `value` is absent exactly when the type is `remove`.
+ */
 export interface Delta {
 	readonly type: DeltaType;
 	readonly id: Uint8Array;
@@ -47,6 +76,14 @@ export interface Delta {
 	readonly value?: Value;
 }
 
+/**
+ * The unit that crosses every boundary.
+ *
+ * A commit applies whole or not at all, and it carries at least one delta. Its deltas are a
+ * set, written in the canonical order of section 6.9, and a receiver replaying them one at a
+ * time would pass through states the sender never had. `tag` is the optional integrity tag,
+ * 4 to 32 bytes; the algorithm that fills it is still open.
+ */
 export interface Commit {
 	readonly deltas: readonly Delta[];
 	readonly tag?: Uint8Array;
@@ -56,6 +93,7 @@ const DELTA_TYPES = ['add', 'replace', 'remove'] as const;
 const KINDS = ['object', 'array', 'map'] as const;
 const EDGES = ['attach', 'alias'] as const;
 
+/** The narrowest and widest an integrity tag may be. Section 3.3; the algorithm is open. */
 export const MIN_TAG_BYTES = 4;
 export const MAX_TAG_BYTES = 32;
 

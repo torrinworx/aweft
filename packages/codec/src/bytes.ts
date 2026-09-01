@@ -25,16 +25,54 @@ export const compareBytes = (a: Uint8Array, b: Uint8Array): number => {
 	return a.length < b.length ? -1 : 1;
 };
 
+/**
+ * Do two byte strings hold the same bytes?
+ *
+ * Params:
+ *   a, b: any two byte strings
+ *
+ * Returns: true when they are the same length and every byte matches. Identity is not the
+ * question: two arrays holding the same bytes are one value to this format.
+ *
+ * Example:
+ *   if (equalBytes(idOfDelta, idOfNode)) apply(delta);
+ */
 export const equalBytes = (a: Uint8Array, b: Uint8Array): boolean => compareBytes(a, b) === 0;
 
 const HEX = '0123456789abcdef';
 
+/**
+ * A byte string as lower case hex.
+ *
+ * Params:
+ *   b: the bytes
+ *
+ * Returns: two characters per byte. Hex is used where bytes have to be a string that still
+ * sorts the way the bytes do, which is what lets an array slot be keyed by its position.
+ *
+ * Example:
+ *   slots.set(bytesToHex(position), cell);
+ */
 export const bytesToHex = (b: Uint8Array): string => {
 	let out = '';
 	for (const v of b) out += HEX[v >> 4]! + HEX[v & 15]!;
 	return out;
 };
 
+/**
+ * The bytes behind a hex string.
+ *
+ * Params:
+ *   hex: an even number of hex characters
+ *
+ * Returns: the bytes it spells.
+ *
+ * Throws: when the length is odd or a character is not hex, rather than guessing at what was
+ * meant.
+ *
+ * Example:
+ *   const position = bytesFromHex(slot);
+ */
 export const bytesFromHex = (hex: string): Uint8Array => {
 	if (hex.length % 2 !== 0) throw new Error(`hex string has an odd length: ${hex.length}`);
 

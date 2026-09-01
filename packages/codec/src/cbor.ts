@@ -25,6 +25,12 @@ const MAX_DEPTH = 8;
 export const MAX_INT = 2 ** 53;
 export const MIN_INT = -(2 ** 53);
 
+/**
+ * Everything the encoding can carry, at the level below deltas and commits.
+ *
+ * The type set is small on purpose, and there are no maps and no tagged values. A commit is
+ * built out of these and nothing else, which is what keeps one spelling per value.
+ */
 export type CborValue = null | boolean | number | string | Uint8Array | readonly CborValue[];
 
 /**

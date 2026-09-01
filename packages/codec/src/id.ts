@@ -4,6 +4,7 @@ import { codecError } from './cbor.ts';
 
 /** 96 bits. Twelve bytes encode to exactly sixteen base64url characters with no padding. */
 export const ID_BYTES = 12;
+/** How many characters the text form of an id is. Sixteen base64url characters, no padding. */
 export const ID_TEXT_LENGTH = 16;
 
 /**
@@ -18,6 +19,20 @@ export const ID_TEXT_LENGTH = 16;
  */
 export const createId = (): Uint8Array => crypto.getRandomValues(new Uint8Array(ID_BYTES));
 
+/**
+ * Check that this is an id, and hand it back.
+ *
+ * Params:
+ *   id: the bytes to check
+ *
+ * Returns: the same bytes, so it can wrap a value on its way into a structure.
+ *
+ * Throws: when it is not exactly ID_BYTES long. An id of the wrong width is refused at the
+ * edge rather than stored and found later, because by then nothing can say what it was.
+ *
+ * Example:
+ *   const delta = { type: 'add', id: assertId(bytes), ref, value };
+ */
 export const assertId = (id: Uint8Array): Uint8Array => {
 	if (!(id instanceof Uint8Array) || id.length !== ID_BYTES) {
 		throw codecError('invalid-id', `an id is ${ID_BYTES} bytes, got ${(id as Uint8Array)?.length}`);
@@ -50,6 +65,20 @@ export const idToText = (id: Uint8Array): string => {
 	return out;
 };
 
+/**
+ * The id behind its text form.
+ *
+ * Params:
+ *   text: sixteen base64url characters, as idToText writes them
+ *
+ * Returns: the 12 bytes.
+ *
+ * Throws: when the length or the alphabet is wrong. Round tripping through text is lossless,
+ * so anything that does not round trip was never one of these ids.
+ *
+ * Example:
+ *   const id = idFromText(slotKey);
+ */
 export const idFromText = (text: string): Uint8Array => {
 	if (text.length !== ID_TEXT_LENGTH) {
 		throw codecError('invalid-id', `an id is ${ID_TEXT_LENGTH} characters, got ${text.length}`);
