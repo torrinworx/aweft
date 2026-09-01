@@ -11,6 +11,8 @@ import {
 	bytesFromHex, bytesToHex, decodeCommit, encodeCommit, idFromText, idToText,
 } from '@aweftjs/codec';
 
+import { randomBelow, randomFrom } from './random.ts';
+
 import {
 	type DocumentJson, type ValueJson, applyCommit, canonicalJson, slotKey, valueFromJson,
 	valueToJson,
@@ -107,14 +109,11 @@ export const seedFrom = (text: string): number => {
 };
 
 export const shuffle = <T>(items: readonly T[], seed: number): T[] => {
-	let s = seed;
+	const random = randomFrom(seed);
 	const out = [...items];
 
 	for (let i = out.length - 1; i > 0; i--) {
-		s ^= s << 13; s >>>= 0;
-		s ^= s >> 17;
-		s ^= s << 5; s >>>= 0;
-		const j = s % (i + 1);
+		const j = randomBelow(random, i + 1);
 		[out[i], out[j]] = [out[j]!, out[i]!];
 	}
 	return out;

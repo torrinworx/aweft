@@ -8,19 +8,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { compareBytes } from '@aweftjs/codec';
+import { randomFrom } from '@aweftjs/testing';
 
 import { createArray, positionsOf } from '../src/index.ts';
-
-/** Seeded, so a failure prints the seed that produced it and can be run again. */
-const random = (seed: number): (() => number) => {
-	let s = seed >>> 0 || 1;
-	return () => {
-		s ^= s << 13; s >>>= 0;
-		s ^= s >> 17;
-		s ^= s << 5; s >>>= 0;
-		return s / 0x100000000;
-	};
-};
 
 const check = (list: number[], mirror: number[], seed: number, step: number): void => {
 	const positions = positionsOf(list);
@@ -45,7 +35,7 @@ const check = (list: number[], mirror: number[], seed: number, step: number): vo
 
 for (const seed of [1, 20260831, 0x5f3759df]) {
 	test(`positions hold their order under random editing, seed ${seed}`, () => {
-		const next = random(seed);
+		const next = randomFrom(seed);
 		const list = createArray<number>();
 		const mirror: number[] = [];
 
