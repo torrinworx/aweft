@@ -143,3 +143,67 @@ test('a delta whose shape is wrong names the rule it broke', () => {
 	reason(() => decodeCommit(encodeValue(['not a commit'])), 'invalid-commit');
 	reason(() => decodeCommit(encodeValue([[[0, A, [0, 'a'], 1]], 'tag'])), 'invalid-tag');
 });
+
+test('a whole commit matches bytes spelled out by hand from the specification', () => {
+	// Everywhere else the expected bytes come from this encoder, so those checks compare it
+	// against its own past behavior and cannot catch it drifting from `spec/format.md`. These
+	// are spelled out from the prose instead, head by head, so a disagreement shows up here.
+	//
+	// Read down the sections: 6.8 says a commit is [deltas], 6.7 says an add is
+	// [type, id, ref, value], 6.5 says a ref is [kind, key], and 6.1 gives every head as three
+	// bits of major type and five of argument, in the shortest form that holds it.
+	//
+	//   81                        6.8  array of 1: the commit
+	//   81                        6.8  array of 1: the deltas
+	//   84                        6.7  array of 4: an add carries a value
+	//   00                        6.7  type 0, add
+	//   4c 0000..0001             6.10 byte string of 12: the id
+	//   82                        6.5  array of 2: the ref
+	//   00                        6.5  kind 0, object
+	//   65 7469746c65             6.3  text of 5: "title"
+	//   62 6869                   6.3  text of 2: "hi"
+	const spelled = '818184004c0000000000000000000000018200657469746c65626869';
+
+	const commit: Commit = {
+		deltas: [{ type: 'add', id: A, ref: { kind: 'object', key: 'title' }, value: 'hi' }],
+	};
+
+	assert.equal(bytesToHex(encodeCommit(commit)), spelled);
+	assert.deepEqual(decodeCommit(bytesFromHex(spelled)), commit);
+});
+
+test('a commit with a tag, a reference and a position matches bytes spelled out by hand', () => {
+	// The head forms the first one does not reach: a three element delta for a remove (6.7),
+	// an array ref whose key is a position byte string (6.5, 6.6), a value that is a reference
+	// (6.4), a tag (6.8), and the canonical order between two deltas (6.9).
+	//
+	// The order is decided by the encoded ref, since both deltas share an id. The object ref
+	// encodes 82 00 61 61 and the array ref 82 01 41 80, so the object one sorts first on its
+	// second byte, whatever order the caller passes them in.
+	//
+	//   82                        6.8  array of 2: a commit carrying a tag
+	//   82                        6.8  array of 2: two deltas
+	//     84                      6.7  array of 4: an add
+	//     00                      6.7  type 0, add
+	//     4c 0000..0001           6.10 byte string of 12: the id
+	//     82 00 61 61             6.5  ref [kind 0 object, text of 1 "a"]
+	//     83 00 00 4c 0000..0002  6.4  value [edge 0 attach, kind 0 object, the id]
+	//     83                      6.7  array of 3: a remove carries no value
+	//     02                      6.7  type 2, remove
+	//     4c 0000..0001           6.10 the id
+	//     82 01 41 80             6.5  ref [kind 1 array, byte string of 1: the position]
+	//   44 deadbeef               6.8  byte string of 4: the tag
+	const spelled = '828284004c000000000000000000000001820061618300004c000000000000000000000002'
+		+ '83024c0000000000000000000000018201418044deadbeef';
+
+	const commit: Commit = {
+		deltas: [
+			{ type: 'add', id: A, ref: { kind: 'object', key: 'a' }, value: { edge: 'attach', kind: 'object', id: B } },
+			{ type: 'remove', id: A, ref: { kind: 'array', key: Uint8Array.of(0x80) } },
+		],
+		tag: bytesFromHex('deadbeef'),
+	};
+
+	assert.equal(bytesToHex(encodeCommit(commit)), spelled);
+	assert.deepEqual(decodeCommit(bytesFromHex(spelled)), commit);
+});
