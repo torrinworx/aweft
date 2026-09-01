@@ -92,3 +92,38 @@ console.log('\n## a write twenty levels down, watched at the root');
 
 	measure('twenty deep, one watcher at the root', 20000, (i) => { at.a = i; });
 }
+
+// How delivery scales with the number of listeners, and with where they registered.
+//
+// Every scope built as `observer(root).path(...)` registers on the root, and delivery walks
+// each delta up to the root, checking every listener it passes. So the cost of one write is
+// the number of listeners standing between the delta and the top, whether or not they match.
+// Registering the same scope on the observable it is about walks past none of them. The
+// derived surface is about to decide which of the two a computed does.
+console.log('\n## a hundred, a thousand and ten thousand listeners, by where they registered');
+for (const count of [100, 1000, 10000]) {
+	{
+		const doc = createObject<Doc>({ a: 0 });
+		let seen = 0;
+		for (let i = 0; i < count; i++) {
+			observer(doc).path(`slot${i}`).watch(() => { seen += 1; });
+		}
+		measure(`${count} scopes on the root, one write they all miss`, 2000, (i) => { doc.a = i; });
+	}
+
+	{
+		const root = createObject<Doc>();
+		const children: Doc[] = [];
+		let seen = 0;
+
+		for (let i = 0; i < count; i++) {
+			const child = createObject<Doc>({ a: 0 });
+			(root as Record<string, unknown>)[`c${i}`] = child;
+			observer(child).path('a').watch(() => { seen += 1; });
+			children.push(child);
+		}
+
+		const target = children[0]!;
+		measure(`${count} scopes on their own observable, one write`, 2000, (i) => { target.a = i; });
+	}
+}
