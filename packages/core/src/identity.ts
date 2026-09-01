@@ -2,6 +2,7 @@
 
 import { codecError, type ObservableKind } from '@aweftjs/codec';
 
+import { isReachable as reachable } from './node.ts';
 import type { Node } from './types.ts';
 import { nodeOf } from './value.ts';
 
@@ -70,3 +71,22 @@ export const kindOf = (observable: unknown): ObservableKind => need(observable).
  *   const list = parentOf(entry); // the array the entry sits in, or undefined
  */
 export const parentOf = (observable: unknown): object | undefined => need(observable).parent?.proxy;
+
+/**
+ * Can this observable still be written to?
+ *
+ * Params:
+ *   observable: any observable
+ *
+ * Returns: true while an attach path from the document root reaches it. Detaching an
+ * observable takes that path away, and a write to it then throws `unreachable`, which is
+ * exactly what a receiver does with the same delta.
+ *
+ * `parentOf` cannot answer this: it returns undefined both for a document root, which is
+ * reachable, and for something detached, which is not. Ask here rather than by catching the
+ * throw, because control flow through an error hides the ordinary case.
+ *
+ * Example:
+ *   if (isReachable(task)) task.done = true;
+ */
+export const isReachable = (observable: unknown): boolean => reachable(need(observable));

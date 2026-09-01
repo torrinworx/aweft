@@ -1,9 +1,10 @@
 export { createObject } from './object.ts';
 export { createArray, insertAt, positionsOf } from './array.ts';
 export { createMap } from './map.ts';
+export type { ObservableMap } from './map.ts';
 
 export { alias, isObservable } from './value.ts';
-export { idOf, kindOf, parentOf, textIdOf } from './identity.ts';
+export { idOf, isReachable, kindOf, parentOf, textIdOf } from './identity.ts';
 
 export { atomic } from './transaction.ts';
 export { observer } from './observer.ts';

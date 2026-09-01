@@ -31,6 +31,7 @@ const keyOf = (key: unknown): string => {
  *
  * Params:
  *   entries: the entries it starts with, as pairs of id and value
+ *   T: what the values are, so `get` answers with something better than unknown
  *   id: its id, when it has to be a particular one. Minted otherwise
  *
  * Returns: a map of ids to values. `add` files an observable under its own id, which is the
@@ -40,20 +41,41 @@ const keyOf = (key: unknown): string => {
  *   const presence = createMap();
  *   presence.add(createObject({ cursor: 42 }));
  */
-export const createMap = (entries?: Iterable<readonly [unknown, unknown]>, id?: Uint8Array) => {
+export interface ObservableMap<T> {
+	/** What is filed under this id, or undefined. */
+	get(key: unknown): T | undefined;
+	has(key: unknown): boolean;
+	/** File a value under an id of your choosing. */
+	set(key: unknown, value: T): void;
+	/** File an observable under its own id, which is the common case. */
+	add(observable: T & object): void;
+	/** Returns whether the id was there, the way a plain Map does. */
+	delete(key: unknown): boolean;
+	readonly size: number;
+	/** The ids, in text form. */
+	keys(): string[];
+	values(): T[];
+	entries(): Generator<[string, T]>;
+	[Symbol.iterator](): Generator<[string, T]>;
+}
+
+export const createMap = <T = unknown>(
+	entries?: Iterable<readonly [unknown, T]>,
+	id?: Uint8Array,
+): ObservableMap<T> => {
 	const node: Node = createNode('map', id);
 
-	const map = {
-		get: (key: unknown): unknown => userValue(node.slots.get(keyOf(key))),
+	const map: ObservableMap<T> = {
+		get: (key: unknown): T | undefined => userValue(node.slots.get(keyOf(key))) as T | undefined,
 
 		has: (key: unknown): boolean => node.slots.has(keyOf(key)),
 
-		set: (key: unknown, value: unknown): void => {
+		set: (key: unknown, value: T): void => {
 			write(node, keyOf(key), toCell(value));
 		},
 
 		/** File an observable under its own id. */
-		add: (observable: object): void => {
+		add: (observable: T & object): void => {
 			const held = nodeOf(observable);
 			if (held === undefined) throw codecError('not-observable', 'add takes an observable');
 			write(node, held.key, toCell(observable));
@@ -72,14 +94,14 @@ export const createMap = (entries?: Iterable<readonly [unknown, unknown]>, id?: 
 
 		keys: (): string[] => [...node.slots.keys()],
 
-		values: (): unknown[] => [...node.slots.values()].map(userValue),
+		values: (): T[] => [...node.slots.values()].map(userValue) as T[],
 
-		entries: function* (): Generator<[string, unknown]> {
-			for (const [slot, cell] of node.slots) yield [slot, userValue(cell)];
+		entries: function* (): Generator<[string, T]> {
+			for (const [slot, cell] of node.slots) yield [slot, userValue(cell) as T];
 		},
 
-		[Symbol.iterator]: function* (): Generator<[string, unknown]> {
-			for (const [slot, cell] of node.slots) yield [slot, userValue(cell)];
+		[Symbol.iterator]: function* (): Generator<[string, T]> {
+			for (const [slot, cell] of node.slots) yield [slot, userValue(cell) as T];
 		},
 	};
 

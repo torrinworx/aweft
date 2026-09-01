@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 import { idToText } from '@aweftjs/codec';
 
 import {
-	alias, createArray, createMap, createObject, idOf, isObservable, kindOf, observer,
-	parentOf, positionsOf, insertAt, snapshot, textIdOf,
+	alias, createArray, createMap, createObject, idOf, isObservable, isReachable, kindOf,
+	observer, parentOf, positionsOf, insertAt, snapshot, textIdOf,
 } from '../src/index.ts';
 import type { Change } from '../src/index.ts';
 
@@ -255,4 +255,38 @@ test('a snapshot is the whole document as plain data', () => {
 	// Any observable in the document answers for the document.
 	assert.deepEqual(snapshot(block), taken);
 	assert.throws(() => snapshot({}), { reason: 'not-observable' });
+});
+
+
+test('reachability is askable, and it is not the question parentOf answers', () => {
+	const task = createObject<Record<string, unknown>>({ text: 'a' });
+	const list = createArray<Record<string, unknown>>([task]);
+	const doc = createObject<Record<string, unknown>>({ tasks: list });
+
+	assert.equal(isReachable(task), true);
+	assert.equal(isReachable(doc), true, 'a document root is reachable');
+
+	list.splice(0, 1);
+
+	assert.equal(isReachable(task), false);
+	assert.throws(() => { task.text = 'b'; }, { reason: 'unreachable' });
+
+	// parentOf cannot stand in for this. It answers undefined for a root, which is reachable,
+	// and undefined for something detached, which is not.
+	assert.equal(parentOf(doc), undefined);
+	assert.equal(parentOf(task), undefined);
+});
+
+test('a map carries the type of what it holds', () => {
+	const counts = createMap<number>();
+	const first = createObject<Record<string, unknown>>({});
+
+	counts.set(textIdOf(first), 3);
+	const got: number | undefined = counts.get(textIdOf(first));
+
+	assert.equal(got, 3);
+	assert.deepEqual(counts.values(), [3]);
+	assert.equal(counts.size, 1);
+	assert.equal(counts.delete(textIdOf(first)), true, 'delete answers like a plain Map');
+	assert.equal(counts.delete(textIdOf(first)), false);
 });
