@@ -18,8 +18,10 @@ import { assertPosition } from './position.ts';
  *
  * The same three words JSON Patch uses, deliberately: the format is specified for other
  * languages to implement, and an implementer reading `replace` already knows the semantics.
- * `add` needs the slot free, `replace` and `remove` need it taken, and a commit that gets
- * that wrong is refused rather than reconciled.
+ * `add` needs the slot free, `replace` and `remove` need it taken. That rule binds whoever
+ * applies the commit to a document: an applier refuses a commit that gets it wrong rather
+ * than reconciling it. The encoder cannot check it, because it holds no state across
+ * commits; the only slot rule enforced here is that one commit never targets a slot twice.
  */
 export type DeltaType = 'add' | 'replace' | 'remove';
 
@@ -67,7 +69,9 @@ export type Ref =
  * One change to one slot.
  *
  * The target is `id` plus `ref` and never a path, so a delta means the same thing whatever
- * else moved in the same commit. `value` is absent exactly when the type is `remove`.
+ * else moved in the same commit. `value` is absent exactly when the type is `remove`:
+ * absent as in the key is omitted, not present holding undefined, and a decoded delta
+ * reads the same way.
  */
 export interface Delta {
 	readonly type: DeltaType;

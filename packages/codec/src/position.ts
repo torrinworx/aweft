@@ -6,6 +6,10 @@
 //
 // Position keys are byte strings ordered as byte strings, so an implementation can order an
 // array without asking any other observable anything.
+//
+// This package judges positions and never mints one: there is no function here that chooses
+// a key between two others. Choosing belongs to whatever owns the array being edited, and a
+// receiver never regenerates a key it was sent.
 
 import { codecError } from './cbor.ts';
 

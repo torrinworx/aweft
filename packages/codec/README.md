@@ -153,7 +153,21 @@ diverged and resynchronizes. It says nothing about the bytes in between, and the
 that fills it is still open, so nothing here computes or checks one yet.
 
 **It does not frame anything.** A commit says how long it is, but a log of commits needs its
-own framing, which `examples/codec/main.ts` shows one way of doing.
+own framing. The simplest workable one is a length prefix per frame:
+
+```ts
+const frame = (bytes: Uint8Array): Uint8Array => {
+	const out = new Uint8Array(4 + bytes.length);
+	new DataView(out.buffer).setUint32(0, bytes.length);
+	out.set(bytes, 4);
+	return out;
+};
+// Reading back: take the length, slice the frame, hand exactly that slice to decodeCommit.
+```
+
+`decodeCommit` takes one commit with nothing before or after it, so the framing decides
+where a commit ends, and anything that must survive a hostile channel adds its own checksum
+or signature at this layer. `examples/codec/main.ts` is a complete log doing this.
 
 ## Boundaries
 
