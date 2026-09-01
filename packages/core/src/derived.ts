@@ -185,17 +185,44 @@ const flush = (): void => {
 	const batch = pending;
 	pending = [];
 
+	// One watcher or one transform throwing must not decide whether the others hear the
+	// value. The first error still reaches whoever made the change, once everyone has been
+	// told, which is the same rule commit delivery follows.
+	let failed = false;
+	let failure: unknown;
+
 	for (const node of batch) {
 		node.queued = false;
 		// A node whose last watcher left mid-burst has nothing maintaining its cache and
 		// nobody to tell.
 		if (node.detached === null) continue;
-		if (node.dirty) settle(node);
+		if (node.dirty) {
+			try {
+				settle(node);
+			} catch (error) {
+				if (!failed) {
+					failed = true;
+					failure = error;
+				}
+				continue;
+			}
+		}
 		if (node.version === node.told) continue;
 
 		node.told = node.version;
-		for (const watcher of node.watchers) watcher(node.value);
+		for (const watcher of [...node.watchers]) {
+			try {
+				watcher(node.value);
+			} catch (error) {
+				if (!failed) {
+					failed = true;
+					failure = error;
+				}
+			}
+		}
 	}
+
+	if (failed) throw failure;
 };
 
 // --- pull: settling --------------------------------------------------------------------
@@ -203,12 +230,8 @@ const flush = (): void => {
 const recompute = (node: DNode): void => {
 	const inputs = node.sources.map((source) => source.read());
 
-	for (let i = 0; i < node.sources.length; i++) {
-		const dep = dnodeOf(node.sources[i]!);
-		if (dep !== undefined) node.depVersions[i] = dep.version;
-	}
-	node.fired = false;
-
+	// A throw above this line records nothing: a failed compute must not read as a fresh one,
+	// or the stale value before it would be served as though it were the answer.
 	let value = node.compute(inputs);
 
 	// unwrap: when the computed value is itself a chain, follow it, and while live keep the
@@ -222,6 +245,12 @@ const recompute = (node: DNode): void => {
 		}
 		if (inner !== undefined) value = inner.read();
 	}
+
+	for (let i = 0; i < node.sources.length; i++) {
+		const dep = dnodeOf(node.sources[i]!);
+		if (dep !== undefined) node.depVersions[i] = dep.version;
+	}
+	node.fired = false;
 
 	if (!Object.is(value, node.value)) {
 		node.value = value;
@@ -243,7 +272,16 @@ const settle = (node: DNode): void => {
 		if (dep.version !== node.depVersions[i]) stale = true;
 	}
 
-	if (stale) recompute(node);
+	if (stale) {
+		try {
+			recompute(node);
+		} catch (error) {
+			// The work is still owed: a read or delivery after a failed compute tries again
+			// rather than serving what the value was before the failure.
+			node.dirty = true;
+			throw error;
+		}
+	}
 };
 
 // --- reading while nothing watches ------------------------------------------------------
