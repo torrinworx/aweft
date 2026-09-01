@@ -59,8 +59,23 @@ const EDGES = ['attach', 'alias'] as const;
 export const MIN_TAG_BYTES = 4;
 export const MAX_TAG_BYTES = 32;
 
+/**
+ * Is this value a reference to an observable rather than a primitive?
+ *
+ * Params:
+ *   v: any value the format can carry
+ *
+ * Returns: true only for the three field shape a reference has. Narrowing on "an object that
+ * is not bytes and not an array" would answer true for a plain object too, and the caller
+ * then fails a step later complaining about the kind rather than about the structure it was
+ * actually handed.
+ *
+ * Example:
+ *   if (isReference(delta.value)) follow(delta.value.id);
+ */
 export const isReference = (v: Value): v is Reference =>
-	typeof v === 'object' && v !== null && !(v instanceof Uint8Array) && !Array.isArray(v);
+	typeof v === 'object' && v !== null && !(v instanceof Uint8Array) && !Array.isArray(v)
+	&& 'edge' in v && 'kind' in v && 'id' in v;
 
 // --- writing ---------------------------------------------------------------------------
 

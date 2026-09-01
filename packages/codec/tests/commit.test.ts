@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 
 import { bytesFromHex, bytesToHex } from '../src/bytes.ts';
 import { type CborValue, type CodecError, encodeValue } from '../src/cbor.ts';
-import { type Commit, type Delta, type Value, decodeCommit, encodeCommit } from '../src/commit.ts';
+import {
+	type Commit, type Delta, type Value,
+	decodeCommit, encodeCommit, isReference, MAX_TAG_BYTES, MIN_TAG_BYTES,
+} from '../src/commit.ts';
 
 const id = (n: number): Uint8Array => bytesFromHex(n.toString(16).padStart(24, '0'));
 
@@ -206,4 +209,37 @@ test('a commit with a tag, a reference and a position matches bytes spelled out 
 
 	assert.equal(bytesToHex(encodeCommit(commit)), spelled);
 	assert.deepEqual(decodeCommit(bytesFromHex(spelled)), commit);
+});
+
+test('the tag bounds are the ones the package publishes, and both edges hold', () => {
+	const withTag = (n: number): Commit => ({
+		deltas: [{ type: 'add', id: A, ref: { kind: 'object', key: 'a' }, value: 1 }],
+		tag: new Uint8Array(n).fill(7),
+	});
+
+	assert.equal(MIN_TAG_BYTES, 4);
+	assert.equal(MAX_TAG_BYTES, 32);
+
+	// The published constants are what the encoder actually enforces. A reader sizing a tag
+	// from them, rather than from the prose, gets the same answer.
+	roundTrip(withTag(MIN_TAG_BYTES));
+	roundTrip(withTag(MAX_TAG_BYTES));
+	reason(() => encodeCommit(withTag(MIN_TAG_BYTES - 1)), 'invalid-tag');
+	reason(() => encodeCommit(withTag(MAX_TAG_BYTES + 1)), 'invalid-tag');
+});
+
+test('a reference is told from a primitive by its shape, not by being an object', () => {
+	const ref: Value = { edge: 'attach', kind: 'object', id: B };
+	assert.equal(isReference(ref), true);
+
+	assert.equal(isReference(1), false);
+	assert.equal(isReference('a'), false);
+	assert.equal(isReference(null), false);
+	assert.equal(isReference(B), false, 'a byte string is a primitive');
+
+	// Anything object shaped used to pass, so a plain object reached the reference writer and
+	// failed there complaining about its kind rather than about being a structure at all.
+	assert.equal(isReference({} as Value), false);
+	assert.equal(isReference(new Date() as unknown as Value), false);
+	assert.equal(isReference({ kind: 'object', id: B } as unknown as Value), false, 'no edge');
 });
