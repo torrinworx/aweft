@@ -317,6 +317,31 @@ which is why it sits low in the stack rather than being bolted on at the applica
 
 ---
 
+## Proof programs
+
+Every package ships a proof program in `examples/<package>/`, and `AGENTS.md` holds the rule
+about what a proof is. This is what each one has to demonstrate.
+
+| Package | The proof must demonstrate |
+|---|---|
+| codec | a stored commit log validates: every frame re-encodes to the bytes it was read from, and every single byte of damage to it is either refused or accepted as the one spelling of what it decoded to |
+| core | a headless app model with cross-field invariants: mutation bursts, commit atomicity observed through watch, undo and redo by commit inversion |
+| schema | a multi-actor scenario: the authorized commit is applied, the unauthorized one is rejected, through the real seam |
+| sync | two live trees over a real channel converge under concurrent edits; the same protocol runs over a second channel (postMessage or in-process) unchanged |
+| store | write, kill the process, reopen, verify; find-or-create under concurrent open |
+| modules | an app assembled from modules through both loaders (filesystem and bundle map), with dependency order and injection proven |
+| sandbox | a hostile module runs the escape suite and stays contained, while a benign module does real work through granted capabilities |
+| dom | mount and hydrate a page with a dynamic list; edits assert exact DOM operations against the mock |
+| ui | an interactive page composed from components, driven and asserted against the mock (plus a manual browser page, outside CI) |
+| icons | a page rendering through the driver interface with the iconify driver |
+| server | a full-stack app: an authenticated client syncs state through schema to store and back |
+| jobs | a scheduled job runs, persists an effect, and survives a restart |
+| ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM |
+| build | the transforms build a real example app; assert stripping is verified in the output |
+| testing | consumed by every other package's suite; its proof is everyone else's |
+
+---
+
 ## Build order
 
 Do not start a phase until the previous phase's packages are foundational-complete, as
