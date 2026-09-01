@@ -10,6 +10,7 @@
 // Run: node examples/core/main.ts
 
 import { decodeCommit, encodeCommit } from '@aweftjs/codec';
+import { randomFrom } from '@aweftjs/testing';
 import type { Commit } from '@aweftjs/codec';
 import { apply, atomic, createArray, createObject, idOf, observer, snapshot } from '@aweftjs/core';
 import type { Change } from '@aweftjs/core';
@@ -118,13 +119,7 @@ const consistent = (board: Board): boolean => {
 // --- the run ---------------------------------------------------------------------------
 
 const seed = Number(process.env.SEED ?? 20260831);
-let state = seed >>> 0 || 1;
-const random = (): number => {
-	state ^= state << 13; state >>>= 0;
-	state ^= state >> 17;
-	state ^= state << 5; state >>>= 0;
-	return state / 0x100000000;
-};
+const random = randomFrom(seed);
 
 const board = createObject<Board>();
 const replica = createObject<Board>(undefined, idOf(board));

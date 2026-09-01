@@ -14,5 +14,8 @@
 	"aweft": {
 		"tier": 1,
 		"branchCoverage": 90
+	},
+	"devDependencies": {
+		"@aweftjs/testing": "*"
 	}
 }

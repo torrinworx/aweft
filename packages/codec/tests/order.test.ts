@@ -10,6 +10,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { randomFrom } from '@aweftjs/testing';
+
 import {
 	type Delta, type Ref,
 	compareBytes, compareDeltas, createId, encodeValue,
@@ -30,16 +32,6 @@ const encodedOrder = (a: Delta, b: Delta): number => {
 	};
 
 	return compareBytes(key(a), key(b));
-};
-
-const seeded = (seed: number): (() => number) => {
-	let s = seed >>> 0 || 1;
-	return () => {
-		s ^= s << 13; s >>>= 0;
-		s ^= s >> 17;
-		s ^= s << 5; s >>>= 0;
-		return s / 0x100000000;
-	};
 };
 
 // Lengths that sit either side of where a head grows, and text that is not one byte per
@@ -63,7 +55,7 @@ const positions = [
 ];
 
 test('the comparator agrees with the encoded order on every pair', () => {
-	const random = seeded(20260831);
+	const random = randomFrom(20260831);
 	const ids = [createId(), createId(), createId(), createId()];
 	const mapKeys = [createId(), createId()];
 
@@ -98,7 +90,7 @@ test('the comparator agrees with the encoded order on every pair', () => {
 });
 
 test('sorting by either rule reaches the same list', () => {
-	const random = seeded(7);
+	const random = randomFrom(7);
 	const ids = [createId(), createId()];
 
 	const deltas: Delta[] = [];

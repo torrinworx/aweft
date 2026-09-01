@@ -15,7 +15,8 @@
 import {
 	type Commit, type Delta, type Value,
 	bytesFromHex, bytesToHex, compareDeltas, createId, decodeCommit, encodeCommit,
-} from '../../packages/codec/src/index.ts';
+} from '@aweftjs/codec';
+import { randomFrom } from '@aweftjs/testing';
 
 let checks = 0;
 
@@ -29,14 +30,12 @@ const check = (ok: boolean, what: string): void => {
 
 // --- a stream to validate ----------------------------------------------------------------
 
-// Deterministic, so a failure names a seed somebody can rerun rather than a mood.
-let state = 20260901;
-const random = (): number => {
-	state ^= state << 13;
-	state ^= state >>> 17;
-	state ^= state << 5;
-	return (state >>> 0) / 0x100000000;
-};
+// Deterministic, so a failure names a seed somebody can rerun rather than a mood. The
+// generator is the shared one: a private copy here drifted from it within an hour of being
+// written, and a seed that reproduces a failure under one copy reproduces nothing under
+// another.
+const SEED = 20260901;
+const random = randomFrom(SEED);
 
 const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)]!;
 
@@ -245,6 +244,6 @@ for (const frame of frames.slice(0, 40)) {
 }
 
 console.log(
-	`codec proof: ${checks} checks, seed 20260901, ${frames.length} commits, ${deltaCount} deltas, `
+	`codec proof: ${checks} checks, seed ${SEED}, ${frames.length} commits, ${deltaCount} deltas, `
 	+ `${log.length} bytes of log, ${refused} damaged frames refused and ${canonical} accepted as canonical`,
 );
