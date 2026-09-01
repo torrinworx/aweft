@@ -13,7 +13,7 @@
 		"typecheck": "tsc --build",
 		"deps": "depcruise packages --config .dependency-cruiser.cjs",
 		"fixtures": "node packages/testing/scripts/generate-fixtures.ts",
-		"proofs": "node examples/core/main.ts",
+		"proofs": "node examples/codec/main.ts && node examples/core/main.ts",
 		"bench": "node bench/derived.ts && node bench/write.ts",
 		"test": "npm run typecheck && npm run deps && node packages/testing/scripts/run-tests.ts && npm run proofs",
 		"gate": "npm test"
