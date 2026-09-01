@@ -136,6 +136,16 @@ const fail = (name: string, check: string, actual: unknown, expected: unknown): 
 export const checkFixture = (f: Fixture, applier: Applier = modelApplier): void => {
 	const seed = seedFrom(f.name);
 
+	// One shuffle is not a reordering test. Seeded from the fixture name it is the identity
+	// permutation for 7 of the 17 commits in the suite, and for those the check silently
+	// repeated the plain re-encode above it. Reversed is a real reorder for anything longer
+	// than one delta, so the same three orders drive the encode check and the apply check.
+	const orders: ReadonlyArray<readonly [string, (d: readonly Delta[]) => readonly Delta[]]> = [
+		['as generated', (d) => d],
+		['shuffled', (d) => shuffle(d, seed)],
+		['reversed', (d) => [...d].reverse()],
+	];
+
 	for (const c of f.commits) {
 		const bytes = bytesFromHex(c.bytes);
 		const decoded = decodeCommit(bytes);
@@ -152,15 +162,23 @@ export const checkFixture = (f: Fixture, applier: Applier = modelApplier): void 
 		const again = bytesToHex(encodeCommit(decoded));
 		if (again !== c.bytes) fail(f.name, 're-encoding is not byte equal', again, c.bytes);
 
-		const reordered = bytesToHex(encodeCommit(withTag(shuffle(decoded.deltas, seed), decoded.tag)));
-		if (reordered !== c.bytes) fail(f.name, 'the order deltas arrive in changed the bytes', reordered, c.bytes);
-	}
+		// The other direction, and the one that is not circular. Above, the deltas came out of
+		// the decoder, so re-encoding them asks the package whether it agrees with itself.
+		// These are built from the JSON the fixture states, which a person wrote and can edit,
+		// so the bytes are checked against something outside the implementation.
+		const fromStated = withTag(c.deltas.map(deltaFromJson), c.tag === undefined ? undefined : bytesFromHex(c.tag));
+		const encoded = bytesToHex(encodeCommit(fromStated));
+		if (encoded !== c.bytes) {
+			fail(f.name, 'the stated deltas do not encode to the stated bytes', encoded, c.bytes);
+		}
 
-	const orders: ReadonlyArray<readonly [string, (d: readonly Delta[]) => readonly Delta[]]> = [
-		['as generated', (d) => d],
-		['shuffled', (d) => shuffle(d, seed)],
-		['reversed', (d) => [...d].reverse()],
-	];
+		for (const [label, reorder] of orders) {
+			const reordered = bytesToHex(encodeCommit(withTag(reorder(decoded.deltas), decoded.tag)));
+			if (reordered !== c.bytes) {
+				fail(f.name, `handing the deltas over ${label} changed the bytes`, reordered, c.bytes);
+			}
+		}
+	}
 
 	for (const [label, reorder] of orders) {
 		const commits = f.commits.map((c) => {
