@@ -7,8 +7,8 @@
 // the inverse is built from (design 016).
 
 import {
-	type Delta, type Ref, type Value,
-	codecError, compareBytes, encodeValue,
+	type Delta, type Value,
+	codecError, compareDeltas,
 } from '@aweftjs/codec';
 
 import type { Cell, Change, Listener, Node } from './types.ts';
@@ -224,25 +224,11 @@ export const atomic = <T>(run: () => T): T => {
 // --- closing ---------------------------------------------------------------------------
 
 interface Entry {
-	readonly key: Uint8Array;
 	readonly delta: Delta;
 	readonly inverse: Delta;
 	readonly node: Node;
 	readonly slot: string;
 }
-
-/** The bytes the format orders deltas by: the id, then the ref, exactly as they are written. */
-const orderKey = (node: Node, ref: Ref): Uint8Array => {
-	const id = encodeValue(node.id);
-	const kind = encodeValue(ref.kind === 'object' ? 0 : ref.kind === 'array' ? 1 : 2);
-	const key = encodeValue(ref.key);
-
-	const out = new Uint8Array(id.length + kind.length + key.length);
-	out.set(id);
-	out.set(kind, id.length);
-	out.set(key, id.length + kind.length);
-	return out;
-};
 
 const entryFor = (touch: Touch): Entry | null => {
 	const node = touch.node;
@@ -255,8 +241,7 @@ const entryFor = (touch: Touch): Entry | null => {
 
 	const ref = slotRef(node, touch.slot);
 	const id = node.id;
-	const key = orderKey(node, ref);
-	const shared = { key, node, slot: touch.slot };
+	const shared = { node, slot: touch.slot };
 
 	const before = (): Value => cellValue(touch.prior!);
 	const now = (): Value => cellValue(current!);
@@ -401,7 +386,10 @@ const deliveries = (): Array<() => void> => {
 	const jobs: Array<() => void> = [];
 
 	for (const entries of byRoot.values()) {
-		entries.sort((a, b) => compareBytes(a.key, b.key));
+		// One mutation is one commit, so most commits carry one delta and there is nothing to
+		// order. Ordering is what the format says a commit is written in, and it costs a
+		// comparison per pair rather than an encoded key per delta.
+		if (entries.length > 1) entries.sort((a, b) => compareDeltas(a.delta, b.delta));
 
 		const perListener = new Map<Listener, Entry[]>();
 		for (const entry of entries) collect(entry, perListener);

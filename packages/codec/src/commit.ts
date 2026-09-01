@@ -110,12 +110,72 @@ const writeFieldValue = (w: Writer, v: Value): void => {
 	writeValue(w, assertId(v.id));
 };
 
-/** The bytes a delta is ordered by: its id followed by its ref, exactly as they are written. */
-const sortKey = (d: Delta): Uint8Array => {
-	const w = createWriter();
-	writeValue(w, assertId(d.id));
-	writeRef(w, d.ref);
-	return written(w);
+/**
+ * Order two deltas the way section 6.9 orders them, without writing any bytes.
+ *
+ * Params:
+ *   a, b: the deltas to compare
+ *
+ * Returns: -1, 0 or 1. Zero means they address the same slot, which a commit may not do.
+ *
+ * The rule is stated over the encoded form: the id, then the ref. This reads that order off
+ * the values instead, which is the same order for a reason worth stating rather than trusting.
+ * Ids are all one width, so their heads are equal and only the bytes decide. A ref's kind
+ * encodes to one byte that grows with the kind. A string or byte string is written as a length
+ * and then its contents, and every head grows with the length it holds, so a shorter key sorts
+ * first whatever it contains. UTF-8 orders by code point, so text compares by code point.
+ *
+ * Example:
+ *   [...deltas].sort(compareDeltas)
+ */
+export const compareDeltas = (a: Delta, b: Delta): number => {
+	const byId = compareBytes(assertId(a.id), assertId(b.id));
+	if (byId !== 0) return byId;
+
+	const kindA = KINDS.indexOf(a.ref.kind);
+	const kindB = KINDS.indexOf(b.ref.kind);
+	if (kindA !== kindB) return kindA < kindB ? -1 : 1;
+
+	if (a.ref.kind === 'object') return compareText(a.ref.key, (b.ref as { key: string }).key);
+
+	const x = a.ref.key;
+	const y = (b.ref as { key: Uint8Array }).key;
+	if (x.length !== y.length) return x.length < y.length ? -1 : 1;
+	return compareBytes(x, y);
+};
+
+/** How many bytes this string takes as UTF-8, counted rather than encoded. */
+const utf8Length = (text: string): number => {
+	let bytes = 0;
+
+	for (let i = 0; i < text.length; i++) {
+		const code = text.charCodeAt(i);
+		if (code < 0x80) bytes += 1;
+		else if (code < 0x800) bytes += 2;
+		else if (code >= 0xd800 && code < 0xdc00) { bytes += 4; i++; }
+		else bytes += 3;
+	}
+	return bytes;
+};
+
+/** Text in the order its UTF-8 sorts: by length, then by code point. */
+const compareText = (a: string, b: string): number => {
+	const lengthA = utf8Length(a);
+	const lengthB = utf8Length(b);
+	if (lengthA !== lengthB) return lengthA < lengthB ? -1 : 1;
+
+	// Code point, not code unit. A surrogate pair is one character above every unpaired one, and
+	// comparing the string with < would put it below anything from U+E000 up.
+	let i = 0;
+	let j = 0;
+	while (i < a.length && j < b.length) {
+		const x = a.codePointAt(i)!;
+		const y = b.codePointAt(j)!;
+		if (x !== y) return x < y ? -1 : 1;
+		i += x > 0xffff ? 2 : 1;
+		j += y > 0xffff ? 2 : 1;
+	}
+	return 0;
 };
 
 const writeDelta = (w: Writer, d: Delta): void => {
@@ -156,12 +216,10 @@ export const encodeCommit = (commit: Commit): Uint8Array => {
 		throw codecError('invalid-tag', `a tag is ${MIN_TAG_BYTES} to ${MAX_TAG_BYTES} bytes, got ${tag.length}`);
 	}
 
-	const ordered = deltas
-		.map((d) => ({ d, key: sortKey(d) }))
-		.sort((a, b) => compareBytes(a.key, b.key));
+	const ordered = [...deltas].sort(compareDeltas);
 
 	for (let i = 1; i < ordered.length; i++) {
-		if (compareBytes(ordered[i - 1]!.key, ordered[i]!.key) === 0) {
+		if (compareDeltas(ordered[i - 1]!, ordered[i]!) === 0) {
 			throw codecError('duplicate-slot', 'two deltas in one commit address the same slot');
 		}
 	}
@@ -169,7 +227,7 @@ export const encodeCommit = (commit: Commit): Uint8Array => {
 	const w = createWriter();
 	writeHead(w, 4, tag === undefined ? 1 : 2);
 	writeHead(w, 4, ordered.length);
-	for (const { d } of ordered) writeDelta(w, d);
+	for (const d of ordered) writeDelta(w, d);
 	if (tag !== undefined) writeValue(w, tag);
 	return written(w);
 };
@@ -286,19 +344,14 @@ export const decodeCommit = (bytes: Uint8Array): Commit => {
 
 	const deltas = list.map(readDelta);
 
-	let previous: Uint8Array | null = null;
-	for (const d of deltas) {
-		const key = sortKey(d);
-		if (previous !== null) {
-			const order = compareBytes(previous, key);
-			if (order === 0) {
-				throw codecError('duplicate-slot', 'two deltas in one commit address the same slot');
-			}
-			if (order > 0) {
-				throw codecError('deltas-out-of-order', 'deltas are written smallest id and ref first');
-			}
+	for (let i = 1; i < deltas.length; i++) {
+		const order = compareDeltas(deltas[i - 1]!, deltas[i]!);
+		if (order === 0) {
+			throw codecError('duplicate-slot', 'two deltas in one commit address the same slot');
 		}
-		previous = key;
+		if (order > 0) {
+			throw codecError('deltas-out-of-order', 'deltas are written smallest id and ref first');
+		}
 	}
 
 	if (parts.length === 1) return { deltas };
