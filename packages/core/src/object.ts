@@ -27,6 +27,10 @@ const reject = (key: symbol): never => {
  * Returns: a proxy whose properties are its slots. Assigning one is a commit; so is deleting
  * one. Reading gives the primitive, or the observable the slot names.
  *
+ * Once it is attached, taking it back out leaves it readable but no longer writable: a write
+ * to a detached observable throws `unreachable`, because a receiver refuses the same delta.
+ * `isReachable` asks before writing, rather than finding out from the throw.
+ *
  * Example:
  *   const doc = createObject({ title: 'notes', blocks: createArray([]) });
  *   doc.title = 'aweft';

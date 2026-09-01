@@ -18,7 +18,14 @@ export interface Observer {
 	get(): unknown;
 	/** Write the slot the path names. The observable holding it has to exist. */
 	set(value: unknown): void;
-	/** Narrow to a slot, or to whatever observable sits in it. A path stops at an alias. */
+	/**
+	 * Narrow to a slot, or to whatever observable sits in it. A path stops at an alias.
+	 *
+	 * A number names a position in an array, not the element that was there when the scope was
+	 * built: `path('tasks', 0)` follows whatever sits at index 0 now, so removing the first
+	 * task makes it the second task's scope. To follow one element wherever it moves, start
+	 * the scope at the element itself.
+	 */
 	path(...keys: ScopeKey[]): Observer;
 	/** Drop changes to these slots of whatever the scope reaches. */
 	ignore(...keys: ScopeKey[]): Observer;

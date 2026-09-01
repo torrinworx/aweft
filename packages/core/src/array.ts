@@ -113,6 +113,11 @@ export const positionsOf = (list: object): Uint8Array[] => {
  * `sort`, `reverse`, `fill` and `copyWithin` throw, because they cannot be expressed as
  * changes to the slots they appear to touch.
  *
+ * Attaching an observable that already has slots carries those slots in the same commit, one
+ * delta for the attach and one for each slot under it, however deep. That is what lets a
+ * replica be built from the commits alone: pushing a filled object sends its contents, not
+ * just its id.
+ *
  * Example:
  *   const blocks = createArray([createObject({ text: 'hi' })]);
  *   blocks.push(createObject({ text: 'there' }));
