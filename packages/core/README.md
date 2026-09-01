@@ -92,6 +92,87 @@ A number in a path names a position, not an element. `path('tasks', 0)` follows 
 at index 0 now, so removing the first task makes it the second task's scope. To follow one
 element wherever it moves, start the scope at the element.
 
+## Derive values from what you read
+
+`map` turns a scope into a derived value, and derived values compose:
+
+```ts
+const caps = observer(doc).path('title').map((v) => String(v).toUpperCase());
+const area = all([observer(doc).path('width'), observer(doc).path('height')])
+	.map(([w, h]) => Number(w) * Number(h));
+
+caps.get();                       // the current value
+const stop = area.watch(render);  // the new value, after each change
+area.effect(render);              // the value now, and after each change
+```
+
+`watch` means two things, and the types keep them apart: on a scope it delivers commits,
+because a scope is about a place in a document; on a derived value it delivers the value,
+because there is no commit. Derived delivery runs after the whole commit has been
+delivered, so a value combining two branches never computes against half a commit, and an
+`atomic` block is one recompute however much it writes.
+
+A derived value is memoized while something watches it and recomputed on read while
+nothing does, so an abandoned chain holds no subscription. A change that settles to an
+equal value (`Object.is`) is not delivered: a container mutated in place reads as
+unchanged, so derive the field you mean, not the container holding it. The transform must
+be pure per input; anything else it reads is not tracked.
+
+`bool(a, b)`, `def(fallback)`, `defined()` and `unwrap()` are shorthand over `map`.
+Writing goes through a declared path only: `map` is read-only, `setter(fn)` declares the
+write half, and `isImmutable()` answers before an input renders. `selector` is per-key
+selection that scales: a change reaches the two keys it moved between and no others.
+
+```ts
+const select = observer(app).path('selectedId').selector();
+select(id).effect((on) => row.classList.toggle('active', on)); // per row
+select(id).set(true);                                          // select this row
+```
+
+## Interface state lives in cells
+
+A cell is a reactive value outside the document: no delta, no replication, no place in the
+undo history. Which tab is open is a cell; the document is the document.
+
+```ts
+const open = mutable(false);
+open.set(true);
+const label = open.bool('hide', 'show');
+
+timer(1000).map(() => new Date().toLocaleTimeString()).effect(show);
+fromEvent(window, 'resize').wait(100).effect(relayout);
+```
+
+Writing a cell into a document slot is refused (`cell-in-document`), so whether state
+replicates stays answerable from the type being written. `immutable(x)` wraps anything as
+a read-only view or a constant.
+
+`throttle(ms)` and `wait(ms)` exist only on this value surface. A commit stream cannot be
+rate limited through this API, because a receiver that misses one commit of a burst holds
+a different document forever after. Reads are never delayed, only delivery.
+
+## Watch a shape, not only a place
+
+A scope step can be a wildcard: `skip(count)` matches any run of keys, `tree(key)` matches
+the named key at any depth. They are ordinary steps, so `path`, `ignore` and `shallow`
+compose with them unchanged.
+
+```ts
+observer(board).skip().path('done').watch(fn);  // every column's done flag
+observer(doc).tree('draft').watch(fn);          // any draft, anywhere
+```
+
+A wildcard scope names many places, so it has no single value: `get()` is undefined,
+`set()` throws, and `isImmutable()` is true. Only scopes that use wildcards pay for the
+backtracking matcher.
+
+## A snapshot rebuilds
+
+`fromSnapshot(snapshot(doc))` is a live copy: same ids, kinds, slots, positions and
+aliases, and it accepts commits addressed to the original's ids from then on. It holds
+what the document says, not the detached observables the original still indexes, so
+replaying a history that resurrects one is the commit log's job, not a snapshot's.
+
 ## Removing something does not delete it
 
 Taking an observable out of the document leaves it readable and no longer writable. A write
@@ -113,9 +194,9 @@ The `Change` a watcher receives is a `Commit`: its `deltas` are exactly what cro
 boundary, and `apply` on the far side takes them unchanged. The sibling codec package
 turns a commit into bytes and back.
 
-Deliberately not here: derived values (nothing in this package recomputes anything), any
-transport, any persistence. `sort`, `reverse`, `fill` and `copyWithin` on an array throw,
-because they cannot be expressed as changes to the slots they appear to touch.
+Deliberately not here: any transport, any persistence, any DOM. `sort`, `reverse`, `fill`
+and `copyWithin` on an array throw, because they cannot be expressed as changes to the
+slots they appear to touch.
 
 The wire format lives in `spec/`, the reasoning in `docs/design/`, and a complete
 program using all of the above in `examples/core/`.
