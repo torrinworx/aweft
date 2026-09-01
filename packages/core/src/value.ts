@@ -26,6 +26,9 @@ export const nodeOf = (value: unknown): Node | undefined =>
  *   value: anything
  *
  * Returns: true for an object, array or map made by this library.
+ *
+ * Example:
+ *   const doc = isObservable(input) ? input : createObject(input);
  */
 export const isObservable = (value: unknown): boolean => nodeOf(value) !== undefined;
 

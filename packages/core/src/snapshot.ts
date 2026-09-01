@@ -38,6 +38,9 @@ export interface Snapshot {
  *
  * An observable that has lost its attach edge is not here. Nothing reaches it, and a delta
  * naming it is refused, so it is not part of what the document says.
+ *
+ * Example:
+ *   assert.deepStrictEqual(snapshot(mirror), snapshot(doc));
  */
 export const snapshot = (observable: unknown): Snapshot => {
 	const from = nodeOf(observable);

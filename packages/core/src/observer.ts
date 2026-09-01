@@ -24,7 +24,13 @@ export interface Observer {
 	ignore(...keys: ScopeKey[]): Observer;
 	/** Keep only changes to the scoped observable's own slots, not to anything below it. */
 	shallow(): Observer;
-	/** Call `fn` with each commit that touched this scope. Returns its unsubscribe. */
+	/**
+	 * Call `fn` with each commit that touched this scope. Returns its unsubscribe.
+	 *
+	 * `fn` runs after the whole commit has been applied, so reading through the tree gives
+	 * the state the commit produced, never a state between deltas. Commits landed with
+	 * `apply` arrive here too, indistinguishable from local mutation.
+	 */
 	watch(fn: (change: Change) => void): () => void;
 	/** Call `fn` with the value now, and again after every change in scope. */
 	effect(fn: (value: unknown) => void): () => void;

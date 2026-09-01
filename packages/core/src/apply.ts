@@ -173,7 +173,15 @@ const cellFor = (delta: Delta, resolve: Resolve): Cell | undefined => {
  * it is settled.
  *
  * Watchers are called once, after every delta has been applied, with the deltas that fell in
- * their scope.
+ * their scope. A watcher cannot tell an applied commit from a local mutation, so anything
+ * that records what a watcher delivers, an undo stack included, receives the commits it
+ * applies itself and wants a way to tell its own apart, such as a flag held for the duration
+ * of the call (`examples/core` does exactly this).
+ *
+ * A commit only names observables reachable in the receiving document, so a replica of an
+ * existing document starts from its root id, `createObject(undefined, idOf(source))` for an
+ * object root; from there, applying the source's commits in the order they happened rebuilds
+ * it. A plain empty observable has a different root id and refuses them as unreachable.
  *
  * Example:
  *   apply(doc, decodeCommit(bytes));

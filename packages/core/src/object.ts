@@ -21,7 +21,8 @@ const reject = (key: symbol): never => {
  * Params:
  *   init: the slots it starts with. Values are primitives or other observables; a plain
  *         object is refused rather than copied
- *   id: its id, when it has to be a particular one. Minted otherwise
+ *   id: its id, when it has to be a particular one. Minted otherwise. The one common case
+ *       is a replica, which starts from the source root's id: see `apply`
  *
  * Returns: a proxy whose properties are its slots. Assigning one is a commit; so is deleting
  * one. Reading gives the primitive, or the observable the slot names.

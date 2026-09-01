@@ -64,6 +64,9 @@ const unsupported = (name: string, instead: string): never => {
  *
  * This is what bridging two trees needs: a receiver that has been told a position must be
  * able to honour it rather than generate its own and diverge.
+ *
+ * Example:
+ *   insertAt(mirror, positionsOf(list)[0]!, list[0]);
  */
 export const insertAt = (list: object, position: Uint8Array, value: unknown): void => {
 	const node = nodeOf(list);
@@ -86,6 +89,9 @@ export const insertAt = (list: object, position: Uint8Array, value: unknown): vo
  *   list: the array observable
  *
  * Returns: one key per element, so a caller can name a place rather than an index.
+ *
+ * Example:
+ *   const first = positionsOf(list)[0]; // survives edits elsewhere; list[0] does not
  */
 export const positionsOf = (list: object): Uint8Array[] => {
 	const node = nodeOf(list);

@@ -20,6 +20,9 @@ const need = (observable: unknown): Node => {
  * Returns: its 12 bytes of id. Two replicas agree on which observable a change is about by
  * this and nothing else. It is published to everyone who can read the document, so it is
  * never a credential.
+ *
+ * Example:
+ *   const mirror = createObject(undefined, idOf(doc));
  */
 export const idOf = (observable: unknown): Uint8Array => need(observable).id;
 
@@ -31,6 +34,9 @@ export const idOf = (observable: unknown): Uint8Array => need(observable).id;
  *
  * Returns: sixteen base64url characters, safe in a URL, a log line, or a key in a plain
  * object. It is the form a map slot is named by.
+ *
+ * Example:
+ *   history.set(textIdOf(entry), createObject({ opened: true }));
  */
 export const textIdOf = (observable: unknown): string => need(observable).key;
 
@@ -42,6 +48,9 @@ export const textIdOf = (observable: unknown): string => need(observable).key;
  *
  * Returns: 'object', 'array' or 'map'. The kind never changes, and a commit that calls one
  * observable two kinds is refused.
+ *
+ * Example:
+ *   if (kindOf(value) === 'array') count = (value as unknown[]).length;
  */
 export const kindOf = (observable: unknown): ObservableKind => need(observable).kind;
 
@@ -56,5 +65,8 @@ export const kindOf = (observable: unknown): ObservableKind => need(observable).
  *
  * A reference from somewhere else is an alias and does not answer this question, which is the
  * point: where something lives is a walk up, never a search.
+ *
+ * Example:
+ *   const list = parentOf(entry); // the array the entry sits in, or undefined
  */
 export const parentOf = (observable: unknown): object | undefined => need(observable).parent?.proxy;

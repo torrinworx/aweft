@@ -15,3 +15,7 @@ export { snapshot } from './snapshot.ts';
 export type { Snapshot, SnapshotObservable, SnapshotRef, SnapshotValue } from './snapshot.ts';
 
 export type { Change, Primitive } from './types.ts';
+
+// The types this package's own signatures take and return, so a caller can type a commit
+// pipeline without importing below it.
+export type { Commit, Delta, EdgeKind, ObservableKind } from '@aweftjs/codec';
