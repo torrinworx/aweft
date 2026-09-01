@@ -132,6 +132,32 @@ test('a selection watcher throwing does not corrupt which key is selected', () =
 	stopB();
 });
 
+test('an effect whose first call throws leaves no subscription behind', () => {
+	const cell = mutable(1);
+	const seen: number[] = [];
+
+	assert.throws(() => cell.effect(() => {
+		throw new Error('first call refuses');
+	}), /first call refuses/);
+
+	// The failed effect held no handle anyone could stop; the subscription must be gone.
+	cell.watch((v) => seen.push(v));
+	cell.set(2);
+	assert.deepEqual(seen, [2]);
+
+	const doc = createObject<Doc>({ title: 'a' });
+	const scope = observer(doc).path('title');
+	assert.throws(() => scope.effect(() => {
+		throw new Error('scope first call refuses');
+	}), /scope first call refuses/);
+
+	let heard = 0;
+	const stop = scope.watch(() => heard += 1);
+	doc.title = 'b';
+	stop();
+	assert.equal(heard, 1, 'the leaked scope listener would make delivery run twice');
+});
+
 test('an effect that writes its scope during its initial call still unsubscribes cleanly', () => {
 	const doc = createObject<Doc>({ title: 'raw' });
 	const scope = observer(doc).path('title');

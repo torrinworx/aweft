@@ -48,7 +48,8 @@ export interface Derived<T> {
 	/**
 	 * Call `fn` with each new value. Returns its unsubscribe. A change that settles to an
 	 * equal value (`Object.is`) is not delivered, so a container mutated in place reads as
-	 * unchanged: derive the field you mean, not the container holding it.
+	 * unchanged: derive the field you mean, not the container holding it. Unsubscribing
+	 * during a delivery does not recall the delivery already in flight.
 	 */
 	watch(fn: (value: T) => void): () => void;
 	/** Call `fn` with the value now, and again after every change. Returns its unsubscribe. */
@@ -87,7 +88,9 @@ interface DNode {
 
 	/** Downstream mark callbacks plus user watchers. Live means either is non-empty. */
 	readonly downstream: Set<() => void>;
-	readonly watchers: Set<(value: unknown) => void>;
+	/** Each watcher beside the version it last heard, so a late subscriber cannot reset what
+	 * an earlier one is still owed. */
+	readonly watchers: Map<(value: unknown) => void, number>;
 	detached: Array<() => void> | null;
 
 	/** A source poked this node directly, so the next settle must recompute. */
@@ -98,8 +101,6 @@ interface DNode {
 	version: number;
 	/** Versions of derived sources at the last recompute, 0 where the source is not derived. */
 	readonly depVersions: number[];
-	/** The version the watchers last heard, so a flush only notifies actual change. */
-	told: number;
 	/** In the pending list already, so a second poke in one burst queues nothing. */
 	queued: boolean;
 	/** The idle cache: trusted while the write clock has not moved past its stamp. */
@@ -122,14 +123,13 @@ const createDNode = (
 	compute,
 	one,
 	downstream: new Set(),
-	watchers: new Set(),
+	watchers: new Map(),
 	detached: null,
 	fired: true,
 	dirty: true,
 	value: undefined,
 	version: 0,
 	depVersions: sources.map(() => 0),
-	told: 0,
 	queued: false,
 	idleAt: -1,
 	idleValue: undefined,
@@ -219,10 +219,12 @@ const flush = (): void => {
 				continue;
 			}
 		}
-		if (node.version === node.told) continue;
 
-		node.told = node.version;
-		for (const watcher of [...node.watchers]) {
+		for (const [watcher, told] of [...node.watchers]) {
+			if (told === node.version) continue;
+			// Recorded before the call, so a watcher that throws is still caught up rather
+			// than retried with the same value forever.
+			node.watchers.set(watcher, node.version);
 			try {
 				watcher(node.value);
 			} catch (error) {
@@ -311,6 +313,11 @@ const readOnce = (node: DNode): unknown => {
 
 	if (node.idleAt === clock()) return node.idleValue;
 
+	// The stamp is taken before the sources are read: if the transform writes anything, the
+	// clock moves past this stamp and the cache is already invalid for the next read, rather
+	// than blessing the pre-write inputs as current.
+	const at = clock();
+
 	let value = node.one !== null
 		? node.one(node.sources[0]!.read())
 		: node.compute(node.sources.map((source) => source.read()));
@@ -319,9 +326,7 @@ const readOnce = (node: DNode): unknown => {
 		if (inner !== undefined) value = inner.read();
 	}
 
-	// Stamped after computing, so a transform that writes state invalidates what was read
-	// before its write rather than blessing it.
-	node.idleAt = clock();
+	node.idleAt = at;
 	node.idleValue = value;
 	return value;
 };
@@ -525,8 +530,9 @@ export const chain = <T>(source: Source): Derived<T> => {
 				node = createDNode([source], (inputs) => inputs[0], false, (input) => input);
 			}
 			goLive(node);
-			node.watchers.add(fn as (value: unknown) => void);
-			node.told = node.version;
+			// This watcher starts caught up to the settled present; anything an earlier watcher
+			// is still owed stays owed to it, because each entry keeps its own version.
+			node.watchers.set(fn as (value: unknown) => void, node.version);
 			let on = true;
 			return () => {
 				if (!on) return;
@@ -539,17 +545,31 @@ export const chain = <T>(source: Source): Derived<T> => {
 		effect: (fn) => {
 			// Subscribe first and read after, so no change lands in the gap between the two.
 			const stop = derived.watch(fn);
-			fn(derived.get());
+			try {
+				fn(derived.get());
+			} catch (error) {
+				// A throwing first call must not leak a subscription nobody holds a handle to.
+				stop();
+				throw error;
+			}
 			return stop;
 		},
 
 		map: (fn) => derive(createDNode([source], (inputs) => fn(inputs[0] as T), false, fn as (input: unknown) => unknown)),
 
-		setter: (fn) => chain({
-			...source,
-			write: fn as (value: unknown) => void,
-			immutable: () => false,
-		}),
+		setter: (fn) => {
+			// A chain that declares itself immutable by construction (an immutable wrapper, a
+			// wildcard scope) stays that way; setter replaces a write path, it does not mint the
+			// right to have one (design 028).
+			if (source.immutable?.() === true) {
+				throw codecError('read-only', 'this chain is immutable by construction; setter cannot reopen it');
+			}
+			return chain({
+				...source,
+				write: fn as (value: unknown) => void,
+				immutable: () => false,
+			});
+		},
 
 		unwrap: () => derive(createDNode([source], (inputs) => inputs[0], true, (input) => input)),
 

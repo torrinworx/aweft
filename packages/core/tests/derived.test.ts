@@ -268,6 +268,48 @@ test('all mixes scopes, cells, chains and plain values, in order', () => {
 	assert.deepEqual(seen, [[2, 20, 21, 'constant']]);
 });
 
+test('a late subscriber does not reset what an earlier watcher is owed', () => {
+	const doc = createObject<Doc>({ width: 1 });
+	const chain = observer(doc).path('width').map((v) => Number(v) * 10);
+	const early: number[] = [];
+	const late: number[] = [];
+
+	chain.watch((v) => early.push(v as number));
+
+	// A peer listener on the same commit reads the chain, settling it, and then subscribes.
+	// The early watcher is still owed the delivery that read forced.
+	observer(doc).watch(() => {
+		chain.get();
+		chain.watch((v) => late.push(v as number));
+	});
+
+	doc.width = 2;
+	assert.deepEqual(early, [20]);
+	assert.deepEqual(late, []);
+});
+
+test('an effect started beside a settling read delivers its value once', () => {
+	const doc = createObject<Doc>({ width: 1 });
+	const chain = observer(doc).path('width').map((v) => Number(v) * 10);
+	const seen: number[] = [];
+
+	observer(doc).watch(() => {
+		chain.get();
+		chain.effect((v) => seen.push(v as number));
+	});
+
+	doc.width = 2;
+	assert.deepEqual(seen, [20]);
+});
+
+test('setter cannot reopen a chain that is immutable by construction', () => {
+	const cell = mutable(1);
+	assert.throws(() => immutable(cell).setter(() => undefined), /read-only/);
+
+	const doc = createObject<Doc>({ title: 'a' });
+	assert.throws(() => observer(doc).skip().setter(() => undefined), /read-only/);
+});
+
 test('a cell or derived value cannot be written into a document slot', () => {
 	const doc = createObject<Doc>();
 	assert.throws(() => {

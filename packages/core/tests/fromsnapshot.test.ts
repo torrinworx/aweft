@@ -117,6 +117,26 @@ test('an attach edge pointing at the root is refused', () => {
 	assert.throws(() => fromSnapshot(broken), /multiple-attach/);
 });
 
+test('a kind that is not a kind is refused, not defaulted', () => {
+	const broken = edit((snap) => {
+		snap.observables[snap.root]!.kind = 'sideboard';
+	});
+	assert.throws(() => fromSnapshot(broken), /kind-conflict/);
+});
+
+test('an array slot that decodes to an illegal position is refused', () => {
+	const doc = createObject({ list: createArray(['x']) });
+	const snap = structuredClone(snapshot(doc)) as unknown as {
+		root: string;
+		observables: Record<string, { kind: string; slots: Record<string, unknown> }>;
+	};
+	const list = snap.observables[textIdOf((doc as { list: unknown }).list)]!;
+	// Well formed hex, but a position never ends in a zero byte.
+	list.slots['8000'] = 'y';
+
+	assert.throws(() => fromSnapshot(snap as unknown as Snapshot), /invalid-key/);
+});
+
 test('an array slot that is not a position key is refused', () => {
 	const doc = createObject({ list: createArray(['x']) });
 	const snap = structuredClone(snapshot(doc)) as unknown as {

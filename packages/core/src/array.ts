@@ -6,7 +6,7 @@
 // methods is not an array. The mutating half is replaced, since the built-in versions would
 // rewrite every slot after the one that actually moved.
 
-import { bytesFromHex, bytesToHex, codecError } from '@aweftjs/codec';
+import { assertPosition, bytesFromHex, bytesToHex, codecError } from '@aweftjs/codec';
 
 import type { Node } from './types.ts';
 import { createNode, indexOfSlot, plantCell } from './node.ts';
@@ -74,6 +74,9 @@ export const insertAt = (list: object, position: Uint8Array, value: unknown): vo
 		throw codecError('not-observable', 'insertAt takes an array observable');
 	}
 
+	// Refused here rather than at encode time, which may be many commits later on a machine
+	// that cannot say where the bad key came from.
+	assertPosition(position);
 	const slot = bytesToHex(position);
 	if (indexOfSlot(node, slot) >= 0) {
 		throw codecError('slot-exists', `${slot} is already taken in this array`);

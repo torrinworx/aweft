@@ -65,6 +65,8 @@ test('timer ticks while observed and holds no interval when abandoned', (t) => {
 	stop();
 	t.mock.timers.tick(200);
 	assert.deepEqual(seen, [1, 2]);
+	// The interval itself is gone, not merely quiet: the count stops moving.
+	assert.equal(ticks.get(), 2);
 });
 
 test('fromEvent holds the last event and listens only while observed', () => {

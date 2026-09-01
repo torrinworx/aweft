@@ -240,3 +240,18 @@ test('a watcher receives a commit in canonical order, not the order the block wr
 	const keys = seen[0]!.deltas.map((d) => (d.ref.kind === 'object' ? d.ref.key : ''));
 	assert.deepEqual(keys, ['draft', 'title']);
 });
+
+test('a scope rooted at a nested observable hears nothing about its siblings', () => {
+	const settings = createObject<Settings>({ theme: 'dark' });
+	const doc = createObject<Doc>({ title: 'a', settings });
+	let heard = 0;
+
+	observer(settings).watch(() => heard += 1);
+
+	doc.title = 'b';
+	doc.draft = 'c';
+	assert.equal(heard, 0);
+
+	settings.theme = 'light';
+	assert.equal(heard, 1);
+});

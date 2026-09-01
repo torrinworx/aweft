@@ -4,7 +4,9 @@
 // for writing one to a file, or for a conformance suite that has to say what a document is
 // after a commit. This is the same document with nothing live in it.
 
-import { codecError, idFromText, type EdgeKind, type ObservableKind } from '@aweftjs/codec';
+import {
+	bytesFromHex, codecError, idFromText, isValidPosition, type EdgeKind, type ObservableKind,
+} from '@aweftjs/codec';
 
 import type { Node, Primitive } from './types.ts';
 import { plantCell } from './node.ts';
@@ -120,9 +122,12 @@ export const fromSnapshot = (snap: Snapshot): object => {
 
 	for (const [key, entry] of Object.entries(snap.observables)) {
 		idFromText(key);
+		if (entry.kind !== 'object' && entry.kind !== 'array' && entry.kind !== 'map') {
+			throw codecError('kind-conflict', `${key} claims to be ${String(entry.kind)}, which is not a kind`);
+		}
 
 		for (const [slot, value] of Object.entries(entry.slots)) {
-			if (entry.kind === 'array' && !HEX.test(slot)) {
+			if (entry.kind === 'array' && (!HEX.test(slot) || !isValidPosition(bytesFromHex(slot)))) {
 				throw codecError('invalid-key', `${slot} is not a position key`);
 			}
 			if (entry.kind === 'map') idFromText(slot);

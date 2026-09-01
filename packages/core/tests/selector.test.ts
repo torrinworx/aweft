@@ -28,6 +28,26 @@ test('a selection change flips exactly the two keys it moved between', () => {
 	for (const stop of stops) stop();
 });
 
+test('a key the selection did not move between is not even recomputed', () => {
+	const active = mutable<string | undefined>('a');
+	const select = active.selector();
+	let runs = 0;
+
+	const stops = [
+		select('a').watch(() => undefined),
+		select('b').watch(() => undefined),
+		select('d').map((v) => {
+			runs += 1;
+			return v;
+		}).watch(() => undefined),
+	];
+	const warm = runs;
+
+	active.set('b');
+	assert.equal(runs, warm, 'the unflipped key was poked into recomputing');
+	for (const stop of stops) stop();
+});
+
 test('reading asks whether this key is the selected one', () => {
 	const active = mutable<string | undefined>('x');
 	const select = active.selector();

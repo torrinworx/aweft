@@ -111,6 +111,47 @@ test('a derived chain over a wildcard scope degrades to its fallback, not a cras
 	assert.equal(label.get(), 'many');
 });
 
+test('a leading-underscore slot is private from wildcards, and only from wildcards', () => {
+	const doc = createObject({
+		done: false,
+		_draft: 'hidden',
+		_private: createObject({ note: 'hidden too' }),
+	});
+	const skipped: unknown[] = [];
+	const named: unknown[] = [];
+
+	observer(doc).skip().watch((change) => skipped.push(change.deltas[0]!.value));
+	observer(doc).path('_draft').watch((change) => named.push(change.deltas[0]!.value));
+
+	doc.done = true;
+	doc._draft = 'still hidden';
+	(doc._private as Record<string, unknown>).note = 'changed';
+
+	assert.deepEqual(skipped, [true]);
+	// An explicit path names it and sees it; privacy is from wildcards, not from everyone.
+	assert.deepEqual(named, ['still hidden']);
+});
+
+test('tree does not walk through a private subtree, and can name a private key itself', () => {
+	const doc = createObject({
+		note: 'top',
+		_private: createObject({ note: 'inner' }),
+	});
+	const notes: unknown[] = [];
+	const explicit: unknown[] = [];
+
+	observer(doc).tree('note').watch((change) => notes.push(change.deltas[0]!.value));
+	observer(doc).tree('_private').watch((change) => explicit.push(change.deltas.length));
+
+	doc.note = 't2';
+	(doc._private as Record<string, unknown>).note = 'i2';
+
+	assert.deepEqual(notes, ['t2']);
+	// Naming the private key explicitly is allowed; the wildcard run before it is what may
+	// not swallow one.
+	assert.deepEqual(explicit, [1]);
+});
+
 test('wildcards see array steps too', () => {
 	const doc = createObject({
 		rows: createArray([createObject({ done: false }), createObject({ done: false })]),

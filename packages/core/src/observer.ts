@@ -57,7 +57,8 @@ export interface Observer extends Omit<Derived<unknown>, 'get' | 'set' | 'watch'
 	 * commit produced: a listener earlier in the same delivery may have mutated already, and a
 	 * mutation lands as it is written. Read `change.deltas` when the exact state of this commit
 	 * is what matters. Commits landed with `apply` arrive here too, indistinguishable from
-	 * local mutation.
+	 * local mutation. Unsubscribing during a delivery does not recall the delivery already
+	 * in flight.
 	 */
 	watch(fn: (change: Change) => void): () => void;
 	/** Call `fn` with the value now, and again after every change in scope. */
@@ -161,7 +162,13 @@ const build = (
 
 		effect: (fn) => {
 			const stop = subscribe(() => fn(get()));
-			fn(get());
+			try {
+				fn(get());
+			} catch (error) {
+				// A throwing first call must not leak a listener nobody holds a handle to.
+				stop();
+				throw error;
+			}
 			return stop;
 		},
 

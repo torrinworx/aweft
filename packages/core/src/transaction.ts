@@ -362,6 +362,11 @@ const wildScope = (
 		return true;
 	};
 
+	// A leading underscore on an object slot is runtime-private from wildcards: a wildcard
+	// step never consumes it, and only a scope that names it explicitly sees under it.
+	const open = (j: number): boolean =>
+		!(holder(j).kind === 'object' && step(j).startsWith('_'));
+
 	const fits = (j: number, k: number): boolean => {
 		if (j === keys.length) return accept(k);
 		if (k >= reach) return false;
@@ -370,10 +375,13 @@ const wildScope = (
 		if (typeof key !== 'object') {
 			return step(k) === resolveKey(holder(k), key) && fits(j + 1, k + 1);
 		}
-		if ('any' in key) return fits(j + 1, k + 1);
+		if ('any' in key) return open(k) && fits(j + 1, k + 1);
 
 		for (let m = k; m < reach; m++) {
+			// The named key itself is explicit and may be private; the run of steps a deep
+			// wildcard swallows on the way to it may not.
 			if (step(m) === resolveKey(holder(m), key.deep) && fits(j + 1, m + 1)) return true;
+			if (!open(m)) return false;
 		}
 		return false;
 	};
