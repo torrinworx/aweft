@@ -66,6 +66,12 @@ A plain `createObject()` on the receiving side does not work: it has a different
 so the source's commits are refused as unreachable. Mint the copy with the source root's
 id, as above.
 
+A replica built from commits holds only what commits described, and construction is not a
+commit: slots passed to a constructor exist before anything can watch, so a watcher wired
+afterwards never hears about them. Start the source empty and assign its slots after the
+watcher is wired, as above, or hand the receiving side a starting point with
+`fromSnapshot(snapshot(source))` and replicate from there.
+
 Compare the two by deep equality, not by `JSON.stringify`. A snapshot's slots are a plain
 object, so the order they were inserted in is part of the string and is not part of the
 document: applying the same commits in two orders gives two strings for one document.
@@ -127,7 +133,11 @@ selection that scales: a change reaches the two keys it moved between and no oth
 const select = observer(app).path('selectedId').selector();
 select(id).effect((on) => row.classList.toggle('active', on)); // per row
 select(id).set(true);                                          // select this row
+select(id).set(false);                                         // clear, only if selected
 ```
+
+`set(true)` writes the key to the source. `set(false)` clears the source only when this key
+is the selected one, so deselecting a row that already lost the selection changes nothing.
 
 ## Interface state lives in cells
 

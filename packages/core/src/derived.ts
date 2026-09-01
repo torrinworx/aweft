@@ -66,9 +66,11 @@ export interface Derived<T> {
 	/** Whether the value is neither null nor undefined. */
 	defined(): Derived<boolean>;
 	/**
-	 * Per-key selection. `select(key)` reads as "is this the selected key" and writes back per
-	 * design 028. A selection change reaches only the keys whose answer flipped; every other
-	 * subscribed key hears nothing.
+	 * Per-key selection. `select(key)` reads as "is this the selected key". Writing maps back
+	 * (design 028): `set(true)` writes the key to the source, and `set(false)` clears the
+	 * source only when this key is the selected one, so clearing a key that already lost the
+	 * selection changes nothing. A selection change reaches only the keys whose answer
+	 * flipped; every other subscribed key hears nothing.
 	 */
 	selector(compare?: (value: T, key: unknown) => boolean): (key: unknown) => Derived<boolean>;
 	/** Deliver at most once per `ms`: the first change of a burst now, the last at the end. */
