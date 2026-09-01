@@ -11,8 +11,10 @@ import { addListener, removeListener, resolveKey, userValue } from './node.ts';
 import { changeOf, write } from './transaction.ts';
 import { nodeOf, toCell } from './value.ts';
 
+/** A step in a path: an object or map slot by name, or an array position by index. */
 export type ScopeKey = string | number;
 
+/** A scope: what part of the document a listener is about. Narrow it before watching. */
 export interface Observer {
 	/** The value the path names, or undefined when nothing sits there. */
 	get(): unknown;

@@ -26,21 +26,7 @@ const keyOf = (key: unknown): string => {
 	throw codecError('invalid-key', 'a map slot is named by an id');
 };
 
-/**
- * Make a map observable.
- *
- * Params:
- *   entries: the entries it starts with, as pairs of id and value
- *   T: what the values are, so `get` answers with something better than unknown
- *   id: its id, when it has to be a particular one. Minted otherwise
- *
- * Returns: a map of ids to values. `add` files an observable under its own id, which is the
- * common case; `set` names the id itself.
- *
- * Example:
- *   const presence = createMap();
- *   presence.add(createObject({ cursor: 42 }));
- */
+/** What a map observable answers to. Slots are named by id, so methods cannot collide. */
 export interface ObservableMap<T> {
 	/** What is filed under this id, or undefined. */
 	get(key: unknown): T | undefined;
@@ -59,6 +45,21 @@ export interface ObservableMap<T> {
 	[Symbol.iterator](): Generator<[string, T]>;
 }
 
+/**
+ * Make a map observable.
+ *
+ * Params:
+ *   entries: the entries it starts with, as pairs of id and value
+ *   T: what the values are, so `get` answers with something better than unknown
+ *   id: its id, when it has to be a particular one. Minted otherwise
+ *
+ * Returns: a map of ids to values. `add` files an observable under its own id, which is the
+ * common case; `set` names the id itself.
+ *
+ * Example:
+ *   const presence = createMap();
+ *   presence.add(createObject({ cursor: 42 }));
+ */
 export const createMap = <T = unknown>(
 	entries?: Iterable<readonly [unknown, T]>,
 	id?: Uint8Array,

@@ -44,6 +44,19 @@ export interface CodecError extends Error {
 	readonly reason: string;
 }
 
+/**
+ * Build a refusal that names the rule it is refusing for.
+ *
+ * Params:
+ *   reason: the stable machine-readable cause, as `spec/fixtures/invalid/` states it
+ *   detail: what was actually seen, for a human reading the message
+ *
+ * Returns: an Error whose `message` is `reason: detail` and whose `reason` is the reason
+ * alone. Callers branch on `reason` and never on the message.
+ *
+ * Example:
+ *   throw codecError('invalid-id', `${id.length} bytes is not an id`);
+ */
 export const codecError = (reason: string, detail: string): CodecError =>
 	Object.assign(new Error(`${reason}: ${detail}`), { reason });
 
@@ -204,6 +217,21 @@ export const writeValue = (w: Writer, v: CborValue): void => {
 	throw codecError('unsupported-value', `${Object.prototype.toString.call(v)} has no encoding`);
 };
 
+/**
+ * Encode one value, below the level of deltas and commits.
+ *
+ * Params:
+ *   v: anything CborValue allows
+ *
+ * Returns: the canonical bytes. There is one encoding per value, so two encoders that agree
+ * on the format produce the same bytes for the same value.
+ *
+ * Throws: a CodecError for a value the format cannot carry, including undefined, a plain
+ * object, a Map, a bigint and a lone surrogate in a string.
+ *
+ * Example:
+ *   encodeValue([1, 'two', null]);
+ */
 export const encodeValue = (v: CborValue): Uint8Array => {
 	const w = createWriter();
 	writeValue(w, v);
@@ -367,6 +395,22 @@ export const readValue = (r: Reader, depth = 0): CborValue => {
 	throw codecError('unsupported-simple', `simple value ${info} is not part of the format`);
 };
 
+/**
+ * Decode one value, rejecting anything the encoder would not have written.
+ *
+ * Params:
+ *   bytes: exactly one value, with nothing before or after it
+ *
+ * Returns: the value. Re-encoding it reproduces the bytes it was read from, for every input
+ * this accepts.
+ *
+ * Throws: a CodecError naming the rule broken. An integer padded into a wider form, a whole
+ * number written as a float, an indefinite length and a trailing byte are all refused, not
+ * because they are ambiguous but because accepting them would give one value two spellings.
+ *
+ * Example:
+ *   decodeValue(encodeValue('hi')) === 'hi';
+ */
 export const decodeValue = (bytes: Uint8Array): CborValue => {
 	const r = createReader(bytes);
 	const v = readValue(r);

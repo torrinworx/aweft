@@ -31,7 +31,7 @@ export interface Violation {
  *
  * Params:
  *   from, to: package names as they appear in the table
- *   table: the tier and plane map, owned by .dependency-cruiser.cjs
+ *   table: the tier and plane map. `boundaries.json` at the repo root is the one copy
  *
  * Returns: a Violation, or null when the edge is allowed.
  */

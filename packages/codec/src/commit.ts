@@ -81,8 +81,13 @@ export interface Delta {
  *
  * A commit applies whole or not at all, and it carries at least one delta. Its deltas are a
  * set, written in the canonical order of section 6.9, and a receiver replaying them one at a
- * time would pass through states the sender never had. `tag` is the optional integrity tag,
- * 4 to 32 bytes; the algorithm that fills it is still open.
+ * time would pass through states the sender never had.
+ *
+ * `tag` is 4 to 32 bytes and is not a checksum of these bytes. It is a digest over the prior
+ * values of the slots this commit addresses, computed by the sender against its own state
+ * before the commit, and it answers whether the commit landed on the state the sender
+ * expected. A receiver computing a different tag treats the replicas as diverged and
+ * resynchronizes. The algorithm that fills it is still open, so nothing here computes one.
  */
 export interface Commit {
 	readonly deltas: readonly Delta[];
@@ -93,7 +98,7 @@ const DELTA_TYPES = ['add', 'replace', 'remove'] as const;
 const KINDS = ['object', 'array', 'map'] as const;
 const EDGES = ['attach', 'alias'] as const;
 
-/** The narrowest and widest an integrity tag may be. Section 3.3; the algorithm is open. */
+/** The narrowest and widest a commit tag may be. Section 3.3; the algorithm is open. */
 export const MIN_TAG_BYTES = 4;
 export const MAX_TAG_BYTES = 32;
 

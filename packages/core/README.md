@@ -66,6 +66,11 @@ A plain `createObject()` on the receiving side does not work: it has a different
 so the source's commits are refused as unreachable. Mint the copy with the source root's
 id, as above.
 
+Compare the two by deep equality, not by `JSON.stringify`. A snapshot's slots are a plain
+object, so the order they were inserted in is part of the string and is not part of the
+document: applying the same commits in two orders gives two strings for one document.
+`canonicalJson` in the sibling testing package is the comparison that holds.
+
 ## Scope where you read, not at the root
 
 A scope registers its listener on the observable it was built from, and delivery walks each

@@ -243,7 +243,54 @@ for (const frame of frames.slice(0, 40)) {
 	check(!accepted, 'a frame with a byte after the end was accepted');
 }
 
+// --- how much damage goes unnoticed ------------------------------------------------------
+
+// The rule above says a damaged frame is refused or is canonical. It does not say a damaged
+// frame is noticed, and those are not the same claim. A reader who takes the first for the
+// second builds a log they believe is tamper evident. So the proof states the real number:
+// flip every bit of three small commits and count how many still decode. The commits use
+// fixed ids rather than the seeded stream, so the census is the same on every run and the
+// README can quote it.
+
+const A = bytesFromHex('000102030405060708090a0b');
+const B = bytesFromHex('0b0a09080706050403020100');
+
+const census: Commit[] = [
+	{ deltas: [{ type: 'add', id: A, ref: { kind: 'object', key: 'title' }, value: 'plan' }] },
+	{ deltas: [
+		{ type: 'add', id: A, ref: { kind: 'object', key: 'n' }, value: 42 },
+		{ type: 'add', id: A, ref: { kind: 'object', key: 'kids' }, value: { edge: 'attach', kind: 'array', id: B } },
+	] },
+	{ deltas: [{ type: 'replace', id: B, ref: { kind: 'array', key: Uint8Array.of(0x80) }, value: 3.5 }] },
+];
+
+let unnoticed = 0;
+let caught = 0;
+
+for (const c of census) {
+	const bytes = encodeCommit(c);
+	for (let at = 0; at < bytes.length; at++) {
+		for (let bit = 0; bit < 8; bit++) {
+			const damaged = Uint8Array.from(bytes);
+			damaged[at] = damaged[at]! ^ (1 << bit);
+			try {
+				decodeCommit(damaged);
+				unnoticed += 1;
+			} catch {
+				caught += 1;
+			}
+		}
+	}
+}
+
+// Exact, because the README quotes these two numbers. A change to the encoding that moves
+// them is a change to what the package can and cannot promise, and it should fail here
+// rather than leave the README saying something that stopped being true.
+check(caught === 406 && unnoticed === 562,
+	`the damage census moved: ${caught} refused and ${unnoticed} accepted, was 406 and 562`);
+
 console.log(
 	`codec proof: ${checks} checks, seed ${SEED}, ${frames.length} commits, ${deltaCount} deltas, `
-	+ `${log.length} bytes of log, ${refused} damaged frames refused and ${canonical} accepted as canonical`,
+	+ `${log.length} bytes of log, ${refused} damaged frames refused and ${canonical} accepted as canonical, `
+	+ `${unnoticed} of ${caught + unnoticed} single-bit flips unnoticed`,
 );

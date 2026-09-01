@@ -14,9 +14,16 @@ export { compareBytes as comparePositions } from './bytes.ts';
 /**
  * Is this a well formed position key?
  *
- * A key is non-empty and does not end in a zero byte. Both rules exist so that a key can
- * always be produced between any two distinct keys: with a trailing zero allowed, nothing
- * fits between K and K followed by a zero, and an array would run out of room to grow.
+ * Params:
+ *   p: the bytes to judge
+ *
+ * Returns: true when the key is non-empty and does not end in a zero byte. Both rules exist
+ * so that a key can always be produced between any two distinct keys: with a trailing zero
+ * allowed, nothing fits between K and K followed by a zero, and an array would run out of
+ * room to grow.
+ *
+ * Example:
+ *   isValidPosition(Uint8Array.of(0x80, 0x00));  // false
  */
 export const isValidPosition = (p: Uint8Array): boolean =>
 	p instanceof Uint8Array && p.length > 0 && p[p.length - 1] !== 0;

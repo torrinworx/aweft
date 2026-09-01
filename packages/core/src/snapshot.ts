@@ -9,19 +9,23 @@ import { codecError, type EdgeKind, type ObservableKind } from '@aweftjs/codec';
 import type { Node, Primitive } from './types.ts';
 import { nodeOf } from './value.ts';
 
+/** A slot naming another observable: which one, what kind, and which edge names it. */
 export interface SnapshotRef {
 	readonly ref: string;
 	readonly kind: ObservableKind;
 	readonly edge: EdgeKind;
 }
 
+/** What a slot holds in a snapshot: a primitive, or the name of another observable. */
 export type SnapshotValue = Primitive | SnapshotRef;
 
+/** One observable as plain data: its kind, and its slots by key. */
 export interface SnapshotObservable {
 	readonly kind: ObservableKind;
 	readonly slots: Record<string, SnapshotValue>;
 }
 
+/** A whole document as plain data, flat, keyed by id in text form, with the root named. */
 export interface Snapshot {
 	readonly root: string;
 	readonly observables: Record<string, SnapshotObservable>;
