@@ -13,9 +13,17 @@
 /** How deeply arrays may nest. Values nest two deep at most, so this is a bomb guard. */
 const MAX_DEPTH = 8;
 
-/** Integers are exact in this range and are written as integers. Outside it, as float64. */
-export const MAX_INT = Number.MAX_SAFE_INTEGER;
-export const MIN_INT = -Number.MAX_SAFE_INTEGER - 1;
+/**
+ * Integers are exact in this range and are written as integers. Outside it, as float64.
+ *
+ * The bound is exact representability, which is what section 6.2 states, and not the safe
+ * integer range: a double holds 2^53 exactly and 2^53 + 1 not at all. Reaching for
+ * `MAX_SAFE_INTEGER` here stops one short on the positive side and leaves the range lopsided,
+ * so a whole number another implementation wrote as an integer, reading the same prose, comes
+ * back refused.
+ */
+export const MAX_INT = 2 ** 53;
+export const MIN_INT = -(2 ** 53);
 
 export type CborValue = null | boolean | number | string | Uint8Array | readonly CborValue[];
 
@@ -263,11 +271,15 @@ export const readArg = (r: Reader, info: number): number => {
 			r.bytes[r.offset + 6]! * 0x100 +
 			r.bytes[r.offset + 7]!;
 		r.offset += 8;
+		// Range is judged on the halves, before they are combined. Adding them first rounds an
+		// argument past 2^53 down into the range and the check then passes it, so the decoder
+		// would answer with a number the bytes did not say. 0x200000 is 2^53 divided by 2^32.
+		if (hi > 0x200000 || (hi === 0x200000 && lo !== 0)) {
+			throw codecError('integer-out-of-range', 'this is not exact and must be a float');
+		}
+
 		const v = hi * 0x100000000 + lo;
 		if (v < 0x100000000) throw codecError('non-canonical-integer', `${v} fits in four bytes`);
-		if (v > MAX_INT) {
-			throw codecError('integer-out-of-range', `${v} is not exact and must be a float`);
-		}
 		return v;
 	}
 
@@ -287,7 +299,16 @@ export const readValue = (r: Reader, depth = 0): CborValue => {
 	const info = initial & 0x1f;
 
 	if (major === 0) return readArg(r, info);
-	if (major === 1) return -1 - readArg(r, info);
+	if (major === 1) {
+		// The head carries the argument and the value is one less than its negation, so the
+		// bound belongs on the argument. Building the value first rounds -(2^53 + 1) up onto
+		// MIN_INT, and a check on the value then sees a number that is in range.
+		const arg = readArg(r, info);
+		if (arg >= MAX_INT) {
+			throw codecError('integer-out-of-range', 'this is not exact and must be a float');
+		}
+		return -1 - arg;
+	}
 
 	if (major === 2 || major === 3) {
 		const n = readArg(r, info);

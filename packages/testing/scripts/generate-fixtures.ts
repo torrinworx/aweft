@@ -302,8 +302,9 @@ const cases: Case[] = [
 				add(1, key('small'), 23),
 				add(1, key('oneByte'), 24),
 				add(1, key('twoBytes'), 256),
-				add(1, key('largestExact'), Number.MAX_SAFE_INTEGER),
-				add(1, key('smallestExact'), -Number.MAX_SAFE_INTEGER - 1),
+				add(1, key('largestExact'), 2 ** 53),
+				add(1, key('smallestExact'), -(2 ** 53)),
+				add(1, key('largestSafe'), Number.MAX_SAFE_INTEGER),
 				add(1, key('negative'), -1),
 				add(1, key('half'), 0.5),
 				add(1, key('tiny'), 1e-7),
@@ -314,7 +315,8 @@ const cases: Case[] = [
 		final: doc(1, {
 			1: obj({
 				zero: 0, small: 23, oneByte: 24, twoBytes: 256,
-				largestExact: Number.MAX_SAFE_INTEGER, smallestExact: -Number.MAX_SAFE_INTEGER - 1,
+				largestExact: 2 ** 53, smallestExact: -(2 ** 53),
+				largestSafe: Number.MAX_SAFE_INTEGER,
 				negative: -1, half: 0.5, tiny: 1e-7, huge: 1e300, beyondExact: 2 ** 55,
 			}),
 		}),
@@ -410,9 +412,11 @@ const rejections: InvalidFixture[] = [
 	},
 	{
 		name: 'integer-out-of-range',
-		description: 'An integer too large to be exact, offered as an integer.',
+		description: 'An integer past the exact range, offered as an integer. 2^53 itself is '
+			+ 'exact and is legal; this is one past it, and adding the halves of the argument '
+			+ 'before checking them rounds it back into range.',
 		stage: 'decode', reason: 'integer-out-of-range',
-		bytes: frame([delta(hex(0), ID1, refKey('a'), '1b0020000000000000')]),
+		bytes: frame([delta(hex(0), ID1, refKey('a'), '1b0020000000000001')]),
 	},
 	{
 		name: 'deltas-out-of-order',

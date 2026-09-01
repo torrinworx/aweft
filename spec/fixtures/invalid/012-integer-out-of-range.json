@@ -1,7 +1,7 @@
 {
 	"name": "integer-out-of-range",
-	"description": "An integer too large to be exact, offered as an integer.",
+	"description": "An integer past the exact range, offered as an integer. 2^53 itself is exact and is legal; this is one past it, and adding the halves of the argument before checking them rounds it back into range.",
 	"stage": "decode",
 	"reason": "integer-out-of-range",
-	"bytes": "818184004c000000000000000000000001820061611b0020000000000000"
+	"bytes": "818184004c000000000000000000000001820061611b0020000000000001"
 }

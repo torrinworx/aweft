@@ -50,5 +50,26 @@ Not frozen. No deployed implementation depends on it yet.
 - This closes the previously open question of what an unreachable observable means: a delta
   into one is refused. What becomes of a subtree after it is detached is still open.
 
-Open: the integrity tag algorithm, large and exact numbers, and the fate of a detached
-subtree.
+### The integer range, corrected 2026-09-01
+
+The prose in 6.2 was already right and the implementation was not, so nothing normative
+changed here. Recording it because two fixtures did.
+
+- The range in 6.2 is stated as plus or minus 2^53, and its reason is exact representability.
+  A double holds every integer of magnitude 2^53 or less exactly, so both endpoints are in
+  the range and the range is symmetric.
+- The encoder had reached for the safe integer range instead, which stops one short on the
+  positive side. It wrote 2^53 as a float and refused the integer spelling of it, so a
+  commit written by a second implementation reading this prose came back refused.
+- Fixture `015-number-edges` had named the safe boundary `largestExact` and skipped 2^53
+  entirely. It now carries 2^53 and its negative, and keeps the safe boundary as its own
+  case.
+- Rejection fixture `012-integer-out-of-range` had used the integer spelling of 2^53, which
+  is legal. It now uses one past it.
+- A decoder **MUST** judge an eight byte argument before combining its halves. Adding them
+  first rounds an argument past 2^53 back down into the range, after which the check passes
+  and the decoder answers with a number the bytes did not state. This was live and silent.
+
+15 conformance fixtures and 35 rejection fixtures, replacing the counts recorded above.
+
+Open: the integrity tag algorithm, and the fate of a detached subtree.
