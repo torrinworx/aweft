@@ -10,14 +10,21 @@ import type { Change, Listener, Node, Step, WildStep } from './types.ts';
 import { addListener, removeListener, resolveKey, userValue } from './node.ts';
 import { changeOf, write } from './transaction.ts';
 import { nodeOf, toCell } from './value.ts';
+import { SOURCE, chain, type Derived, type Source } from './derived.ts';
 
 /** A step in a path: an object or map slot by name, or an array position by index. */
 export type ScopeKey = string | number;
 
 const isWild = (key: Step): key is WildStep => typeof key === 'object';
 
-/** A scope: what part of the document a listener is about. Narrow it before watching. */
-export interface Observer {
+/**
+ * A scope: what part of the document a listener is about. Narrow it before watching.
+ *
+ * A scope also carries the value combinators of design 023, inherited below: `map` is the
+ * bridge from this surface to derived values, and `bool`, `def`, `selector` and the rest
+ * ride on it.
+ */
+export interface Observer extends Omit<Derived<unknown>, 'get' | 'set' | 'watch' | 'effect'> {
 	/** The value the path names, or undefined when nothing sits there. */
 	get(): unknown;
 	/** Write the slot the path names. The observable holding it has to exist. */
@@ -37,7 +44,7 @@ export interface Observer {
 	shallow(): Observer;
 	/**
 	 * Match any `count` consecutive steps (design 025). A scope with a wildcard in it names
-	 * many places, so `get` is undefined and `set` throws.
+	 * many places, so `get` is undefined, `set` throws, and `isImmutable` is true.
 	 */
 	skip(count?: number): Observer;
 	/** Match the named key at any depth: here, or under any chain of slots (design 025). */
@@ -121,6 +128,17 @@ const build = (
 		write(holder, slot, toCell(value));
 	};
 
+	// The bridge to the value surface (design 023): this scope as a source, and the value
+	// combinators borrowed from a chain built over it. The methods close over the source
+	// rather than `this`, which is what makes borrowing them sound.
+	const source: Source = {
+		read: get,
+		attach: (mark) => subscribe(mark),
+		write: wild ? undefined : set,
+		immutable: () => wild,
+	};
+	const value = chain<unknown>(source);
+
 	const observer: Observer = {
 		get,
 		set,
@@ -146,8 +164,20 @@ const build = (
 			fn(get());
 			return stop;
 		},
+
+		isImmutable: value.isImmutable,
+		map: value.map,
+		setter: value.setter,
+		unwrap: value.unwrap,
+		bool: value.bool,
+		def: value.def,
+		defined: value.defined,
+		selector: value.selector,
+		throttle: value.throttle,
+		wait: value.wait,
 	};
 
+	(observer as unknown as { [SOURCE]?: Source })[SOURCE] = source;
 	return observer;
 };
 

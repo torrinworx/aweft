@@ -7,6 +7,7 @@
 import { codecError } from '@aweftjs/codec';
 
 import type { Cell, Node } from './types.ts';
+import { sourceOf } from './derived.ts';
 
 const nodes = new WeakMap<object, Node>();
 
@@ -87,6 +88,15 @@ export const toCell = (value: unknown): Cell => {
 
 	const object = value as object;
 	if (object instanceof Uint8Array) return { kind: 'value', value: object };
+
+	// A cell or a derived value is interface state (design 024). Refusing it here is what
+	// keeps "does this replicate" answerable from the type of the thing being written.
+	if (sourceOf(object) !== undefined) {
+		throw codecError(
+			'cell-in-document',
+			'a cell or derived value does not replicate; store a primitive or an observable, or its get()',
+		);
+	}
 
 	const named = aliased(object);
 	if (named !== undefined) return { kind: 'ref', node: named, edge: 'alias' };

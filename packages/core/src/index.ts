@@ -10,6 +10,11 @@ export { atomic } from './transaction.ts';
 export { observer } from './observer.ts';
 export type { Observer, ScopeKey } from './observer.ts';
 
+export { all } from './derived.ts';
+export type { Derived } from './derived.ts';
+export { fromEvent, immutable, mutable, timer } from './cell.ts';
+export type { EventEmitting } from './cell.ts';
+
 export { apply } from './apply.ts';
 
 export { snapshot } from './snapshot.ts';

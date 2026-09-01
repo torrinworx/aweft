@@ -101,7 +101,14 @@ test('a wildcard scope has no single value: get is undefined, set throws', () =>
 	const scope = observer(doc).skip().path('done');
 
 	assert.equal(scope.get(), undefined);
+	assert.equal(scope.isImmutable(), true);
 	assert.throws(() => scope.set(true), /multi-target/);
+});
+
+test('a derived chain over a wildcard scope degrades to its fallback, not a crash', () => {
+	const doc = board();
+	const label = observer(doc).skip().path('done').def('many');
+	assert.equal(label.get(), 'many');
 });
 
 test('wildcards see array steps too', () => {
