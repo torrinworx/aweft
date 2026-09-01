@@ -1,0 +1,7 @@
+{
+	"name": "delta-not-an-array",
+	"description": "A delta that is not an array. Section 6.7: a delta is an array of three or four items.",
+	"stage": "decode",
+	"reason": "invalid-delta",
+	"bytes": "818105"
+}

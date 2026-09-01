@@ -152,8 +152,9 @@ thought it would? A receiver that computes a different tag treats the two replic
 diverged and resynchronizes. It says nothing about the bytes in between, and the algorithm
 that fills it is still open, so nothing here computes or checks one yet.
 
-**It does not frame anything.** A commit says how long it is, but a log of commits needs its
-own framing. The simplest workable one is a length prefix per frame:
+**It does not frame anything.** A decoded commit is internally complete, but no public API
+reports how many bytes it consumed, so a log of commits needs its own framing to say where
+each one ends. The simplest workable one is a length prefix per frame:
 
 ```ts
 const frame = (bytes: Uint8Array): Uint8Array => {

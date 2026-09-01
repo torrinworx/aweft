@@ -27,8 +27,8 @@ const rejections = jsonFiles(invalidDir);
 test('there are fixtures to run', () => {
 	// Exact, not a floor. A floor passes when a fixture and its generator entry are deleted
 	// together, which is the one way the suite can quietly shrink.
-	assert.equal(fixtures.length, 15, `found ${fixtures.length} fixtures`);
-	assert.equal(rejections.length, 35, `found ${rejections.length} rejection fixtures`);
+	assert.equal(fixtures.length, 16, `found ${fixtures.length} fixtures`);
+	assert.equal(rejections.length, 38, `found ${rejections.length} rejection fixtures`);
 });
 
 for (const file of fixtures) {
@@ -86,19 +86,30 @@ function pathToUrl(path: string): string {
 // only in a fixture is one a second implementation finds by decoding bytes and guessing. That
 // happened: `kind-conflict` was the rule and the token, and neither was written down. So the
 // prose and the corpus are held to each other here rather than trusted to stay in step.
-test('every apply-stage reason is in the specification, and every one there is used', () => {
+test('each stage\'s reasons are the specification\'s, and every stated one is used', () => {
 	const spec = readFileSync(new URL('../../../spec/format.md', import.meta.url), 'utf8');
 	const section = spec.slice(spec.indexOf('## 7. Conformance'));
 
-	const used = new Set(
-		rejections
-			.map((file) => read<InvalidFixture>(invalidDir, file))
-			.filter((f) => f.stage === 'apply')
-			.map((f) => f.reason),
-	);
+	// Section 7 states the vocabulary as two tables, decode first, apply second. Holding both
+	// to the fixtures is what makes "that directory is the complete vocabulary" a claim the
+	// gate checks rather than a sentence.
+	const split = section.indexOf('belong to applying');
+	assert.ok(split > 0, 'section 7 no longer marks where the apply table starts');
+	const tokens = (text: string): Set<string> =>
+		new Set([...text.matchAll(/^\| `([a-z0-9-]+)` \|/gm)].map((m) => m[1]!));
 
-	const stated = new Set([...section.matchAll(/^\| `([a-z-]+)` \|/gm)].map((m) => m[1]!));
+	const usedBy = (stage: string): Set<string> =>
+		new Set(
+			rejections
+				.map((file) => read<InvalidFixture>(invalidDir, file))
+				.filter((f) => f.stage === stage)
+				.map((f) => f.reason),
+		);
 
-	assert.deepEqual([...used].sort(), [...stated].sort());
-	assert.ok(used.size > 0, 'no apply-stage fixture found, so this check proves nothing');
+	const decode = usedBy('decode');
+	const apply = usedBy('apply');
+	assert.ok(decode.size > 0 && apply.size > 0, 'a stage has no fixture, so this proves nothing');
+
+	assert.deepEqual([...decode].sort(), [...tokens(section.slice(0, split))].sort());
+	assert.deepEqual([...apply].sort(), [...tokens(section.slice(split))].sort());
 });

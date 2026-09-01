@@ -6,9 +6,9 @@
 // re-encode of anything decoded reproduces the input exactly.
 
 import {
-	type CborValue, type Writer, codecError, createWriter, decodeValue, writeHead, writeValue,
+	type WireValue, type Writer, codecError, createWriter, decodeValue, writeHead, writeValue,
 	written,
-} from './cbor.ts';
+} from './wire.ts';
 import { compareBytes } from './bytes.ts';
 import { assertId } from './id.ts';
 import { assertPosition } from './position.ts';
@@ -274,8 +274,11 @@ export const encodeCommit = (commit: Commit): Uint8Array => {
 	const { deltas, tag } = commit;
 
 	if (deltas.length === 0) throw codecError('empty-commit', 'a commit carries at least one delta');
-	if (tag !== undefined && (tag.length < MIN_TAG_BYTES || tag.length > MAX_TAG_BYTES)) {
-		throw codecError('invalid-tag', `a tag is ${MIN_TAG_BYTES} to ${MAX_TAG_BYTES} bytes, got ${tag.length}`);
+	// The type is checked as well as the length: every other field asserts at the edge, and
+	// without this an encoder could write bytes its own decoder refuses.
+	if (tag !== undefined && (!(tag instanceof Uint8Array)
+		|| tag.length < MIN_TAG_BYTES || tag.length > MAX_TAG_BYTES)) {
+		throw codecError('invalid-tag', `a tag is ${MIN_TAG_BYTES} to ${MAX_TAG_BYTES} bytes`);
 	}
 
 	const ordered = [...deltas].sort(compareDeltas);
@@ -296,12 +299,12 @@ export const encodeCommit = (commit: Commit): Uint8Array => {
 
 // --- reading ---------------------------------------------------------------------------
 
-const readRef = (raw: CborValue | undefined): Ref => {
+const readRef = (raw: WireValue | undefined): Ref => {
 	if (!Array.isArray(raw) || raw.length !== 2) {
 		throw codecError('invalid-ref', 'a ref is a kind and a key');
 	}
 
-	const items = raw as readonly CborValue[];
+	const items = raw as readonly WireValue[];
 	const kindIndex = items[0];
 	if (typeof kindIndex !== 'number' || KINDS[kindIndex] === undefined) {
 		throw codecError('unknown-ref-kind', `${String(kindIndex)} is not an observable kind`);
@@ -322,9 +325,9 @@ const readRef = (raw: CborValue | undefined): Ref => {
 	return { kind, key: assertId(key) };
 };
 
-const readFieldValue = (raw: CborValue | undefined): Value => {
+const readFieldValue = (raw: WireValue | undefined): Value => {
 	if (Array.isArray(raw)) {
-		const items = raw as readonly CborValue[];
+		const items = raw as readonly WireValue[];
 		if (items.length !== 3) {
 			throw codecError('invalid-reference', 'a reference is an edge, a kind and an id');
 		}
@@ -348,10 +351,10 @@ const readFieldValue = (raw: CborValue | undefined): Value => {
 	return raw as Value;
 };
 
-const readDelta = (raw: CborValue | undefined): Delta => {
+const readDelta = (raw: WireValue | undefined): Delta => {
 	if (!Array.isArray(raw)) throw codecError('invalid-delta', 'a delta is an array');
 
-	const items = raw as readonly CborValue[];
+	const items = raw as readonly WireValue[];
 	if (items.length < 3 || items.length > 4) {
 		throw codecError('invalid-delta', 'a delta is a type, an id, a ref, and a value unless it removes');
 	}
@@ -393,7 +396,7 @@ export const decodeCommit = (bytes: Uint8Array): Commit => {
 	const top = decodeValue(bytes);
 	if (!Array.isArray(top)) throw codecError('invalid-commit', 'a commit is an array');
 
-	const parts = top as readonly CborValue[];
+	const parts = top as readonly WireValue[];
 	if (parts.length < 1 || parts.length > 2) {
 		throw codecError('invalid-commit', 'a commit is its deltas and an optional tag');
 	}
@@ -401,7 +404,7 @@ export const decodeCommit = (bytes: Uint8Array): Commit => {
 	const rawDeltas = parts[0];
 	if (!Array.isArray(rawDeltas)) throw codecError('invalid-commit', 'the deltas are an array');
 
-	const list = rawDeltas as readonly CborValue[];
+	const list = rawDeltas as readonly WireValue[];
 	if (list.length === 0) throw codecError('empty-commit', 'a commit carries at least one delta');
 
 	const deltas = list.map(readDelta);

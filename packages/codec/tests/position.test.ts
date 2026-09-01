@@ -6,9 +6,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { bytesFromHex } from '../src/bytes.ts';
-import { type CodecError } from '../src/cbor.ts';
-import { assertPosition, comparePositions, isValidPosition } from '../src/position.ts';
+import { bytesFromHex } from '../src/index.ts';
+import { type CodecError } from '../src/index.ts';
+import { assertPosition, comparePositions, isValidPosition } from '../src/index.ts';
 
 const pos = (hex: string): Uint8Array => bytesFromHex(hex);
 

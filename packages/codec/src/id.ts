@@ -1,6 +1,6 @@
 // Observable ids: what two replicas agree on when they cannot agree on a position in a tree.
 
-import { codecError } from './cbor.ts';
+import { codecError } from './wire.ts';
 
 /** 96 bits. Twelve bytes encode to exactly sixteen base64url characters with no padding. */
 export const ID_BYTES = 12;

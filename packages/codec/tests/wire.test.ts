@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { bytesFromHex, bytesToHex } from '../src/bytes.ts';
+import { bytesFromHex, bytesToHex } from '../src/index.ts';
 import {
-	type CborValue, type CodecError,
+	type WireValue, type CodecError,
 	codecError, decodeValue, encodeValue, MAX_INT, MIN_INT,
-} from '../src/cbor.ts';
+} from '../src/index.ts';
 
-const roundTrip = (v: CborValue): void => {
+const roundTrip = (v: WireValue): void => {
 	const bytes = encodeValue(v);
 	assert.deepEqual(decodeValue(bytes), v, `decoding ${bytesToHex(bytes)}`);
 	assert.deepEqual(encodeValue(decodeValue(bytes)), bytes, 're-encoding is not byte equal');
@@ -22,7 +22,7 @@ const rejects = (hex: string, reason: string): void => {
 };
 
 test('every representable value survives a round trip', () => {
-	const values: CborValue[] = [
+	const values: WireValue[] = [
 		null, true, false,
 		0, 1, 23, 24, 255, 256, 65535, 65536, 4294967295, 4294967296,
 		Number.MAX_SAFE_INTEGER,
@@ -145,4 +145,29 @@ test('a refusal carries a reason a caller can branch on, not just a message', ()
 	assert.ok(error instanceof Error);
 	assert.equal(error.reason, 'invalid-position');
 	assert.equal(error.message, 'invalid-position: a position is non-empty');
+});
+
+test('heads at and past the one-byte boundary, derived by hand from the specification', () => {
+	// A 30-character text: major 3, length 30 needs the one-byte argument form, so the head
+	// is 0x78 0x1e followed by the UTF-8 bytes.
+	const text30 = 'abcdefghijklmnopqrstuvwxyz0123';
+	assert.equal(
+		bytesToHex(encodeValue(text30)),
+		'781e' + Buffer.from(text30, 'utf8').toString('hex'),
+	);
+
+	// A 300-byte string: major 2, length 300 needs the two-byte argument form, so the head is
+	// 0x59 0x01 0x2c.
+	const bytes300 = new Uint8Array(300).fill(0xab);
+	assert.equal(
+		bytesToHex(encodeValue(bytes300)),
+		'59012c' + 'ab'.repeat(300),
+	);
+
+	// An array of 25 nulls: major 4, count 25 needs the one-byte argument form, so the head
+	// is 0x98 0x19, and null is 0xf6.
+	assert.equal(
+		bytesToHex(encodeValue(new Array(25).fill(null) as never)),
+		'9819' + 'f6'.repeat(25),
+	);
 });

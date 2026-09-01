@@ -1,0 +1,60 @@
+{
+	"name": "astral-keys",
+	"description": "Object keys where byte order and code-unit order disagree: an astral character is one code point above U+FFFF whose first code unit sits below U+E000, so comparing units puts it under a private-use key while its UTF-8 bytes sort above. Canonical order is the bytes.",
+	"initial": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {}
+			}
+		}
+	},
+	"commits": [
+		{
+			"bytes": "818384004c0000000000000000000000018200617a686f6e65206279746584004c000000000000000000000001820064ee8080617820707269766174652075736520706c7573206f6e652c20666f757220627974657384004c000000000000000000000001820064f09d95927261737472616c2c20666f7572206279746573",
+			"deltas": [
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "z"
+					},
+					"value": "one byte"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "a"
+					},
+					"value": "private use plus one, four bytes"
+				},
+				{
+					"type": "add",
+					"id": "AAAAAAAAAAAAAAAB",
+					"ref": {
+						"kind": "object",
+						"key": "𝕒"
+					},
+					"value": "astral, four bytes"
+				}
+			]
+		}
+	],
+	"final": {
+		"root": "AAAAAAAAAAAAAAAB",
+		"observables": {
+			"AAAAAAAAAAAAAAAB": {
+				"kind": "object",
+				"slots": {
+					"z": "one byte",
+					"a": "private use plus one, four bytes",
+					"𝕒": "astral, four bytes"
+				}
+			}
+		}
+	}
+}

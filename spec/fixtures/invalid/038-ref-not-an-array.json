@@ -1,0 +1,7 @@
+{
+	"name": "ref-not-an-array",
+	"description": "A ref that is not an array. Section 6.5: a ref is a kind and a key.",
+	"stage": "decode",
+	"reason": "invalid-ref",
+	"bytes": "818184004c070707070707070707070707616b01"
+}

@@ -1,5 +1,5 @@
-export { codecError, decodeValue, encodeValue, MAX_INT, MIN_INT } from './cbor.ts';
-export type { CborValue, CodecError } from './cbor.ts';
+export { codecError, decodeValue, encodeValue, MAX_INT, MIN_INT } from './wire.ts';
+export type { WireValue, CodecError } from './wire.ts';
 
 export { bytesFromHex, bytesToHex, compareBytes, equalBytes } from './bytes.ts';
 

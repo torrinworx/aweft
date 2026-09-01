@@ -19,9 +19,13 @@ checks four things:
 4. Applying the commits reaches the stated document, with the deltas in generated, shuffled
    and reversed order.
 
-The ending document is written by hand in the generator, not derived by the applier.
-Generation fails if applying the commits does not reach it, so a fixture is a claim about the
-format rather than a transcript of what the reference implementation did.
+The starting and ending documents are written by hand in the generator, not derived by the
+applier, and the stated deltas are ordered independently of the encoder's own sort.
+Generation fails if applying the commits does not reach the stated document, or if the
+encoder's canonical order disagrees with the independent one. The `bytes` are the reference
+encoder's output, frozen by this directory: a change to them is a format change and gets a
+`CHANGELOG` entry, which is what stops a regeneration from quietly re-baselining the format
+around a defect.
 
 ## `invalid/`
 

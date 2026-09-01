@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { bytesFromHex, bytesToHex, compareBytes, equalBytes } from '../src/bytes.ts';
+import { bytesFromHex, bytesToHex, compareBytes, equalBytes } from '../src/index.ts';
 
 test('byte strings order as unsigned bytes', () => {
 	assert.equal(compareBytes(Uint8Array.of(1), Uint8Array.of(2)), -1);

@@ -1,0 +1,7 @@
+{
+	"name": "malformed-head",
+	"description": "A value head whose additional information is reserved (28 to 30). Section 6.1: those values are not part of the format.",
+	"stage": "decode",
+	"reason": "malformed-head",
+	"bytes": "818184004c0707070707070707070707078200616b1c"
+}

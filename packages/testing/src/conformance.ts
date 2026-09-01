@@ -100,9 +100,9 @@ export const deltaToJson = (d: Delta): DeltaJson => {
 /**
  * The delta a JSON one names.
  *
- * This is the direction that makes a fixture's bytes checkable against something outside the
- * implementation: the JSON is written by hand, so encoding it and comparing to the stated
- * bytes asks a question the decoder's own output cannot answer.
+ * This is the direction that makes a fixture's bytes checkable against something beside the
+ * decoder: the stated JSON is ordered independently of the encoder's sort, so encoding it
+ * and comparing to the stated bytes asks a question the decoder's own output cannot answer.
  */
 export const deltaFromJson = (d: DeltaJson): Delta => {
 	const base = { type: d.type, id: idFromText(d.id), ref: refFromJson(d.ref) };
@@ -238,7 +238,8 @@ export const checkFixture = (f: Fixture, applier: Applier = modelApplier): void 
 
 		// The other direction, and the one that is not circular. Above, the deltas came out of
 		// the decoder, so re-encoding them asks the package whether it agrees with itself.
-		// These are built from the JSON the fixture states, which a person wrote and can edit,
+		// These are built from the JSON the fixture states, whose deltas the generator orders
+		// independently of the encoder's own sort and whose documents a person wrote,
 		// so the bytes are checked against something outside the implementation.
 		const fromStated = withTag(c.deltas.map(deltaFromJson), c.tag === undefined ? undefined : bytesFromHex(c.tag));
 		const encoded = bytesToHex(encodeCommit(fromStated));

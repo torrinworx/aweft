@@ -10,7 +10,14 @@
 // encoder would not have written: an integer padded into a wider form, a float holding a
 // whole number, a length prefix with room to spare.
 
+import { codecError } from './error.ts';
+export { codecError } from './error.ts';
+export type { CodecError } from './error.ts';
+
 /** How deeply arrays may nest. Values nest two deep at most, so this is a bomb guard. */
+// Stated in spec/format.md 6.1: nothing this format writes nests past four levels, and a
+// decoder refuses past eight, so a malicious length cannot recurse a reader to death while
+// honest growth still has room.
 const MAX_DEPTH = 8;
 
 /**
@@ -31,34 +38,7 @@ export const MIN_INT = -(2 ** 53);
  * The type set is small on purpose, and there are no maps and no tagged values. A commit is
  * built out of these and nothing else, which is what keeps one spelling per value.
  */
-export type CborValue = null | boolean | number | string | Uint8Array | readonly CborValue[];
-
-/**
- * An error carrying a stable machine-readable reason.
- *
- * The reason is part of the format's contract: `spec/fixtures/invalid/` names one per case,
- * so a conforming implementation must reject the same input for the same stated cause, not
- * merely reject it somehow.
- */
-export interface CodecError extends Error {
-	readonly reason: string;
-}
-
-/**
- * Build a refusal that names the rule it is refusing for.
- *
- * Params:
- *   reason: the stable machine-readable cause, as `spec/fixtures/invalid/` states it
- *   detail: what was actually seen, for a human reading the message
- *
- * Returns: an Error whose `message` is `reason: detail` and whose `reason` is the reason
- * alone. Callers branch on `reason` and never on the message.
- *
- * Example:
- *   throw codecError('invalid-id', `${id.length} bytes is not an id`);
- */
-export const codecError = (reason: string, detail: string): CodecError =>
-	Object.assign(new Error(`${reason}: ${detail}`), { reason });
+export type WireValue = null | boolean | number | string | Uint8Array | readonly WireValue[];
 
 // --- writing ---------------------------------------------------------------------------
 
@@ -184,7 +164,7 @@ export const writeNumber = (w: Writer, n: number): void => {
 	w.length += 8;
 };
 
-export const writeValue = (w: Writer, v: CborValue): void => {
+export const writeValue = (w: Writer, v: WireValue): void => {
 	if (v === null) {
 		byte(w, 0xf6);
 		return;
@@ -221,7 +201,7 @@ export const writeValue = (w: Writer, v: CborValue): void => {
  * Encode one value, below the level of deltas and commits.
  *
  * Params:
- *   v: anything CborValue allows
+ *   v: anything WireValue allows
  *
  * Returns: the canonical bytes. There is one encoding per value, so two encoders that agree
  * on the format produce the same bytes for the same value.
@@ -232,7 +212,7 @@ export const writeValue = (w: Writer, v: CborValue): void => {
  * Example:
  *   encodeValue([1, 'two', null]);
  */
-export const encodeValue = (v: CborValue): Uint8Array => {
+export const encodeValue = (v: WireValue): Uint8Array => {
 	const w = createWriter();
 	writeValue(w, v);
 	return written(w);
@@ -324,8 +304,8 @@ export const readArg = (r: Reader, info: number): number => {
 
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
 
-export const readValue = (r: Reader, depth = 0): CborValue => {
-	if (depth > MAX_DEPTH) throw codecError('nesting-too-deep', `past ${MAX_DEPTH} levels`);
+export const readValue = (r: Reader, depth = 0): WireValue => {
+	if (depth >= MAX_DEPTH) throw codecError('nesting-too-deep', `past ${MAX_DEPTH} levels`);
 
 	need(r, 1);
 	const initial = r.bytes[r.offset++]!;
@@ -367,7 +347,7 @@ export const readValue = (r: Reader, depth = 0): CborValue => {
 			throw codecError('truncated', `an array of ${n} cannot fit in the remaining bytes`);
 		}
 
-		const items: CborValue[] = [];
+		const items: WireValue[] = [];
 		for (let i = 0; i < n; i++) items.push(readValue(r, depth + 1));
 		return items;
 	}
@@ -411,7 +391,7 @@ export const readValue = (r: Reader, depth = 0): CborValue => {
  * Example:
  *   decodeValue(encodeValue('hi')) === 'hi';
  */
-export const decodeValue = (bytes: Uint8Array): CborValue => {
+export const decodeValue = (bytes: Uint8Array): WireValue => {
 	const r = createReader(bytes);
 	const v = readValue(r);
 	if (r.offset !== bytes.length) {

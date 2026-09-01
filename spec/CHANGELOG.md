@@ -88,3 +88,19 @@ were already enforced and already had fixtures. They were not stated.
   A test now holds the table and the corpus to each other, so neither can move alone.
 
 Open: the integrity tag algorithm, and the fate of a detached subtree.
+
+## 2026-09-01
+
+- Section 6.1 states the nesting bound the decoder always enforced: the format needs four
+  levels, a decoder refuses past eight. The reference decoder was admitting nine; it now
+  admits exactly eight.
+- Section 7 lists the decode-stage refusal vocabulary in full, the same way the apply stage
+  was already listed. Three reasons were reachable from wire bytes with no fixture naming
+  them; `invalid/036-malformed-head`, `invalid/037-delta-not-an-array` and
+  `invalid/038-ref-not-an-array` close that.
+- New fixture `016-astral-keys`: two object keys above the basic plane on one id, the case
+  where byte order and code-unit order disagree.
+- Fixture provenance: a fixture's `deltas` are now stated from the authored commit, ordered
+  by a comparison independent of the encoder's sort, so the bytes are checked against a
+  statement the encoder did not produce. The regenerated corpus is byte-identical, which is
+  the point: the change is to what a regeneration would do with a broken encoder.

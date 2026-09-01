@@ -11,9 +11,23 @@
 // a key between two others. Choosing belongs to whatever owns the array being edited, and a
 // receiver never regenerates a key it was sent.
 
-import { codecError } from './cbor.ts';
+import { codecError } from './wire.ts';
 
-export { compareBytes as comparePositions } from './bytes.ts';
+import { compareBytes } from './bytes.ts';
+
+/**
+ * Order two position keys.
+ *
+ * Params:
+ *   a, b: position keys
+ *
+ * Returns: negative, zero or positive, ordering the keys as their bytes order, which is the
+ * one array order every implementation agrees on.
+ *
+ * Example:
+ *   positions.sort(comparePositions);
+ */
+export const comparePositions = (a: Uint8Array, b: Uint8Array): number => compareBytes(a, b);
 
 /**
  * Is this a well formed position key?

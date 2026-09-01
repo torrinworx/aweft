@@ -96,8 +96,8 @@ const rejections = jsonFiles(invalidDir);
 test('there are fixtures to run', () => {
 	// Exact, not a floor. A floor passes when a fixture and its generator entry are deleted
 	// together, which is the one way the suite can quietly shrink.
-	assert.equal(fixtures.length, 15, `found ${fixtures.length} fixtures`);
-	assert.equal(rejections.length, 35, `found ${rejections.length} rejection fixtures`);
+	assert.equal(fixtures.length, 16, `found ${fixtures.length} fixtures`);
+	assert.equal(rejections.length, 38, `found ${rejections.length} rejection fixtures`);
 });
 
 for (const file of fixtures) {

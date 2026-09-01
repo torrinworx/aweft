@@ -253,6 +253,11 @@ An encoder **MUST** write every head in the shortest form that holds its argumen
 following the end of the commit, and **MUST** refuse an array whose stated length exceeds
 the bytes remaining.
 
+Nothing this format writes nests past four levels (a commit, its list of deltas, a delta,
+a ref inside it). A decoder **MUST** refuse nesting past eight levels (`nesting-too-deep`),
+so a hostile length cannot recurse a reader to death, while the format keeps room to grow
+without re-freezing this rule.
+
 ### 6.2 Numbers
 
 A number that is whole and within plus or minus 2^53 **MUST** be encoded as an integer, in
@@ -386,7 +391,39 @@ an input is invalid has not been specified, only implemented.
 
 Every fixture in `spec/fixtures/invalid/` names its reason, and that directory is the complete
 vocabulary. Most reasons belong to decoding, and each one is a **MUST** in section 6 read back
-as a refusal. Five belong to applying, where the bytes are a well formed commit and the
+as a refusal:
+
+| reason | the bytes were refused because |
+|---|---|
+| `malformed-head` | a head uses reserved additional information 28 to 30, section 6.1 |
+| `indefinite-length` | a length is indefinite instead of stated, section 6.1 |
+| `non-canonical-integer` | a head is wider than its value needs, section 6.1 |
+| `truncated` | the bytes end before the value they promise, section 6.1 |
+| `trailing-bytes` | bytes follow the one commit, section 6.8 |
+| `nesting-too-deep` | nesting passes eight levels, section 6.1 |
+| `integer-out-of-range` | an integer is outside plus or minus 2^53, section 6.2 |
+| `non-canonical-float` | a float carries a value the integer encoding must carry, section 6.2 |
+| `non-finite-float` | a float is an infinity or not a number, section 6.2 |
+| `invalid-utf8` | text is not well formed UTF-8, section 6.3 |
+| `unsupported-major` | a major type outside the format appears, section 6.4 |
+| `unsupported-simple` | a simple value other than false, true or null appears, section 6.4 |
+| `invalid-commit` | the commit is not an array of deltas and an optional tag, section 6.8 |
+| `empty-commit` | the commit carries no delta, section 6.8 |
+| `invalid-tag` | the tag is not 4 to 32 bytes, section 6.8 |
+| `duplicate-slot` | two deltas address one slot, section 6.8 |
+| `deltas-out-of-order` | the deltas are not in canonical order, section 6.9 |
+| `invalid-delta` | a delta is not an array of three or four items, section 6.7 |
+| `unknown-delta-type` | a delta type outside add, replace and remove appears, section 6.7 |
+| `missing-value` | an add or replace carries no value, section 6.7 |
+| `unexpected-value` | a remove carries a value, section 6.7 |
+| `invalid-id` | an id is not a 12-byte string, section 6.10 |
+| `invalid-ref` | a ref is not a kind and the key that kind takes, section 6.5 |
+| `unknown-ref-kind` | a ref kind outside object, array and map appears, section 6.5 |
+| `invalid-reference` | a reference value is not an edge, a kind and an id, section 6.4 |
+| `unknown-edge-kind` | a reference edge outside attach and alias appears, section 6.4 |
+| `invalid-position` | a position is empty or ends in a zero byte, section 6.6 |
+
+Five belong to applying, where the bytes are a well formed commit and the
 document is what refuses it:
 
 | reason | the commit was refused because |

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { bytesFromHex } from '../src/bytes.ts';
-import type { CodecError } from '../src/cbor.ts';
-import { assertId, createId, ID_BYTES, ID_TEXT_LENGTH, idFromText, idToText } from '../src/id.ts';
+import { bytesFromHex } from '../src/index.ts';
+import type { CodecError } from '../src/index.ts';
+import { assertId, createId, ID_BYTES, ID_TEXT_LENGTH, idFromText, idToText } from '../src/index.ts';
 
 test('an id is 96 bits of randomness', () => {
 	const id = createId();

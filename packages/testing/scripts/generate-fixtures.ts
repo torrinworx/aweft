@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
 	type Commit, type Delta, type Ref, type Value,
-	bytesFromHex, bytesToHex, decodeCommit, encodeCommit, encodeValue, idToText,
+	bytesFromHex, bytesToHex, compareBytes, encodeCommit, encodeValue, idToText,
 } from '@aweftjs/codec';
 
 import {
@@ -62,6 +62,11 @@ interface Case {
 }
 
 // --- the valid fixtures -------------------------------------------------------------------
+
+
+/** The wire's index for a ref kind, stated here rather than imported from the encoder. */
+const refKindIndex = (kind: 'object' | 'array' | 'map'): number =>
+	kind === 'object' ? 0 : kind === 'array' ? 1 : 2;
 
 const cases: Case[] = [
 	{
@@ -318,6 +323,28 @@ const cases: Case[] = [
 				largestExact: 2 ** 53, smallestExact: -(2 ** 53),
 				largestSafe: Number.MAX_SAFE_INTEGER,
 				negative: -1, half: 0.5, tiny: 1e-7, huge: 1e300, beyondExact: 2 ** 55,
+			}),
+		}),
+	},
+	{
+		name: 'astral-keys',
+		description: 'Object keys where byte order and code-unit order disagree: an astral '
+			+ 'character is one code point above U+FFFF whose first code unit sits below '
+			+ 'U+E000, so comparing units puts it under a private-use key while its UTF-8 '
+			+ 'bytes sort above. Canonical order is the bytes.',
+		initial: doc(1, { 1: obj({}) }),
+		commits: [{
+			deltas: [
+				add(1, key('\u{1d552}'), 'astral, four bytes'),
+				add(1, key('\ue000a'), 'private use plus one, four bytes'),
+				add(1, key('z'), 'one byte'),
+			],
+		}],
+		final: doc(1, {
+			1: obj({
+				'z': 'one byte',
+				'\ue000a': 'private use plus one, four bytes',
+				'\u{1d552}': 'astral, four bytes',
 			}),
 		}),
 	},
@@ -590,6 +617,26 @@ const rejections: InvalidFixture[] = [
 			deltas: [add(1, key('seeAlso'), alias('object', 5)), add(5, key('title'), 'nowhere')],
 		})),
 	},
+	{
+		name: 'malformed-head',
+		description: 'A value head whose additional information is reserved (28 to 30). '
+			+ 'Section 6.1: those values are not part of the format.',
+		stage: 'decode', reason: 'malformed-head',
+		bytes: '818184004c0707070707070707070707078200616b1c',
+	},
+	{
+		name: 'delta-not-an-array',
+		description: 'A delta that is not an array. Section 6.7: a delta is an array of three '
+			+ 'or four items.',
+		stage: 'decode', reason: 'invalid-delta',
+		bytes: '818105',
+	},
+	{
+		name: 'ref-not-an-array',
+		description: 'A ref that is not an array. Section 6.5: a ref is a kind and a key.',
+		stage: 'decode', reason: 'invalid-ref',
+		bytes: '818184004c070707070707070707070707616b01',
+	},
 ];
 
 // --- write them out ------------------------------------------------------------------------
@@ -622,12 +669,27 @@ cases.forEach((c, i) => {
 		name: c.name,
 		description: c.description,
 		initial: c.initial,
-		// What a fixture says the bytes mean is read back off the bytes, never restated from
-		// what was handed to the encoder. The deltas above are written in whatever order reads
-		// well; the bytes are in canonical order, and the fixture has to agree with the bytes.
+		// The stated deltas are the authored ones, in the order section 6.9 states, derived
+		// here independently of the encoder's sort: the encoding of the id, then of the ref,
+		// compared as byte strings. If the encoder's canonical order ever disagrees with
+		// this, checkFixture below fails at generation, instead of the corpus quietly
+		// regenerating itself around the bug.
 		commits: c.commits.map((commit) => {
-			const bytes = encodeCommit(commit);
-			return commitToJson(decodeCommit(bytes), bytes);
+			const orderKey = (d: Delta): Uint8Array => {
+				const idBytes = encodeValue(d.id);
+				const kindBytes = encodeValue(refKindIndex(d.ref.kind));
+				const slotBytes = encodeValue(d.ref.key);
+				const out = new Uint8Array(idBytes.length + kindBytes.length + slotBytes.length);
+				out.set(idBytes, 0);
+				out.set(kindBytes, idBytes.length);
+				out.set(slotBytes, idBytes.length + kindBytes.length);
+				return out;
+			};
+			const ordered = [...commit.deltas].sort((a, b) => compareBytes(orderKey(a), orderKey(b)));
+			const stated: Commit = commit.tag === undefined
+				? { deltas: ordered }
+				: { deltas: ordered, tag: commit.tag };
+			return commitToJson(stated, encodeCommit(stated));
 		}),
 		final: c.final,
 	};

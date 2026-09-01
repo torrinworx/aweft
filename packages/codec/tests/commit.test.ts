@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { bytesFromHex, bytesToHex } from '../src/bytes.ts';
-import { type CborValue, type CodecError, encodeValue } from '../src/cbor.ts';
+import { bytesFromHex, bytesToHex } from '../src/index.ts';
+import { type WireValue, type CodecError, encodeValue } from '../src/index.ts';
 import {
 	type Commit, type Delta, type Value,
 	decodeCommit, encodeCommit, isReference, MAX_TAG_BYTES, MIN_TAG_BYTES,
-} from '../src/commit.ts';
+} from '../src/index.ts';
 
 const id = (n: number): Uint8Array => bytesFromHex(n.toString(16).padStart(24, '0'));
 
@@ -127,7 +127,7 @@ test('a malformed slot name is refused', () => {
 // accepting them would mean two byte strings decode to one commit, and then a re-encode
 // could not reproduce its input, which is the property conformance rests on.
 test('deltas out of canonical order are refused, not sorted', () => {
-	const delta = (target: Uint8Array): CborValue => [0, target, [0, 'a'], 1];
+	const delta = (target: Uint8Array): WireValue => [0, target, [0, 'a'], 1];
 
 	reason(() => decodeCommit(encodeValue([[delta(B), delta(A)]])), 'deltas-out-of-order');
 	reason(() => decodeCommit(encodeValue([[delta(A), delta(A)]])), 'duplicate-slot');

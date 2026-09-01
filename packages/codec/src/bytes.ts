@@ -1,6 +1,8 @@
 // Byte string comparison, used wherever the format needs a total order it can state in one
 // sentence: array positions, and the canonical ordering of deltas within a commit.
 
+import { codecError } from './error.ts';
+
 /**
  * Order two byte strings.
  *
@@ -74,12 +76,12 @@ export const bytesToHex = (b: Uint8Array): string => {
  *   const position = bytesFromHex(slot);
  */
 export const bytesFromHex = (hex: string): Uint8Array => {
-	if (hex.length % 2 !== 0) throw new Error(`hex string has an odd length: ${hex.length}`);
+	if (hex.length % 2 !== 0) throw codecError('invalid-hex', `hex string has an odd length: ${hex.length}`);
 
 	const out = new Uint8Array(hex.length / 2);
 	for (let i = 0; i < out.length; i++) {
 		const v = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-		if (Number.isNaN(v)) throw new Error(`"${hex.slice(i * 2, i * 2 + 2)}" is not a hex byte`);
+		if (Number.isNaN(v)) throw codecError('invalid-hex', `"${hex.slice(i * 2, i * 2 + 2)}" is not a hex byte`);
 		out[i] = v;
 	}
 	return out;
