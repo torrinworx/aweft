@@ -12,7 +12,10 @@
 import { decodeCommit, encodeCommit } from '@aweftjs/codec';
 import { randomFrom } from '@aweftjs/testing';
 import type { Commit } from '@aweftjs/codec';
-import { apply, atomic, createArray, createObject, idOf, observer, snapshot } from '@aweftjs/core';
+import {
+	all, apply, atomic, createArray, createObject, fromSnapshot, idOf, mutable, observer,
+	snapshot, textIdOf,
+} from '@aweftjs/core';
 import type { Change } from '@aweftjs/core';
 
 // --- the application -------------------------------------------------------------------
@@ -171,6 +174,48 @@ observer(board).path('tasks').ignore('counts').watch((change) => {
 	titleChanges += change.deltas.filter((d) => d.ref.key === 'title').length;
 });
 
+// A wildcard scope beside a full count of the same deltas. Every status delta the root sees,
+// wherever the task sits in the array, must reach the wildcard scope, and nothing else may.
+let statusAtRoot = 0;
+observer(board).watch((change) => {
+	statusAtRoot += change.deltas.filter((d) => d.ref.kind === 'object' && d.ref.key === 'status').length;
+});
+let statusAtWild = 0;
+observer(board).path('tasks').skip().path('status').watch((change) => {
+	statusAtWild += change.deltas.length;
+});
+
+// --- the interface layer, on the value surface -----------------------------------------
+//
+// What a page would keep beside this document: a status line derived from the counts, and a
+// visible list filtered by a cell that is not document state. Neither is maintained by hand
+// past this point; the checks at the end ask whether the framework maintained them.
+
+let countCommits = 0;
+observer(board).path('counts').watch(() => {
+	countCommits += 1;
+});
+
+let statusRuns = 0;
+const statusLine = all([
+	observer(board).path('counts', 'open'),
+	observer(board).path('counts', 'done'),
+]).map(([open, done]) => {
+	statusRuns += 1;
+	return `${Number(open ?? 0)} open, ${Number(done ?? 0)} done`;
+});
+let statusSeen = '';
+statusLine.effect((line) => {
+	statusSeen = line;
+});
+
+const filter = mutable<'all' | 'open'>('all');
+const visible = all([filter, observer(board).path('tasks')]).map(([mode]) => {
+	const tasks = board.tasks ?? [];
+	return tasks.filter((t) => mode === 'all' || t.status === 'open').map((t) => t.title);
+});
+visible.watch(() => undefined); // kept warm, the way a page keeps what it renders
+
 install(board);
 
 // A burst. Every operation keeps the invariant, and every one is a commit.
@@ -194,6 +239,50 @@ check(titleChanges > 0, 'the scoped watcher never saw a title change');
 const after = snapshot(board);
 check(same(snapshot(replica), after), 'the replica does not hold the same document as the board');
 
+// The interface layer, checked against the document rather than against itself.
+check(
+	statusSeen === `${String(board.counts!.open)} open, ${String(board.counts!.done)} done`,
+	`the status line reads "${statusSeen}" against counts ${String(board.counts!.open)}/${String(board.counts!.done)}`,
+);
+check(statusSeen === statusLine.get(), 'the delivered status line disagrees with a fresh read');
+check(statusRuns > 0, 'the status line never computed');
+check(
+	statusRuns <= countCommits + 1,
+	`the status line ran ${statusRuns} times for ${countCommits} count commits: not one recompute per commit`,
+);
+
+const openTitles = board.tasks!.filter((t) => t.status === 'open').map((t) => t.title);
+filter.set('open');
+check(same(visible.get(), openTitles), 'the visible list does not follow the filter cell');
+filter.set('all');
+check(visible.get().length === board.tasks!.length, 'the visible list does not show everything again');
+
+check(statusAtRoot > 0, 'no status delta ever reached the root');
+check(
+	statusAtWild === statusAtRoot,
+	`the wildcard scope saw ${statusAtWild} status deltas against ${statusAtRoot} at the root`,
+);
+
+// Selection over ids, driven by a cell. A move must reach the two keys it moved between and
+// nothing else, so the flip count is exact.
+const ids = board.tasks!.slice(0, 3).map((t) => textIdOf(t));
+const selected = mutable<string | undefined>(undefined);
+const select = selected.selector();
+let flips = 0;
+for (const id of ids) select(id).watch(() => flips += 1);
+
+selected.set(ids[0]!); // one key flips
+selected.set(ids[1]!); // two keys flip
+selected.set(ids[2]!); // two keys flip
+check(flips === 5, `selection moves flipped ${flips} keys, not the 5 the two-key rule gives`);
+check(select(ids[2]!).get() && !select(ids[0]!).get(), 'selection does not read back');
+
+// A document rebuilt from a snapshot is the same document. It holds what the document says,
+// not the detached observables the original still indexes, so it follows live commits from
+// here forward; replaying resurrections from before the snapshot is the commit log's job.
+const rebuiltFrom = fromSnapshot(after) as Board;
+check(same(snapshot(rebuiltFrom), after), 'the rebuilt document differs from its snapshot');
+
 // Undo everything, one commit at a time, checking the invariant the whole way back.
 let undone = 0;
 while (replay(undoable, 'undo')) {
@@ -216,8 +305,20 @@ check(redone === undone, `${redone} commits were redone against ${undone} undone
 check(same(snapshot(board), after), 'redoing every commit did not reach the document undo started from');
 check(torn === 0, 'a watcher saw a half applied commit during undo or redo');
 check(same(snapshot(replica), after), 'the replica did not follow the undo and redo');
+check(
+	statusSeen === `${String(board.counts!.open)} open, ${String(board.counts!.done)} done`,
+	'the status line fell out of step across undo and redo',
+);
+
+// The rebuilt document accepts live commits addressed to the original's ids.
+const follow = observer(board).watch((change) => apply(rebuiltFrom, change));
+renameTask(board, 0, 'renamed after the rebuild');
+follow();
+check(board.tasks![0]!.title === 'renamed after the rebuild', 'the final rename did not land');
+check(same(snapshot(rebuiltFrom), snapshot(board)), 'the rebuilt document did not follow a live commit');
 
 console.log(
 	`core proof: ${checks} checks, seed ${seed}, ${String(board.tasks?.length)} tasks, ` +
-	`${undone} commits undone and redone, replica in step`,
+	`${undone} commits undone and redone, replica and rebuild in step, ` +
+	`status line ran ${statusRuns} times over ${countCommits} count commits`,
 );

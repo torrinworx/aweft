@@ -95,6 +95,12 @@ const HEX = /^(?:[0-9a-f]{2})+$/;
  * aliases. `snapshot(fromSnapshot(s))` deep-equals `s`, and commits addressed to the
  * original document's ids apply to the rebuilt one.
  *
+ * The rebuilt document holds what the snapshot says, which is the document, not the
+ * detached observables the original may still index. A commit that re-attaches one of
+ * those names an id the rebuilt document has never held, so its subtree arrives empty and
+ * deltas over its old slots are refused. A replica that must replay that kind of history
+ * replays the commit log rather than starting from a snapshot.
+ *
  * Throws with the vocabulary `apply` uses when the snapshot does not describe a document:
  * a ref naming an id the snapshot does not hold, an observable attached twice or not at
  * all, a kind that disagrees with its target, or a slot key invalid for its kind.
