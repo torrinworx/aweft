@@ -236,6 +236,49 @@ a delta is in scope when the path from the observer's base to the delta starts w
 scope's keys. A scoped watcher sees the deltas in its scope, not the whole commit. See
 design 017.
 
+### Scopes and values are two surfaces of one chain
+
+A scope is about a place in a document and its `watch` delivers commits. A derived value is
+about a value: `map` and `all` produce one, its `watch` delivers the value, and both surfaces
+carry the same combinators. A derived value is memoized while observed; while unobserved it
+holds no subscription and its cache is trusted only while a global write clock has not moved.
+Settling is two-phase, marks then one flush behind the commit's own deliveries, so a value
+combining two branches never computes against half a commit. See design 023 and its dated
+revision.
+
+### Cells are state outside the document
+
+`mutable`, `immutable`, `timer` and `fromEvent` carry the value surface with no deltas, no
+commits and no place on any wire, and a cell cannot be attached into a document: the write is
+refused. Which tab is open is a cell; the document is the document. Rate limiting (`throttle`,
+`wait`) exists only on the value surface, so a commit stream cannot lose a commit to a
+limiter by construction. See designs 024 and 026.
+
+### A scope step can be a wildcard
+
+`skip(count)` and `tree(key)` are steps in the ordinary scope grammar, so `path`, `ignore`
+and `shallow` compose with them. A wildcard scope names many places and has no single value:
+`get()` is undefined and `set()` throws. Only wildcard scopes pay for the backtracking
+matcher. See design 025.
+
+### Writing through a derived value is declared, never inferred
+
+`map` is read-only; `setter` declares the write half; `selector` writes back by its own
+meaning; `isImmutable` answers before an input renders, and immutability propagates through
+derivation. One caching layer exists, at the transform, and deduplication happens there once.
+See designs 027 and 028.
+
+### A snapshot rebuilds into a document
+
+`fromSnapshot` inverts `snapshot`: same ids, kinds, slots, positions and aliases, validated
+before building. It holds what the document says, not the detached observables the original
+still indexes, so replaying resurrection history is the commit log's job. See design 029.
+
+### The delivery plumbing is not public, and there are no view-layer adapters
+
+The listener registry, walkers and dispatch queue stay internal; the public seams are the two
+surfaces and `apply`. The stack ships one view binding, `dom`. See designs 030 and 031.
+
 ### `store` is not decided
 
 Deliberately open, pending the research that settles it. Until that lands, `store`
