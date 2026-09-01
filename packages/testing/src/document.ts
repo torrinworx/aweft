@@ -10,6 +10,7 @@ import {
 	bytesFromHex, bytesToHex, codecError, idFromText, idToText, isReference,
 } from '@aweftjs/codec';
 
+/** A value as plain JSON: a primitive, `{ bytes }` for a byte string, or a reference. */
 export type ValueJson =
 	| null
 	| boolean
@@ -18,22 +19,32 @@ export type ValueJson =
 	| { readonly bytes: string }
 	| { readonly ref: string; readonly kind: ObservableKind; readonly edge: EdgeKind };
 
+/** One observable as plain JSON: its kind, and its slots by key. */
 export interface ObservableJson {
 	readonly kind: ObservableKind;
 	readonly slots: Readonly<Record<string, ValueJson>>;
 }
 
+/**
+ * A whole document as plain JSON.
+ *
+ * Flat, keyed by id in text form, with the root named separately. Flat rather than nested
+ * because an observable can be named from more than one place, and a nested spelling would
+ * have to pick one of them and quietly lose the others.
+ */
 export interface DocumentJson {
 	readonly root: string;
 	readonly observables: Readonly<Record<string, ObservableJson>>;
 }
 
+/** A value in its JSON form, and back. Both directions are used, so both are exercised. */
 export const valueToJson = (v: Value): ValueJson => {
 	if (v instanceof Uint8Array) return { bytes: bytesToHex(v) };
 	if (isReference(v)) return { ref: idToText(v.id), kind: v.kind, edge: v.edge };
 	return v;
 };
 
+/** The value a JSON one names. The inverse of valueToJson. */
 export const valueFromJson = (v: ValueJson): Value => {
 	if (v === null || typeof v !== 'object') return v;
 	if ('bytes' in v) return bytesFromHex(v.bytes);

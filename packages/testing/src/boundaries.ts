@@ -8,14 +8,17 @@
 // This is a function with tests rather than a lint config because an unenforceable rule is
 // worse than no rule: it reads as a guarantee and delivers nothing.
 
+/** Which side a package runs on. `isomorphic` may be imported from either. */
 export type Plane = 'client' | 'server' | 'isomorphic';
 
+/** A package's place in the table: how high it sits, and which side it runs on. */
 export interface PackageInfo {
 	/** Tier number, or 'integrator' for packages exempt from the ordering. */
 	readonly tier: number | 'integrator';
 	readonly plane: Plane;
 }
 
+/** One illegal import edge, and which rule it broke. */
 export interface Violation {
 	readonly from: string;
 	readonly to: string;

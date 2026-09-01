@@ -250,16 +250,24 @@ log is a candidate rather than the answer.
 Test discipline decays at the layer boundary where the person who set it stops being the
 primary author. A convention will not prevent that. A dependency will.
 
-`@aweftjs/testing` exports:
+`@aweftjs/testing` exports today:
 
 - the **conformance runner** for `spec/fixtures`, so any implementation of the format proves
-  it rather than claiming it
+  it rather than claiming it, together with the **document model** it checks against, which is
+  a second reading of the format written from the prose rather than from the implementation
+- the **boundary checker**, which decides whether an import edge is legal and is run over the
+  real import graph by the root gate
+- the **seeded generator** for property tests, so a failure prints a seed that reproduces it,
+  and one implementation of it rather than one per suite
+
+It grows these as the packages that need them arrive, and this list says "today" because it
+used to name all three as though they existed:
+
 - a **driver conformance suite**, so a new `store` driver is correct by passing it rather
-  than by inspection
+  than by inspection. Arrives with `store`.
 - a **module harness**, so an application tests its own modules with the tools the stack
-  tests itself with
-- a **DOM mock**, so nothing pulls in a full browser emulation
-- **seeded generators** for property tests, so a failure prints a seed that reproduces it
+  tests itself with. Arrives with `modules`.
+- a **DOM mock**, so nothing pulls in a full browser emulation. Arrives with `dom`.
 
 One test runner and one assertion library everywhere. Gates are the conformance suite,
 per-package branch coverage, and a rule that a package publishes only if a harness exercises

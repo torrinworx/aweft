@@ -18,11 +18,13 @@ import {
 	valueToJson,
 } from './document.ts';
 
+/** A ref as plain JSON. The key is text for an object, hex for an array, an id for a map. */
 export interface RefJson {
 	readonly kind: ObservableKind;
 	readonly key: string;
 }
 
+/** A delta as plain JSON, with `value` absent exactly when the type is remove. */
 export interface DeltaJson {
 	readonly type: DeltaType;
 	readonly id: string;
@@ -30,12 +32,24 @@ export interface DeltaJson {
 	readonly value?: ValueJson;
 }
 
+/** A commit as plain JSON: its bytes in hex, the deltas they carry, and an optional tag. */
 export interface CommitJson {
 	readonly bytes: string;
 	readonly deltas: readonly DeltaJson[];
 	readonly tag?: string;
 }
 
+/**
+ * One conformance case: bytes, what they mean, and the document they produce.
+ *
+ * This is the contract an implementation in another language reads. `initial` is the document
+ * before, `commits` are applied in order, `final` is the document after, and every one of them
+ * is stated as plain JSON so that nothing about this repo's types is needed to consume it.
+ *
+ * `initial` and `final` are written by hand rather than generated, which is the point: an
+ * ending document produced by the implementation under test would only say the implementation
+ * agrees with itself.
+ */
 export interface Fixture {
 	readonly name: string;
 	readonly description: string;
@@ -44,6 +58,15 @@ export interface Fixture {
 	readonly final: DocumentJson;
 }
 
+/**
+ * One case that must be refused, and the reason it must be refused for.
+ *
+ * `reason` is the contract, not the message. Two implementations that both reject an input
+ * for different stated reasons have not agreed on the format, they have agreed on rejecting
+ * one string. `stage` says where the refusal is due: `decode` for bytes that are not a commit,
+ * `apply` for a commit that is well formed and cannot be applied, which is the only case that
+ * needs `initial`.
+ */
 export interface InvalidFixture {
 	readonly name: string;
 	readonly description: string;
@@ -53,24 +76,35 @@ export interface InvalidFixture {
 	readonly initial?: DocumentJson;
 }
 
+/** A ref in its JSON form, and back. The pair round trips, which the fixtures depend on. */
 export const refToJson = (ref: Ref): RefJson => ({ kind: ref.kind, key: slotKey(ref) });
 
+/** The ref a JSON one names. The inverse of refToJson, and the fixtures rely on it round tripping. */
 export const refFromJson = (r: RefJson): Ref => {
 	if (r.kind === 'object') return { kind: 'object', key: r.key };
 	if (r.kind === 'array') return { kind: 'array', key: bytesFromHex(r.key) };
 	return { kind: 'map', key: idFromText(r.key) };
 };
 
+/** A delta in its JSON form, as a fixture states it. */
 export const deltaToJson = (d: Delta): DeltaJson => {
 	const base = { type: d.type, id: idToText(d.id), ref: refToJson(d.ref) };
 	return d.value === undefined ? base : { ...base, value: valueToJson(d.value) };
 };
 
+/**
+ * The delta a JSON one names.
+ *
+ * This is the direction that makes a fixture's bytes checkable against something outside the
+ * implementation: the JSON is written by hand, so encoding it and comparing to the stated
+ * bytes asks a question the decoder's own output cannot answer.
+ */
 export const deltaFromJson = (d: DeltaJson): Delta => {
 	const base = { type: d.type, id: idFromText(d.id), ref: refFromJson(d.ref) };
 	return d.value === undefined ? base : { ...base, value: valueFromJson(d.value) };
 };
 
+/** A commit and its bytes in the shape a fixture states them, for comparing against one. */
 export const commitToJson = (commit: Commit, bytes: Uint8Array): CommitJson => {
 	const base = { bytes: bytesToHex(bytes), deltas: commit.deltas.map(deltaToJson) };
 	return commit.tag === undefined ? base : { ...base, tag: bytesToHex(commit.tag) };
@@ -108,6 +142,19 @@ export const seedFrom = (text: string): number => {
 	return h || 1;
 };
 
+/**
+ * Reorder deterministically, from a seed.
+ *
+ * Params:
+ *   items: what to reorder
+ *   seed: the same seed always gives the same order
+ *
+ * Returns: a new array. Used to check that the order deltas arrive in changes nothing, so it
+ * has to be repeatable: a failure that cannot be run again is a rumour.
+ *
+ * A shuffle can legitimately come back in the order it went in, so it is never the only
+ * reordering a check tries.
+ */
 export const shuffle = <T>(items: readonly T[], seed: number): T[] => {
 	const random = randomFrom(seed);
 	const out = [...items];
