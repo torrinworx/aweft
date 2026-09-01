@@ -27,9 +27,12 @@ export interface Observer {
 	/**
 	 * Call `fn` with each commit that touched this scope. Returns its unsubscribe.
 	 *
-	 * `fn` runs after the whole commit has been applied, so reading through the tree gives
-	 * the state the commit produced, never a state between deltas. Commits landed with
-	 * `apply` arrive here too, indistinguishable from local mutation.
+	 * `fn` runs after the whole commit has been applied, so the tree is never read between the
+	 * deltas of one commit. It is the tree as it stands, which is not always the state this
+	 * commit produced: a listener earlier in the same delivery may have mutated already, and a
+	 * mutation lands as it is written. Read `change.deltas` when the exact state of this commit
+	 * is what matters. Commits landed with `apply` arrive here too, indistinguishable from
+	 * local mutation.
 	 */
 	watch(fn: (change: Change) => void): () => void;
 	/** Call `fn` with the value now, and again after every change in scope. */
