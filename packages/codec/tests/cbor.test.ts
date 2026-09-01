@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { bytesFromHex, bytesToHex } from '../src/bytes.ts';
-import { type CborValue, type CodecError, decodeValue, encodeValue } from '../src/cbor.ts';
+import {
+	type CborValue, type CodecError,
+	codecError, decodeValue, encodeValue, MAX_INT, MIN_INT,
+} from '../src/cbor.ts';
 
 const roundTrip = (v: CborValue): void => {
 	const bytes = encodeValue(v);
@@ -64,8 +67,33 @@ test('a number too large to be exact as an integer is written as a float', () =>
 	const big = 2 ** 53 * 4;
 	assert.equal(bytesToHex(encodeValue(big)), 'fb4360000000000000');
 	assert.equal(decodeValue(encodeValue(big)), big);
-	// The same magnitude arriving as an integer is not exact and is refused.
-	rejects('1b0020000000000000', 'integer-out-of-range');
+	// A magnitude that really is past the exact range, arriving as an integer, is refused.
+	rejects('1b0020000000000001', 'integer-out-of-range');
+});
+
+test('the integer range is the exact one, and it is the same on both sides', () => {
+	// Section 6.2 draws the line at what a double holds exactly, so the last integer is 2^53
+	// on each side. The safe integer range is one narrower on the positive side, and reaching
+	// for it here refuses a whole number another implementation legitimately wrote.
+	// Through the published constants, so a consumer sizing a check from them agrees with what
+	// the encoder does.
+	assert.equal(MAX_INT, 2 ** 53);
+	assert.equal(MIN_INT, -(2 ** 53));
+	assert.equal(bytesToHex(encodeValue(MAX_INT)), '1b0020000000000000');
+	assert.equal(bytesToHex(encodeValue(MIN_INT)), '3b001fffffffffffff');
+	assert.equal(decodeValue(encodeValue(MAX_INT)), MAX_INT);
+	assert.equal(decodeValue(encodeValue(MIN_INT)), MIN_INT);
+
+	// One past the line, on both sides. Both halves of the argument are checked before they
+	// are added, because adding them first rounds the value back into range and the decoder
+	// then answers with a number the bytes did not say.
+	rejects('1b0020000000000001', 'integer-out-of-range');
+	rejects('3b0020000000000000', 'integer-out-of-range');
+	rejects('1bffffffffffffffff', 'integer-out-of-range');
+	rejects('3bffffffffffffffff', 'integer-out-of-range');
+
+	// And the float spelling of a whole number inside the range stays refused.
+	rejects('fb4340000000000000', 'non-canonical-float');
 });
 
 test('what is not part of the format is refused by name', () => {
@@ -105,4 +133,16 @@ test('a string with an unpaired surrogate has no encoding', () => {
 
 test('nesting past the guard is refused rather than recursed', () => {
 	rejects('81818181818181818100', 'nesting-too-deep');
+});
+
+
+test('a refusal carries a reason a caller can branch on, not just a message', () => {
+	// Every consumer of this package tells one refusal from another by `reason`, and the
+	// conformance fixtures name the reason each invalid input must be refused for. A thrown
+	// Error without it would still read fine in a log and be useless to a caller.
+	const error = codecError('invalid-position', 'a position is non-empty');
+
+	assert.ok(error instanceof Error);
+	assert.equal(error.reason, 'invalid-position');
+	assert.equal(error.message, 'invalid-position: a position is non-empty');
 });
