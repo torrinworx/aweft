@@ -17,7 +17,7 @@ export type { EventEmitting } from './cell.ts';
 
 export { apply } from './apply.ts';
 
-export { snapshot } from './snapshot.ts';
+export { fromSnapshot, snapshot } from './snapshot.ts';
 export type { Snapshot, SnapshotObservable, SnapshotRef, SnapshotValue } from './snapshot.ts';
 
 export type { Change, Primitive } from './types.ts';

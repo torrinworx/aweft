@@ -4,10 +4,14 @@
 // for writing one to a file, or for a conformance suite that has to say what a document is
 // after a commit. This is the same document with nothing live in it.
 
-import { codecError, type EdgeKind, type ObservableKind } from '@aweftjs/codec';
+import { codecError, idFromText, type EdgeKind, type ObservableKind } from '@aweftjs/codec';
 
 import type { Node, Primitive } from './types.ts';
-import { nodeOf } from './value.ts';
+import { plantCell } from './node.ts';
+import { nodeOf, toCell } from './value.ts';
+import { createArray } from './array.ts';
+import { createMap } from './map.ts';
+import { createObject } from './object.ts';
 
 /** A slot naming another observable: which one, what kind, and which edge names it. */
 export interface SnapshotRef {
@@ -73,4 +77,98 @@ export const snapshot = (observable: unknown): Snapshot => {
 	}
 
 	return { root: root.key, observables };
+};
+
+/** The shape sniff: a snapshot slot that is not a primitive names another observable. */
+const isRef = (value: SnapshotValue): value is SnapshotRef =>
+	value !== null && typeof value === 'object' && !(value instanceof Uint8Array);
+
+const HEX = /^(?:[0-9a-f]{2})+$/;
+
+/**
+ * Build a live document from a snapshot (design 029).
+ *
+ * Params:
+ *   snap: what `snapshot` returned, or the same shape written by hand
+ *
+ * Returns: the root observable, with the snapshot's ids, kinds, slots, positions and
+ * aliases. `snapshot(fromSnapshot(s))` deep-equals `s`, and commits addressed to the
+ * original document's ids apply to the rebuilt one.
+ *
+ * Throws with the vocabulary `apply` uses when the snapshot does not describe a document:
+ * a ref naming an id the snapshot does not hold, an observable attached twice or not at
+ * all, a kind that disagrees with its target, or a slot key invalid for its kind.
+ *
+ * Example:
+ *   const copy = fromSnapshot(snapshot(doc));
+ */
+export const fromSnapshot = (snap: Snapshot): object => {
+	// Validate before building, so a malformed snapshot is refused whole rather than half
+	// constructed, and the reason named is the structural one rather than whichever plant
+	// happened to run first.
+	if (snap.observables[snap.root] === undefined) {
+		throw codecError('unreachable', `${snap.root} is named as the root but is not in the snapshot`);
+	}
+
+	const attached = new Set<string>();
+
+	for (const [key, entry] of Object.entries(snap.observables)) {
+		idFromText(key);
+
+		for (const [slot, value] of Object.entries(entry.slots)) {
+			if (entry.kind === 'array' && !HEX.test(slot)) {
+				throw codecError('invalid-key', `${slot} is not a position key`);
+			}
+			if (entry.kind === 'map') idFromText(slot);
+			if (!isRef(value)) continue;
+
+			const target = snap.observables[value.ref];
+			if (target === undefined) {
+				throw codecError('unreachable', `${value.ref} is named but not in the snapshot`);
+			}
+			if (target.kind !== value.kind) {
+				throw codecError('kind-conflict', `${value.ref} is ${target.kind} but a slot calls it ${value.kind}`);
+			}
+			if (value.edge !== 'attach') continue;
+
+			if (attached.has(value.ref) || value.ref === snap.root) {
+				throw codecError(
+					'multiple-attach',
+					`${value.ref} would have two attach edges, and an observable lives in one place`,
+				);
+			}
+			attached.add(value.ref);
+		}
+	}
+
+	for (const key of Object.keys(snap.observables)) {
+		if (key !== snap.root && !attached.has(key)) {
+			throw codecError('unreachable', `${key} has no attach path from the root`);
+		}
+	}
+
+	const made = new Map<string, Node>();
+	for (const [key, entry] of Object.entries(snap.observables)) {
+		const id = idFromText(key);
+		const proxy =
+			entry.kind === 'object' ? createObject(undefined, id)
+			: entry.kind === 'array' ? createArray(undefined, id)
+			: createMap(undefined, id);
+		made.set(key, nodeOf(proxy)!);
+	}
+
+	for (const [key, entry] of Object.entries(snap.observables)) {
+		const node = made.get(key)!;
+		for (const [slot, value] of Object.entries(entry.slots)) {
+			if (!isRef(value)) {
+				plantCell(node, slot, toCell(value));
+				continue;
+			}
+			// A cycle among the attach edges is the one shape counting cannot see; plantCell's
+			// ancestry check refuses it here.
+			plantCell(node, slot, { kind: 'ref', node: made.get(value.ref)!, edge: value.edge });
+		}
+	}
+
+	return made.get(snap.root)!.proxy;
 };
