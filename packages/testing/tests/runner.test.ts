@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { type Fixture, type InvalidFixture, checkFixture, checkInvalidFixture } from '../src/index.ts';
+import { type Applier, type Fixture, type InvalidFixture, checkFixture, checkInvalidFixture } from '../src/index.ts';
 
 const root = join(import.meta.dirname, '..', '..', '..');
 
@@ -87,4 +87,28 @@ test('a rejection fixture refused for the wrong reason is caught', () => {
 	f.reason = 'a-reason-nothing-throws';
 
 	refuses(() => checkInvalidFixture(f as InvalidFixture), 'expected a-reason-nothing-throws');
+});
+
+// An implementer writing a second reading of the format spends most of their time here: their
+// applier refuses a case the fixture says is valid, and the only thing between them and the
+// bug is what this runner says. It used to say nothing, letting their own error through with
+// no fixture name attached, which is how the promise in checkFixture's own documentation came
+// to be false.
+test('an applier that throws on a valid fixture is named, not passed through', () => {
+	const f = load('001-object-slots.json');
+	const thrower: Applier = () => {
+		throw Object.assign(new Error('refusing everything'), { reason: 'slot-missing' });
+	};
+
+	refuses(() => checkFixture(f, thrower), 'object-slots');
+	refuses(() => checkFixture(f, thrower), 'this fixture is valid');
+	refuses(() => checkFixture(f, thrower), 'slot-missing');
+});
+
+test('a fixture whose own bytes do not decode is named too', () => {
+	const f = copy(load('001-object-slots.json'));
+	f.commits[0]!.bytes = 'ff';
+
+	refuses(() => checkFixture(f as Fixture), 'object-slots');
+	refuses(() => checkFixture(f as Fixture), 'decoding the stated bytes threw');
 });

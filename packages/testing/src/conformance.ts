@@ -18,7 +18,12 @@ import {
 	valueToJson,
 } from './document.ts';
 
-/** A ref as plain JSON. The key is text for an object, hex for an array, an id for a map. */
+/**
+ * A ref as plain JSON, with the key always a string so a fixture stays readable.
+ *
+ * An object key is itself, an array position is hex, and a map key is the id in its textual
+ * form: sixteen base64url characters, as `idToText` writes it, not hex.
+ */
 export interface RefJson {
 	readonly kind: ObservableKind;
 	readonly key: string;
@@ -173,12 +178,34 @@ const fail = (name: string, check: string, actual: unknown, expected: unknown): 
 };
 
 /**
+ * Run something that must not throw, and say which fixture it was if it does.
+ *
+ * An applier that wrongly refuses a valid case used to throw straight through this function,
+ * so the implementer saw their own error message with no fixture name, no check, and nothing
+ * to locate it by. That is the failure a second implementation hits most, and it was the one
+ * the harness said the least about.
+ */
+const during = <T>(name: string, check: string, run: () => T): T => {
+	try {
+		return run();
+	} catch (error) {
+		const reason = (error as { reason?: string }).reason;
+		throw new Error(
+			`${name}: ${check}, and this fixture is valid\n`
+			+ `  threw    ${reason === undefined ? '(no reason)' : reason}: ${(error as Error).message}`,
+			{ cause: error },
+		);
+	}
+};
+
+/**
  * Run one fixture.
  *
  * Params:
  *   f: the fixture, already parsed
  *
- * Throws: an Error naming the fixture and the check that failed. Returns nothing on success.
+ * Throws: an Error naming the fixture and the check that failed, including when the applier
+ * itself throws on a case that is valid. Returns nothing on success.
  */
 export const checkFixture = (f: Fixture, applier: Applier = modelApplier): void => {
 	const seed = seedFrom(f.name);
@@ -195,7 +222,7 @@ export const checkFixture = (f: Fixture, applier: Applier = modelApplier): void 
 
 	for (const c of f.commits) {
 		const bytes = bytesFromHex(c.bytes);
-		const decoded = decodeCommit(bytes);
+		const decoded = during(f.name, 'decoding the stated bytes threw', () => decodeCommit(bytes));
 
 		const stated: CommitJson = c.tag === undefined
 			? { bytes: c.bytes, deltas: c.deltas }
@@ -233,7 +260,7 @@ export const checkFixture = (f: Fixture, applier: Applier = modelApplier): void 
 			return withTag(reorder(decoded.deltas), decoded.tag);
 		});
 
-		const reached = applier(f.initial, commits);
+		const reached = during(f.name, `applying the deltas ${label} threw`, () => applier(f.initial, commits));
 		if (canonicalJson(reached) !== canonicalJson(f.final)) {
 			fail(f.name, `applying the deltas ${label} did not reach the stated document`, reached, f.final);
 		}
