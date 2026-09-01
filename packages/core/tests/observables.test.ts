@@ -6,9 +6,10 @@ import assert from 'node:assert/strict';
 import { idToText } from '@aweftjs/codec';
 
 import {
-	alias, createArray, createMap, createObject, idOf, isObservable, kindOf, parentOf,
-	positionsOf, insertAt, snapshot, textIdOf,
+	alias, createArray, createMap, createObject, idOf, isObservable, kindOf, observer,
+	parentOf, positionsOf, insertAt, snapshot, textIdOf,
 } from '../src/index.ts';
+import type { Change } from '../src/index.ts';
 
 interface Block {
 	text: string;
@@ -67,6 +68,18 @@ test('a value with no encoding is refused where it is written', () => {
 test('a byte string is a value, and reads back as the same bytes', () => {
 	const doc = createObject<Record<string, unknown>>({ blob: Uint8Array.of(1, 2, 3) });
 	assert.deepEqual(doc.blob, Uint8Array.of(1, 2, 3));
+});
+
+test('rewriting a slot with a fresh copy of the same bytes is not a change', () => {
+	const doc = createObject<Record<string, unknown>>({ blob: Uint8Array.of(1, 2, 3) });
+	const seen: Change[] = [];
+	observer(doc).watch((change) => seen.push(change));
+
+	doc.blob = Uint8Array.of(1, 2, 3);
+	assert.equal(seen.length, 0);
+
+	doc.blob = Uint8Array.of(1, 2, 4);
+	assert.equal(seen.length, 1);
 });
 
 test('an array reads with the array methods', () => {

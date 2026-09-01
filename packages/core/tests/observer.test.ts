@@ -225,3 +225,18 @@ test('a path stops at an alias, so reading and watching agree', () => {
 
 	assert.throws(() => observer(doc).path('shortcut', 'theme').set('x'), { reason: 'slot-missing' });
 });
+
+test('a watcher receives a commit in canonical order, not the order the block wrote', () => {
+	const doc = createObject<Doc>({});
+	const seen: Change[] = [];
+	observer(doc).watch((change) => seen.push(change));
+
+	atomic(() => {
+		doc.title = 'written first';
+		doc.draft = 'written second';
+	});
+
+	assert.equal(seen.length, 1);
+	const keys = seen[0]!.deltas.map((d) => (d.ref.kind === 'object' ? d.ref.key : ''));
+	assert.deepEqual(keys, ['draft', 'title']);
+});
