@@ -9,7 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { atomic, createArray, createObject, observer, snapshot } from '../src/index.ts';
+import { alias, atomic, createArray, createObject, observer, snapshot } from '../src/index.ts';
 import type { Change } from '../src/index.ts';
 
 interface Doc extends Record<string, unknown> {
@@ -175,4 +175,288 @@ test('a document that was never watched still reads back as itself', () => {
 
 	assert.deepEqual(snapshot(doc).observables[snapshot(doc).root]?.slots.b, 2);
 	assert.deepEqual([...doc.list], [1, 2, 3]);
+});
+
+
+// --- delivery under reentrancy ------------------------------------------------------------
+
+test('a listener that throws a falsy value hands that exact value back', () => {
+	const doc = createObject<Doc>();
+	observer(doc).watch(() => { throw undefined; });
+
+	let caught: unknown = 'nothing was thrown';
+	try {
+		doc.a = 1;
+	} catch (error) {
+		caught = error;
+	}
+
+	// Delivery holds the first failure and rethrows it once everyone has been told. Holding it
+	// in a variable and testing that variable for undefined would swallow this throw entirely,
+	// and the mutation would look like it succeeded.
+	assert.equal(caught, undefined);
+
+	const other = createObject<Doc>();
+	observer(other).watch(() => { throw 0; });
+
+	let zero: unknown = 'nothing was thrown';
+	try {
+		other.a = 1;
+	} catch (error) {
+		zero = error;
+	}
+	assert.equal(zero, 0);
+});
+
+test('a mutation made inside a listener is its own commit, not part of the one that made it', () => {
+	const doc = createObject<Doc>();
+	const sizes: number[] = [];
+
+	observer(doc).watch((change) => {
+		sizes.push(change.deltas.length);
+		if (doc.note === undefined) doc.note = 'written by a listener';
+	});
+
+	atomic(() => {
+		doc.a = 1;
+		doc.b = 2;
+	});
+
+	// The block closes before user code runs, so a listener's own write opens a new commit. If
+	// it joined the open one the far side would receive a commit the sender never bounded.
+	assert.deepEqual(sizes, [2, 1]);
+});
+
+test('a block hands back what it returned', () => {
+	const doc = createObject<Doc>();
+	const out = atomic(() => {
+		doc.a = 1;
+		return 'the block decided this';
+	});
+
+	assert.equal(out, 'the block decided this');
+});
+
+test('a listener that mutates its own observable runs the change out, one commit a step', () => {
+	const doc = createObject<Doc>({ a: 0 });
+	const steps: unknown[] = [];
+
+	observer(doc).watch(() => {
+		steps.push(doc.a);
+		if ((doc.a as number) < 4) doc.a = (doc.a as number) + 1;
+	});
+
+	doc.a = 0 + 1;
+
+	assert.deepEqual(steps, [1, 2, 3, 4], 'each step is delivered, and the cascade ends');
+});
+
+test('a listener reads the tree as it stands, which a cascade may have moved past its commit', () => {
+	const doc = createObject<Doc>();
+	const pairs: Array<[unknown, unknown]> = [];
+
+	observer(doc).watch(() => {
+		if ((doc.a as number) < 3) doc.a = (doc.a as number) + 1;
+	});
+	observer(doc).watch((change) => {
+		pairs.push([change.deltas[0]!.value, doc.a]);
+	});
+
+	doc.a = 0;
+
+	// A mutation lands in the tree as it is written, so a listener earlier in this delivery has
+	// already moved the tree on by the time a later one runs. The tree is never seen between
+	// the deltas of one commit, but it is not pinned to the commit a listener was handed. Read
+	// the deltas when the exact state of your own commit is what matters.
+	assert.deepEqual(pairs, [[0, 1], [1, 2], [2, 3], [3, 3]]);
+});
+
+test('two listeners on one commit each write a third observable, in the order they registered', () => {
+	const source = createObject<Doc>({ a: 0, b: 0 });
+	const target = createObject<Doc>();
+	const commits: unknown[][] = [];
+
+	observer(target).watch((change) => commits.push(change.deltas.map((delta) => delta.value)));
+	observer(source).path('a').watch(() => { target.a = 1; });
+	observer(source).path('b').watch(() => { target.a = 2; });
+
+	atomic(() => {
+		source.a = 1;
+		source.b = 1;
+	});
+
+	// Each listener's write is its own commit, and neither is folded into the other. Two writes
+	// coalescing here would hide one of them from a receiver.
+	assert.equal(commits.length, 2);
+	assert.deepEqual(commits, [[1], [2]]);
+	assert.equal(target.a, 2, 'the later listener wrote last');
+});
+
+test('delivery to one observable does not recurse into another listener set', () => {
+	const first = createObject<Doc>({ a: 0 });
+	const second = createObject<Doc>({ a: 0 });
+	const order: string[] = [];
+
+	observer(first).watch(() => {
+		order.push('first');
+		second.a = (second.a as number) + 1;
+	});
+	observer(second).watch(() => order.push('second'));
+
+	first.a = 1;
+
+	// One observable's listeners firing another's must queue rather than nest. Nesting here is
+	// how a deep chain of subscriptions overflows the stack instead of running.
+	assert.deepEqual(order, ['first', 'second']);
+});
+
+// --- references ---------------------------------------------------------------------------
+
+test('a mutation is delivered once however many aliases name the observable', () => {
+	const shared = createObject<Doc>();
+	const root = createObject<Doc>();
+	let heard = 0;
+
+	observer(root).watch(() => { heard += 1; });
+
+	atomic(() => {
+		root.held = shared as Record<string, unknown>;
+		root.first = alias(shared);
+		root.second = alias(shared);
+	});
+
+	heard = 0;
+	shared.a = 1;
+	assert.equal(heard, 1, 'three references, one delivery');
+
+	delete root.first;
+	heard = 0;
+	shared.a = 2;
+	assert.equal(heard, 1, 'an alias going away changes nothing, because it carried nothing');
+
+	delete root.held;
+	assert.throws(() => { shared.a = 3; }, { reason: 'unreachable' },
+		'the attach edge was the only thing holding it in the document');
+});
+
+test('an alias cycle does not make delivery walk forever', () => {
+	const first = createObject<Doc>();
+	const second = createObject<Doc>();
+	let heard = 0;
+
+	observer(first).watch(() => { heard += 1; });
+
+	first.held = second as Record<string, unknown>;
+	second.back = alias(first);
+
+	heard = 0;
+	first.a = 1;
+
+	// Delivery walks attach edges, and an alias is not one, so a reference cycle cannot become
+	// a walk that never ends.
+	assert.equal(heard, 1);
+});
+
+// --- scopes and slots ---------------------------------------------------------------------
+
+test('ignore filters what a scope hears without changing what it reads and writes', () => {
+	const doc = createObject<Doc>({ a: 1, b: 2 });
+	let heard = 0;
+
+	observer(doc).ignore('b').watch(() => { heard += 1; });
+
+	doc.b = 3;
+	assert.equal(heard, 0, 'the ignored branch is dropped');
+
+	doc.a = 4;
+	assert.equal(heard, 1, 'everything else still arrives');
+
+	const ignored = observer(doc).path('b').ignore('anything');
+	ignored.set(5);
+	assert.equal(ignored.get(), 5, 'ignore only filters delivery; the path still reads and writes');
+});
+
+test('a slot may be named the empty string or a digit', () => {
+	const doc = createObject<Record<string, unknown>>();
+
+	doc[''] = 'named by nothing';
+	doc['0'] = 'named by a digit';
+
+	// A path walks to a slot by name, and a name that is falsy or looks like an index is still
+	// a name. Treating either as absent would lose the slot silently.
+	assert.equal(observer(doc).path('').get(), 'named by nothing');
+	assert.equal(observer(doc).path('0').get(), 'named by a digit');
+	assert.equal(snapshot(doc).observables[Object.keys(snapshot(doc).observables)[0]!]!.slots[''], 'named by nothing');
+});
+
+test('a splice that removes nothing and adds nothing is not a commit', () => {
+	const list = createArray<number>([1, 2, 3]);
+	let commits = 0;
+
+	observer(list).watch(() => { commits += 1; });
+
+	assert.deepEqual(list.splice(1, 0), []);
+	assert.equal(commits, 0, 'a block that changed no slot closes without telling anyone');
+	assert.deepEqual([...list], [1, 2, 3]);
+});
+
+test('an object surfaces its own slots and nothing from the prototype', () => {
+	const doc = createObject<Doc>({ a: 1 });
+
+	const seen: string[] = [];
+	for (const key in doc) seen.push(key);
+
+	// Enumerating must not surface the machinery the proxy is built on. A consumer that walks
+	// an observable to copy or serialize it would otherwise pick up names nobody wrote.
+	assert.deepEqual(seen, ['a']);
+	assert.ok('a' in doc);
+	assert.ok(!('constructor' in doc));
+	assert.ok(!('toString' in doc));
+	assert.ok(Object.hasOwn(doc, 'a'));
+});
+
+test('an effect follows the depth of its scope, and narrows only when asked', () => {
+	const grandchild = createObject<Doc>({ a: 1 });
+	const child = createObject<Doc>({ held: grandchild as Record<string, unknown> });
+	const doc = createObject<Doc>({ held: child as Record<string, unknown> });
+
+	let deep = 0;
+	let shallow = 0;
+	observer(doc).path('held').effect(() => { deep += 1; });
+	observer(doc).path('held').shallow().effect(() => { shallow += 1; });
+
+	assert.equal(deep, 1, 'an effect runs once up front');
+	assert.equal(shallow, 1);
+
+	child.a = 2;
+	assert.equal(deep, 2, "the scoped observable's own slot is in both");
+	assert.equal(shallow, 2);
+
+	grandchild.a = 2;
+
+	// The corpus carries a case for an effect that subscribes shallowly on its own. It does not
+	// carry over: depth belongs to the scope, so every operator reads it the same way, and
+	// shallow() is how a caller asks for the narrower one. Decision design 018.
+	assert.equal(deep, 3, 'a change below the scoped observable is still in the scope');
+	assert.equal(shallow, 2, 'shallow() is what stops at the scoped observable own slots');
+});
+
+test('a long cascade of listener mutations does not grow the stack', () => {
+	const doc = createObject<Doc>();
+	const depth = 2000;
+	let steps = 0;
+
+	observer(doc).watch(() => {
+		steps += 1;
+		if ((doc.a as number) < depth) doc.a = (doc.a as number) + 1;
+	});
+
+	// Delivery queues and drains in a loop rather than calling into itself. A listener that
+	// mutates queues its commit behind the one being delivered, so the cost of a cascade is
+	// heap, not stack. Delivering the follow-up inside the call that caused it makes the stack
+	// depth the length of the cascade, and this runs out of stack in the low hundreds.
+	doc.a = 0;
+
+	assert.equal(steps, depth + 1);
+	assert.equal(doc.a, depth);
 });
