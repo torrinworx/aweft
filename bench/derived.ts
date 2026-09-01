@@ -382,6 +382,37 @@ const load = async (name: string): Promise<Record<string, unknown> | null> => {
 
 type Fn = (...args: unknown[]) => unknown;
 
+// The shipped surface, measured beside the prototypes it was chosen from. A claim that the
+// design "lands in the same class" is about this implementation, not the sketch.
+const core = await load('../packages/core/src/index.ts');
+if (core !== null) {
+	interface Chain {
+		get(): number;
+		set(value: number): void;
+		map(fn: (value: number) => number): Chain;
+		effect(fn: (value: number) => void): () => void;
+	}
+	const mutable = core.mutable as (value: number) => Chain;
+	const combine = core.all as (inputs: unknown[]) => {
+		map(fn: (values: number[]) => number): Chain;
+		effect(fn: (values: number[]) => void): () => void;
+	};
+
+	adapters.push({
+		name: 'aweft core (shipped)',
+		signal: (value) => mutable(value),
+		computed: (deps, fn) => (deps.length === 1
+			? (deps[0] as Chain).map((v) => fn(v))
+			: combine(deps).map((values) => fn(...values))),
+		get: (handle) => (handle as Chain).get(),
+		set: (handle, value) => (handle as Chain).set(value),
+		effect: (deps, fn) => {
+			if (deps.length === 1) (deps[0] as Chain).effect((v) => fn(v));
+			else combine(deps).effect((values) => fn(...values));
+		},
+	});
+}
+
 const alien = await load('alien-signals');
 if (alien !== null) {
 	const signal = alien.signal as Fn;
