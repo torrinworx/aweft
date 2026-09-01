@@ -94,8 +94,10 @@ const fixtures = jsonFiles(dir);
 const rejections = jsonFiles(invalidDir);
 
 test('there are fixtures to run', () => {
-	assert.ok(fixtures.length >= 10, `found ${fixtures.length} fixtures`);
-	assert.ok(rejections.length >= 20, `found ${rejections.length} rejection fixtures`);
+	// Exact, not a floor. A floor passes when a fixture and its generator entry are deleted
+	// together, which is the one way the suite can quietly shrink.
+	assert.equal(fixtures.length, 15, `found ${fixtures.length} fixtures`);
+	assert.equal(rejections.length, 35, `found ${rejections.length} rejection fixtures`);
 });
 
 for (const file of fixtures) {
