@@ -587,7 +587,7 @@ page actually compiles code.
 Three tiers, because each catches failures the others structurally cannot.
 
 **Tier 1, per-package proof programs.** A small real program per package, public exports only,
-running in CI and asserting its own outcome. Catches a broken API. The table of what each must
+running in the root gate and asserting its own outcome. Catches a broken API. The table of what each must
 demonstrate is in `AGENTS.md`.
 
 **Tier 2, one integration app: the documentation site and playground.** Catches two packages

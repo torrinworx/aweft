@@ -12,7 +12,8 @@
 		"test": "node --test tests/*.test.ts"
 	},
 	"dependencies": {
-		"@aweftjs/codec": "*"
+		"@aweftjs/codec": "*",
+		"typescript": "^5.9.2"
 	},
 	"aweft": {
 		"tier": "integrator",

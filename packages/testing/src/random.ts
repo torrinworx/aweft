@@ -10,7 +10,8 @@
  * A seeded stream of numbers in [0, 1).
  *
  * Params:
- *   seed: any integer. Zero is mapped to 1, since a shift register cannot leave zero
+ *   seed: any integer. It is folded to 32 bits, so seeds equal modulo 2^32 give one stream,
+ *         and zero is mapped to 1, since a shift register cannot leave zero
  *
  * Returns: a function giving the next number. Two generators made with one seed produce the
  * same stream, so a failure prints its seed and the run can be repeated exactly.
@@ -42,5 +43,8 @@ export const randomFrom = (seed: number): (() => number) => {
  * Example:
  *   const victim = items[randomBelow(random, items.length)];
  */
-export const randomBelow = (random: () => number, bound: number): number =>
-	Math.floor(random() * bound);
+export const randomBelow = (random: () => number, bound: number): number => {
+	// A bound of zero has no index to give, and returning 0 anyway would read as one.
+	if (!(bound >= 1)) throw new Error(`randomBelow needs a bound of at least 1, got ${bound}`);
+	return Math.floor(random() * bound);
+};

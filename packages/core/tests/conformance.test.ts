@@ -8,22 +8,17 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-
 import { bytesFromHex, bytesToHex, idFromText } from '@aweftjs/codec';
 import type {
-	Applier, DocumentJson, Fixture, InvalidFixture, ObservableJson, ValueJson,
+	Applier, DocumentJson, ObservableJson, ValueJson,
 } from '@aweftjs/testing';
-import { checkFixture, checkInvalidFixture } from '@aweftjs/testing';
+import { checkFixture, checkInvalidFixture, loadFixtures, loadInvalidFixtures } from '@aweftjs/testing';
 
 import { alias, apply, createArray, createMap, createObject, insertAt, snapshot } from '../src/index.ts';
 
 const dir = new URL('../../../spec/fixtures/', import.meta.url);
-const invalidDir = new URL('invalid/', dir);
-
-const jsonFiles = (at: URL): string[] => readdirSync(at).filter((f) => f.endsWith('.json')).sort();
-
-const read = <T>(at: URL, file: string): T => JSON.parse(readFileSync(new URL(file, at), 'utf8')) as T;
+const fixtures = loadFixtures(dir);
+const rejections = loadInvalidFixtures(new URL('invalid/', dir));
 
 interface MapLike {
 	set(key: string, value: unknown): void;
@@ -90,8 +85,6 @@ const live: Applier = (initial, commits) => {
 	return plain(document);
 };
 
-const fixtures = jsonFiles(dir);
-const rejections = jsonFiles(invalidDir);
 
 test('there are fixtures to run', () => {
 	// Exact, not a floor. A floor passes when a fixture and its generator entry are deleted
@@ -100,14 +93,14 @@ test('there are fixtures to run', () => {
 	assert.equal(rejections.length, 38, `found ${rejections.length} rejection fixtures`);
 });
 
-for (const file of fixtures) {
-	test(`fixture ${file} through observables`, () => {
-		checkFixture(read<Fixture>(dir, file), live);
+for (const fixture of fixtures) {
+	test(`fixture ${fixture.name} through observables`, () => {
+		checkFixture(fixture, live);
 	});
 }
 
-for (const file of rejections) {
-	test(`observables reject ${file}`, () => {
-		checkInvalidFixture(read<InvalidFixture>(invalidDir, file), live);
+for (const rejection of rejections) {
+	test(`observables reject ${rejection.name}`, () => {
+		checkInvalidFixture(rejection, live);
 	});
 }

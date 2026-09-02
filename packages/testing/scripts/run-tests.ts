@@ -11,6 +11,14 @@ import { spawnSync } from 'node:child_process';
 const root = new URL('../../../', import.meta.url);
 const packagesDir = new URL('packages/', root);
 
+// The policy's floors, restated here so a declared threshold cannot drift below them
+// without this run going red. Raising a declaration above its floor is always allowed;
+// lowering a floor is a policy change and happens in this file together with AGENTS.md.
+const FLOORS: Record<string, number> = {
+	core: 90, schema: 90, sync: 90, store: 90, modules: 90, sandbox: 90, dom: 90, codec: 90,
+	ui: 80, icons: 80, server: 80, jobs: 80, ssg: 80, build: 80, testing: 80,
+};
+
 let failed = false;
 for (const name of readdirSync(packagesDir).sort()) {
 	const pkgDir = new URL(`${name}/`, packagesDir);
@@ -21,6 +29,13 @@ for (const name of readdirSync(packagesDir).sort()) {
 	const threshold = manifest.aweft?.branchCoverage;
 	if (typeof threshold !== 'number') {
 		console.error(`${name}: package.json declares no aweft.branchCoverage`);
+		failed = true;
+		continue;
+	}
+
+	const floor = FLOORS[name];
+	if (floor !== undefined && threshold < floor) {
+		console.error(`${name}: declares branch coverage ${threshold}, below the policy floor of ${floor}`);
 		failed = true;
 		continue;
 	}

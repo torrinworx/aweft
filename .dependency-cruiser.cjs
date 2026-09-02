@@ -1,4 +1,4 @@
-// Package boundary rules, enforced on every push.
+// Package boundary rules, enforced on every run of the root gate.
 //
 // This file catches cycles and deep imports. The tier and plane rules live in
 // boundaries.json (the table) and checkGraph in @aweftjs/testing (the check, with its own

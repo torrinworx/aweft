@@ -15,9 +15,10 @@
 		"fixtures": "node packages/testing/scripts/generate-fixtures.ts",
 		"proofs": "node examples/codec/main.ts && node examples/core/main.ts",
 		"bench": "node bench/derived.ts && node bench/write.ts",
-		"test": "npm run typecheck && npm run deps && npm run boundaries && node packages/testing/scripts/run-tests.ts && npm run proofs",
+		"test": "npm run typecheck && npm run deps && npm run boundaries && npm run dependencies && node packages/testing/scripts/run-tests.ts && npm run proofs",
 		"gate": "npm test",
-		"boundaries": "node packages/testing/scripts/check-boundaries.ts"
+		"boundaries": "node packages/testing/scripts/check-boundaries.ts",
+		"dependencies": "node packages/testing/scripts/check-dependencies.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^24.13.3",

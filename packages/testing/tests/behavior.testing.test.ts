@@ -11,10 +11,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { type Fixture, checkFixture, randomFrom, seedFrom, shuffle } from '../src/index.ts';
+import { type Fixture, checkFixture, loadFixtures, randomFrom, seedFrom, shuffle } from '../src/index.ts';
 
 const root = join(import.meta.dirname, '..', '..', '..');
 
@@ -40,12 +40,10 @@ test('one reordering is not a reordering check, measured against the real suite'
 	// taste: each commit's seed comes from its fixture name, and for some of them the shuffle
 	// is the identity, so a check built on that one permutation silently repeats the check
 	// above it. That is why the runner drives the same three orders the apply loop does.
-	const dir = join(root, 'spec/fixtures');
 	let identity = 0;
 	let total = 0;
 
-	for (const name of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
-		const fixture = JSON.parse(readFileSync(join(dir, name), 'utf8')) as Fixture;
+	for (const fixture of loadFixtures(new URL('../../../spec/fixtures/', import.meta.url))) {
 		const seedOf = seedFrom(fixture.name);
 
 		for (const commit of fixture.commits) {
@@ -59,6 +57,12 @@ test('one reordering is not a reordering check, measured against the real suite'
 	assert.ok(
 		identity > 0,
 		`the shuffle permuted all ${total} commits, so this case cannot show what it is for`,
+	);
+	// And the mirror image: a shuffle that returns its input for every commit is not a
+	// reordering check at all, it is the plain re-encode run twice. Both halves have to hold.
+	assert.ok(
+		identity < total,
+		`the shuffle was the identity on all ${total} commits, so nothing was ever reordered`,
 	);
 });
 

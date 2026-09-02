@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { randomFrom } from '@aweftjs/testing';
+import { randomBelow, randomFrom } from '@aweftjs/testing';
 
 import {
 	type Delta, type Ref,
@@ -59,7 +59,7 @@ test('the comparator agrees with the encoded order on every pair', () => {
 	const ids = [createId(), createId(), createId(), createId()];
 	const mapKeys = [createId(), createId()];
 
-	const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
+	const pick = <T>(list: readonly T[]): T => list[randomBelow(random, list.length)]!;
 
 	const refs: Ref[] = [];
 	for (const key of texts) refs.push({ kind: 'object', key });

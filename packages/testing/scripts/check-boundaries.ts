@@ -1,20 +1,22 @@
 // The tier rule, run over the imports that actually exist.
 //
-// `checkGraph` decides whether an edge is legal, and until this script existed it was only
-// ever handed edge lists written by hand in its own tests. So the rule had tests, the policy
-// said the machine enforced it on every push, and the real graph was never looked at. It held
-// a violation the whole time.
+// `checkGraph` decides whether an edge is legal; `moduleSpecifiers` finds the edges by
+// parsing each file the way the compiler does, so every literal spelling of an import is
+// seen and a specifier in a comment or a string is not. What no scanner can see is a
+// specifier that is not written as a literal, and evading the rule that way is deliberate,
+// which review catches.
 //
-// Runtime code is what ships, and that is what the tier rule governs. Tests, scripts and
-// examples are excluded deliberately: a suite importing the harness creates no dependency in
-// anything a user installs, and definition-of-done item 3 requires exactly that import. They
-// are still reported, so an exclusion that starts hiding something is visible rather than
-// silent.
+// Runtime code is what ships, and that is what the tier rule governs. `tests` and `scripts`
+// are excluded deliberately: a suite importing the harness creates no dependency in anything
+// a user installs, and definition-of-done item 3 requires exactly that import. They are
+// still reported, so an exclusion that starts hiding something is visible rather than
+// silent. Any other directory inside a package is treated as runtime: code that is neither
+// tests nor scripts is presumed shipped until someone says otherwise.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { type PackageInfo, checkGraph } from '../src/boundaries.ts';
+import { type PackageInfo, aweftPackageOf, checkGraph, moduleSpecifiers } from '../src/index.ts';
 
 const root = join(import.meta.dirname, '..', '..', '..');
 const table = JSON.parse(readFileSync(join(root, 'boundaries.json'), 'utf8'))
@@ -33,20 +35,6 @@ const sources = (dir: string): string[] => {
 	return found;
 };
 
-/** Every `@aweftjs/x` a file imports from, however the import statement is spelled. */
-const importsOf = (path: string): string[] => {
-	const text = readFileSync(path, 'utf8');
-	const found = new Set<string>();
-
-	// All three spellings. A bare `import '@aweftjs/x';` has no `from`, and missing it was
-	// this script's own first bug: the red demonstration it was written for came back green.
-	for (const m of text.matchAll(/from\s+'@aweftjs\/([a-z-]+)'/g)) found.add(m[1]!);
-	for (const m of text.matchAll(/import\s*\(\s*'@aweftjs\/([a-z-]+)'\s*\)/g)) found.add(m[1]!);
-	for (const m of text.matchAll(/import\s+'@aweftjs\/([a-z-]+)'/g)) found.add(m[1]!);
-
-	return [...found];
-};
-
 const packages = readdirSync(join(root, 'packages'))
 	.filter((name) => statSync(join(root, 'packages', name)).isDirectory());
 
@@ -55,23 +43,23 @@ const runtime: Array<readonly [string, string]> = [];
 const outside: Array<readonly [string, string, string]> = [];
 
 for (const name of packages) {
-	for (const area of ['src', 'tests', 'scripts']) {
-		const dir = join(root, 'packages', name, area);
+	const home = join(root, 'packages', name);
 
-		try {
-			statSync(dir);
-		} catch {
-			continue;
-		}
+	for (const file of sources(home)) {
+		const relative = file.slice(home.length + 1);
+		const area = relative.split('/', 1)[0]!;
+		const exempt = area === 'tests' || area === 'scripts';
 
-		for (const file of sources(dir)) {
-			for (const to of importsOf(file)) {
-				if (area === 'src') {
-					if (seen.has(`${name} ${to}`)) continue;
-					seen.add(`${name} ${to}`);
-					runtime.push([name, to]);
-				}
-				else outside.push([name, to, file.slice(root.length + 1)]);
+		for (const specifier of moduleSpecifiers(readFileSync(file, 'utf8'), file)) {
+			const to = aweftPackageOf(specifier);
+			if (to === undefined) continue;
+
+			if (!exempt) {
+				if (seen.has(`${name} ${to}`)) continue;
+				seen.add(`${name} ${to}`);
+				runtime.push([name, to]);
+			} else {
+				outside.push([name, to, file.slice(root.length + 1)]);
 			}
 		}
 	}
