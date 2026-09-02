@@ -201,6 +201,11 @@ A wildcard scope names many places, so it has no single value: `get()` is undefi
 `set()` throws, and `isImmutable()` is true. Only scopes that use wildcards pay for the
 backtracking matcher.
 
+`skip()` matches exactly one step unless you say otherwise, and a scope at a depth nothing
+sits at is silent: it never matches, and a derived value on it sits at its initial value
+forever, which reads as a counter that works and is always zero. Count the steps from the
+observable the scope starts at, or use `tree`, which does not care how deep the thing is.
+
 ## A snapshot rebuilds
 
 `fromSnapshot(snapshot(doc))` is a live copy: same ids, kinds, slots, positions and

@@ -43,11 +43,21 @@ export interface Observer extends Omit<Derived<unknown>, 'get' | 'set' | 'watch'
 	/** Keep only changes to the scoped observable's own slots, not to anything below it. */
 	shallow(): Observer;
 	/**
-	 * Match any `count` consecutive steps (design 025). A scope with a wildcard in it names
-	 * many places, so `get` is undefined, `set` throws, and `isImmutable` is true.
+	 * Match any `count` consecutive steps, one by default (design 025). A scope with a
+	 * wildcard in it names many places, so `get` is undefined, `set` throws, and `isImmutable`
+	 * is true.
+	 *
+	 * The count is exact, and a scope that names a depth nothing sits at is silent: it simply
+	 * never matches, and a derived value built on it sits at its initial value forever, which
+	 * reads as a working value that never changes. Count the steps between the observable the
+	 * scope starts at and the slot you mean, or reach for `tree`, which is depth independent.
 	 */
 	skip(count?: number): Observer;
-	/** Match the named key at any depth: here, or under any chain of slots (design 025). */
+	/**
+	 * Match the named key at any depth: here, or under any chain of slots (design 025).
+	 * Reach for this over `skip` whenever the depth is not fixed, because a `skip` at the
+	 * wrong depth matches nothing and says nothing about it.
+	 */
 	tree(key: ScopeKey): Observer;
 	/**
 	 * Call `fn` with each commit that touched this scope. Returns its unsubscribe.
