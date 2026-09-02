@@ -178,6 +178,11 @@ const cellFor = (delta: Delta, resolve: Resolve): Cell | undefined => {
  * applies itself and wants a way to tell its own apart, such as a flag held for the duration
  * of the call (`examples/core` does exactly this).
  *
+ * That flag only covers this call when the call is made from ordinary code. Userspace calls
+ * are deferred, so calling `apply` from inside a watcher hands the commit to the second
+ * document's watchers after the outer watcher has returned and cleared the flag. Queue the
+ * commit and apply it once the delivery has finished, which is what a transport does anyway.
+ *
  * A commit only names observables reachable in the receiving document, so a replica of an
  * existing document starts from its root id, `createObject(undefined, idOf(source))` for an
  * object root; from there, applying the source's commits in the order they happened rebuilds

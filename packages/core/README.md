@@ -48,6 +48,22 @@ A watcher cannot tell a commit landed with `apply` from a local mutation. An und
 that stays subscribed while it undoes will record its own undo; hold a flag for the
 duration of the call, the way `examples/core` does.
 
+That flag works while `apply` is called from ordinary code. It does not work when `apply`
+is called from **inside** a watcher, which is the shape a replication seam reaches for
+first. Delivery is deferred, so the nested commit reaches the second document's watchers
+after the outer watcher has already returned and cleared the flag. Queue the commit and
+apply it once the delivery has finished:
+
+```ts
+const queued: Commit[] = [];
+observer(source).watch((change) => queued.push({ deltas: [...change.deltas] }));
+
+// later, outside any delivery
+while (queued.length > 0) apply(mirror, queued.shift()!);
+```
+
+A real transport queues here anyway, because writing to a socket is not synchronous.
+
 ## A replica
 
 Two documents stay in step when they share a root id and every commit crosses:

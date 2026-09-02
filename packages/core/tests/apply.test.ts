@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { decodeCommit, encodeCommit } from '@aweftjs/codec';
+import type { Commit } from '@aweftjs/codec';
 
 import { apply, atomic, createArray, createObject, idOf, observer, snapshot } from '../src/index.ts';
 import type { Change } from '../src/index.ts';
@@ -140,4 +141,48 @@ test('an integrity tag is carried without being checked', () => {
 
 	assert.doesNotThrow(() => apply(target, tagged));
 	assert.equal(target.title, 'notes');
+});
+
+test('a commit applied from inside a watcher delivers after that watcher has returned', () => {
+	// Userspace calls are deferred, so a nested apply's own deliveries queue behind the
+	// delivery already running. A flag held across the apply call is therefore already clear
+	// when the second document's watchers see the commit, which is exactly what a replication
+	// seam reaches for first. The README and apply's own docs say to queue instead, and this is
+	// the behaviour they are describing.
+	const source = createObject<Record<string, unknown>>();
+	const mirror = createObject<Record<string, unknown>>(undefined, idOf(source));
+
+	let inside = false;
+	const seen: boolean[] = [];
+
+	observer(source).watch((change) => {
+		inside = true;
+		apply(mirror, change);
+		inside = false;
+	});
+	observer(mirror).watch(() => seen.push(inside));
+
+	source.title = 'shared';
+
+	assert.deepEqual(seen, [false], 'the mirror watcher ran while the flag was already clear');
+});
+
+test('the same commit applied outside a delivery does reach the mirror watcher inside the flag', () => {
+	const source = createObject<Record<string, unknown>>();
+	const mirror = createObject<Record<string, unknown>>(undefined, idOf(source));
+
+	const queued: Commit[] = [];
+	observer(source).watch((change) => queued.push({ deltas: [...change.deltas] }));
+
+	let inside = false;
+	const seen: boolean[] = [];
+	observer(mirror).watch(() => seen.push(inside));
+
+	source.title = 'shared';
+
+	inside = true;
+	for (const commit of queued) apply(mirror, commit);
+	inside = false;
+
+	assert.deepEqual(seen, [true], 'applying outside the delivery keeps the flag meaningful');
 });
