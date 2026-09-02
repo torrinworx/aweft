@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { ANY, REST, SELF, checkPolicy, createIndex, validate } from '../src/index.ts';
+import type { Rule } from '../src/index.ts';
 
 import { commit, id, slot } from './documents.ts';
 
@@ -50,4 +51,22 @@ test('validate refuses a malformed policy itself, so a caller who never calls ch
 test('an empty pattern is refused, because no delta lands at a path it could match', () => {
 	assert.throws(() => checkPolicy([{ effect: 'allow', path: [] }]), reason('bad-pattern'));
 	assert.throws(() => checkPolicy([{ effect: 'deny', path: [] }]), reason('bad-pattern'));
+});
+
+test('a rule added to a policy after it was first used is checked like any other', () => {
+	// The check used to be cached on the policy array's identity, so a rule appended after the
+	// first call was never looked at. Because matching stops at the first REST, an unchecked
+	// `[REST, 'x']` then matched every path in the document, which is a grant nobody wrote.
+	const policy: Rule[] = [{ effect: 'allow', path: ['users', REST] }];
+	checkPolicy(policy);
+
+	policy.push({ effect: 'allow', path: [REST, 'anything'] });
+
+	assert.throws(() => checkPolicy(policy), reason('bad-pattern'));
+	assert.throws(
+		() => validate(commit(slot(1, 'anything', 1)), {
+			index: createIndex(id(1)), policy, actor: { id: 'me' },
+		}),
+		reason('bad-pattern'),
+	);
 });

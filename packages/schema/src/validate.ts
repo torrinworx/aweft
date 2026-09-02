@@ -7,7 +7,7 @@ import {
 	type Commit, type Delta, type DeltaType, codecError, idToText, isReference,
 } from '@aweftjs/codec';
 
-import { type DocumentIndex, overlayOf, resolve, stepOf } from './document.ts';
+import { type DocumentIndex, enclosesItself, overlayOf, resolve, stepOf } from './document.ts';
 import { type Pattern, checkPattern, matches } from './pattern.ts';
 
 /**
@@ -76,10 +76,6 @@ export interface Context {
 
 const TYPES: readonly DeltaType[] = ['add', 'replace', 'remove'];
 
-// Checked once per policy rather than once per delta. A caller that rebuilds its policy array
-// on every call pays on every call, which is its own cost and a small one.
-const checked = new WeakSet<object>();
-
 /**
  * Refuse a policy that cannot mean what it says.
  *
@@ -89,15 +85,14 @@ const checked = new WeakSet<object>();
  * Throws `bad-rule` for an effect or a delta type that is not one, and `bad-pattern` for a
  * pattern that is malformed, naming the step. Returns nothing when the policy is well formed.
  *
- * `validate` calls this itself, once per policy, so this exists for the caller who would
- * rather find out at boot than at the first commit that arrives.
+ * `validate` calls this itself on every commit, so a rule appended to a policy after it was
+ * first used is checked like any other. This exists for the caller who would rather find out
+ * at boot than at the first commit that arrives.
  *
  * Example:
  *   checkPolicy(policy);  // before the server starts listening
  */
 export const checkPolicy = (policy: Policy): void => {
-	if (checked.has(policy)) return;
-
 	for (const rule of policy) {
 		if (rule.effect !== 'allow' && rule.effect !== 'deny') {
 			throw codecError('bad-rule', `${String(rule.effect)} is not an effect`);
@@ -109,8 +104,6 @@ export const checkPolicy = (policy: Policy): void => {
 		}
 		checkPattern(rule.path);
 	}
-
-	checked.add(policy);
 };
 
 const applies = (rule: Rule, actor: Actor, type: DeltaType): boolean => {
@@ -180,6 +173,32 @@ export const validate = (commit: Commit, context: Context): Verdict => {
 	checkPolicy(policy);
 
 	const overlay = overlayOf(index, commit);
+
+	// Staged the way the applier stages its own checks: every attachment first, then every
+	// path. A commit that breaks both rules has one reason, and it is the same reason on both
+	// sides, which is what design 035 promises and design 037 made checkable.
+	if (overlay.ambiguous.size > 0) {
+		const reasons: Reason[] = [];
+
+		for (const delta of commit.deltas) {
+			const holder = idToText(delta.id);
+			const value = delta.value;
+			const target = value !== undefined && isReference(value) ? idToText(value.id) : undefined;
+
+			if (!overlay.ambiguous.has(holder) && (target === undefined || !overlay.ambiguous.has(target))) {
+				continue;
+			}
+			reasons.push({
+				code: 'multiple-attach',
+				delta,
+				message: `${overlay.ambiguous.has(holder) ? holder : target!} would be in two places at once, `
+					+ 'so no path decides who may write it',
+			});
+		}
+
+		return { ok: false, reasons };
+	}
+
 	const reasons: Reason[] = [];
 	const known = new Map<string, readonly string[] | 'unreachable' | 'multiple-attach'>();
 
@@ -196,15 +215,7 @@ export const validate = (commit: Commit, context: Context): Verdict => {
 		const holder = idToText(delta.id);
 		const found = at(holder);
 
-		if (found === 'multiple-attach') {
-			reasons.push({
-				code: 'multiple-attach',
-				delta,
-				message: `${holder} would be in two places at once, so no path decides who may write it`,
-			});
-			continue;
-		}
-		if (found === 'unreachable') {
+		if (found === 'unreachable' || found === 'multiple-attach') {
 			reasons.push({
 				code: 'unreachable',
 				delta,
@@ -213,15 +224,16 @@ export const validate = (commit: Commit, context: Context): Verdict => {
 			continue;
 		}
 
-		// A delta that only creates the ambiguity, writing an attach edge to something already
-		// attached elsewhere, is refused where it is written rather than only where it is read.
+		// An edge that puts an observable inside its own subtree closes a ring, and a ring has
+		// no top, so the applier refuses it as unreachable and so does this. Checked here, after
+		// the holder's own path, because that is the order the applier checks them in.
 		const value = delta.value;
-		if (value !== undefined && isReference(value) && overlay.ambiguous.has(idToText(value.id))) {
+		if (value !== undefined && isReference(value) && value.edge === 'attach'
+			&& enclosesItself(index, overlay, idToText(value.id), holder)) {
 			reasons.push({
-				code: 'multiple-attach',
+				code: 'unreachable',
 				delta,
-				path: [...found, stepOf(delta.ref)],
-				message: `${idToText(value.id)} would be in two places at once`,
+				message: `${idToText(value.id)} cannot be attached inside itself`,
 			});
 			continue;
 		}

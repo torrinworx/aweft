@@ -128,3 +128,17 @@ test('a cycle among detached observables answers rather than spinning', () => {
 	assert.equal(pathOf(index, id(2)), undefined);
 	assert.equal(pathOf(index, id(4)), undefined);
 });
+
+test('an add into a slot the index already fills is refused, not folded in', () => {
+	// The applier refuses that commit as slot-exists, so it was never applied and must not
+	// reach the index. Folding it in left two observables claiming one path.
+	const index = createIndex(id(1));
+	record(index, commit(slot(1, 'here', ref(2))));
+
+	assert.throws(
+		() => record(index, commit(slot(1, 'here', ref(3)))),
+		(e: Error & { reason?: string }) => e.reason === 'slot-exists',
+	);
+	assert.deepEqual(pathOf(index, id(2)), ['here']);
+	assert.equal(pathOf(index, id(3)), undefined);
+});

@@ -154,13 +154,30 @@ test('a new subtree hung off a region the actor may not write is refused there',
 	assert.deepEqual(codes(verdict).sort(), ['unauthorized', 'unauthorized']);
 });
 
-test('a commit cannot write into a subtree it is detaching in the same breath', () => {
-	const verdict = decide([{ effect: 'allow', path: [REST] }], [
+test('a commit writing into a subtree it detaches is judged at the path that subtree had', () => {
+	const detachAndWrite: Parameters<typeof commit> = [
 		slot(1, 'posts', undefined),
-		slot(5, 'title', 'too late', 'replace'),
-	]);
+		slot(5, 'title', 'last word', 'replace'),
+	];
 
-	assert.deepEqual(codes(verdict), ['unreachable']);
+	assert.equal(decide([{ effect: 'allow', path: [REST] }], detachAndWrite).ok, true);
+
+	// Each delta is still judged where it lands: the remove at ['posts'], the write at
+	// ['posts', 'p1', 'title'], so a grant covering one of them does not carry the other.
+	assert.deepEqual(
+		decide([{ effect: 'allow', path: ['posts', ANY, 'title'] }], detachAndWrite).ok === false
+			? (decide([{ effect: 'allow', path: ['posts', ANY, 'title'] }], detachAndWrite) as { reasons: readonly { path?: readonly string[] }[] })
+				.reasons.map((r) => r.path?.join('/'))
+			: [],
+		['posts'],
+	);
+	assert.deepEqual(
+		decide([{ effect: 'allow', path: ['posts'] }], detachAndWrite).ok === false
+			? (decide([{ effect: 'allow', path: ['posts'] }], detachAndWrite) as { reasons: readonly { path?: readonly string[] }[] })
+				.reasons.map((r) => r.path?.join('/'))
+			: [],
+		['posts/p1/title'],
+	);
 });
 
 test('a second attach edge refuses the delta that writes it and any delta that reads through it', () => {

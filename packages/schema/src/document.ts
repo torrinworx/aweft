@@ -164,11 +164,45 @@ export const resolve = (
 			continue;
 		}
 
-		if (overlay.detaching.has(at)) return 'unreachable';
-
+		// An edge this commit removes is not counted, so a commit may write into a subtree in the
+		// same breath as it detaches it, and the write is judged at the path that subtree had
+		// when the commit began. This is the applier's own rule, and design 037 is why the two
+		// follow each other rather than each being right on its own.
 		const entry = index.entries_.get(at);
 		if (entry === undefined || entry.parent_ === null) return 'unreachable';
 		steps.push(entry.slot_!);
+		at = entry.parent_;
+	}
+};
+
+/**
+ * Would this attach edge put an observable inside its own subtree?
+ *
+ * The applier refuses that as `unreachable`, because a ring has no top and nothing in it has
+ * a path. Walking up from the holder is the whole test: reach the child and the edge closes a
+ * ring, reach the root and it does not.
+ */
+export const enclosesItself = (
+	index: DocumentIndex,
+	overlay: Overlay,
+	child: string,
+	holder: string,
+): boolean => {
+	let hops = index.entries_.size + overlay.attaching.size;
+	let at = holder;
+
+	for (;;) {
+		if (at === child) return true;
+		if (at === index.root_ || hops-- <= 0) return false;
+
+		const edge = overlay.attaching.get(at);
+		if (edge !== undefined) {
+			at = edge.holder;
+			continue;
+		}
+
+		const entry = index.entries_.get(at);
+		if (entry === undefined || entry.parent_ === null) return false;
 		at = entry.parent_;
 	}
 };
@@ -222,6 +256,21 @@ const detach = (index: DocumentIndex, key: string): void => {
  *   record(index, commit);
  */
 export const record = (index: DocumentIndex, commit: Commit): void => {
+	// An add into a slot the index already fills is a commit the applier refused, so it was
+	// never applied and must not be folded in. This is the second breach of the record-after-
+	// apply contract the fold can see for itself, and it lives here rather than in the overlay
+	// because `validate` shares that and a validator returns a verdict, never a throw.
+	for (const delta of commit.deltas) {
+		if (delta.type !== 'add') continue;
+		const holder = idToText(delta.id);
+		if (index.entries_.get(holder)?.children_.has(stepOf(delta.ref)) === true) {
+			throw codecError(
+				'slot-exists',
+				`${holder} already holds ${stepOf(delta.ref)}, so this is not the commit that was applied`,
+			);
+		}
+	}
+
 	const overlay = overlayOf(index, commit);
 	if (overlay.ambiguous.size > 0) {
 		const [first] = overlay.ambiguous;

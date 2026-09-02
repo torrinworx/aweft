@@ -12,13 +12,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-	atomic, createArray, createMap, createObject, idOf, observer, snapshot, textIdOf,
+	apply, atomic, createArray, createMap, createObject, idOf, observer, snapshot, textIdOf,
 } from '@aweftjs/core';
 import type { Snapshot } from '@aweftjs/core';
 import { randomBelow, randomFrom } from '@aweftjs/testing';
+import { createId } from '@aweftjs/codec';
+import type { Commit, Delta } from '@aweftjs/codec';
 
-import { createIndex, pathOf, record } from '../src/index.ts';
+import { REST, createIndex, pathOf, record, validate } from '../src/index.ts';
+import type { Policy } from '../src/index.ts';
 import { idFromText } from '@aweftjs/testing';
+
+const OPEN: Policy = [{ effect: 'allow', path: [REST] }];
 
 /** Where each observable sits, read off the document itself, walking down from the root. */
 const placesIn = (state: Snapshot): Map<string, readonly string[]> => {
@@ -131,4 +136,142 @@ const run = (seed: number): void => {
 
 test('the index agrees with the document it was fed, over a random edit stream', () => {
 	for (let seed = 1; seed <= 40; seed++) run(seed * 20260901);
+});
+
+// --- the validator against the applier ---------------------------------------------------
+//
+// Design 035 claimed the two shared reason tokens refuse the same input for the same cause,
+// and nothing checked it, so it drifted: the applier does not count a commit's own detachments
+// and the validator did, which refused a commit one ordinary atomic block produces. Design 037
+// settles which one follows the other. This is the check that fails when they part again.
+//
+// The suites either side of it cannot see this. The conformance suite feeds the validator only
+// commits the fixtures already accept, and the index-versus-document check above never calls
+// validate at all. Each half was checked against something and the seam against nothing.
+
+const SHARED = ['unreachable', 'multiple-attach'];
+
+/** A pile of deltas of the shapes that make the two disagree, if anything does. */
+const commitsFor = (
+	seed: number,
+	doc: Record<string, unknown>,
+	known: object[],
+): Commit[] => {
+	const random = randomFrom(seed);
+	const pick = <T>(from: readonly T[]): T => from[randomBelow(random, from.length)]!;
+	const name = (): string => `k${randomBelow(random, 5)}`;
+	const out: Commit[] = [];
+
+	for (let i = 0; i < 60; i++) {
+		const deltas: Delta[] = [];
+		const count = 1 + randomBelow(random, 3);
+
+		for (let d = 0; d < count; d++) {
+			const holder = pick(known);
+			const slot = name();
+			const shape = randomBelow(random, 6);
+
+			if (shape === 0) {
+				deltas.push({ type: 'remove', id: idOf(holder), ref: { kind: 'object', key: slot } });
+			} else if (shape === 1) {
+				deltas.push({
+					type: pick(['add', 'replace'] as const),
+					id: idOf(holder),
+					ref: { kind: 'object', key: slot },
+					value: randomBelow(random, 100),
+				});
+			} else {
+				// A reference: to something already in the document, or to an id nothing holds.
+				const target = shape === 5 ? createId() : idOf(pick(known));
+				deltas.push({
+					type: pick(['add', 'replace'] as const),
+					id: idOf(holder),
+					ref: { kind: 'object', key: slot },
+					value: { edge: pick(['attach', 'alias'] as const), kind: 'object', id: target },
+				});
+			}
+		}
+
+		out.push({ deltas });
+	}
+
+	// Two shapes worth guaranteeing rather than hoping the generator reaches: writing into a
+	// subtree the same commit detaches, and moving an observable and writing it in one breath.
+	const child = known.find((o) => o !== doc);
+	if (child !== undefined) {
+		out.push({ deltas: [
+			{ type: 'remove', id: idOf(doc), ref: { kind: 'object', key: 'k0' } },
+			{ type: 'add', id: idOf(child), ref: { kind: 'object', key: 'late' }, value: 1 },
+		] });
+	}
+
+	return out;
+};
+
+test('the validator and the applier refuse the same commits for the same reasons', () => {
+	for (let run = 1; run <= 12; run++) {
+		const seed = run * 7717;
+		const doc = createObject<Record<string, unknown>>();
+		const index = createIndex(idOf(doc));
+		observer(doc).watch((change) => record(index, change));
+
+		const known: object[] = [doc];
+		atomic(() => {
+			for (let i = 0; i < 4; i++) {
+				const child = createObject<Record<string, unknown>>();
+				doc[`k${i}`] = child;
+				known.push(child);
+			}
+		});
+		for (const child of known.slice(1)) {
+			(child as Record<string, unknown>).leaf = 'x';
+		}
+
+		let judged = 0;
+		let refusedBoth = 0;
+
+		for (const commit of commitsFor(seed, doc, known)) {
+			const verdict = validate(commit, { index, policy: OPEN, actor: { id: 'anyone' } });
+
+			let refusal: string | undefined;
+			try {
+				apply(doc, commit);
+			} catch (error) {
+				refusal = (error as { reason?: string }).reason;
+			}
+			judged += 1;
+
+			// No false refusal: a commit the validator turns away must be one the applier turns
+			// away too, because a refusal costs the client the edit under design 011.
+			if (!verdict.ok) {
+				const code = verdict.reasons[0]!.code;
+				assert.ok(
+					refusal !== undefined,
+					`seed ${seed}: the validator refused ${code} and the applier accepted the commit`,
+				);
+				// When the applier refuses for a cause the validator also decides, the cause has
+				// to be the same one. When it refuses for a cause the validator cannot see, such
+				// as a slot that is taken or empty, it has simply found something first.
+				if (SHARED.includes(refusal!)) {
+					assert.equal(
+						refusal,
+						code,
+						`seed ${seed}: the two refused one commit for two different stated causes`,
+					);
+				}
+				refusedBoth += 1;
+				continue;
+			}
+
+			// No false acceptance: the two causes the validator decides are the two it must
+			// never let past.
+			assert.ok(
+				refusal === undefined || !SHARED.includes(refusal),
+				`seed ${seed}: the validator accepted a commit the applier refused as ${String(refusal)}`,
+			);
+		}
+
+		assert.ok(judged >= 60, `seed ${seed}: only ${judged} commits judged`);
+		assert.ok(refusedBoth > 0, `seed ${seed}: nothing was refused, so the check proved nothing`);
+	}
 });

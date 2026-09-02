@@ -82,13 +82,32 @@ test('a new observable is judged at the path the same commit gives it, not waved
 	);
 });
 
-test('a commit cannot write into a subtree it detaches in the same breath', () => {
+test('a commit may write into a subtree it detaches, judged where that subtree was', () => {
+	// Design 037: an edge the commit removes is not counted, which is the applier's rule, so
+	// one atomic block that writes a slot and drops its parent is one commit both halves take.
+	// The authority question is unchanged, because the path is the one the subtree had.
+	const detachAndWrite: Parameters<typeof commit> = [
+		slot(1, 'users', undefined),
+		slot(3, 'name', 'still mine', 'replace'),
+	];
+
+	assert.equal(
+		judge([{ effect: 'allow', path: [REST] }], detachAndWrite).ok,
+		true,
+		'the applier takes this commit, so the validator must not refuse it',
+	);
+
+	// And detaching is not a way out of a rule: the write is still judged at users/<id>/name,
+	// so a deny on that path refuses it however the same commit rearranges the tree above it.
+	const guarded = judge([
+		{ effect: 'allow', path: ['users', REST] },
+		{ effect: 'deny', path: ['users', ANY, 'name'] },
+	], detachAndWrite);
+
+	assert.deepEqual(codes(guarded), ['unauthorized']);
 	assert.deepEqual(
-		codes(judge([{ effect: 'allow', path: [REST] }], [
-			slot(1, 'users', undefined),
-			slot(3, 'name', 'too late', 'replace'),
-		])),
-		['unreachable'],
+		guarded.ok ? [] : guarded.reasons.map((r) => r.path?.join('/')),
+		[`users/${key(3)}/name`],
 	);
 });
 
@@ -225,4 +244,75 @@ test('a move re-homes authority, so removal authority is authority to take somet
 	// The guard is the removal, not the flag: take that grant away and the move stops.
 	const held: Policy = policy.filter((rule) => rule.path.length !== 2);
 	assert.deepEqual(codes(validate(moved, { index, policy: held, actor })), ['unauthorized']);
+});
+
+test('roles narrow a deny exactly as they narrow an allow, and reach no roleless actor', () => {
+	// Design 038. The record this corrects said a deny is about the path and not about who,
+	// which the code never did, and nothing here checked either reading.
+	const policy: Policy = [
+		{ effect: 'allow', path: [REST] },
+		{ effect: 'deny', path: ['secrets', 'token'], roles: ['member'] },
+	];
+	const write: Parameters<typeof commit> = [slot(6, 'token', 'x', 'replace')];
+
+	assert.deepEqual(codes(judge(policy, write, { id: key(3), roles: ['member'] })), ['unauthorized']);
+	assert.equal(judge(policy, write, { id: key(3), roles: ['moderator'] }).ok, true);
+	assert.equal(judge(policy, write, { id: key(3) }).ok, true, 'no roles means no role-scoped rule reaches');
+
+	// And an unscoped deny still refuses everyone, which is what makes it worth having.
+	const blanket: Policy = [
+		{ effect: 'allow', path: [REST] },
+		{ effect: 'deny', path: ['secrets', 'token'] },
+	];
+	for (const actor of [{ id: key(3) }, { id: key(3), roles: ['moderator'] }]) {
+		assert.deepEqual(codes(judge(blanket, write, actor)), ['unauthorized']);
+	}
+});
+
+test('a wildcard grants a leading-underscore slot, because that convention is about delivery', () => {
+	// Design 039. The underscore rule makes a slot private from wildcard observers, which is a
+	// delivery rule. A _ slot is ordinary state that crosses the wire and has to have an owner,
+	// so a subtree grant covers it, and the error direction is the permissive one.
+	const index = createIndex(id(1));
+	record(index, commit(slot(1, 'users', ref(7, 'map'))));
+	record(index, commit(
+		{ type: 'add', id: id(7), ref: { kind: 'map', key: id(9) }, value: ref(9) },
+		slot(9, '_internal', 'private by convention'),
+	));
+
+	const actor: Actor = { id: key(9) };
+	const write = commit(slot(9, '_internal', 'written anyway', 'replace'));
+
+	assert.equal(
+		validate(write, { index, policy: [{ effect: 'allow', path: ['users', SELF, REST] }], actor }).ok,
+		true,
+	);
+	assert.equal(
+		validate(write, { index, policy: [{ effect: 'allow', path: ['users', SELF, ANY] }], actor }).ok,
+		true,
+	);
+	// Which is why a policy that means to keep one out says so.
+	assert.equal(
+		validate(write, {
+			index,
+			policy: [
+				{ effect: 'allow', path: ['users', SELF, REST] },
+				{ effect: 'deny', path: ['users', ANY, '_internal'] },
+			],
+			actor,
+		}).ok,
+		false,
+	);
+});
+
+test('SELF matches an object key as readily as a map identity, since a step is a step', () => {
+	const index = createIndex(id(1));
+	record(index, commit(slot(1, 'people', ref(7))));
+	record(index, commit(slot(7, 'alice', ref(9)), slot(9, 'name', 'Alice')));
+
+	const policy: Policy = [{ effect: 'allow', path: ['people', SELF, REST] }];
+	const write = commit(slot(9, 'name', 'Alice A', 'replace'));
+
+	assert.equal(validate(write, { index, policy, actor: { id: 'alice' } }).ok, true);
+	assert.equal(validate(write, { index, policy, actor: { id: 'bob' } }).ok, false);
 });
