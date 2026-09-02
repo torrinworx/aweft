@@ -84,10 +84,17 @@ meaning the same thing. `ANY`, `REST` and `SELF` are those objects, exported so 
 have to write them out.
 
 An object slot is named by its key and a map slot by the identity in text form, so both can
-be written literally. An array slot is named by its position, which is chosen by whoever
-inserted and means nothing to a policy, so array slots are reachable only through `ANY` and
-`REST`. An authority boundary inside one array is not expressible; put those elements in a
-map or an object instead.
+be written literally. An array slot is named by its position in hex, which nothing stops you
+writing literally and which you should not: a position is chosen by whoever inserted, and it
+is a different string after an unrelated edit. Reach array slots through `ANY` and `REST`, and
+if you need an authority boundary inside a collection, put those elements in a map or an
+object where the key is yours to choose.
+
+A wildcard matches every slot, including one whose name begins with an underscore. That
+convention makes a slot private from wildcard *observers*, which is a delivery rule; it is not
+an authority rule, and a `_` slot is ordinary state that still has to have an owner. So
+`['users', SELF, REST]` grants `_internal` along with everything else. Design 039 has the
+reasoning.
 
 ## Nothing is granted, and a deny wins
 
@@ -105,9 +112,11 @@ const trusted: Policy = [{ effect: 'allow', path: [REST] }];
 `roles` narrows a rule to actors holding one of them, and `types` narrows it to some of
 `add`, `replace` and `remove`. Omit either and it does not narrow.
 
-A deny is about the path, not about who: it cannot be reopened for some actors, and there is
-no "deny everyone except". So a field that only some actors may write is **granted** to them
-and not covered by a wider grant:
+`roles` narrows a deny exactly as it narrows an allow: `{ effect: 'deny', path, roles }`
+refuses only actors holding one of those roles, and an actor holding none is reached by no
+role-scoped rule at all. What a deny cannot do is be reopened: no allow written anywhere
+survives a deny that matches. So there is no "deny everyone except", and a field that only
+some actors may write is **granted** to them and not covered by a wider grant:
 
 ```ts
 { effect: 'allow', path: ['notes', ANY] },                                  // start a note
@@ -153,8 +162,11 @@ document's values, and an authority index holds attach edges and nothing else. S
 authorized commit still goes through the applier, and a refusal from either refuses the
 commit. Neither closes the connection.
 
-`unreachable` and `multiple-attach` are the applier's own words, deliberately, and both
-layers refuse the same input for the same stated cause.
+`unreachable` and `multiple-attach` are the applier's own words, deliberately. Neither layer
+lets past what the other would refuse for one of those two causes, and that is checked on a
+real commit stream rather than intended. The stated cause can still differ when a commit
+breaks two rules at once, because the applier can see things an authority index does not, such
+as whether a slot is already taken. Design 037 states it exactly.
 
 ## A move re-homes authority
 
