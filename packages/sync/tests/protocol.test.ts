@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { createId } from '@aweftjs/codec';
 import type { Commit } from '@aweftjs/codec';
 import { REST, type Policy } from '@aweftjs/schema';
-import { atomic, createArray, createMap, createObject, idOf } from '@aweftjs/core';
+import { atomic, createArray, createMap, createObject, idOf, observer } from '@aweftjs/core';
 import { inProcess, serve } from '@aweftjs/sync';
 import type { Channel, Frame } from '@aweftjs/sync';
 
@@ -339,4 +339,130 @@ test('a host mutating its own document publishes it, in the order it happened', 
 	assert.equal(commits[0]!.first, 1);
 	assert.equal(commits[0]!.commits.length, 2, 'an atomic block is one commit and the write is another');
 	assert.equal(commits[0]!.commits[0]!.deltas.length, 2);
+});
+
+test('a join turned away for any reason leaves the link up', async () => {
+	// Design 012 and `spec/replication.md` 2: a join that is refused is an answer, not a
+	// protocol violation. All four reasons, not just the two that are easy.
+	// A document per case: one that lingers under a second host would confuse what is being
+	// measured here, which is only whether the link survives.
+	const build = (): [Record<string, unknown>, string, Parameters<typeof serve>[0]][] => {
+		const a = createObject<Record<string, unknown>>({ n: 0 });
+		const b = createObject<Record<string, unknown>>({ n: 0 });
+		const c = createObject<Record<string, unknown>>({ n: 0 });
+		return [
+			[a, 'no-topic', (name) => (name === 'good' ? { document: a, policy: OPEN } : undefined)],
+			[b, 'bad-pattern', (name) => ({
+				document: name === 'good' ? b : createObject({}),
+				policy: name === 'good' ? OPEN : [{ effect: 'allow', path: [] }],
+			})],
+			[c, 'policy-mismatch', (name) => ({
+				document: c,
+				policy: name === 'good' ? OPEN : [{ effect: 'allow', path: ['other'] }],
+			})],
+		];
+	};
+
+	for (const [good, reason, resolve] of build()) {
+		const host = serve(resolve);
+		const [there, here] = inProcess();
+		host.accept(there, { id: 'a' });
+		const heard: Frame[] = [];
+		let over = false;
+		here.receive((frame) => heard.push(frame));
+		here.closed(() => { over = true; });
+
+		here.send(joinFrame(0, 'good'));
+		await tick();
+		here.send(joinFrame(1, 'bad'));
+		await tick();
+
+		const fault = heard.find((f) => f.kind === 'fault');
+		assert.ok(fault?.kind === 'fault', `${reason}: a fault came back`);
+		assert.equal(fault.reason, reason);
+		assert.equal(over, false, `${reason}: and the link is still up`);
+
+		// The topic that was fine still works afterwards.
+		heard.length = 0;
+		good.n = 1;
+		await tick();
+		assert.ok(heard.some((f) => f.kind === 'commits'), `${reason}: the other topic carried on`);
+		host.close();
+	}
+});
+
+test('one link may not sync one document under two numbers', async () => {
+	// Every commit on one would be published to the other, applied, and published back. It is
+	// a caller's mistake, and left alone it is a silent permanent spin.
+	const document = createObject<Record<string, unknown>>({ n: 0 });
+	const host = serve(() => ({ document, policy: OPEN }));
+	const [there, here] = inProcess();
+	host.accept(there, { id: 'a' });
+	const heard: Frame[] = [];
+	let over = false;
+	here.receive((frame) => heard.push(frame));
+	here.closed(() => { over = true; });
+
+	here.send(joinFrame(0, 'one'));
+	await tick();
+	here.send(joinFrame(1, 'another'));
+	await tick();
+
+	const fault = heard.find((f) => f.kind === 'fault');
+	assert.ok(fault?.kind === 'fault');
+	assert.equal(fault.reason, 'document-in-use');
+	assert.equal(over, false, 'refused, not fatal');
+
+	heard.length = 0;
+	document.n = 1;
+	await tick();
+	const commits = heard.filter((f) => f.kind === 'commits');
+	assert.equal(commits.length, 1, 'one write reaches this link once');
+	host.close();
+});
+
+test('a host lets go of a document nothing is syncing or can come back to', async () => {
+	const made: Record<string, unknown>[] = [];
+	const host = serve((name) => {
+		const document = createObject<Record<string, unknown>>({ name });
+		made.push(document);
+		return { document, policy: OPEN };
+	}, { sessions: 1 });
+
+	// A host whose resolve opens a document per name is the shape the README shows.
+	const links = [];
+	for (let i = 0; i < 5; i++) {
+		const [there, here] = inProcess();
+		host.accept(there, { id: 'a' });
+		here.send(joinFrame(0, `room:${i}`));
+		await tick();
+		links.push(there);
+	}
+	assert.equal(made.length, 5, 'five documents were opened');
+
+	// Everyone leaves. One session is remembered, so one document is held for it.
+	for (const there of links) there.close();
+	await tick();
+
+	// Whether the tracker was let go is the observable part: a document nothing holds no longer
+	// pays for a watch on every write to it.
+	const watched = made.filter((document) => {
+		let heard = false;
+		const stop = observer(document).path('probe').watch(() => { heard = true; });
+		document.probe = 1;
+		stop();
+		return heard;
+	});
+	assert.equal(watched.length, 5, 'the documents themselves still work; the host simply let go');
+
+	const [there, here] = inProcess();
+	host.accept(there, { id: 'a' });
+	const heard: Frame[] = [];
+	here.receive((frame) => heard.push(frame));
+	here.send(joinFrame(0, 'room:0'));
+	await tick();
+	const joined = heard.find((f) => f.kind === 'joined');
+	assert.ok(joined?.kind === 'joined');
+	assert.equal(joined.seq, 0, 'a released document is served fresh, from the top');
+	host.close();
 });

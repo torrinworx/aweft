@@ -467,3 +467,62 @@ test('a replica that cannot get in step gives up rather than asking forever', as
 	session.close();
 	host.close();
 });
+
+// The two numbers a caller never passes, so nothing else exercises them.
+test('the defaults are the ones the README and design 045 state', async () => {
+	// The backoff: 100ms doubling to a cap of 30s, which is what `retry` replaces.
+	const waits: number[] = [];
+	const timer = globalThis.setTimeout;
+	(globalThis as { setTimeout: unknown }).setTimeout = ((fn: () => void, ms: number) => {
+		// The test's own settling uses zero, so only a real wait is a backoff.
+		if (ms > 0) waits.push(ms);
+		return timer(fn, 0);
+	}) as typeof setTimeout;
+
+	let tries = 0;
+	const session = connect(() => {
+		tries += 1;
+		if (tries > 4) {
+			session.close();
+			throw new Error('enough');
+		}
+		throw new Error('no route to host');
+	});
+	session.join('doc');
+	await settle(8);
+	(globalThis as { setTimeout: unknown }).setTimeout = timer;
+	session.close();
+
+	assert.deepStrictEqual(waits.slice(0, 4), [100, 200, 400, 800], 'doubling from 100ms');
+	assert.ok(Math.min(...waits) >= 100 && Math.max(...waits) <= 30_000, 'inside the stated bounds');
+
+	// The replay window: 256 commits per topic by default, so a client that missed fewer than
+	// that is sent what it missed rather than the whole document.
+	const document = createObject<Record<string, unknown>>({ n: 0 });
+	const host = serve(() => ({ document, policy: OPEN }));
+	const [there, here] = inProcess();
+	host.accept(there, { id: 'a' });
+	const heard: Frame[] = [];
+	here.receive((frame) => heard.push(frame));
+	here.send({ kind: 'join', topic: 0, name: 'doc', have: 0 });
+	await settle(2);
+	const joined = heard[0];
+	assert.ok(joined?.kind === 'joined');
+
+	for (let i = 1; i <= 200; i++) document.n = i;
+	await settle(2);
+	there.close();
+	await settle(2);
+
+	const [again, back] = inProcess();
+	host.accept(again, { id: 'a' });
+	const second: Frame[] = [];
+	back.receive((frame) => second.push(frame));
+	back.send({ kind: 'join', topic: 0, name: 'doc', have: 0, resume: joined.session });
+	await settle(2);
+
+	const answer = second.find((f) => f.kind === 'joined');
+	assert.ok(answer?.kind === 'joined');
+	assert.equal(answer.whole, false, '200 missed commits is inside the default window of 256');
+	host.close();
+});

@@ -125,6 +125,8 @@ interface Conn {
 interface Remembered {
 	readonly actor: string;
 	readonly accepted: Map<string, number>;
+	/** The documents this record could resume, so they are held for as long as it is. */
+	readonly holding: readonly Live[];
 }
 
 const rootOf = (document: object): { id: Uint8Array; kind: ObservableKind } =>
@@ -231,22 +233,52 @@ export const serve = (resolve: Resolve, options: HostOptions = {}): Host => {
 		return live;
 	};
 
+	/**
+	 * Let go of a document nothing is syncing and nothing can come back to.
+	 *
+	 * A served document pins a live watch on it and a window of recent commits, so a host whose
+	 * `resolve` opens documents on demand would otherwise grow for as long as it runs. It is
+	 * held while anything is joined to it, and while any remembered session could still resume
+	 * it, because letting it go throws away the window that makes a reconnect cheap.
+	 */
+	const release = (live: Live): void => {
+		if (live.members.size > 0) return;
+		for (const record of remembered.values()) {
+			if (record.holding.includes(live)) return;
+		}
+		live.tracker.stop();
+		documents.delete(idToText(idOf(live.document)));
+	};
+
+	/** Drop the oldest remembered sessions, and whatever they were the last thing holding. */
+	const trim = (): void => {
+		while (remembered.size > rememberLimit) {
+			const oldest = remembered.keys().next().value!;
+			const record = remembered.get(oldest)!;
+			remembered.delete(oldest);
+			for (const live of record.holding) release(live);
+		}
+	};
+
 	const forget = (conn: Conn): void => {
 		const accepted = new Map<string, number>();
+		const holding: Live[] = [];
 		for (const member of conn.members.values()) {
 			// Everything through here was decided, accepted or refused. A verdict that was in
 			// flight when the link dropped is lost; the reconcile on the way back makes the
 			// document right either way.
 			accepted.set(member.name, member.next - 1);
+			holding.push(member.live);
 			member.live.members.delete(member);
 		}
 		conn.members.clear();
 		conns.delete(conn);
 
-		remembered.set(idToText(conn.session), { actor: conn.actor.id, accepted });
-		while (remembered.size > rememberLimit) {
-			remembered.delete(remembered.keys().next().value!);
-		}
+		remembered.set(idToText(conn.session), { actor: conn.actor.id, accepted, holding });
+		trim();
+
+		// Anything the record above does not hold, and nobody is joined to, goes now.
+		for (const live of holding) release(live);
 	};
 
 	const accept = (channel: Channel, actor: Actor): Connection => {
@@ -289,7 +321,17 @@ export const serve = (resolve: Resolve, options: HostOptions = {}): Host => {
 				return;
 			}
 
-			const live = liveFor(resolved);
+			let live: Live;
+			try {
+				live = liveFor(resolved);
+			} catch (error) {
+				// Whatever is wrong with what `resolve` handed back, the answer is to turn this
+				// join away. The link carries on for whatever else is on it (design 012).
+				const reason = (error as { reason?: string }).reason;
+				if (reason === undefined) throw error;
+				refuseJoin(topic, reason, (error as Error).message);
+				return;
+			}
 			const prior = resume === undefined ? undefined : remembered.get(idToText(resume));
 			// A resume only counts when this host is the one that handed out the session and the
 			// actor is the same. Anything else is a client that has to be sent the document.
@@ -299,6 +341,15 @@ export const serve = (resolve: Resolve, options: HostOptions = {}): Host => {
 				? existing.next - 1
 				: resuming ? prior.accepted.get(name) ?? 0 : 0;
 			const held = existing !== undefined || resuming;
+
+			// One link syncing one document under two numbers means every commit on one is
+			// published to the other, applied, and published back. It is a caller's mistake and
+			// it is a silent permanent spin, so it is refused where the caller can see it.
+			for (const other of conn.members.values()) {
+				if (other.live !== live) continue;
+				refuseJoin(topic, 'document-in-use', `this link already syncs that document as ${other.name}`);
+				return;
+			}
 
 			const member: Member = { conn, topic, name, live, next: accepted + 1, owed: undefined };
 			conn.members.set(topic, member);
@@ -420,6 +471,7 @@ export const serve = (resolve: Resolve, options: HostOptions = {}): Host => {
 			} else if (frame.kind === 'leave') {
 				member.live.members.delete(member);
 				conn.members.delete(frame.topic);
+				release(member.live);
 			} else {
 				fault(frame.topic, 'not-for-a-host', `a host is not sent ${frame.kind}`);
 			}

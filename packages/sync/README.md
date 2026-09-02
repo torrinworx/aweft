@@ -132,7 +132,12 @@ accepts. There is nothing to wire and nothing to do before you call `serve`.
 **One document has one authority.** Resolving the same document with a different policy for a
 different actor is refused with `policy-mismatch`, because otherwise whichever join arrived
 first would decide what everyone after it may write. Serve two documents, or write one policy
-that covers both actors.
+that covers both actors. Syncing one document twice on one link is refused the same way, as
+`document-in-use`: every commit on one topic would be published to the other and back again.
+
+A host lets go of a document once nothing is joined to it and no remembered session can come
+back to it, so a `resolve` that opens a document per name does not grow for as long as the
+process runs.
 
 ### Ownership is shape, not data
 

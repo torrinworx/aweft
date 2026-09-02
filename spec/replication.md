@@ -46,6 +46,11 @@ chose and numbered by an integer the client chooses when it joins.
   resolving the same document with a different policy is refused with `policy-mismatch`,
   because otherwise whichever join arrived first would decide what everyone after it may
   write.
+- A host **MUST NOT** let one link sync one document under two topic numbers, and refuses the
+  second with `document-in-use`. Every commit on one would be published to the other, applied
+  there, and published back.
+- A `fault` answering a `join` **MUST NOT** end the link, whatever the reason is. That binds
+  every reason, not only the ones a client is likely to see.
 
 ## 3. Sequence numbers
 

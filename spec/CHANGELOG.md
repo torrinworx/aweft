@@ -133,7 +133,12 @@ format and changes nothing about it.
 - A client that has lost its place leaves the topic and joins it again presenting no session,
   rather than joining with a count of zero while still a member.
 - One document is served under one authority; a second join resolving it differently is
-  refused with `policy-mismatch`.
+  refused with `policy-mismatch`, and one link syncing it twice is refused with
+  `document-in-use`. Neither ends the link, and neither does any other reason a join is
+  turned away.
+- A client that has asked for the whole document several times in a row without taking a
+  commit from the host stops asking and reports it. Only a commit from the host counts as
+  getting somewhere: a client that is writing collects accepts whatever else is wrong.
 - 9 frame fixtures and 10 rejections, each rejection naming the reason it must be refused for.
 - Not specified, on purpose: application messages, forwarding between hosts (so no frame
   carries an originating actor), read filtering, and how long a host remembers.

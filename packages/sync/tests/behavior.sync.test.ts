@@ -332,14 +332,20 @@ test('a host writing in answer to a commit does not put the sender out of step',
 	});
 	const mirror = await replica.ready;
 
-	mirror.intent = 'ship it';
+	// Enough of them that a client which has to ask for the document after each one runs past
+	// the limit and gives up. One write costs one request and recovers from it, so one write
+	// would pass whether or not the ordering holds.
+	for (let i = 0; i < 30; i++) {
+		mirror.intent = `ship ${i}`;
+		await settle(2);
+	}
 	await settle();
 
 	// A client that cannot get anywhere gives up loudly rather than asking forever, so this
 	// case fails rather than starving the machine when the ordering it rests on is broken.
 	assert.deepStrictEqual(faults, [], 'it never had to ask for the document');
-	assert.equal(world.document.outcome, 'did ship it', 'the host answered');
-	assert.equal(mirror.outcome, 'did ship it', 'and the client heard the answer');
+	assert.equal(world.document.outcome, 'did ship 29', 'the host answered');
+	assert.equal(mirror.outcome, 'did ship 29', 'and the client heard the answer');
 	assert.equal(replica.state.get(), 'live', 'without ever losing its place');
 	same(mirror, world.document, 'in step');
 	session.close();
@@ -424,21 +430,97 @@ test('one document may not be served under two policies', async () => {
 // forever: the replica reads `live` with work pending that will never clear.
 test('a commit that changed nothing is still accepted', async () => {
 	const world = board();
-	world.document.n = 1;
+	world.document.n = 0;
+	const one = world.client('a');
+	const two = world.client('b');
+	const first = one.join<Record<string, unknown>>('board');
+	const second = two.join<Record<string, unknown>>('board');
+	const [a, b] = [await first.ready, await second.ready];
+
+	// Both write the same value. Whichever reaches the host second is a real commit on its own
+	// replica and changes nothing at the host, so the host delivers nothing for it and has
+	// nothing to hang an accept on unless it says so itself.
+	a.n = 7;
+	b.n = 7;
+	await settle();
+
+	assert.equal(first.pending.get(), 0, 'the first was decided');
+	assert.equal(second.pending.get(), 0, 'and so was the one that did nothing');
+	assert.equal(world.document.n, 7);
+	same(a, world.document, 'both replicas agree with the host');
+	same(b, world.document, 'and with each other');
+	one.close();
+	two.close();
+});
+
+// A watcher answering an arriving change is the ordinary way an application reacts, and with
+// nothing pending the rebase has no work to do, so it is easy to leave the list being replayed
+// and the list being appended to as the same array. That walks a list it is growing: 100% of a
+// core, then an uncaught throw out of a channel delivery, which takes the process rather than
+// the link.
+test('a watcher answering an arriving commit does not spin the replica', async () => {
+	const world = board();
+	atomic(() => {
+		world.document.from = '';
+		world.document.echo = '';
+	});
 	const session = world.client();
 	const replica = session.join<Record<string, unknown>>('board');
 	const mirror = await replica.ready;
 
-	// Written on this side, so it is a real commit here and a no-op at the host.
-	world.document.n = 2;
-	await settle();
-	mirror.n = 1;
-	mirror.n = 2;
+	// On the client, and with nothing pending when the commit lands.
+	observer(mirror).path('from').watch(() => { mirror.echo = `heard ${String(mirror.from)}`; });
+	assert.equal(replica.pending.get(), 0, 'nothing pending, which is the shape that bites');
+
+	world.document.from = 'the host';
 	await settle();
 
-	assert.equal(replica.pending.get(), 0, 'both were decided, including the one that did nothing');
-	same(mirror, world.document, 'and the two sides agree');
+	assert.equal(mirror.echo, 'heard the host', 'the answer was made');
+	assert.equal(world.document.echo, 'heard the host', 'and replicated');
+	assert.equal(replica.state.get(), 'live');
+	same(mirror, world.document, 'in step');
 	session.close();
+});
+
+// The limit exists so a client that cannot get in step stops rather than starving the machine.
+// A client that is writing collects accepts whatever else is wrong, so counting an accept as
+// progress would leave exactly that client able to ask forever.
+test('a client that keeps writing still gives up on a host it cannot follow', async () => {
+	const document = createObject<Record<string, unknown>>({ n: 0 });
+	const host = serve(() => ({ document, policy: OPEN }), { replay: 0 });
+
+	let joins = 0;
+	const session = connect(() => {
+		const [there, here] = inProcess();
+		host.accept({
+			...there,
+			send: (frame: Frame) => {
+				if (frame.kind === 'joined') joins += 1;
+				// Every broadcast is lost, so the client keeps finding holes, while its own
+				// writes keep being accepted.
+				if (frame.kind === 'commits') return;
+				there.send(frame);
+			},
+		}, { id: 'a' });
+		return here;
+	}, { retry: () => false });
+
+	const faults: string[] = [];
+	const replica = session.join<Record<string, unknown>>('doc', {
+		fault: (reason) => faults.push(reason),
+	});
+	const mirror = await replica.ready;
+
+	for (let i = 0; i < 40; i++) {
+		mirror.n = i;
+		document.other = i;
+		await settle(2);
+	}
+
+	assert.deepStrictEqual(faults, ['resync-loop'], 'it said why it stopped');
+	assert.ok(joins < 20, `it stopped asking after ${joins} joins rather than forever`);
+	session.close();
+	host.close();
 });
 
 // The host forgets a client's numbering when that client joins as if it had never been here,

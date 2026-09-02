@@ -313,11 +313,13 @@ export const connect = (
 
 		const group: Refused[] = [];
 		const held = sub.pending;
-		// The common case is an empty pending list, and then this is an ordinary apply.
-		if (held.length > 0) {
-			rewind(sub, 0);
-			sub.pending = [];
-		}
+		if (held.length > 0) rewind(sub, 0);
+
+		// A fresh list before anything is applied, always, even when there was nothing pending.
+		// A watcher writing in answer to what is arriving pushes onto the pending list, and if
+		// that were still the list being replayed, the replay would walk a list it is appending
+		// to and never reach the end of it.
+		sub.pending = [];
 
 		try {
 			for (const commit of frame.commits) {
@@ -339,7 +341,6 @@ export const connect = (
 	};
 
 	const onAccept = (sub: Sub, frame: Frame & { kind: 'accept' }): void => {
-		sub.resyncs = 0;
 		// A commit this side gave up on that the host took anyway means the two are applying
 		// different sequences, which nothing here can reason its way out of. Ask for the
 		// document rather than carry on holding something the host does not have.
@@ -401,6 +402,10 @@ export const connect = (
 
 		// Asking again and again without getting anywhere is a disagreement neither side can
 		// talk its way out of, and asking forever starves the machine rather than reporting it.
+		//
+		// Only taking a commit from the host counts as getting somewhere. An accept does not:
+		// a client that is writing collects accepts whatever else is wrong, and clearing the
+		// count on one would leave a client that writes able to ask forever.
 		sub.resyncs += 1;
 		if (sub.resyncs > RESYNC_LIMIT) {
 			const message = `${sub.name} asked for the document ${sub.resyncs} times without moving`;
