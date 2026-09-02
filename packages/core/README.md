@@ -82,11 +82,20 @@ A plain `createObject()` on the receiving side does not work: it has a different
 so the source's commits are refused as unreachable. Mint the copy with the source root's
 id, as above.
 
-A replica built from commits holds only what commits described, and construction is not a
-commit: slots passed to a constructor exist before anything can watch, so a watcher wired
-afterwards never hears about them. Start the source empty and assign its slots after the
-watcher is wired, as above, or hand the receiving side a starting point with
-`fromSnapshot(snapshot(source))` and replicate from there.
+A replica built from commits holds only what commits described, and one thing is never
+described: the slots the **watched** observable was constructed with. Nothing can watch an
+observable before it exists, so a watcher wired afterwards never hears about them. Start the
+source empty and assign its slots after the watcher is wired, as above, or hand the receiving
+side a starting point with `fromSnapshot(snapshot(source))` and replicate from there.
+
+Everything below that is fine. Attaching an observable into a watched document emits the
+slots it was constructed with, in the same commit as the attach, so a subtree built and
+attached in one breath replicates whole:
+
+```ts
+atomic(() => { doc.settings = createObject({ theme: 'dark', limit: 5 }); });
+// three deltas: the attach, and one for each slot the child was constructed with
+```
 
 Compare the two by deep equality, not by `JSON.stringify`. A snapshot's slots are a plain
 object, so the order they were inserted in is part of the string and is not part of the
