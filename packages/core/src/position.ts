@@ -4,42 +4,85 @@
 // byte. It deliberately does not say how a position between two others is chosen, because a
 // receiver orders by comparing and never by regenerating. This is core's choice.
 //
-// Positions are read as fractions in base 256: the digits after an implied point, with no
-// trailing zero, exactly as a decimal fraction has none. Between any two there is always
-// room, which is the property the two rules in the format exist to protect.
+// A position is a run of fixed-width levels, each a digit and a few random bytes. Read as a
+// fraction, the digits are the digits and the random bytes break a tie between two replicas
+// that chose the same one. Fixed width is what makes a plain byte comparison mean the same
+// thing as comparing level by level: a byte can only ever line up against a byte playing the
+// same part.
+//
+// The random bytes are the whole point. Without them the choice is a pure function of the two
+// neighbours, so two replicas inserting at the same place name the same slot and one of the
+// two inserts is refused: two people adding to a list at the same moment lose one of them.
+// Design 040. Design 014 claimed the keys already differed, nothing checked it, and they
+// did not. `bench/replicate.ts` measures what the levels cost and counts the distinctness.
 
 import { codecError } from '@aweftjs/codec';
 
-/** The smallest-effort position strictly after `a`, or the first one when there is no `a`. */
-const after = (a: Uint8Array | null): Uint8Array => {
-	if (a === null || a.length === 0) return Uint8Array.of(0x80);
+/**
+ * A level is one digit and three random bytes.
+ *
+ * Three bytes puts two replicas that chose the same digit at one chance in 16.7 million of
+ * naming the same slot, and even then the loser's commit is refused rather than lost quietly.
+ * It costs four bytes where a bare digit costs one.
+ */
+const JITTER = 3;
+const LEVEL = 1 + JITTER;
 
-	const last = a[a.length - 1]!;
-	if (last < 0xff) {
-		const out = Uint8Array.from(a);
-		out[out.length - 1] = last + 1;
-		return out;
-	}
+// A chosen digit stays strictly inside the byte range, so there is always room to place one
+// below the lowest and above the highest without adding a level.
+const FLOOR = 1;
+const CEILING = 254;
+/** Where the first element of an array goes, so there is room on both sides of it. */
+const START = 128;
 
-	// Nothing is left in the last digit, so go one digit deeper. Appending anything non-zero
-	// sorts after the string it extends.
-	const out = new Uint8Array(a.length + 1);
-	out.set(a);
-	out[a.length] = 0x80;
-	return out;
+/**
+ * The digit to choose between two bounds, or undefined when none fits.
+ *
+ * A step of one at each end and the midpoint in the middle. Stepping matters: jumping to the
+ * midpoint of an open end burns half the range on every append, which is 250 levels over two
+ * thousand appends against eight. Two replicas choosing the same digit is fine and expected;
+ * the randomness after it is what tells them apart.
+ */
+const digitFor = (da: number | undefined, db: number | undefined): number | undefined => {
+	if (da === undefined && db === undefined) return START;
+	if (db === undefined) return da! < CEILING ? da! + 1 : undefined;
+	if (da === undefined) return db > FLOOR ? db - 1 : undefined;
+	return db - da >= 2 ? da + ((db - da) >> 1) : undefined;
 };
 
-/** The smallest-effort position strictly before `b`. */
-const before = (b: Uint8Array): Uint8Array => {
-	const first = b[0]!;
-	if (first >= 2) return Uint8Array.of(first - 1);
-	if (first === 1) return Uint8Array.of(0, 0x80);
+const jitter = (): number[] => {
+	const bytes = crypto.getRandomValues(new Uint8Array(JITTER));
+	// A position may not end in a zero byte, and any level may turn out to be the last one.
+	if (bytes[JITTER - 1] === 0) bytes[JITTER - 1] = 1;
+	return [...bytes];
+};
 
-	// A leading zero has nothing below it, so keep it and place the answer under the rest.
-	const tail = before(b.subarray(1));
-	const out = new Uint8Array(tail.length + 1);
-	out.set(tail, 1);
-	return out;
+/** The digit of level `i`, or undefined when the key has no level there. */
+const digitAt = (key: Uint8Array | null, i: number): number | undefined =>
+	(key === null || key.length <= i * LEVEL ? undefined : key[i * LEVEL]);
+
+/** Do both keys carry the same bytes at level `i`? */
+const sameLevel = (a: Uint8Array, b: Uint8Array, i: number): boolean => {
+	const at = i * LEVEL;
+	for (let j = 0; j < LEVEL; j++) {
+		if (a[at + j] !== b[at + j]) return false;
+	}
+	return true;
+};
+
+/** Is level `i` of `key` the lowest one that digit has, with no randomness after it? */
+const zeroJitter = (key: Uint8Array, i: number): boolean => {
+	const at = i * LEVEL;
+	for (let j = 1; j < LEVEL; j++) {
+		if ((key[at + j] ?? 0) !== 0) return false;
+	}
+	return true;
+};
+
+/** Copy level `i` of `key` onto the answer. */
+const copyLevel = (out: number[], key: Uint8Array, i: number): void => {
+	const at = i * LEVEL;
+	for (let j = 0; j < LEVEL; j++) out.push(key[at + j] ?? 0);
 };
 
 /**
@@ -49,45 +92,64 @@ const before = (b: Uint8Array): Uint8Array => {
  *   a: the position before, or null for the start of the array
  *   b: the position after, or null for the end
  *
- * Returns: a valid position, non-empty and not ending in a zero byte.
+ * Returns: a valid position, non-empty and not ending in a zero byte. Two calls with the same
+ * neighbours give two different positions, both between them, in an order both sides agree on.
+ *
+ * Throws `invalid-position` when `a` is not below `b`.
+ *
+ * `a` and `b` are positions this produced, or ones a replica of the same array produced. A
+ * position written by hand is a valid slot key and is not a fraction this can subdivide, so
+ * hand one to `insertAt` rather than expecting a neighbour to be chosen beside it.
  *
  * Example:
- *   between(Uint8Array.of(0x80), null)  // 0x81
- *   between(null, Uint8Array.of(0x80))  // 0x7f
+ *   between(null, null)  // one level: a digit near the middle, then three random bytes
  */
 export const between = (a: Uint8Array | null, b: Uint8Array | null): Uint8Array => {
-	if (b === null) return after(a);
-	if (a === null) return before(b);
-
 	const out: number[] = [];
+	let above: Uint8Array | null = b;
 
 	for (let i = 0; ; i++) {
-		if (i >= b.length) {
-			throw codecError('invalid-position', 'a position must sit between two ordered positions');
-		}
+		const da = digitAt(a, i);
+		const db = digitAt(above, i);
 
-		const x = i < a.length ? a[i]! : 0;
-		const y = b[i]!;
-
-		if (y - x >= 2) {
-			out.push(x + ((y - x) >> 1));
-			return Uint8Array.from(out);
-		}
-
-		if (x === y) {
-			out.push(x);
+		// The same level on both sides says nothing about where the answer goes. Copy it and
+		// look at the next one.
+		if (da !== undefined && db !== undefined && sameLevel(a!, above!, i)) {
+			copyLevel(out, a!, i);
 			continue;
 		}
 
-		// One apart, so nothing fits at this digit. Take the lower one, which already puts the
-		// answer under b, and everything left to do is to clear a.
-		out.push(x);
-		const rest = i + 1 < a.length ? a.subarray(i + 1) : null;
-		const tail = after(rest);
+		const digit = digitFor(da, db);
+		if (digit !== undefined) {
+			out.push(digit, ...jitter());
+			return Uint8Array.from(out);
+		}
 
-		const result = new Uint8Array(out.length + tail.length);
-		result.set(out);
-		result.set(tail, out.length);
-		return result;
+		if (da !== undefined) {
+			// The digits are adjacent, or equal with different randomness, so nothing fits beside
+			// them. Go under `a`: every level added below it is above `a`, and `a` is not a prefix
+			// of `b` in this branch, so it is still below `b`.
+			copyLevel(out, a!, i);
+			above = null;
+			continue;
+		}
+
+		if (db === undefined) {
+			throw codecError('invalid-position', 'a position must sit between two ordered positions');
+		}
+
+		// `a` has run out and `b` sits on the floor, so no digit fits below it. Take `b`'s digit
+		// with no randomness at all, which is under every level that shares that digit, and
+		// place the answer below that.
+		//
+		// Unless `b`'s own level is already that: then copying it puts the answer nowhere, and
+		// the room has to be found further down. The last level of a position never has zero
+		// randomness, because a position never ends in a zero byte, so this always ends.
+		if (zeroJitter(above!, i)) {
+			copyLevel(out, above!, i);
+			continue;
+		}
+		out.push(db, ...new Uint8Array(JITTER));
+		above = null;
 	}
 };
