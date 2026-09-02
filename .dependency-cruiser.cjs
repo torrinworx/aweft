@@ -25,9 +25,11 @@ module.exports = {
 		},
 		{
 			name: 'no-orphans',
-			severity: 'warn',
+			// An error, not a warning: a warning passes the gate, and an unwired source file is
+			// exactly how untested code hides from a coverage pass that only sees loaded files.
+			severity: 'error',
 			comment: 'A module nothing imports is either dead or unwired.',
-			from: { orphan: true, pathNot: ['\\.d\\.ts$', '(^|/)tests?/'] },
+			from: { orphan: true, pathNot: ['\\.d\\.ts$', '(^|/)tests?/', '(^|/)scripts/'] },
 			to: {},
 		},
 		{
