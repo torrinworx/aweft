@@ -4,15 +4,20 @@
 // framework names the file that refuses it. Widening it is a policy change and belongs in
 // the same commit as the reasoning.
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { type Manifest, checkManifests } from '../src/index.ts';
 
 const root = join(import.meta.dirname, '..', '..', '..');
 
+// A directory with no manifest is build residue, not a package: a checkout that moves across
+// a package's first commit leaves the ignored build info behind and the directory with it.
+// The coverage runner already skips those, and the two checks disagreeing meant this one died
+// on a stack trace where the other carried on.
 const manifests: Manifest[] = readdirSync(join(root, 'packages'))
 	.filter((name) => statSync(join(root, 'packages', name)).isDirectory())
+	.filter((name) => existsSync(join(root, 'packages', name, 'package.json')))
 	.map((name) => JSON.parse(readFileSync(join(root, 'packages', name, 'package.json'), 'utf8')) as Manifest);
 
 const violations = checkManifests(manifests, [], {
