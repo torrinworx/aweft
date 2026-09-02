@@ -12,8 +12,26 @@ with a gap in it refuses rather than permits.
 
 ## Quickstart
 
+A commit is what arrived on the wire. On the sending side it is what a watcher handed you;
+on the receiving side it is what came out of the decoder. Both are the same shape:
+
 ```ts
-import { apply, createObject, idOf, observer } from '@aweftjs/core';
+observer(clientDoc).watch((change) => send(encodeCommit(change)));  // one commit, on the wire
+const commit = decodeCommit(bytes);                                 // and off it again
+```
+
+An actor is who is speaking, and it comes from the connection, never from the message.
+`validate` believes `actor.id`: whoever calls it has already decided who this is. Reading the
+id out of the client's own message would let anyone claim to be anyone, which is the whole
+point of the line above.
+
+`actor.id` is compared against a path step exactly as written, so it is whatever the document
+names this actor by: `textIdOf(record)` when members are filed in a map by their own id, or
+the key itself when they sit in an object.
+
+```ts
+import { decodeCommit, encodeCommit } from '@aweftjs/codec';
+import { apply, createObject, idOf, observer, textIdOf } from '@aweftjs/core';
 import { ANY, REST, SELF, createIndex, record, validate } from '@aweftjs/schema';
 import type { Policy } from '@aweftjs/schema';
 
@@ -27,11 +45,11 @@ const policy: Policy = [
 	{ effect: 'allow', path: ['posts', ANY, 'title'] },
 	// Nobody may touch a verified flag, whatever else they were granted.
 	{ effect: 'deny', path: ['users', ANY, 'verified'] },
-	// A moderator may write anything.
+	// A moderator may write anything the deny above does not cover, because it does not.
 	{ effect: 'allow', path: [REST], roles: ['moderator'] },
 ];
 
-const actor = { id: 'A3f9kQ2mZ0pL7xTt' };
+const actor = { id: textIdOf(memberRecord) };  // who the connection authenticated
 
 const verdict = validate(commit, { index, policy, actor });
 if (verdict.ok) {
@@ -138,6 +156,28 @@ commit. Neither closes the connection.
 `unreachable` and `multiple-attach` are the applier's own words, deliberately, and both
 layers refuse the same input for the same stated cause.
 
+## A move re-homes authority
+
+Authority is the attach chain, so moving an object changes which rules govern it. An actor
+who may take an object out of a collection may put it where their own rules govern it, in the
+same commit, and a rule about its old path stops applying:
+
+```ts
+{ effect: 'allow', path: ['tasks', ANY] },                              // anyone may remove a task
+{ effect: 'allow', path: ['tasks', ANY, 'archived'], roles: ['admin'] },
+{ effect: 'allow', path: ['users', SELF, REST] },
+```
+
+One commit that removes `tasks/t1`, attaches the task under `users/<them>`, and sets
+`archived` is **authorized**, because at the path that commit gives it the flag is inside
+their own subtree. The same write in place is refused.
+
+The guard is the removal, not the field. Granting an actor the power to take something out of
+a shared collection is granting them the power to take it somewhere else, so grant removal
+where objects are genuinely theirs to take, and not where a rule about a field is the only
+thing protecting it. Design 010 has the model: a move needs remove authority at the old
+parent and add authority at the new one, and nothing else decides.
+
 ## Detaching is not deleting
 
 An observable with no attach edge is owned by nobody, so any actor who may write a slot may
@@ -167,6 +207,28 @@ exist, and the symptom is an authority answer about a path that is not there. `r
 
 `pathOf(index, id)` is where an observable lives, or undefined when nothing attaches it. A
 detached observable stays in the index, so the index grows the way the document does.
+
+**Bootstrapping.** An index is fed commits, and a server that builds its own document mutates
+rather than applies, so wire the watcher **before** the first mutation and record what it
+hands you:
+
+```ts
+const doc = createObject();
+const index = createIndex(idOf(doc));
+observer(doc).watch((change) => record(index, change));  // before anything is written
+
+atomic(() => { doc.users = createMap(); doc.tasks = createMap(); });
+```
+
+Wire it late and the index silently lacks paths for whatever it missed, and the symptom is an
+authority answer about a path that is not there. A document restored from a snapshot rather
+than from its history has no commits to replay, so say it as one: a commit of `add` deltas,
+one per slot, fed to `record`. There is no entry point for that yet, because nothing needs one
+until something persists a document.
+
+**Do not send a client back the commit it sent you.** It already applied it locally, and
+applying it a second time gives whatever it attached two attach edges. Broadcast an accepted
+commit to every replica except the one it came from.
 
 Measured on the shipped code with `bench/authority.ts`, against a document of 30,941
 observables at depth 4: finding where a leaf lives costs 0.334 us, deciding a one-delta commit
