@@ -3,8 +3,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ANY, REST, SELF, checkPolicy, createIndex, validate } from '../src/index.ts';
-import type { Rule } from '../src/index.ts';
+import { atomic, createMap, createObject, idOf, observer } from '@aweftjs/core';
+import type { ObservableMap } from '@aweftjs/core';
+import type { Commit } from '@aweftjs/codec';
+
+import { ANY, REST, SELF, checkPolicy, createIndex, record, validate } from '../src/index.ts';
+import type { Policy, Rule } from '../src/index.ts';
 
 import { commit, id, slot } from './documents.ts';
 
@@ -68,5 +72,42 @@ test('a rule added to a policy after it was first used is checked like any other
 			index: createIndex(id(1)), policy, actor: { id: 'me' },
 		}),
 		reason('bad-pattern'),
+	);
+});
+
+// The README claims a task built with a field only a moderator may write is refused for
+// everyone else, because attaching an observable emits the slots it was built with in the
+// same commit and a commit is authorized whole. A real program crashed into this while it
+// was undocumented, so this is the check that goes red if it stops being true.
+test('a slot a constructed observable carries is judged like any other write', () => {
+	const doc = createObject<Record<string, unknown>>();
+	const index = createIndex(idOf(doc));
+	const commits: Commit[] = [];
+	observer(doc).watch((change) => commits.push({ deltas: [...change.deltas] }));
+
+	atomic(() => { doc.tasks = createMap(); });
+	for (const commit of commits.splice(0)) record(index, commit);
+
+	const policy: Policy = [
+		{ effect: 'allow', path: ['tasks', ANY] },
+		{ effect: 'allow', path: ['tasks', ANY, 'title'] },
+		{ effect: 'allow', path: ['tasks', ANY, 'flagged'], roles: ['moderator'] },
+	];
+	const member = { id: 'member' };
+
+	const tasks = doc.tasks as ObservableMap<object>;
+	tasks.add(createObject({ title: 'write it up', flagged: false }));
+	const withFlag = commits.splice(0)[0]!;
+
+	const refused = validate(withFlag, { index, policy, actor: member });
+	assert.equal(refused.ok, false, 'a default for a field they cannot write refuses the whole commit');
+	assert.ok(!refused.ok && refused.reasons.some((r) => r.path?.[2] === 'flagged'));
+
+	tasks.add(createObject({ title: 'book the room' }));
+	const without = commits.splice(0)[0]!;
+	assert.equal(validate(without, { index, policy, actor: member }).ok, true, 'leaving it out works');
+	assert.equal(
+		validate(withFlag, { index, policy, actor: { id: 'mod', roles: ['moderator'] } }).ok, true,
+		'and a moderator may build it either way',
 	);
 });

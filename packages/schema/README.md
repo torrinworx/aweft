@@ -133,6 +133,24 @@ have one authority.
 { effect: 'allow', path: ['comments', SELF, REST], types: ['add', 'replace'] }
 ```
 
+## A field with its own authority is a field you do not construct
+
+Attaching an observable into a document emits the slots it was built with, in the same commit
+as the attach. So building a task with a field only a moderator may write puts a delta at a
+moderator-only path in the same commit, and a commit is authorized whole:
+
+```ts
+{ effect: 'allow', path: ['tasks', ANY] },
+{ effect: 'allow', path: ['tasks', ANY, 'title'] },
+{ effect: 'allow', path: ['tasks', ANY, 'flagged'], roles: ['moderator'] },
+
+tasks.add(createObject({ title: 'write it up', flagged: false }));  // refused for everyone else
+```
+
+The refusal names `tasks/<id>/flagged`, which is a field the author never meant to write and
+only set to its default. Leave it out and let a moderator add it: an absent slot and a slot
+holding `false` are the same thing to everyone who cannot write it.
+
 ## Three refusals, and what they mean
 
 ```ts
