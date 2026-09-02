@@ -16,7 +16,7 @@
 // Design 040. Design 014 claimed the keys already differed, nothing checked it, and they
 // did not. `bench/replicate.ts` measures what the levels cost and counts the distinctness.
 
-import { codecError } from '@aweftjs/codec';
+import { codecError, compareBytes } from '@aweftjs/codec';
 
 /**
  * A level is one digit and three random bytes.
@@ -105,6 +105,12 @@ const copyLevel = (out: number[], key: Uint8Array, i: number): void => {
  *   between(null, null)  // one level: a digit near the middle, then three random bytes
  */
 export const between = (a: Uint8Array | null, b: Uint8Array | null): Uint8Array => {
+	// Checked here rather than discovered further down: every branch below assumes the two
+	// bound a gap, and handed a pair that does not it would answer with a key outside it.
+	if (a !== null && b !== null && compareBytes(a, b) >= 0) {
+		throw codecError('invalid-position', 'a position must sit between two ordered positions');
+	}
+
 	const out: number[] = [];
 	let above: Uint8Array | null = b;
 
@@ -134,10 +140,6 @@ export const between = (a: Uint8Array | null, b: Uint8Array | null): Uint8Array 
 			continue;
 		}
 
-		if (db === undefined) {
-			throw codecError('invalid-position', 'a position must sit between two ordered positions');
-		}
-
 		// `a` has run out and `b` sits on the floor, so no digit fits below it. Take `b`'s digit
 		// with no randomness at all, which is under every level that shares that digit, and
 		// place the answer below that.
@@ -149,7 +151,9 @@ export const between = (a: Uint8Array | null, b: Uint8Array | null): Uint8Array 
 			copyLevel(out, above!, i);
 			continue;
 		}
-		out.push(db, ...new Uint8Array(JITTER));
+		// `db` is defined here: `a` has run out, so `digitFor` only answers undefined when `b`
+		// has a level too, and the entry check has already refused a pair that is not a gap.
+		out.push(db!, ...new Uint8Array(JITTER));
 		above = null;
 	}
 };
