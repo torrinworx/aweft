@@ -9,7 +9,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { alias, atomic, createArray, createObject, observer, snapshot } from '../src/index.ts';
+import {
+	alias, atomic, createArray, createObject, isReachable, observer, parentOf, snapshot, textIdOf,
+} from '../src/index.ts';
 import type { Change } from '../src/index.ts';
 
 interface Doc extends Record<string, unknown> {
@@ -459,4 +461,28 @@ test('a long cascade of listener mutations does not grow the stack', () => {
 
 	assert.equal(steps, depth + 1);
 	assert.equal(doc.a, depth);
+});
+
+test('turning the one attach edge into an alias takes the observable out of the document', () => {
+	// The slot stopped attaching the observable while the observable went on believing this
+	// slot was its home, so it was outside the document and reported that it was inside:
+	// isReachable said true, parentOf named a parent, snapshot did not contain it, and writes
+	// into it were accepted. A document in that state cannot be rebuilt from its own snapshot.
+	const doc = createObject<Record<string, unknown>>();
+	const child = createObject<Record<string, unknown>>();
+
+	doc.k = child;
+	child.leaf = 'here';
+	assert.equal(isReachable(child), true);
+
+	doc.k = alias(child);
+
+	assert.equal(isReachable(child), false, 'nothing attaches it, so nothing reaches it');
+	assert.equal(parentOf(child), undefined, 'and it has no parent to name');
+	assert.ok(!(textIdOf(child) in snapshot(doc).observables), 'the document does not contain it');
+	assert.throws(
+		() => { child.leaf = 'after'; },
+		(e: Error & { reason?: string }) => e.reason === 'unreachable',
+		'a write into it is refused, the same as any receiver refuses the same delta',
+	);
 });

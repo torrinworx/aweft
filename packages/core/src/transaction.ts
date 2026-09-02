@@ -149,9 +149,16 @@ export const write = (node: Node, slot: string, next: Cell | undefined): void =>
 		setCell(node, slot, next);
 		undos.push(() => setCell(node, slot, prior));
 
+		// Whatever the slot used to attach loses this edge, and `release` is what decides
+		// whether that means anything: it does nothing when something in this same commit has
+		// already re-homed the observable. There used to be a second guard here that skipped
+		// the release whenever the new cell named the same observable, and because an
+		// unchanged cell never reaches this far, the only thing it ever caught was an attach
+		// being replaced by an alias to the same observable. That left the observable's parent
+		// pointing at a slot that no longer attached it, so it was outside the document and
+		// said it was inside.
 		if (prior !== undefined && prior.kind === 'ref' && prior.edge === 'attach') {
-			const kept = next !== undefined && next.kind === 'ref' && next.node === prior.node;
-			if (!kept) release(prior.node, node, slot);
+			release(prior.node, node, slot);
 		}
 	});
 };
