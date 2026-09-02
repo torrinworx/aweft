@@ -3,6 +3,7 @@
 	"references": [
 		{ "path": "packages/codec" },
 		{ "path": "packages/core" },
+		{ "path": "packages/schema" },
 		{ "path": "packages/testing" }
 	]
 }

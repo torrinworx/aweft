@@ -1,0 +1,25 @@
+{
+	"name": "@aweftjs/schema",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"description": "Commit validation and mutation authority: who may write what, decided by path.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "node --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/codec": "*"
+	},
+	"devDependencies": {
+		"@aweftjs/core": "*",
+		"@aweftjs/testing": "*"
+	},
+	"aweft": {
+		"tier": 3,
+		"branchCoverage": 90
+	}
+}
