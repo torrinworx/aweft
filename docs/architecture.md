@@ -279,6 +279,40 @@ still indexes, so replaying resurrection history is the commit log's job. See de
 The listener registry, walkers and dispatch queue stay internal; the public seams are the two
 surfaces and `apply`. The stack ships one view binding, `dom`. See designs 030 and 031.
 
+### A policy is patterns over paths, and it is data
+
+A rule names a pattern over the attach path a delta lands on, plus optionally the roles and
+the delta types it covers. A step is a literal, `ANY` for one step, `SELF` for the actor's own
+id, or `REST` for the remainder. Every step is a string or a plain object, so a policy
+survives a round trip through JSON. See design 032.
+
+### Nothing is granted by default, and a deny wins
+
+A delta is authorized when an allow matches it and no deny does, whatever order the rules are
+written in. `effect` is required, an empty policy authorizes nothing, and allowing everything
+is a rule that has to be typed. A deny is about the path rather than about who, so a field
+some actors may write is granted to them and not covered by a wider grant. See design 033.
+
+### The authority index is resident and holds attach edges only
+
+One parent and one slot per observable, folded from the commits the document accepted, after
+each is applied. Rebuilding per commit is four orders of magnitude more expensive, and cached
+paths lose by the same margin whenever a subtree moves. `schema` therefore depends on `codec`
+and nothing else, and never touches a live document. See design 034.
+
+### The validator decides authority and reachability, and the applier decides the rest
+
+Three refusals: `unauthorized`, `unreachable`, `multiple-attach`. Whether a slot is free or
+taken needs the document's values, which an authority index deliberately does not hold, so an
+authorized commit still goes through the applier and a refusal from either refuses the commit.
+The two shared reason tokens are the applier's own words. See design 035.
+
+### An observable nothing attaches has no owner
+
+Authority is the chain of attach edges and nothing else, including nothing about where
+something used to be. So detaching is not deleting: an orphan may be adopted by any actor who
+may write the slot they attach it to. See design 036.
+
 ### `store` is not decided
 
 Deliberately open, pending the research that settles it. Until that lands, `store`
