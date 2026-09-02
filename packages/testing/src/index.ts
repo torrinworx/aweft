@@ -4,6 +4,9 @@ export { aweftPackageOf, moduleSpecifiers } from './imports.ts';
 
 export { loadFixtures, loadInvalidFixtures } from './fixtures.ts';
 
+export { driverChecks } from './drivers.ts';
+export type { DriverCheck, MakeDriver, StoreDriver } from './drivers.ts';
+
 export { checkManifests } from './manifests.ts';
 export type { Manifest } from './manifests.ts';
 

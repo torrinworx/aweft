@@ -108,7 +108,7 @@ version in lockstep.
 | `core` | Observers, observables, deltas, commits, scopes, identity | DOM, network, storage, schema |
 | `schema` | Validating a commit, and who may mutate what | Transport, storage |
 | `sync` | Moving commits between trees and over a channel | DOM, storage internals |
-| `store` | Persisting commits, the driver interface | DOM, transport |
+| `store` | Persisting a document as observable rows, its commit tail, the driver interface | DOM, transport |
 | `modules` | Discovery, dependency order, injection, lifecycle | Whether it runs on a client or a server |
 | `sandbox` | Isolated execution and the capability bridge | What the code it runs is for |
 | `dom` | Mounting, hydration, static render, URL and history | Storage, transport, components |
@@ -332,12 +332,19 @@ Authority is the chain of attach edges and nothing else, including nothing about
 something used to be. So detaching is not deleting: an orphan may be adopted by any actor who
 may write the slot they attach it to. See design 036.
 
-### `store` is not decided
+### `store` persists observable rows, and the delta stream does not stop at persistence
 
-Deliberately open, pending the research that settles it. Until that lands, `store`
-carries a snapshot-plus-index design with a driver interface, and the delta stream stops at
-the persistence boundary. Closing that gap is the point of the research, and an append-only
-log is a candidate rather than the answer.
+A document is one row per observable, and a commit writes only the rows its deltas name.
+Nothing writes a whole document. Beside the rows is a commit tail, bounded by what `sync`'s
+resume window needs, derived rather than authoritative. R1 measured the alternative at 648
+times the write latency for the same edit, and found that a document-sized write turns
+concurrent edits that touch nothing in common into lost updates.
+
+An observable that loses its attach edge keeps its row and nulls its parent, so re-attaching
+returns it whole. Collecting is a sweep the host runs on a policy. See designs 047 and 048.
+
+The query surface is not decided. Open research gates it, because one DSL over an index
+lookup on one driver and a capped scan on another says nothing about which it is.
 
 ---
 
@@ -355,12 +362,14 @@ primary author. A convention will not prevent that. A dependency will.
   real import graph by the root gate
 - the **seeded generator** for property tests, so a failure prints a seed that reproduces it,
   and one implementation of it rather than one per suite
+- the **driver conformance suite**, so a new `store` driver is correct by passing it rather
+  than by inspection. Its load-bearing check runs writers concurrently against slots that do
+  not overlap and asserts every one survives, because a suite that tests two writers
+  sequentially on one field encodes the lost update as the specification
 
 It grows these as the packages that need them arrive, and this list says "today" because it
 used to name all three as though they existed:
 
-- a **driver conformance suite**, so a new `store` driver is correct by passing it rather
-  than by inspection. Arrives with `store`.
 - a **module harness**, so an application tests its own modules with the tools the stack
   tests itself with. Arrives with `modules`.
 - a **DOM mock**, so nothing pulls in a full browser emulation. Arrives with `dom`.

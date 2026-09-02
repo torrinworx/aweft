@@ -1,0 +1,25 @@
+{
+	"name": "@aweftjs/store",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"description": "Persistence: observable rows, a bounded commit tail, and the driver interface.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "node --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/codec": "*",
+		"@aweftjs/core": "*"
+	},
+	"devDependencies": {
+		"@aweftjs/testing": "*"
+	},
+	"aweft": {
+		"tier": 4,
+		"branchCoverage": 90
+	}
+}

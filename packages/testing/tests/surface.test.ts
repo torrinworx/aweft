@@ -14,6 +14,7 @@ test('the entry file exports exactly what was decided', () => {
 		'applyCommit', 'aweftPackageOf', 'canonicalJson',
 		'checkEdge', 'checkFixture', 'checkGraph', 'checkInvalidFixture', 'checkManifests',
 		'commitToJson', 'deltaFromJson', 'deltaToJson',
+	'driverChecks',
 		'idFromText', 'idToText',
 		'loadFixtures', 'loadInvalidFixtures',
 		'modelApplier', 'moduleSpecifiers',
