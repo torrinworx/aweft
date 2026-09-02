@@ -54,6 +54,12 @@ const isRest = (step: PatternStep): step is typeof REST =>
  * that reads as protection until the day it does not.
  */
 export const checkPattern = (pattern: Pattern): void => {
+	// Every delta lands at least one step deep, at the slot it names, so an empty pattern can
+	// never match anything. An allow that never fires is the shape this check exists to refuse.
+	if (pattern.length === 0) {
+		throw codecError('bad-pattern', 'an empty pattern matches nothing, since every delta names a slot');
+	}
+
 	for (let i = 0; i < pattern.length; i++) {
 		const step = pattern[i]!;
 

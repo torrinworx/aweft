@@ -46,3 +46,8 @@ test('validate refuses a malformed policy itself, so a caller who never calls ch
 		reason('bad-pattern'),
 	);
 });
+
+test('an empty pattern is refused, because no delta lands at a path it could match', () => {
+	assert.throws(() => checkPolicy([{ effect: 'allow', path: [] }]), reason('bad-pattern'));
+	assert.throws(() => checkPolicy([{ effect: 'deny', path: [] }]), reason('bad-pattern'));
+});

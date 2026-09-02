@@ -180,3 +180,49 @@ test('detaching is not deleting: an observable nothing attaches has no owner, an
 
 	assert.equal(verdict.ok, true);
 });
+
+test('a move re-homes authority, so removal authority is authority to take something away', () => {
+	// Design 010: moving needs remove authority at the old parent and add authority at the
+	// new one, and authority is the attach chain and nothing else. So an actor who may take an
+	// object out of a shared collection may put it where their own rules govern it, and a rule
+	// about the object's old path stops applying. The refusing half of this, writing into a
+	// subtree the same commit detaches, is above; this is the half that is allowed, and it is
+	// the one somebody reaches for.
+	const index = createIndex(id(1));
+	record(index, commit(slot(1, 'tasks', ref(2)), slot(1, 'users', ref(7, 'map'))));
+	record(index, commit(
+		slot(2, 't1', ref(8)),
+		slot(8, 'title', 'shared work'),
+		{ type: 'add', id: id(7), ref: { kind: 'map', key: id(9) }, value: ref(9) },
+	));
+
+	const actor: Actor = { id: key(9) };
+	const policy: Policy = [
+		{ effect: 'allow', path: ['tasks', ANY] },
+		{ effect: 'allow', path: ['tasks', ANY, 'title'] },
+		{ effect: 'allow', path: ['tasks', ANY, 'archived'], roles: ['admin'] },
+		{ effect: 'allow', path: ['users', SELF, REST] },
+	];
+
+	const inPlace = commit(slot(8, 'archived', true));
+	assert.deepEqual(
+		codes(validate(inPlace, { index, policy, actor })),
+		['unauthorized'],
+		'the flag is admin only where the task lives',
+	);
+
+	const moved = commit(
+		slot(2, 't1', undefined),
+		slot(9, 'taken', ref(8)),
+		slot(8, 'archived', true),
+	);
+	assert.equal(
+		validate(moved, { index, policy, actor }).ok,
+		true,
+		'and it is theirs once the same commit moves the task into their own region',
+	);
+
+	// The guard is the removal, not the flag: take that grant away and the move stops.
+	const held: Policy = policy.filter((rule) => rule.path.length !== 2);
+	assert.deepEqual(codes(validate(moved, { index, policy: held, actor })), ['unauthorized']);
+});

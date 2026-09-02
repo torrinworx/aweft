@@ -32,8 +32,10 @@ const cases: Array<[string, Pattern, string[], boolean]> = [
 	['SELF matches the acting actor', ['users', SELF, 'name'], ['users', 'me', 'name'], true],
 	['SELF matches nobody else', ['users', SELF, 'name'], ['users', 'you', 'name'], false],
 
-	['an empty pattern is the root itself', [], [], true],
-	['and nothing in it', [], ['a'], false],
+	// checkPolicy refuses an empty pattern, so these two say what the matcher does with one
+	// rather than what a policy may contain.
+	['an empty pattern matches only the empty path', [], [], true],
+	['and no path a delta could have', [], ['a'], false],
 ];
 
 for (const [what, pattern, path, expected] of cases) {
