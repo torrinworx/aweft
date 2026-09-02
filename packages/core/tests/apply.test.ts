@@ -11,7 +11,9 @@ import assert from 'node:assert/strict';
 import { decodeCommit, encodeCommit } from '@aweftjs/codec';
 import type { Commit } from '@aweftjs/codec';
 
-import { apply, atomic, createArray, createObject, idOf, observer, snapshot } from '../src/index.ts';
+import {
+	apply, atomic, createArray, createMap, createObject, idOf, observer, snapshot,
+} from '../src/index.ts';
 import type { Change } from '../src/index.ts';
 
 interface Block {
@@ -185,4 +187,42 @@ test('the same commit applied outside a delivery does reach the mirror watcher i
 	inside = false;
 
 	assert.deepEqual(seen, [true], 'applying outside the delivery keeps the flag meaningful');
+});
+
+// The decoder refuses a slot key the format forbids, so a commit that arrived as bytes has
+// been through that check. One handed straight over in the same process has not, and a key
+// the format forbids applied here makes a document nothing can ever encode: every later
+// reader is refused, and the refusal comes from the encoder rather than from whoever wrote
+// the bad key. `spec/format.md` 6.6 lists these as apply-stage refusals, so the applier is
+// where they belong.
+test('a slot key the format forbids is refused where it is applied, not where it is read', () => {
+	const doc = createArray<number>();
+	const id = idOf(doc);
+
+	for (const [what, key] of [
+		['ending in a zero byte', Uint8Array.of(0x80, 0x00)],
+		['empty', new Uint8Array(0)],
+		['a single zero', Uint8Array.of(0x00)],
+	] as const) {
+		assert.throws(
+			() => apply(doc, { deltas: [{ type: 'add', id, ref: { kind: 'array', key }, value: 1 }] }),
+			(error: Error & { reason?: string }) => {
+				assert.equal(error.reason, 'invalid-position', what);
+				return true;
+			},
+			what,
+		);
+	}
+	assert.equal(doc.length, 0, 'and nothing was applied');
+
+	const map = createMap();
+	assert.throws(
+		() => apply(map, {
+			deltas: [{
+				type: 'add', id: idOf(map), ref: { kind: 'map', key: Uint8Array.of(1, 2, 3) }, value: 1,
+			}],
+		}),
+		/invalid-id/,
+		'a map slot is named by an id, and a short one is not',
+	);
 });

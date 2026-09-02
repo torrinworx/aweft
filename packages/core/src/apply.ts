@@ -8,7 +8,7 @@
 
 import {
 	type Commit, type Delta, type ObservableKind,
-	codecError, idToText, isReference,
+	assertId, assertPosition, codecError, idToText, isReference,
 } from '@aweftjs/codec';
 
 import type { Cell, Node } from './types.ts';
@@ -16,6 +16,22 @@ import { anchorOf, slotKeyOf } from './node.ts';
 import { nodeFor } from './create.ts';
 import { atomic, write } from './transaction.ts';
 import { nodeOf } from './value.ts';
+
+/**
+ * Every ref names a slot the format allows.
+ *
+ * The decoder checks this on the way in, so a commit that arrived as bytes has been through
+ * it already. One that did not, because it was handed straight over in the same process, has
+ * not, and a position the format forbids applied here makes a document nothing can ever
+ * encode: every later reader of it is refused, and the refusal comes from the encoder rather
+ * than from whoever wrote the bad key.
+ */
+const checkRefs = (commit: Commit): void => {
+	for (const delta of commit.deltas) {
+		if (delta.ref.kind === 'array') assertPosition(delta.ref.key);
+		else if (delta.ref.kind === 'map') assertId(delta.ref.key);
+	}
+};
 
 /** Every observable the commit mentions, and the kind each mention says it is. */
 const kindsIn = (commit: Commit, index: Map<string, Node>): Map<string, ObservableKind> => {
@@ -202,6 +218,7 @@ export const apply = (observable: unknown, commit: Commit): void => {
 		throw codecError('empty-commit', 'a commit carries at least one delta');
 	}
 
+	checkRefs(commit);
 	const kinds = kindsIn(commit, index);
 	const attachedBy = new Map<string, string>();
 	checkAttachments(commit, index, attachedBy);
