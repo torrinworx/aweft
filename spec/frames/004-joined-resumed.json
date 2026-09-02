@@ -1,0 +1,31 @@
+{
+	"note": "A resume the host could answer from what it still holds: not whole, and seq is the have.",
+	"frame": {
+		"kind": "joined",
+		"topic": 2,
+		"accepted": 9,
+		"seq": 17,
+		"whole": false,
+		"session": "1112131415161718191a1b1c",
+		"root": {
+			"id": "0102030405060708090a0b0c",
+			"kind": "map"
+		}
+	},
+	"wire": [
+		1,
+		2,
+		9,
+		17,
+		false,
+		{
+			"hex": "1112131415161718191a1b1c"
+		},
+		{
+			"hex": "0102030405060708090a0b0c"
+		},
+		2,
+		null
+	],
+	"bytes": "8901020911f44c1112131415161718191a1b1c4c0102030405060708090a0b0c02f6"
+}

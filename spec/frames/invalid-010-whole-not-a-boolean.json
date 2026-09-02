@@ -1,0 +1,5 @@
+{
+	"note": "Whether a frame describes the whole document is a yes or a no.",
+	"reason": "bad-frame",
+	"bytes": "8901000000637965734c0102030405060708090a0b0c4c0102030405060708090a0b0c00f6"
+}

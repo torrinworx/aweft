@@ -1,0 +1,49 @@
+{
+	"note": "Two commits in one frame, numbered from the first. Batching is not rate limiting.",
+	"frame": {
+		"kind": "commits",
+		"topic": 1,
+		"first": 5,
+		"commits": [
+			{
+				"deltas": [
+					{
+						"type": "add",
+						"id": "0102030405060708090a0b0c",
+						"ref": {
+							"kind": "object",
+							"key": "title"
+						},
+						"value": "plan"
+					}
+				]
+			},
+			{
+				"deltas": [
+					{
+						"type": "remove",
+						"id": "0102030405060708090a0b0c",
+						"ref": {
+							"kind": "object",
+							"key": "gone"
+						}
+					}
+				]
+			}
+		]
+	},
+	"wire": [
+		2,
+		1,
+		5,
+		[
+			{
+				"hex": "818184004c0102030405060708090a0b0c8200657469746c6564706c616e"
+			},
+			{
+				"hex": "818183024c0102030405060708090a0b0c820064676f6e65"
+			}
+		]
+	],
+	"bytes": "8402010582581e818184004c0102030405060708090a0b0c8200657469746c6564706c616e5818818183024c0102030405060708090a0b0c820064676f6e65"
+}

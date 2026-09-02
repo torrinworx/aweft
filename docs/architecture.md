@@ -218,6 +218,25 @@ A refusal refuses the commit and never the connection. A well-behaved client pro
 through ordinary races, and disconnecting turns every race into a full resynchronization at
 the moment the client is busiest. See designs 011 and 012.
 
+### A replica is what the host said, plus what still applies on top
+
+A client applies its own commits at once and holds them until the host decides them. Every
+case where the host says something unexpected runs one mechanism: undo the pending commits
+newest first, apply what arrived, redo them oldest first. A commit that cannot be redone is
+one the host would refuse for the same cause, so it is dropped and reported. That is the
+stated outcome for a client mutating an object another client just removed: the write is
+refused as `unreachable`, rolled back, and handed to the application with its prior values.
+See design 043.
+
+### A link carries frames, and a resynchronization moves the document
+
+A channel is four functions and carries frames, not bytes; encoding is what an adapter does
+when its transport needs bytes. A frame names its topic by a number agreed at the join and
+states the sequence of its first commit, so one link carries many documents and a hole is
+caught where it happens. When a client needs the whole document it is sent one commit of
+adds and applies the difference against what it holds, so the document an application is
+holding is never swapped for another one. See designs 041, 042 and 044.
+
 ### A commit closes with the mutation, or with the atomic block
 
 One mutation is one commit, and `atomic(fn)` makes everything inside it one commit. A block
@@ -662,8 +681,5 @@ Each needs a home before the build order past phase 4 is final.
 - **Stored data migration.** `spec/CHANGELOG.md` versions the wire format. Nothing yet owns
   the evolution of data already stored, and upcasting old records is the classically hard part
   of any log-shaped design.
-- **Sync conflict semantics.** A client mutating an object another client just deleted must
-  have a stated outcome. Throwing wedges the connection. "An alternative merge strategy later"
-  does not answer what the default does.
 - **Quotas, secrets, and resident processes.** `modules` owns discovery and injection only.
   A platform running other people's code needs all three and none has an owner.

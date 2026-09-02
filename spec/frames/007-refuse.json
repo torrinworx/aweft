@@ -1,0 +1,45 @@
+{
+	"note": "One reason per refused delta. A path is present when the refusing side could decide it.",
+	"frame": {
+		"kind": "refuse",
+		"topic": 0,
+		"seq": 4,
+		"reasons": [
+			{
+				"code": "unauthorized",
+				"message": "users/x/verified is not granted",
+				"path": [
+					"users",
+					"x",
+					"verified"
+				]
+			},
+			{
+				"code": "unreachable",
+				"message": "AQIDBAUGBwgJCgsM has no attach path from the root"
+			}
+		]
+	},
+	"wire": [
+		4,
+		0,
+		4,
+		[
+			[
+				"unauthorized",
+				"users/x/verified is not granted",
+				[
+					"users",
+					"x",
+					"verified"
+				]
+			],
+			[
+				"unreachable",
+				"AQIDBAUGBwgJCgsM has no attach path from the root",
+				null
+			]
+		]
+	],
+	"bytes": "8404000482836c756e617574686f72697a6564781f75736572732f782f7665726966696564206973206e6f74206772616e746564836575736572736178687665726966696564836b756e726561636861626c65783141514944424155474277674a4367734d20686173206e6f2061747461636820706174682066726f6d2074686520726f6f74f6"
+}

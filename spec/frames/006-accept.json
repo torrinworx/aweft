@@ -1,0 +1,16 @@
+{
+	"note": "Decided through client sequence 12, which landed at topic sequence 30.",
+	"frame": {
+		"kind": "accept",
+		"topic": 0,
+		"through": 12,
+		"at": 30
+	},
+	"wire": [
+		3,
+		0,
+		12,
+		30
+	],
+	"bytes": "8403000c181e"
+}

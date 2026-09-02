@@ -1,0 +1,20 @@
+{
+	"note": "A rejoin: the topic number is the client's to choose, and the session came from a joined.",
+	"frame": {
+		"kind": "join",
+		"topic": 3,
+		"name": "board:42",
+		"have": 17,
+		"resume": "1112131415161718191a1b1c"
+	},
+	"wire": [
+		0,
+		3,
+		"board:42",
+		17,
+		{
+			"hex": "1112131415161718191a1b1c"
+		}
+	],
+	"bytes": "85000368626f6172643a3432114c1112131415161718191a1b1c"
+}

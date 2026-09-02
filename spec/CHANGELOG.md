@@ -104,3 +104,36 @@ Open: the integrity tag algorithm, and the fate of a detached subtree.
   by a comparison independent of the encoder's sort, so the bytes are checked against a
   statement the encoder did not produce. The regenerated corpus is byte-identical, which is
   the point: the change is to what a regeneration would do with a broken encoder.
+
+### The replication protocol, added 2026-09-02
+
+`spec/replication.md` v0 and the fixture corpus in `spec/frames/`. It builds on the commit
+format and changes nothing about it.
+
+- A link carries frames in order, and delivery is never synchronous with the send: a commit
+  applied from inside another document's delivery breaks the ordering the client rests on.
+- A link carries many documents. Each is a topic, named by a string on the join frame and
+  numbered by an integer on every frame after it. A string topic on every frame measured
+  +29.5% over the commit bytes it carries, which is why it is a number. Decision 042.
+- Two sequence counters per topic: the client numbers what it sends, the host numbers what it
+  publishes. An accept states both, because a commit is never sent back to whoever made it and
+  the sender would otherwise have a hole in its count of the topic.
+- A frame carries one or more commits. That is batching and never rate limiting: every commit
+  goes, in order, in the tick it was made. Frames are not compressed one at a time, because
+  gzip per frame measured larger than the frames themselves.
+- Seven frame kinds, written as arrays with the kind first, encoded by section 6 of the state
+  format. A frame that does not decode ends the link; a commit that is refused never does.
+- A `joined` frame says whether it describes the whole document, as a field of its own rather
+  than by carrying a reset. A host whose document is empty has no commit to send and still has
+  to be able to say so, or a replica holding stale content keeps it forever.
+- A reset is the whole document as one commit of adds, and a receiver of a whole frame applies
+  the difference rather than replacing the document. Decision 044.
+- A host sends the accept for a commit before anything else it sends that client afterwards,
+  so a host that writes in answer to a commit does not put the sender out of step.
+- A client that has lost its place leaves the topic and joins it again presenting no session,
+  rather than joining with a count of zero while still a member.
+- One document is served under one authority; a second join resolving it differently is
+  refused with `policy-mismatch`.
+- 9 frame fixtures and 10 rejections, each rejection naming the reason it must be refused for.
+- Not specified, on purpose: application messages, forwarding between hosts (so no frame
+  carries an originating actor), read filtering, and how long a host remembers.

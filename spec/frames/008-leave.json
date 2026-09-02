@@ -1,0 +1,12 @@
+{
+	"note": "Done with this topic. The link stays up for the others.",
+	"frame": {
+		"kind": "leave",
+		"topic": 7
+	},
+	"wire": [
+		5,
+		7
+	],
+	"bytes": "820507"
+}

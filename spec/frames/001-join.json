@@ -1,0 +1,17 @@
+{
+	"note": "A first join: the name rides here and on no other frame, and there is no session yet.",
+	"frame": {
+		"kind": "join",
+		"topic": 0,
+		"name": "board:42",
+		"have": 0
+	},
+	"wire": [
+		0,
+		0,
+		"board:42",
+		0,
+		null
+	],
+	"bytes": "85000068626f6172643a343200f6"
+}

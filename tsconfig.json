@@ -4,6 +4,7 @@
 		{ "path": "packages/codec" },
 		{ "path": "packages/core" },
 		{ "path": "packages/schema" },
+		{ "path": "packages/sync" },
 		{ "path": "packages/testing" }
 	]
 }
