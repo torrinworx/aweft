@@ -142,3 +142,28 @@ format and changes nothing about it.
 - 9 frame fixtures and 10 rejections, each rejection naming the reason it must be refused for.
 - Not specified, on purpose: application messages, forwarding between hosts (so no frame
   carries an originating actor), read filtering, and how long a host remembers.
+
+### The replication protocol, rewritten as v1 2026-09-03
+
+v0 had a host and a client. v1 has two equal ends and replaces v0 whole. Decision 053.
+
+- Nothing in the protocol says which end is which. Both run the same rules.
+- Each end numbers the topics it opens, and a frame names a topic by the sender's number, so
+  a name still rides on no commit frame. `open` carries the name, the sender's root id and
+  kind, and whether it wants the other end's state.
+- A topic is live at an end once it has shared the name and received the other end's `open`.
+  Different root ids under one name are refused with `root-mismatch`.
+- Six frame kinds: `open`, `state`, `commits`, `refused`, `leave`, `fault`. `join`, `joined`,
+  `accept` and `refuse` are gone: they were verdicts, and a verdict needs an authority.
+- One sequence counter per topic per direction, used only so a `refused` can name a commit.
+  Loss is not detected: a link delivers in order or ends.
+- A commit an end cannot apply is reported to that end's application and answered with
+  `refused`, so the sender's application hears it too. The protocol never chooses which end
+  yields; an end asks for the other's state by sending `open` again with `want`. Decision 054.
+- A commit that arrived over a link is never sent back over it, and is delivered to every
+  other consumer of the document as a commit made at this end. Decision 055.
+- Nothing resumes. Sessions, replay windows and `policy-mismatch` are gone with the host.
+- An `open` may state no root, meaning the sender holds nothing and wants the other end's
+  state; two ends with nothing fault each other with `no-document` rather than waiting.
+  Topic and sequence numbers below 1 are `bad-frame`. Added 2026-09-03 from the check-in.
+- The frame fixtures in `spec/frames/` are regenerated for v1.

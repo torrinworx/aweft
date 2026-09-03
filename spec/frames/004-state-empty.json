@@ -1,0 +1,13 @@
+{
+	"note": "An empty document has no commit to say, and saying so is what drops whatever the other end held.",
+	"frame": {
+		"kind": "state",
+		"topic": 2
+	},
+	"wire": [
+		1,
+		2,
+		null
+	],
+	"bytes": "830102f6"
+}

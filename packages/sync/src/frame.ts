@@ -1,13 +1,13 @@
-// Frames: what one side of a replication link says to the other.
+// Frames: what one end of a link says to the other.
 //
 // A frame is a value, not bytes. Handing one across an in process channel costs 0.011 us
 // against 4.29 us to encode and decode it, so the encoding is a property of the transport
 // that needs one rather than of the protocol (design 041). `encodeFrame` and `decodeFrame`
 // are that encoding, and they are what a second implementation has to match.
 //
-// Every frame names a topic by a small integer agreed when the topic was joined. The string
-// an application wrote is on the join frame and nowhere else: measured, a string on every
-// frame costs 29.5% over the commit bytes it carries (`bench/replicate.ts`).
+// Every frame names a topic by a small integer each end chose for the topics it opened. The
+// string an application wrote is on the `open` frame and nowhere else: measured, a string on
+// every frame costs 29.5% over the commit bytes it carries (`bench/replicate.ts`).
 
 import {
 	type Commit, type ObservableKind, type WireValue,
@@ -21,56 +21,38 @@ export interface RootRef {
 }
 
 /**
- * Why one delta of a commit was refused, in the form that crosses a link.
+ * Why a commit was refused, in the form that crosses a link.
  *
- * The delta itself is not carried. The receiver of a refusal is the side that sent the
+ * The commit itself is not carried. The end that hears a refusal is the end that sent the
  * commit, so it already holds every delta; what it does not hold is the cause and the place.
  */
 export interface WireReason {
 	readonly code: string;
 	readonly message: string;
-	/** Where the delta lands, when the refusing side could decide that. */
+	/** Where the delta lands, when the refusing end could decide that. */
 	readonly path?: readonly string[];
 }
 
-/** Asks to sync a named document on this link, and gives it a number for later frames. */
-export interface JoinFrame {
-	readonly kind: 'join';
+/**
+ * Shares a document under a name, and gives it the number the sender's later frames use.
+ *
+ * `want` asks the other end to say its whole document, which an end sets when it holds
+ * nothing for the name: a document it has just minted, or one it has chosen to give up.
+ */
+export interface OpenFrame {
+	readonly kind: 'open';
 	readonly topic: number;
 	readonly name: string;
-	/** How many commits this side has already taken for this topic, so a resume can skip them. */
-	readonly have: number;
-	/** The session this is resuming, when it is resuming one. */
-	readonly resume?: Uint8Array;
+	/** The sender's root, or null when the sender holds nothing under the name and wants the other end's. */
+	readonly root: RootRef | null;
+	readonly want: boolean;
 }
 
-/** Answers a join: what the document is, and how much of what this side sent survived. */
-export interface JoinedFrame {
-	readonly kind: 'joined';
+/** The sender's whole document, said as one commit. Absent when the document is empty. */
+export interface StateFrame {
+	readonly kind: 'state';
 	readonly topic: number;
-	/** The highest sequence number from the joining side that was accepted before now. */
-	readonly accepted: number;
-	/**
-	 * Where the joining side stands in the topic's own stream once this frame is processed.
-	 *
-	 * With a reset, the sequence the reset was taken at. Without one, the `have` the join
-	 * asked with, unchanged, and whatever was missed follows as ordinary commits.
-	 */
-	readonly seq: number;
-	/**
-	 * True when this frame describes the whole document, so the receiver drops anything it
-	 * holds that the frame does not mention.
-	 *
-	 * It is a field of its own rather than "a reset is present", because a host whose document
-	 * is empty has no commit to send and still has to be able to say so. Without it a replica
-	 * holding stale content would keep it forever.
-	 */
-	readonly whole: boolean;
-	/** The session id to present on a later resume. */
-	readonly session: Uint8Array;
-	readonly root: RootRef;
-	/** The whole document said as one commit, when the joining side needs one. */
-	readonly reset?: Commit;
+	readonly commit?: Commit;
 }
 
 /** Commits, in the order they were made, starting at the sequence number stated. */
@@ -81,30 +63,20 @@ export interface CommitsFrame {
 	readonly commits: readonly Commit[];
 }
 
-/** Every commit through this sequence number was applied. */
-export interface AcceptFrame {
-	readonly kind: 'accept';
-	readonly topic: number;
-	/** The highest sequence number the sending side assigned that was accepted. */
-	readonly through: number;
-	/**
-	 * Where the accepting side put the last of them in the topic's own stream.
-	 *
-	 * A commit is never sent back to whoever made it, so without this the sender would have a
-	 * hole in its count of the topic and would ask to resume from before its own work.
-	 */
-	readonly at: number;
-}
-
-/** One commit was refused, and here is a reason for each delta that caused it. */
-export interface RefuseFrame {
-	readonly kind: 'refuse';
+/**
+ * One commit did not apply here, and here is why.
+ *
+ * `topic` is the refusing end's number and `seq` is the sequence the other end assigned.
+ * A refusal refuses the commit and never the link.
+ */
+export interface RefusedFrame {
+	readonly kind: 'refused';
 	readonly topic: number;
 	readonly seq: number;
 	readonly reasons: readonly WireReason[];
 }
 
-/** This side is done with the topic. The link stays up. */
+/** This end is done with the topic. The link stays up for the others. */
 export interface LeaveFrame {
 	readonly kind: 'leave';
 	readonly topic: number;
@@ -113,8 +85,12 @@ export interface LeaveFrame {
 /**
  * The link cannot carry on for this topic.
  *
- * A refusal is not a fault: refusing a commit never closes anything (design 012). A fault
- * is a join that was turned away, or a frame that did not make sense.
+ * A refusal is not a fault: refusing a commit never ends anything. A fault is two documents
+ * that are not one document, or a frame about a topic nothing is open under.
+ *
+ * The topic is the number the end being told uses, because the two cases that raise a fault
+ * are exactly the two where the sender has no number to give: nothing is open under it, or
+ * the topic is being turned away before it ever opened. Topic 0 is the link itself.
  */
 export interface FaultFrame {
 	readonly kind: 'fault';
@@ -123,13 +99,13 @@ export interface FaultFrame {
 	readonly message: string;
 }
 
-/** Everything one side of a replication link can say to the other. */
+/** Everything one end of a link can say to the other. */
 export type Frame =
-	| JoinFrame | JoinedFrame | CommitsFrame | AcceptFrame | RefuseFrame | LeaveFrame | FaultFrame;
+	| OpenFrame | StateFrame | CommitsFrame | RefusedFrame | LeaveFrame | FaultFrame;
 
 // The wire spells a kind as a small integer and this table is the only place the two meet.
 // Appending is a format change; renumbering is a break.
-const KINDS = ['join', 'joined', 'commits', 'accept', 'refuse', 'leave', 'fault'] as const;
+const KINDS = ['open', 'state', 'commits', 'refused', 'leave', 'fault'] as const;
 const ROOT_KINDS: readonly ObservableKind[] = ['object', 'array', 'map'];
 
 const kindNumber = (kind: Frame['kind']): number => KINDS.indexOf(kind);
@@ -173,17 +149,58 @@ const asPath = (value: WireValue): readonly string[] | undefined => {
 const reasonValue = (reason: WireReason): WireValue =>
 	[reason.code, reason.message, reason.path === undefined ? null : [...reason.path]];
 
+/** Is this one of the `{ code, message, path? }` objects a thrown refusal carries? */
+const isReason = (value: unknown): value is WireReason => {
+	const held = value as { code?: unknown; message?: unknown; path?: unknown } | null;
+	return held !== null && typeof held === 'object'
+		&& typeof held.code === 'string' && typeof held.message === 'string'
+		&& (held.path === undefined || Array.isArray(held.path));
+};
+
 /**
- * The reasons to send back for a refusal that came out of an applier rather than a policy.
+ * The reasons to send back for a commit that would not apply.
  *
- * Every refusal in this stack carries a stable token as `reason`. Anything without one is a
- * defect rather than a refusal, so it is re-thrown instead of being reported as one.
+ * Params:
+ *   error: whatever was thrown while the commit was applying
+ *
+ * Returns: one reason per cause. An error carrying a `refusals` array of
+ * `{ code, message, path? }` gives one reason each; anything else carrying a stable `reason`
+ * token gives one reason built from that token and the message.
+ *
+ * Throws the error back when it carries neither. Something with no cause on it is a defect
+ * rather than a refusal, and swallowing it would report a bug as a conflict.
+ *
+ * Example:
+ *   try { tracker.receive(commit); } catch (error) { answer(reasonsOf(error)); }
  */
 export const reasonsOf = (error: unknown): WireReason[] => {
+	const refusals = (error as { refusals?: unknown }).refusals;
+	if (Array.isArray(refusals)) {
+		const held = refusals.filter(isReason);
+		if (held.length > 0) {
+			return held.map((reason) => reason.path === undefined
+				? { code: reason.code, message: reason.message }
+				: { code: reason.code, message: reason.message, path: [...reason.path] });
+		}
+	}
+
 	const reason = (error as { reason?: string }).reason;
 	if (typeof reason !== 'string') throw error;
 	return [{ code: reason, message: (error as Error).message }];
 };
+
+/** The reasons an error carries, or undefined when it is not a refusal at all. */
+export const refusalOf = (error: unknown): WireReason[] | undefined => {
+	try {
+		return reasonsOf(error);
+	} catch {
+		return undefined;
+	}
+};
+
+/** What an error says, for a reason built from something that was not a refusal. */
+export const messageOf = (error: unknown): string =>
+	error instanceof Error ? error.message : String(error);
 
 /**
  * Turn a frame into the bytes a transport carries.
@@ -195,28 +212,25 @@ export const reasonsOf = (error: unknown): WireReason[] => {
  * goes through the one canonical encoding this stack has.
  *
  * Example:
- *   channel.send(encodeFrame({ kind: 'accept', topic: 0, through: 12 }));
+ *   socket.send(encodeFrame({ kind: 'leave', topic: 3 }));
  */
 export const encodeFrame = (frame: Frame): Uint8Array => {
 	const head = kindNumber(frame.kind);
 
-	if (frame.kind === 'join') {
-		return encodeValue([head, frame.topic, frame.name, frame.have,
-			frame.resume === undefined ? null : frame.resume]) as Uint8Array;
+	if (frame.kind === 'open') {
+		return encodeValue([head, frame.topic, frame.name,
+			frame.root === null ? null : frame.root.id,
+			frame.root === null ? null : ROOT_KINDS.indexOf(frame.root.kind), frame.want]) as Uint8Array;
 	}
-	if (frame.kind === 'joined') {
-		return encodeValue([head, frame.topic, frame.accepted, frame.seq, frame.whole, frame.session,
-			frame.root.id, ROOT_KINDS.indexOf(frame.root.kind),
-			frame.reset === undefined ? null : encodeCommit(frame.reset)]) as Uint8Array;
+	if (frame.kind === 'state') {
+		return encodeValue([head, frame.topic,
+			frame.commit === undefined ? null : encodeCommit(frame.commit)]) as Uint8Array;
 	}
 	if (frame.kind === 'commits') {
 		return encodeValue([head, frame.topic, frame.first,
 			frame.commits.map((commit) => encodeCommit(commit))]) as Uint8Array;
 	}
-	if (frame.kind === 'accept') {
-		return encodeValue([head, frame.topic, frame.through, frame.at]) as Uint8Array;
-	}
-	if (frame.kind === 'refuse') {
+	if (frame.kind === 'refused') {
 		return encodeValue([head, frame.topic, frame.seq,
 			frame.reasons.map(reasonValue)]) as Uint8Array;
 	}
@@ -237,13 +251,26 @@ export const encodeFrame = (frame: Frame): Uint8Array => {
  * Throws a `CodecError` when the bytes are not a frame, naming the field that was wrong. The
  * `reason` is `bad-frame` for a frame this package can read but does not accept, and whatever
  * the byte layer says otherwise: `truncated`, `trailing-bytes`, `unsupported-major`,
- * `invalid-utf8` and the rest. Branch on there being a `CodecError`, not on one reason. A
- * frame that does not decode is a fault and may close a link; a commit that is refused never
- * does (design 012).
+ * `invalid-utf8` and the rest. Branch on there being a `CodecError`, not on one reason. Bytes
+ * that do not decode end the link; a commit that is refused never does.
  *
  * Example:
  *   const frame = decodeFrame(event.data);
  */
+/** A topic number: an integer from 1. Zero names the link, which only a fault may do. */
+const asTopic = (value: WireValue, allowLink: boolean): number => {
+	const n = asNumber(value, 'a topic');
+	if (n < 1 && !(allowLink && n === 0)) bad(`${n} is not a topic number`);
+	return n;
+};
+
+/** A sequence number: an integer from 1. */
+const asSeq = (value: WireValue): number => {
+	const n = asNumber(value, 'a sequence number');
+	if (n < 1) bad(`${n} is not a sequence number`);
+	return n;
+};
+
 export const decodeFrame = (bytes: Uint8Array): Frame => {
 	const value = decodeValue(bytes);
 	if (!Array.isArray(value) || value.length === 0) bad('a frame is a non-empty array');
@@ -253,53 +280,47 @@ export const decodeFrame = (bytes: Uint8Array): Frame => {
 	const kind = KINDS[head];
 	if (kind === undefined) bad(`${head} is not a frame kind`);
 
-	if (kind === 'join') {
-		const [, topic, name, have, resume] = asArray(value, 5, 'a join');
-		const frame: JoinFrame = {
-			kind, topic: asNumber(topic!, 'a topic'), name: asText(name!, 'a topic name'),
-			have: asNumber(have!, 'a have count'),
+	if (kind === 'open') {
+		const [, topic, name, rootId, rootKind, want] = asArray(value, 6, 'an open');
+		if (typeof want !== 'boolean') bad('a want is a boolean');
+		const nothing = rootId === null || rootKind === null;
+		if (nothing && (rootId !== null || rootKind !== null)) bad('an open with no root has neither an id nor a kind');
+		if (nothing && !want) bad('an end that holds nothing wants the other end\'s state');
+		let root: RootRef | null = null;
+		if (!nothing) {
+			const kindOfRoot = ROOT_KINDS[asNumber(rootKind!, 'a root kind')];
+			if (kindOfRoot === undefined) bad(`${String(rootKind)} is not an observable kind`);
+			root = { id: asBytes(rootId!, 'a root id'), kind: kindOfRoot! };
+		}
+		return {
+			kind, topic: asTopic(topic!, false), name: asText(name!, 'a topic name'), root, want: want as boolean,
 		};
-		return resume === null ? frame : { ...frame, resume: asBytes(resume!, 'a session id') };
 	}
-	if (kind === 'joined') {
-		const [, topic, accepted, seq, whole, session, rootId, rootKind, reset] =
-			asArray(value, 9, 'a joined');
-		const root = ROOT_KINDS[asNumber(rootKind!, 'a root kind')];
-		if (root === undefined) bad(`${String(rootKind)} is not an observable kind`);
-		if (typeof whole !== 'boolean') bad('a whole flag is a boolean');
-		const frame: JoinedFrame = {
-			kind, topic: asNumber(topic!, 'a topic'), accepted: asNumber(accepted!, 'an accepted count'),
-			seq: asNumber(seq!, 'a sequence number'), whole: whole as boolean,
-			session: asBytes(session!, 'a session id'),
-			root: { id: asBytes(rootId!, 'a root id'), kind: root! },
-		};
-		return reset === null ? frame : { ...frame, reset: decodeCommit(asBytes(reset!, 'a reset')) };
+	if (kind === 'state') {
+		const [, topic, commit] = asArray(value, 3, 'a state');
+		const frame: StateFrame = { kind, topic: asTopic(topic!, false) };
+		return commit === null
+			? frame
+			: { ...frame, commit: decodeCommit(asBytes(commit!, 'a state commit')) };
 	}
 	if (kind === 'commits') {
 		const [, topic, first, commits] = asArray(value, 4, 'a commits frame');
 		if (!Array.isArray(commits)) bad('a commits frame carries an array of commits');
-		const list_ = commits as readonly WireValue[];
-		if (list_.length === 0) bad('a commits frame carries at least one commit');
+		const held = commits as readonly WireValue[];
+		if (held.length === 0) bad('a commits frame carries at least one commit');
 		return {
-			kind, topic: asNumber(topic!, 'a topic'), first: asNumber(first!, 'a sequence number'),
-			commits: list_.map((c) => decodeCommit(asBytes(c, 'a commit'))),
+			kind, topic: asTopic(topic!, false), first: asSeq(first!),
+			commits: held.map((c) => decodeCommit(asBytes(c, 'a commit'))),
 		};
 	}
-	if (kind === 'accept') {
-		const [, topic, through, at] = asArray(value, 4, 'an accept');
+	if (kind === 'refused') {
+		const [, topic, seq, reasons] = asArray(value, 4, 'a refused');
+		if (!Array.isArray(reasons)) bad('a refused carries an array of reasons');
+		const held = reasons as readonly WireValue[];
+		if (held.length === 0) bad('a refused carries at least one reason');
 		return {
-			kind, topic: asNumber(topic!, 'a topic'), through: asNumber(through!, 'a sequence number'),
-			at: asNumber(at!, 'a topic sequence'),
-		};
-	}
-	if (kind === 'refuse') {
-		const [, topic, seq, reasons] = asArray(value, 4, 'a refuse');
-		if (!Array.isArray(reasons)) bad('a refuse carries an array of reasons');
-		const list_ = reasons as readonly WireValue[];
-		if (list_.length === 0) bad('a refuse carries at least one reason');
-		return {
-			kind, topic: asNumber(topic!, 'a topic'), seq: asNumber(seq!, 'a sequence number'),
-			reasons: list_.map((raw) => {
+			kind, topic: asTopic(topic!, false), seq: asSeq(seq!),
+			reasons: held.map((raw) => {
 				const [code, message, path] = asArray(raw, 3, 'a reason');
 				const steps = asPath(path!);
 				const reason: WireReason = {
@@ -311,11 +332,11 @@ export const decodeFrame = (bytes: Uint8Array): Frame => {
 	}
 	if (kind === 'leave') {
 		const [, topic] = asArray(value, 2, 'a leave');
-		return { kind, topic: asNumber(topic!, 'a topic') };
+		return { kind, topic: asTopic(topic!, false) };
 	}
 	const [, topic, reason, message] = asArray(value, 4, 'a fault');
 	return {
-		kind, topic: asNumber(topic!, 'a topic'), reason: asText(reason!, 'a fault reason'),
+		kind, topic: asTopic(topic!, true), reason: asText(reason!, 'a fault reason'),
 		message: asText(message!, 'a fault message'),
 	};
 };

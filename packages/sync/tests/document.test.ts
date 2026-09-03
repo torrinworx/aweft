@@ -53,29 +53,29 @@ test('asCommit takes an observable and refuses anything else', () => {
 });
 
 test('reconcile moves a drifted document without replacing it', () => {
-	const server = createObject<Record<string, unknown>>();
-	const client = createObject<Record<string, unknown>>(undefined, idOf(server));
+	const source = createObject<Record<string, unknown>>();
+	const copy = createObject<Record<string, unknown>>(undefined, idOf(source));
 
 	atomic(() => {
-		server.title = 'plan';
-		server.tasks = createArray<object>();
+		source.title = 'plan';
+		source.tasks = createArray<object>();
 	});
-	const fix = reconcile(client, snapshot(server));
+	const fix = reconcile(copy, snapshot(source));
 	assert.ok(fix !== undefined);
-	apply(client, fix);
-	equal(client, server, 'the client caught up');
+	apply(copy, fix);
+	equal(copy, source, 'the copy caught up');
 
 	// The document itself is still the one the caller holds.
-	const held = client;
-	const list = server.tasks as object[];
+	const held = copy;
+	const list = source.tasks as object[];
 	atomic(() => { list.push(createObject({ title: 'x' })); });
-	server.title = 'plan b';
+	source.title = 'plan b';
 
-	const second = reconcile(client, snapshot(server));
+	const second = reconcile(copy, snapshot(source));
 	assert.ok(second !== undefined);
-	apply(client, second);
-	equal(client, server, 'and again, after two more changes');
-	assert.equal(held, client, 'the same object throughout');
+	apply(copy, second);
+	equal(copy, source, 'and again, after two more changes');
+	assert.equal(held, copy, 'the same object throughout');
 });
 
 test('reconcile is empty when there is nothing to say', () => {
@@ -93,82 +93,82 @@ test('reconcile refuses two documents that are not the same document', () => {
 });
 
 test('reconcile sees a value change of every shape', () => {
-	const server = createObject<Record<string, unknown>>();
-	const client = createObject<Record<string, unknown>>(undefined, idOf(server));
+	const source = createObject<Record<string, unknown>>();
+	const copy = createObject<Record<string, unknown>>(undefined, idOf(source));
 	atomic(() => {
-		server.text = 'a';
-		server.num = 1;
-		server.flag = true;
-		server.blob = new Uint8Array([1]);
-		server.gone = 'here';
+		source.text = 'a';
+		source.num = 1;
+		source.flag = true;
+		source.blob = new Uint8Array([1]);
+		source.gone = 'here';
 	});
-	apply(client, reconcile(client, snapshot(server))!);
+	apply(copy, reconcile(copy, snapshot(source))!);
 
 	atomic(() => {
-		server.text = 'b';
-		server.num = 2;
-		server.flag = false;
-		server.blob = new Uint8Array([2]);
-		delete server.gone;
+		source.text = 'b';
+		source.num = 2;
+		source.flag = false;
+		source.blob = new Uint8Array([2]);
+		delete source.gone;
 	});
-	const fix = reconcile(client, snapshot(server))!;
+	const fix = reconcile(copy, snapshot(source))!;
 	assert.equal(fix.deltas.length, 5, 'four replaces and one remove');
 	assert.equal(fix.deltas.filter((d) => d.type === 'remove').length, 1);
-	apply(client, fix);
-	equal(client, server, 'every shape of change crossed');
+	apply(copy, fix);
+	equal(copy, source, 'every shape of change crossed');
 });
 
 test('reconcile sees a byte string that changed content but not length', () => {
-	const server = createObject<Record<string, unknown>>({ blob: new Uint8Array([1, 2]) });
-	const client = createObject<Record<string, unknown>>(undefined, idOf(server));
-	apply(client, asCommit(server)!);
-	server.blob = new Uint8Array([1, 3]);
-	assert.notEqual(reconcile(client, snapshot(server)), undefined, 'bytes compare by content');
+	const source = createObject<Record<string, unknown>>({ blob: new Uint8Array([1, 2]) });
+	const copy = createObject<Record<string, unknown>>(undefined, idOf(source));
+	apply(copy, asCommit(source)!);
+	source.blob = new Uint8Array([1, 3]);
+	assert.notEqual(reconcile(copy, snapshot(source)), undefined, 'bytes compare by content');
 });
 
 test('reconcile follows an observable that moved rather than re-sending it', () => {
-	const server = createObject<Record<string, unknown>>();
-	const client = createObject<Record<string, unknown>>(undefined, idOf(server));
+	const source = createObject<Record<string, unknown>>();
+	const copy = createObject<Record<string, unknown>>(undefined, idOf(source));
 	const moved = createObject({ deep: 'value' });
 	atomic(() => {
-		server.left = createArray<object>([moved]);
-		server.right = createArray<object>();
+		source.left = createArray<object>([moved]);
+		source.right = createArray<object>();
 	});
-	apply(client, asCommit(server)!);
+	apply(copy, asCommit(source)!);
 
 	atomic(() => {
-		(server.left as object[]).splice(0, 1);
-		(server.right as object[]).push(moved);
+		(source.left as object[]).splice(0, 1);
+		(source.right as object[]).push(moved);
 	});
-	const fix = reconcile(client, snapshot(server))!;
+	const fix = reconcile(copy, snapshot(source))!;
 	assert.equal(fix.deltas.length, 2, 'one slot given up and one taken, not a resend of the subtree');
-	apply(client, fix);
-	equal(client, server, 'the move crossed');
+	apply(copy, fix);
+	equal(copy, source, 'the move crossed');
 });
 
 test('reconcile crosses an alias and the observable it names', () => {
-	const server = createObject<Record<string, unknown>>();
-	const client = createObject<Record<string, unknown>>(undefined, idOf(server));
+	const source = createObject<Record<string, unknown>>();
+	const copy = createObject<Record<string, unknown>>(undefined, idOf(source));
 	const task = createObject({ title: 'a' });
 	atomic(() => {
-		server.tasks = createArray<object>([task]);
-		server.featured = alias(task);
+		source.tasks = createArray<object>([task]);
+		source.featured = alias(task);
 	});
-	apply(client, reconcile(client, snapshot(server))!);
-	equal(client, server, 'the alias points at the same observable on both sides');
+	apply(copy, reconcile(copy, snapshot(source))!);
+	equal(copy, source, 'the alias points at the same observable on both sides');
 });
 
 // The property this whole package rests on: whatever a document reaches, one commit says it
 // and one commit corrects it. Both directions, over a stream nobody chose by hand.
 test('over a random edit stream, a replica rebuilt and a replica corrected both match', () => {
 	const rng = randomFrom(20260902);
-	const server = createObject<Record<string, unknown>>();
-	const corrected = createObject<Record<string, unknown>>(undefined, idOf(server));
+	const source = createObject<Record<string, unknown>>();
+	const corrected = createObject<Record<string, unknown>>(undefined, idOf(source));
 	const tasks = createArray<Record<string, unknown>>();
 	const people = createMap<Record<string, unknown>>();
 	atomic(() => {
-		server.tasks = tasks;
-		server.people = people;
+		source.tasks = tasks;
+		source.people = people;
 	});
 
 	for (let round = 0; round < 60; round++) {
@@ -184,12 +184,12 @@ test('over a random edit stream, a replica rebuilt and a replica corrected both 
 		} else if (roll < 9 && tasks.length > 0) {
 			tasks[randomBelow(rng, tasks.length)]!.title = `edited ${round}`;
 		} else {
-			server.round = round;
+			source.round = round;
 		}
 
-		const fix = reconcile(corrected, snapshot(server));
+		const fix = reconcile(corrected, snapshot(source));
 		if (fix !== undefined) apply(corrected, fix);
-		equal(corrected, server, `corrected replica at round ${round}`);
-		equal(rebuild(server), server, `rebuilt replica at round ${round}`);
+		equal(corrected, source, `corrected replica at round ${round}`);
+		equal(rebuild(source), source, `rebuilt replica at round ${round}`);
 	}
 });

@@ -1,5 +1,5 @@
 {
-	"note": "A topic is the number agreed at the join.",
+	"note": "A topic is the number its sender gave it.",
 	"reason": "bad-frame",
-	"bytes": "820565626f617264"
+	"bytes": "820465626f617264"
 }

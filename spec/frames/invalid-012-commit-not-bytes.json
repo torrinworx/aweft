@@ -1,0 +1,5 @@
+{
+	"note": "A commit rides as the bytes the format states.",
+	"reason": "bad-frame",
+	"bytes": "8402010181696e6f74206279746573"
+}

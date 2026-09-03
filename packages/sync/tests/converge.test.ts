@@ -1,181 +1,203 @@
+// Convergence: whatever order a handful of ends write in, they all end at one document.
+//
+// The property the package rests on, over shapes nobody chose by hand. Every end runs the
+// same code, so there is nothing here that decides a winner: edits that commute converge on
+// their own, and the one edit that does not commute is refused by the end that will not take
+// it and yielded by the end that made it, with the undo the refusal came with.
+//
+// Seeds are committed for the named cases, so a failure repeats exactly. The sweep runs a
+// hundred more and says how many.
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ANY, REST, type Policy } from '@aweftjs/schema';
-import { atomic, createMap, createObject, isReachable, snapshot, textIdOf } from '@aweftjs/core';
+import { apply, atomic, createArray, createObject, idOf, snapshot } from '@aweftjs/core';
 import { canonicalJson, randomBelow, randomFrom } from '@aweftjs/testing';
-import { connect, inProcess, serve } from '@aweftjs/sync';
-import type { Channel, Refused, Session } from '@aweftjs/sync';
+import { asCommit, connect, inProcess } from '@aweftjs/sync';
+import type { Commit, Link, Refused, Shared, WireReason } from '@aweftjs/sync';
 
-// Everything under `tasks` and `notes` is fair game; `sealed` belongs to nobody, so a client
-// that writes it produces a real refusal in the middle of everything else.
-const POLICY: Policy = [
-	{ effect: 'allow', path: ['tasks', REST] },
-	{ effect: 'allow', path: ['notes', ANY] },
-	{ effect: 'allow', path: ['counter'] },
-];
+type Doc = Record<string, unknown>;
+
+/** The one value the refusing end will hold in `sealed`. Anything else it turns away. */
+const SEALED = 'held by the first end';
+
+const REASON: WireReason = {
+	code: 'not-here', message: 'sealed is not written from anywhere else', path: ['sealed'],
+};
 
 const settle = async (rounds: number): Promise<void> => {
 	for (let i = 0; i < rounds; i++) await new Promise((done) => setTimeout(done, 0));
 };
 
-interface Peer {
-	readonly session: Session;
-	readonly replica: ReturnType<Session['join']>;
-	document: Record<string, unknown>;
-	readonly refused: Refused[];
-	cut(): void;
+/** The first end's rule, and nobody else's: `sealed` keeps the value it has here. */
+const guard = (commit: Commit): readonly WireReason[] =>
+	commit.deltas.some((delta) =>
+		delta.ref.kind === 'object' && delta.ref.key === 'sealed'
+		&& (delta.type !== 'replace' || delta.value !== SEALED))
+		? [REASON]
+		: [];
+
+const shape = (size: number): Doc => {
+	const document = createObject<Doc>();
+	atomic(() => {
+		document.list = createArray<string>(['first', 'last']);
+		document.sealed = SEALED;
+		for (let i = 0; i < size; i++) document[`s${i}`] = 0;
+	});
+	return document;
+};
+
+/** A second end holding the same document: the same root id, and the same state in it. */
+const copyOf = (source: Doc): Doc => {
+	const held = createObject<Doc>(undefined, idOf(source));
+	apply(held, asCommit(source)!);
+	return held;
+};
+
+interface Wire {
+	readonly a: number;
+	readonly b: number;
+	links: [Link, Link];
+	shares: [Shared<Doc>, Shared<Doc>];
 }
 
-const board = () => {
-	const document = createObject<Record<string, unknown>>();
-	atomic(() => {
-		document.tasks = createMap<Record<string, unknown>>();
-		document.notes = createObject<Record<string, unknown>>();
-		document.counter = 0;
-		document.sealed = 'nobody writes this';
-	});
-	return { document, host: serve(() => ({ document, policy: POLICY })) };
-};
+const edgesOf = (kind: 'chain' | 'star', size: number): [number, number][] =>
+	kind === 'chain'
+		? Array.from({ length: size - 1 }, (_, i) => [i, i + 1] as [number, number])
+		: Array.from({ length: size - 1 }, (_, i) => [0, i + 1] as [number, number]);
 
-const peer = (host: ReturnType<typeof serve>, id: string): Peer => {
-	let live: Channel | undefined;
-	const refused: Refused[] = [];
-
-	const session = connect(() => {
-		const [there, here] = inProcess();
-		live = there;
-		host.accept(there, { id });
-		return here;
-	}, { retry: () => 0 });
-
-	const replica = session.join<Record<string, unknown>>('board', {
-		refused: (group) => refused.push(...group),
-	});
-
-	return {
-		session, replica, refused,
-		get document() {
-			return replica.document as Record<string, unknown>;
-		},
-		set document(_) {},
-		cut: () => { live?.close(); },
-	};
-};
-
-/** Every reachable task on this replica, so an edit picks one that is still there. */
-const tasksOf = (doc: Record<string, unknown>): Record<string, unknown>[] => {
-	const tasks = doc.tasks as { values(): Record<string, unknown>[] } | undefined;
-	return tasks === undefined ? [] : tasks.values().filter((task) => isReachable(task));
-};
-
-const edit = (
-	rng: () => number, doc: Record<string, unknown>, round: number, mayWriteSealed = false,
-): void => {
-	const roll = randomBelow(rng, 100);
-	const tasks = doc.tasks as {
-		add(o: object): void; delete(k: unknown): boolean; values(): Record<string, unknown>[];
-	};
-	const notes = doc.notes as Record<string, unknown>;
-	const live = tasksOf(doc);
-
-	if (roll < 22 || live.length === 0) {
-		tasks.add(createObject({ title: `t${round}`, done: false, weight: randomBelow(rng, 50) }));
-	} else if (roll < 32) {
-		tasks.delete(textIdOf(live[randomBelow(rng, live.length)]!));
-	} else if (roll < 55) {
-		live[randomBelow(rng, live.length)]!.title = `edited ${round}`;
-	} else if (roll < 68) {
-		live[randomBelow(rng, live.length)]!.done = randomBelow(rng, 2) === 1;
-	} else if (roll < 78) {
-		atomic(() => {
-			const task = live[randomBelow(rng, live.length)]!;
-			task.weight = randomBelow(rng, 50);
-			task.touched = round;
-		});
-	} else if (roll < 88) {
-		notes[`n${randomBelow(rng, 6)}`] = `note ${round}`;
-	} else if (roll < 94) {
-		doc.counter = round;
-	} else if (!mayWriteSealed) {
-		// Refused every time, for a client. It runs beside everything else on purpose: a
-		// rollback has to leave the commits around it alone.
-		doc.sealed = `attempt ${round}`;
-	} else {
-		doc.counter = round;
-	}
-};
-
-/** Run until nothing is pending anywhere and the links have gone quiet. */
-const quiesce = async (peers: readonly Peer[]): Promise<void> => {
-	for (let i = 0; i < 400; i++) {
-		await settle(2);
-		if (peers.every((p) => p.replica.pending.get() === 0 && p.replica.state.get() === 'live')) {
-			await settle(4);
-			if (peers.every((p) => p.replica.pending.get() === 0)) return;
-		}
-	}
-	assert.fail('the replicas never went quiet');
-};
-
-const run = async (seed: number, rounds: number, cuts: boolean): Promise<void> => {
+const run = async (
+	seed: number, kind: 'chain' | 'star', size: number, rounds: number, cuts: boolean,
+): Promise<void> => {
 	const rng = randomFrom(seed);
-	const { document, host } = board();
-	const peers = ['a', 'b', 'c'].map((id) => peer(host, id));
-	for (const p of peers) await p.replica.ready;
+	const documents: Doc[] = [shape(size)];
+	for (let i = 1; i < size; i++) documents.push(copyOf(documents[0]!));
+
+	// One end refuses what it will not hold; the end beside it yields with the undo the
+	// refusal carried. Nothing in the link decides which of the two that is.
+	let yielding = false;
+	const handlers = (at: number) => ({
+		accept: at === 0 ? guard : undefined,
+		refused: (report: Refused) => {
+			if (!report.mine || report.undo === undefined || yielding) return;
+			yielding = true;
+			apply(documents[at]!, report.undo);
+			yielding = false;
+		},
+	});
+
+	const join = (a: number, b: number): Wire => {
+		const [x, y] = inProcess();
+		const links: [Link, Link] = [connect(x), connect(y)];
+		return {
+			a, b, links,
+			shares: [
+				links[0].share<Doc>('board', documents[a], handlers(a)),
+				links[1].share<Doc>('board', documents[b], handlers(b)),
+			],
+		};
+	};
+
+	const wires = edgesOf(kind, size).map(([a, b]) => join(a, b));
+	await settle(6);
+
+	// The ends with one link are the ones that can throw their copy away and ask for it back:
+	// nothing else holds the document they would be discarding. The first end is left out of
+	// that, because it is the one whose rule the run checks and a state it asked for would move
+	// it past its own rule.
+	const leaves = Array.from({ length: size }, (_, i) => i)
+		.filter((i) => i !== 0
+			&& wires.filter((wire) => wire.a === i || wire.b === i).length === 1);
+
+	const edit = (at: number, round: number): void => {
+		const document = documents[at]!;
+		const list = document.list as string[];
+		const roll = randomBelow(rng, 100);
+
+		if (roll < 45) {
+			list.splice(randomBelow(rng, list.length + 1), 0, `${at}:${round}`);
+		} else if (roll < 90) {
+			document[`s${at}`] = round;
+		} else if (at === 1 && document.sealed === SEALED) {
+			// The one edit that does not commute, and the only one anybody refuses. It is only
+			// ever made from the value the first end holds, so the undo the refusal comes with
+			// puts the slot back to a value that end takes. Yielding with an undo of an undo
+			// would be two ends arguing, which is what the second write of a pair produces.
+			document.sealed = `written from end ${at} at ${round}`;
+		}
+	};
 
 	for (let round = 0; round < rounds; round++) {
-		const writers = 1 + randomBelow(rng, peers.length);
-		for (let i = 0; i < writers; i++) {
-			const who = peers[randomBelow(rng, peers.length)]!;
-			try {
-				edit(rng, who.document, round);
-			} catch {
-				// Writing into something another replica took out throws locally, exactly as it
-				// would in an application. Nothing about replication is involved.
-			}
+		const writers = 1 + randomBelow(rng, size);
+		for (let i = 0; i < writers; i++) edit(randomBelow(rng, size), round);
+
+		if (cuts && leaves.length > 0 && randomBelow(rng, 100) < 8) {
+			const leaf = leaves[randomBelow(rng, leaves.length)]!;
+			const wire = wires.find((held) => held.a === leaf || held.b === leaf)!;
+			const far = wire.a === leaf ? wire.b : wire.a;
+
+			for (const link of wire.links) link.close();
+			await settle(2);
+
+			const [x, y] = inProcess();
+			const near = connect(x);
+			const other = connect(y);
+			wire.links = [near, other];
+			// The end that was cut throws its copy away and asks for the document back.
+			const asking = near.share<Doc>('board', undefined, handlers(leaf));
+			const holding = other.share<Doc>('board', documents[far], handlers(far));
+			wire.shares = [asking, holding];
+			documents[leaf] = await asking.ready;
+			await settle(6);
 		}
 
-		if (randomBelow(rng, 100) < 20) {
-			try {
-				// The host owns the document, so no policy is consulted for its own writes. It
-				// leaves `sealed` alone so the assertion below is about clients.
-				edit(rng, document, round, true);
-			} catch { /* same, on the host's own document */ }
-		}
-
-		if (cuts && randomBelow(rng, 100) < 12) peers[randomBelow(rng, peers.length)]!.cut();
-
-		if (randomBelow(rng, 100) < 25) await settle(1 + randomBelow(rng, 3));
+		if (randomBelow(rng, 100) < 30) await settle(1 + randomBelow(rng, 3));
 	}
 
-	await quiesce(peers);
+	await settle(40);
 
-	const truth = canonicalJson(snapshot(document));
-	for (const p of peers) {
-		assert.equal(canonicalJson(snapshot(p.document)), truth, `replica converged (seed ${seed})`);
+	const truth = canonicalJson(snapshot(documents[0]!));
+	for (let i = 1; i < size; i++) {
+		assert.equal(
+			canonicalJson(snapshot(documents[i]!)), truth,
+			`end ${i} of a ${kind} of ${size} converged (seed ${seed})`,
+		);
 	}
-	assert.notEqual(document.sealed, undefined, 'the sealed slot is untouched');
-	assert.equal(document.sealed, 'nobody writes this');
-	assert.ok(
-		peers.some((p) => p.refused.length > 0),
-		'the run actually produced refusals, so the rollback path was exercised',
-	);
+	assert.equal(documents[0]!.sealed, SEALED, 'the slot the first end holds is untouched');
 
-	for (const p of peers) p.session.close();
-	host.close();
+	for (const wire of wires) for (const link of wire.links) link.close();
 };
 
-// The property the whole package rests on: whatever order three replicas and a host write in,
-// they all end at what the host says. The seeds are committed, so a failure repeats exactly.
-for (const seed of [20260902, 424242, 7]) {
-	test(`three replicas converge under concurrent edits, seed ${seed}`, async () => {
-		await run(seed, 120, false);
+// Named cases, so a failure the sweep found repeats exactly and stays checked.
+const named: [number, 'chain' | 'star', number, boolean][] = [
+	[20260903, 'chain', 3, false],
+	[20260903, 'star', 4, false],
+	[424242, 'chain', 5, false],
+	[7, 'star', 5, true],
+	[909090, 'chain', 4, true],
+];
+
+for (const [seed, kind, size, cuts] of named) {
+	test(`a ${kind} of ${size} converges${cuts ? ' with the link cut under it' : ''}, seed ${seed}`, async () => {
+		await run(seed, kind, size, 90, cuts);
 	});
 }
 
-for (const seed of [20260902, 909090]) {
-	test(`three replicas converge with the link cut under them, seed ${seed}`, async () => {
-		await run(seed, 120, true);
-	});
-}
+test('the convergence sweep: a hundred seeds over both shapes', async (t) => {
+	const failures: string[] = [];
+	let ran = 0;
+
+	for (let seed = 1; seed <= 100; seed++) {
+		const kind = seed % 2 === 0 ? 'chain' : 'star';
+		const size = 3 + (seed % 3);
+		ran += 1;
+		try {
+			await run(seed, kind, size, 30, seed % 4 === 0);
+		} catch (error) {
+			failures.push(`seed ${seed} (${kind} of ${size}): ${(error as Error).message}`);
+		}
+	}
+
+	t.diagnostic(`convergence sweep: ${ran} runs, ${failures.length} failed`);
+	assert.deepEqual(failures, [], 'every seed converged');
+});

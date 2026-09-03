@@ -1,6 +1,6 @@
 // The frame corpus, run against the shipped encoder.
 //
-// Each fixture states the frame and, separately, the array `spec/replication.md` section 6
+// Each fixture states the frame and, separately, the array `spec/replication.md` section 5
 // says that frame is written as. The bytes are the codec's value encoder applied to that
 // stated array, so nothing here compares the encoder against its own past output.
 
@@ -30,15 +30,12 @@ const wireFromJson = (value: unknown): WireValue => {
 /** A frame as a fixture writes it: every byte string in hex. */
 const frameFromJson = (value: Record<string, unknown>): Frame => {
 	const out: Record<string, unknown> = { ...value };
-	for (const key of ['session', 'resume']) {
-		if (typeof out[key] === 'string') out[key] = bytesFromHex(out[key] as string);
-	}
-	if (out.root !== undefined) {
+	if (out.root !== undefined && out.root !== null) {
 		const root = out.root as { id: string; kind: string };
 		out.root = { id: bytesFromHex(root.id), kind: root.kind };
 	}
-	for (const key of ['reset']) {
-		if (out[key] !== undefined) out[key] = commitFromJson(out[key] as Record<string, unknown>);
+	if (out.commit !== undefined) {
+		out.commit = commitFromJson(out.commit as Record<string, unknown>);
 	}
 	if (Array.isArray(out.commits)) {
 		out.commits = (out.commits as Record<string, unknown>[]).map(commitFromJson);
@@ -60,7 +57,7 @@ const commitFromJson = (value: Record<string, unknown>): unknown => ({
 });
 
 test('the corpus exists and every file is a fixture', () => {
-	assert.ok(files.length >= 18, `${files.length} fixture files`);
+	assert.ok(files.length >= 20, `${files.length} fixture files`);
 	for (const name of files) assert.ok(name.endsWith('.json'), name);
 });
 

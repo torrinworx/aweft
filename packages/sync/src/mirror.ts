@@ -4,24 +4,23 @@ import { idOf, kindOf } from '@aweftjs/core';
 
 import { inProcess } from './channel.ts';
 import { rootFrom } from './document.ts';
-import { connect } from './client.ts';
-import { serve } from './server.ts';
+import { connect } from './link.ts';
 
 /**
  * Keep a second document in step with a first, both ways.
  *
  * Params:
- *   source: any observable in the document that decides. Its order is the order both end in
+ *   source: any observable in the document to copy from. Its state is the state both start at
  *   target: the document to keep in step. Minted from the source's root when left out
  *
- * Returns: the mirror, with the document being kept in step and the function that stops it.
+ * Returns: the document being kept in step, and the function that stops it.
  *
- * This is the same engine a link over a socket runs, with the two ends in one heap and no
- * authority check, because there is no untrusted party between them. It is asynchronous for
- * the same reason every link is: a commit applied from inside a watcher reaches the second
- * document's watchers after the first has returned, so both sides queue and apply on a
- * microtask. The two documents are in step at the end of the tick, not at the end of the
- * statement.
+ * This is a link over an in-process pair, with `connect` at both ends and nothing else: the
+ * same code a link over a socket runs. It is asynchronous for the same reason every link is,
+ * so the two documents are in step at the end of the tick, not at the end of the statement.
+ *
+ * The target starts by asking for the source's state, so a target holding something else is
+ * moved to the source. After that the two are equal ends and a change on either crosses.
  *
  * Example:
  *   const editing = mirror(stored);
@@ -33,19 +32,18 @@ export const mirror = (source: object, target?: object): {
 	stop(): void;
 } => {
 	const document = target ?? rootFrom(idOf(source), kindOf(source));
+	const [here, there] = inProcess();
 
-	const host = serve(() => ({ document: source, policy: 'trusted' }));
-	const [there, here] = inProcess();
-	host.accept(there, { id: 'mirror' });
-
-	const session = connect(() => here, { retry: () => false });
-	session.join('mirror', { document });
+	const from = connect(here);
+	const to = connect(there);
+	from.share('mirror', source);
+	to.share('mirror', document).resync();
 
 	return {
 		document,
 		stop: () => {
-			session.close();
-			host.close();
+			from.close();
+			to.close();
 		},
 	};
 };

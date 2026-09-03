@@ -1,0 +1,5 @@
+{
+	"note": "A refused names a sequence, and sequences start at 1.",
+	"reason": "bad-frame",
+	"bytes": "84030100818361616162f6"
+}

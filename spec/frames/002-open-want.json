@@ -1,0 +1,24 @@
+{
+	"note": "An end holding nothing asks for the whole document. The topic number is that end own.",
+	"frame": {
+		"kind": "open",
+		"topic": 4,
+		"name": "board:42",
+		"root": {
+			"id": "1112131415161718191a1b1c",
+			"kind": "map"
+		},
+		"want": true
+	},
+	"wire": [
+		0,
+		4,
+		"board:42",
+		{
+			"hex": "1112131415161718191a1b1c"
+		},
+		2,
+		true
+	],
+	"bytes": "86000468626f6172643a34324c1112131415161718191a1b1c02f5"
+}

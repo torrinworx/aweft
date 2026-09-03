@@ -8,7 +8,9 @@ import type { Channel, Frame, PortLike, SocketLike } from '@aweftjs/sync';
 
 const tick = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
 
-const accept: Frame = { kind: 'accept', topic: 0, through: 3, at: 9 };
+const refused: Frame = {
+	kind: 'refused', topic: 3, seq: 9, reasons: [{ code: 'not-here', message: 'no' }],
+};
 
 test('an in-process pair delivers in order, and never inside the send', async () => {
 	const [a, b] = inProcess();
@@ -16,13 +18,13 @@ test('an in-process pair delivers in order, and never inside the send', async ()
 	let duringSend = 0;
 
 	b.receive((frame) => heard.push(frame));
-	a.send(accept);
+	a.send(refused);
 	a.send({ kind: 'leave', topic: 1 });
 	duringSend = heard.length;
 
 	await tick();
 	assert.equal(duringSend, 0, 'nothing was delivered inside the send');
-	assert.deepStrictEqual(heard.map((f) => f.kind), ['accept', 'leave']);
+	assert.deepStrictEqual(heard.map((f) => f.kind), ['refused', 'leave']);
 });
 
 test('a channel that closed says so to whoever asks afterwards', async () => {
@@ -37,7 +39,7 @@ test('a channel that closed says so to whoever asks afterwards', async () => {
 
 	const heard: Frame[] = [];
 	b.receive((frame) => heard.push(frame));
-	a.send(accept);
+	a.send(refused);
 	await tick();
 	assert.equal(heard.length, 0, 'and carries nothing more');
 });
@@ -46,10 +48,10 @@ test('unsubscribing stops delivery', async () => {
 	const [a, b] = inProcess();
 	const heard: Frame[] = [];
 	const stop = b.receive((frame) => heard.push(frame));
-	a.send(accept);
+	a.send(refused);
 	await tick();
 	stop();
-	a.send(accept);
+	a.send(refused);
 	await tick();
 	assert.equal(heard.length, 1);
 
@@ -63,7 +65,7 @@ test('closing twice is not an error, and neither is sending afterwards', async (
 	const [a] = inProcess();
 	a.close();
 	a.close();
-	a.send(accept);
+	a.send(refused);
 });
 
 const port = (p: unknown): PortLike => p as PortLike;
@@ -78,11 +80,11 @@ test('a MessagePort pair carries frames as bytes, both ways', async () => {
 	const back: Frame[] = [];
 	here.receive((frame) => back.push(frame));
 
-	here.send(accept);
+	here.send(refused);
 	there.send({ kind: 'leave', topic: 4 });
 	await tick();
 
-	assert.deepStrictEqual(heard, [accept]);
+	assert.deepStrictEqual(heard, [refused]);
 	assert.deepStrictEqual(back, [{ kind: 'leave', topic: 4 }]);
 
 	here.close();
@@ -111,9 +113,9 @@ test('a MessagePort ignores a message that is not a frame, and ends on a message
 	await tick();
 	assert.equal(heard.length, 0, 'anything that is not bytes is not a frame');
 
-	for (const fn of listeners.message!) fn({ data: encodeFrame(accept) });
+	for (const fn of listeners.message!) fn({ data: encodeFrame(refused) });
 	await tick();
-	assert.deepStrictEqual(heard, [accept]);
+	assert.deepStrictEqual(heard, [refused]);
 
 	for (const fn of listeners.messageerror!) fn({ data: undefined });
 	await tick();
@@ -148,8 +150,8 @@ test('a WebSocket carries frames as binary messages', async () => {
 	const heard: Frame[] = [];
 	channel.receive((frame) => heard.push(frame));
 
-	channel.send(accept);
-	assert.deepStrictEqual(ws.sent, [encodeFrame(accept)]);
+	channel.send(refused);
+	assert.deepStrictEqual(ws.sent, [encodeFrame(refused)]);
 
 	// A browser hands over an ArrayBuffer; some runtimes hand over a view. Both are frames.
 	const bytes = encodeFrame({ kind: 'leave', topic: 2 });
@@ -166,7 +168,7 @@ test('a WebSocket carries frames as binary messages', async () => {
 test('a WebSocket that is not open drops what it is handed rather than throwing', () => {
 	const ws = socket();
 	ws.readyState = 0;
-	fromWebSocket(ws as unknown as SocketLike).send(accept);
+	fromWebSocket(ws as unknown as SocketLike).send(refused);
 	assert.equal(ws.sent.length, 0);
 });
 
@@ -201,5 +203,7 @@ test('a channel is exactly four functions, so writing one is a small job', () =>
 	const surface: (keyof Channel)[] = ['send', 'receive', 'closed', 'close'];
 	assert.deepStrictEqual(Object.keys(a).sort(), [...surface].sort());
 	// And the frame encoding a new transport needs is two functions, both public.
-	assert.ok(encodeFrame({ kind: 'join', topic: 0, name: 'x', have: 0, resume: createId() }).length > 0);
+	assert.ok(encodeFrame({
+		kind: 'open', topic: 1, name: 'x', root: { id: createId(), kind: 'object' }, want: true,
+	}).length > 0);
 });

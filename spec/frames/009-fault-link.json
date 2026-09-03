@@ -1,0 +1,16 @@
+{
+	"note": "Topic 0 is the link itself, and a fault naming it ends the link rather than one topic.",
+	"frame": {
+		"kind": "fault",
+		"topic": 0,
+		"reason": "bad-frame",
+		"message": "a frame is a non-empty array"
+	},
+	"wire": [
+		5,
+		0,
+		"bad-frame",
+		"a frame is a non-empty array"
+	],
+	"bytes": "840500696261642d6672616d65781c61206672616d652069732061206e6f6e2d656d707479206172726179"
+}

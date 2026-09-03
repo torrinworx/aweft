@@ -4,7 +4,7 @@
 // export that appears without being decided turns this red.
 //
 // Three layers, and the list says which is which: `track` on its own, the frame codec on its
-// own, and the engine that needs both. A transport is not a layer: it is four functions a
+// own, and the link that needs both. A transport is not a layer: it is four functions a
 // caller writes, and the three shipped here are conveniences over the same seam.
 
 import test from 'node:test';
@@ -22,8 +22,8 @@ test('the entry file exports exactly what was decided', () => {
 		'fromMessagePort', 'fromWebSocket', 'inProcess',
 		// Saying a document, and moving one to what another says.
 		'asCommit', 'reconcile', 'rootFrom',
-		// The engine.
-		'connect', 'serve', 'mirror',
+		// The link. Both ends run the same one.
+		'connect', 'mirror',
 	];
 
 	assert.deepEqual(Object.keys(sync).sort(), [...decided].sort());
@@ -44,4 +44,14 @@ test('every shipped channel answers the same four functions', () => {
 	for (const channel of [port, socket]) {
 		assert.deepEqual(Object.keys(channel).sort(), ['close', 'closed', 'receive', 'send']);
 	}
+});
+
+test('a link is two functions, and a share is four', () => {
+	const [a] = sync.inProcess();
+	const link = sync.connect(a);
+	assert.deepEqual(Object.keys(link).sort(), ['close', 'share']);
+
+	const shared = link.share('board', sync.rootFrom(new Uint8Array(12), 'object'));
+	assert.deepEqual(Object.keys(shared).sort(), ['document', 'ready', 'resync', 'stop']);
+	link.close();
 });

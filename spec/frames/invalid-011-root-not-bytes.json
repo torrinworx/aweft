@@ -1,0 +1,5 @@
+{
+	"note": "A root id is an id, which is bytes.",
+	"reason": "bad-frame",
+	"bytes": "8600016162696e6f7420627974657300f4"
+}

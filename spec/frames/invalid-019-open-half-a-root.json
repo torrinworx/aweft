@@ -1,0 +1,5 @@
+{
+	"note": "An open with no root has neither an id nor a kind; one without the other is neither.",
+	"reason": "bad-frame",
+	"bytes": "8600016162f600f5"
+}

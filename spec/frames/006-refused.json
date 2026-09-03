@@ -1,0 +1,45 @@
+{
+	"note": "One commit did not apply here. A path is present when the refusing end could decide it.",
+	"frame": {
+		"kind": "refused",
+		"topic": 3,
+		"seq": 4,
+		"reasons": [
+			{
+				"code": "not-here",
+				"message": "users/x/verified is not written at this end",
+				"path": [
+					"users",
+					"x",
+					"verified"
+				]
+			},
+			{
+				"code": "unreachable",
+				"message": "AQIDBAUGBwgJCgsM has no attach path from the root"
+			}
+		]
+	},
+	"wire": [
+		3,
+		3,
+		4,
+		[
+			[
+				"not-here",
+				"users/x/verified is not written at this end",
+				[
+					"users",
+					"x",
+					"verified"
+				]
+			],
+			[
+				"unreachable",
+				"AQIDBAUGBwgJCgsM has no attach path from the root",
+				null
+			]
+		]
+	],
+	"bytes": "840303048283686e6f742d68657265782b75736572732f782f7665726966696564206973206e6f74207772697474656e206174207468697320656e64836575736572736178687665726966696564836b756e726561636861626c65783141514944424155474277674a4367734d20686173206e6f2061747461636820706174682066726f6d2074686520726f6f74f6"
+}

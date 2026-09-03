@@ -1,0 +1,19 @@
+{
+	"note": "An end that holds nothing under the name: no root, and it wants the other end's state.",
+	"frame": {
+		"kind": "open",
+		"topic": 2,
+		"name": "board:42",
+		"root": null,
+		"want": true
+	},
+	"wire": [
+		0,
+		2,
+		"board:42",
+		null,
+		null,
+		true
+	],
+	"bytes": "86000268626f6172643a3432f6f6f5"
+}

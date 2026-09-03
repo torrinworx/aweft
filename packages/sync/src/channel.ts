@@ -109,8 +109,8 @@ const surface = (state: Wiring, send: (frame: Frame) => void, close: () => void)
  *
  * Example:
  *   const [a, b] = inProcess();
- *   host.accept(a, { actor });
- *   const session = connect(() => b);
+ *   const left = connect(a);
+ *   const right = connect(b);
  */
 export const inProcess = (): [Channel, Channel] => {
 	const left = wiring();
@@ -189,7 +189,7 @@ const SOCKET_OPEN = 1;
  * pay for a gzip header. Turn on the transport's own shared-context compression instead.
  *
  * Example:
- *   const session = connect(() => fromWebSocket(new WebSocket(url)));
+ *   const link = connect(fromWebSocket(new WebSocket(url)));
  */
 export const fromWebSocket = (socket: SocketLike): Channel => {
 	const state = wiring();

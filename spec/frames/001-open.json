@@ -1,0 +1,24 @@
+{
+	"note": "Sharing a document. The name rides here and on no other frame, and this end already holds it.",
+	"frame": {
+		"kind": "open",
+		"topic": 1,
+		"name": "board:42",
+		"root": {
+			"id": "0102030405060708090a0b0c",
+			"kind": "object"
+		},
+		"want": false
+	},
+	"wire": [
+		0,
+		1,
+		"board:42",
+		{
+			"hex": "0102030405060708090a0b0c"
+		},
+		0,
+		false
+	],
+	"bytes": "86000168626f6172643a34324c0102030405060708090a0b0c00f4"
+}

@@ -6,16 +6,19 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { MessageChannel } from 'node:worker_threads';
+import { spawnSync } from 'node:child_process';
 
-import { REST, type Policy } from '@aweftjs/schema';
-import {
-	atomic, createArray, createMap, createObject, idOf, observer, snapshot, textIdOf,
-} from '@aweftjs/core';
+import { apply, atomic, createObject, idOf, observer, snapshot } from '@aweftjs/core';
 import { canonicalJson } from '@aweftjs/testing';
-import { connect, inProcess, serve, track } from '@aweftjs/sync';
-import type { Commit, Frame, Refused, Session } from '@aweftjs/sync';
+import {
+	asCommit, connect, decodeFrame, encodeFrame, fromMessagePort, fromWebSocket, inProcess, track,
+} from '@aweftjs/sync';
+import type {
+	Channel, Commit, Frame, PortLike, Refused, ShareHandlers, SocketLike, WireReason,
+} from '@aweftjs/sync';
 
-const OPEN: Policy = [{ effect: 'allow', path: [REST] }];
+type Doc = Record<string, unknown>;
 
 const settle = async (rounds = 20): Promise<void> => {
 	for (let i = 0; i < rounds; i++) await new Promise((done) => setTimeout(done, 0));
@@ -23,18 +26,6 @@ const settle = async (rounds = 20): Promise<void> => {
 
 const same = (a: unknown, b: unknown, what: string): void => {
 	assert.equal(canonicalJson(snapshot(a)), canonicalJson(snapshot(b)), what);
-};
-
-const board = (policy: Policy | 'trusted' = OPEN) => {
-	const document = createObject<Record<string, unknown>>();
-	const host = serve(() => ({ document, policy }));
-	const refusals: Refused[] = [];
-	const client = (id = 'a'): Session => connect(() => {
-		const [there, here] = inProcess();
-		host.accept(there, { id });
-		return here;
-	}, { retry: () => false });
-	return { document, host, refusals, client };
 };
 
 /** One commit a document made, so a case can hand it somewhere by hand. */
@@ -47,12 +38,68 @@ const oneCommit = (document: object, write: () => void): Commit => {
 	return held[0]!;
 };
 
+/** A channel that records what was put on it, so a case can say what did and did not go. */
+const watched = (channel: Channel): { channel: Channel; sent: Frame[] } => {
+	const sent: Frame[] = [];
+	return {
+		sent,
+		channel: {
+			send: (frame) => { sent.push(frame); channel.send(frame); },
+			receive: (fn) => channel.receive(fn),
+			closed: (fn) => channel.closed(fn),
+			close: () => channel.close(),
+		},
+	};
+};
+
+/** A channel whose deliveries can be held, so a case can make one end fall behind. */
+const gated = (channel: Channel): { channel: Channel; hold(): void; release(): void } => {
+	const listeners = new Set<(frame: Frame) => void>();
+	const queue: Frame[] = [];
+	let flowing = true;
+
+	const fire = (frame: Frame): void => {
+		for (const fn of [...listeners]) fn(frame);
+	};
+	channel.receive((frame) => {
+		if (flowing) fire(frame);
+		else queue.push(frame);
+	});
+
+	return {
+		hold: () => { flowing = false; },
+		release: () => {
+			flowing = true;
+			while (queue.length > 0) fire(queue.shift()!);
+		},
+		channel: {
+			send: (frame) => channel.send(frame),
+			receive: (fn) => {
+				listeners.add(fn);
+				return () => { listeners.delete(fn); };
+			},
+			closed: (fn) => channel.closed(fn),
+			close: () => channel.close(),
+		},
+	};
+};
+
+/** A second end holding the same document: the same root id, and the same state in it. */
+const twin = (source: object): Doc => {
+	const copy = createObject<Doc>(undefined, idOf(source));
+	const whole = asCommit(source);
+	if (whole !== undefined) apply(copy, whole);
+	return copy;
+};
+
+// --- what `track` guarantees, which every link rests on ------------------------------------
+
 // A watcher that writes in answer to an arriving commit is the ordinary way an application
 // reacts to a change. Delivery is deferred, so that write is delivered inside the same drain
 // as the commit that caused it: an engine that suppresses its own echo with a plain flag
-// swallows it, and the reaction never leaves the machine. Measured in .scratch/sync/e6-echo.ts.
+// swallows it, and the reaction never leaves the machine.
 test('a local write made in answer to an arriving commit still replicates', () => {
-	const document = createObject<Record<string, unknown>>();
+	const document = createObject<Doc>();
 	const outgoing: Commit[] = [];
 	const tracker = track(document, ({ commit, landed }) => {
 		if (!landed) outgoing.push(commit);
@@ -60,7 +107,7 @@ test('a local write made in answer to an arriving commit still replicates', () =
 
 	observer(document).path('remote').watch(() => { document.reacted = true; });
 
-	const source = createObject<Record<string, unknown>>(undefined, idOf(document));
+	const source = twin(document);
 	tracker.receive(oneCommit(source, () => { source.remote = 1; }));
 
 	assert.equal(outgoing.length, 1, 'the reaction is a local commit and goes out');
@@ -72,7 +119,7 @@ test('a local write made in answer to an arriving commit still replicates', () =
 // delivered for it. An engine that assumes one delivery per receive is then one delivery out
 // of step for the rest of its life, and the next genuinely local commit is swallowed.
 test('a commit that changes nothing does not swallow the next local one', () => {
-	const document = createObject<Record<string, unknown>>({ n: 1 });
+	const document = createObject<Doc>({ n: 1 });
 	const outgoing: Commit[] = [];
 	const tracker = track(document, ({ commit, landed }) => {
 		if (!landed) outgoing.push(commit);
@@ -87,563 +134,713 @@ test('a commit that changes nothing does not swallow the next local one', () => 
 	tracker.stop();
 });
 
-// A client applies its own commit before it sends it. Handing it back would give whatever it
-// attached a second attach edge, which the applier refuses, and the replica would be stuck
-// asking for the document over and over.
-test('a replica is never sent back the commit it sent', async () => {
-	const world = board();
-	world.document.ready = true;
-	const session = world.client();
-	const replica = session.join<Record<string, unknown>>('board');
-	const mirror = await replica.ready;
+// Two trackers on one document is what several networks on one document is made of, and the
+// counting rule has to hold per tracker: a commit that lands through one is a local commit to
+// the other. Design 055, at the layer that implements it.
+test('a commit landing through one tracker is a local commit to a second one', () => {
+	const document = createObject<Doc>();
+	const first: Commit[] = [];
+	const second: Commit[] = [];
+	const one = track(document, ({ commit, landed }) => { if (!landed) first.push(commit); });
+	const two = track(document, ({ commit, landed }) => { if (!landed) second.push(commit); });
 
-	const refusals: Refused[] = [];
-	const two = world.client('b').join<Record<string, unknown>>('board', {
-		refused: (group) => refusals.push(...group),
+	const source = twin(document);
+	one.receive(oneCommit(source, () => { source.n = 1; }));
+
+	assert.equal(first.length, 0, 'the tracker that applied it does not send it back');
+	assert.equal(second.length, 1, 'and the other tracker ships it on');
+	one.stop();
+	two.stop();
+});
+
+// --- the handshake --------------------------------------------------------------------------
+
+for (const [order, reversed] of [['shared here first', false], ['shared there first', true]] as const) {
+	test(`the topic opens whichever end shares first: ${order}`, async () => {
+		const here = createObject<Doc>({ title: 'plan' });
+		const there = twin(here);
+		const [x, y] = inProcess();
+		const a = connect(x);
+		const b = connect(y);
+
+		if (reversed) {
+			b.share('board', there);
+			await settle(2);
+			a.share('board', here);
+		} else {
+			a.share('board', here);
+			await settle(2);
+			b.share('board', there);
+		}
+		await settle();
+
+		here.n = 1;
+		await settle();
+		assert.equal(there.n, 1, 'the topic is live whichever order the two shares happened in');
+		a.close();
+		b.close();
 	});
-	await two.ready;
+}
 
-	mirror.child = createObject({ deep: true });
-	await settle();
-
-	assert.equal(refusals.length, 0, 'nothing came back to be refused');
-	same(mirror, world.document, 'and the sender is in step');
-	session.close();
-});
-
-// Undoing a pending list oldest first meets each undo against a state it was not made
-// against. The one that matters: a commit that attaches a subtree and a later one that writes
-// into it. Undo the attach first and the write's undo has nowhere to land.
-test('a pending list is undone newest first', async () => {
-	const world = board([{ effect: 'allow', path: ['keep', REST] }]);
-	world.document.keep = createObject({});
-	const session = world.client();
-	const refusals: Refused[] = [];
-	const replica = session.join<Record<string, unknown>>('board', {
-		refused: (group) => refusals.push(...group),
-	});
-	const mirror = await replica.ready;
-
-	// Refused, so everything after it is rewound: an attach, then a write inside it.
-	mirror.blocked = 1;
-	const child = createObject<Record<string, unknown>>({ n: 1 });
-	(mirror.keep as Record<string, unknown>).child = child;
-	child.n = 2;
-	await settle();
-
-	assert.equal(refusals.length, 1, 'only the unauthorized one was refused');
-	assert.equal(mirror.blocked, undefined);
-	assert.equal(((mirror.keep as Record<string, unknown>).child as Record<string, unknown>).n, 2,
-		'the two that were rewound came back');
-	same(mirror, world.document, 'and the host agrees');
-	session.close();
-});
-
-// A well behaved client produces refusals through ordinary races and keeps writing while one
-// is in flight. Ending the link would turn every race into a full resynchronization at the
-// moment the client is busiest. Design 012.
-test('a refusal leaves the link up and the commits around it alone', async () => {
-	const world = board([{ effect: 'allow', path: ['ok'] }]);
-	const session = world.client();
-	const refusals: Refused[] = [];
-	const replica = session.join<Record<string, unknown>>('board', {
-		refused: (group) => refusals.push(...group),
-	});
-	const mirror = await replica.ready;
-
-	mirror.ok = 'before';
-	mirror.no = 'refused';
-	mirror.ok = 'after';
-	await settle();
-
-	assert.equal(refusals.length, 1);
-	assert.equal(mirror.ok, 'after', 'the commits on either side of it landed');
-	assert.equal(world.document.ok, 'after');
-	assert.equal(replica.state.get(), 'live', 'and the link never went down');
-	session.close();
-});
-
-// Rate limiting a commit stream loses one commit of a burst, and a receiver that misses one
-// holds a different document forever after. Frames may be batched, which sends every commit
-// in fewer messages; they may never be dropped or coalesced across the wire.
-test('a burst of commits in one tick all arrive, in order', async () => {
-	const world = board();
-	world.document.n = 0;
-	const session = world.client();
-	const replica = session.join<Record<string, unknown>>('board');
-	const mirror = await replica.ready;
-
-	const seen: unknown[] = [];
-	observer(world.document).path('n').watch(() => seen.push(world.document.n));
-
-	for (let i = 1; i <= 50; i++) mirror.n = i;
-	await settle();
-
-	assert.deepStrictEqual(seen, Array.from({ length: 50 }, (_, i) => i + 1),
-		'every value of the burst reached the host, in order');
-	session.close();
-});
-
-// The host decides the order. A commit that arrives while a local one is still in flight has
-// to be put underneath it, not on top, or the two sides end at different documents.
-test('a commit arriving under a pending one is rebased, not dropped', async () => {
-	const world = board();
-	atomic(() => { world.document.mine = 0; world.document.theirs = 0; });
-	const session = world.client();
-	const replica = session.join<Record<string, unknown>>('board');
-	const mirror = await replica.ready;
-
-	mirror.mine = 1;                 // pending, not yet accepted
-	world.document.theirs = 1;       // and the host writes at the same moment
-	await settle();
-
-	assert.equal(mirror.mine, 1);
-	assert.equal(mirror.theirs, 1);
-	same(mirror, world.document, 'both sides say the same thing');
-	session.close();
-});
-
-// A commit may write into a subtree it detaches in the same breath. Core found this by
-// hand: the walk from the delta up to a listener ran through a parent that was already gone,
-// and a replica received half the commit and drifted, silently.
-test('a commit that writes into a subtree it detaches crosses whole', async () => {
-	const world = board();
-	const holder = createObject<Record<string, unknown>>();
-	const inner = createObject<Record<string, unknown>>({ n: 1 });
+// An end that holds nothing mints the document from the other end's root and asks for its
+// state. Building a fresh root of its own instead would give it a different id, and every
+// commit about the document would then be unreachable at one of the two ends.
+test('an end that holds nothing is handed the document, and it is a live document', async () => {
+	const source = createObject<Doc>();
 	atomic(() => {
-		world.document.holder = holder;
-		holder.inner = inner;
+		source.title = 'plan';
+		source.child = createObject({ n: 1 });
 	});
 
-	const session = world.client();
-	const mirror = await session.join<Record<string, unknown>>('board').ready;
-	same(mirror, world.document, 'in step to start with');
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
+	a.share('board', source);
+	const shared = b.share<Doc>('board');
 
+	assert.equal(shared.document, undefined, 'there is nothing until the other end says what it is');
+	const document = await shared.ready;
+	await settle();
+
+	same(document, source, 'the whole document arrived');
+	source.title = 'plan b';
+	await settle();
+	assert.equal(document.title, 'plan b', 'and it goes on receiving');
+	(document.child as Doc).n = 2;
+	await settle();
+	assert.equal((source.child as Doc).n, 2, 'and sending');
+	a.close();
+	b.close();
+});
+
+// A resynchronization moves the document rather than replacing it (design 044). Everything
+// holding the old tree would otherwise be pointing at something nothing writes to any more,
+// and nothing would say so.
+test('state moves the document rather than replacing it, root and children alike', async () => {
+	const source = createObject<Doc>();
 	atomic(() => {
-		inner.n = 2;
-		delete holder.inner;
-	});
-	await settle();
-
-	same(mirror, world.document, 'the whole commit crossed, not half of it');
-	session.close();
-});
-
-// Two replicas inserting at the same place in one array is the case an index-addressed list
-// cannot survive. Positions are ordered keys chosen by whoever inserted, so two inserts get
-// two distinct keys and neither shifts the other.
-test('two replicas inserting at the same place in one array do not collide', async () => {
-	const world = board();
-	const list = createArray<string>(['a', 'z']);
-	world.document.list = list;
-
-	const one = world.client('a');
-	const two = world.client('b');
-	const a = await one.join<Record<string, unknown>>('board').ready;
-	const b = await two.join<Record<string, unknown>>('board').ready;
-
-	(a.list as string[]).splice(1, 0, 'from a');
-	(b.list as string[]).splice(1, 0, 'from b');
-	await settle();
-
-	assert.equal(list.length, 4, 'both inserts survived');
-	same(a, world.document, 'the first replica agrees with the host');
-	same(b, world.document, 'and so does the second');
-	one.close();
-	two.close();
-});
-
-// An id-keyed map is the collection to reach for when what matters is which thing an entry
-// is about. Two replicas filing under the same id is a genuine conflict; two replicas filing
-// different entries is not, and must not behave like one.
-test('two replicas filing into one map keep both entries', async () => {
-	const world = board();
-	const people = createMap<Record<string, unknown>>();
-	world.document.people = people;
-
-	const one = world.client('a');
-	const two = world.client('b');
-	const a = await one.join<Record<string, unknown>>('board').ready;
-	const b = await two.join<Record<string, unknown>>('board').ready;
-
-	(a.people as typeof people).add(createObject({ name: 'from a' }));
-	(b.people as typeof people).add(createObject({ name: 'from b' }));
-	await settle();
-
-	assert.equal(people.size, 2);
-	same(a, world.document, 'the first replica agrees with the host');
-	same(b, world.document, 'and so does the second');
-	one.close();
-	two.close();
-});
-
-// A replica that writes into something another replica has just taken out cannot have its
-// write, and has to be told rather than left showing it. The applier's own word for it is
-// what the report carries, so the two layers never disagree about the cause.
-test('writing into what another replica removed is refused by name', async () => {
-	const world = board();
-	const tasks = createMap<Record<string, unknown>>();
-	world.document.tasks = tasks;
-	const doomed = createObject<Record<string, unknown>>({ title: 'about to go' });
-	tasks.add(doomed);
-
-	const one = world.client('a');
-	const two = world.client('b');
-	const refusals: Refused[] = [];
-	const a = await one.join<Record<string, unknown>>('board').ready;
-	const b = await two.join<Record<string, unknown>>('board', {
-		refused: (group) => refusals.push(...group),
-	}).ready;
-
-	const key = textIdOf(doomed);
-	const mine = (b.tasks as typeof tasks).get(key)!;
-	(a.tasks as typeof tasks).delete(key);
-	mine.title = 'written after it was taken out';
-	await settle();
-
-	assert.equal(refusals.length, 1, 'the write was refused, once');
-	assert.equal(refusals[0]!.reasons[0]!.code, 'unreachable');
-	same(b, world.document, 'and the replica ends where the host is');
-	one.close();
-	two.close();
-});
-
-// A host that writes in answer to a client's commit is the action pattern the architecture
-// prescribes: an intent goes into the document as state and a handler with wider authority
-// writes the outcome. That write is published to the client before the batch it arrived in
-// has finished, so the accept for the client's own commit has to be numbered where the commit
-// is numbered, not held to the end. Held to the end, the client sees a hole in the topic
-// stream that is not there, asks to start over, and never stops asking.
-test('a host writing in answer to a commit does not put the sender out of step', async () => {
-	const world = board();
-	atomic(() => {
-		world.document.intent = '';
-		world.document.outcome = '';
-	});
-	// The handler with wider authority, on the host.
-	observer(world.document).path('intent').watch(() => {
-		world.document.outcome = `did ${String(world.document.intent)}`;
+		source.title = 'plan';
+		source.child = createObject({ n: 1 });
 	});
 
-	const session = world.client();
-	const faults: string[] = [];
-	const replica = session.join<Record<string, unknown>>('board', {
-		fault: (reason) => faults.push(reason),
-	});
-	const mirror = await replica.ready;
-
-	// Enough of them that a client which has to ask for the document after each one runs past
-	// the limit and gives up. One write costs one request and recovers from it, so one write
-	// would pass whether or not the ordering holds.
-	for (let i = 0; i < 30; i++) {
-		mirror.intent = `ship ${i}`;
-		await settle(2);
-	}
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
+	a.share('board', source);
+	const shared = b.share<Doc>('board');
+	const document = await shared.ready;
 	await settle();
 
-	// A client that cannot get anywhere gives up loudly rather than asking forever, so this
-	// case fails rather than starving the machine when the ordering it rests on is broken.
-	assert.deepStrictEqual(faults, [], 'it never had to ask for the document');
-	assert.equal(world.document.outcome, 'did ship 29', 'the host answered');
-	assert.equal(mirror.outcome, 'did ship 29', 'and the client heard the answer');
-	assert.equal(replica.state.get(), 'live', 'without ever losing its place');
-	same(mirror, world.document, 'in step');
-	session.close();
+	const root = document;
+	const child = document.child as Doc;
+
+	source.title = 'moved on';
+	(source.child as Doc).n = 7;
+	await settle();
+	shared.resync();
+	await settle();
+
+	assert.equal(shared.document, root, 'the root is the same object');
+	assert.equal(document.child, child, 'and so is the nested observable');
+	assert.equal(child.n, 7, 'which now says what the other end says');
+	same(document, source, 'the whole document agrees');
+	a.close();
+	b.close();
 });
 
-// A commit a rebase gives up on has already been numbered, or is about to be. Taking it out of
-// the pending list leaves a hole in the run, and the next frame arrives at the host as
-// out-of-order, which ends the link and loses whatever was behind it with nothing reported.
-test('a commit a rebase gives up on leaves no hole in what is sent', async () => {
-	const document = createObject<Record<string, unknown>>();
-	document.holder = createObject({});
-	const host = serve(() => ({ document, policy: OPEN }), { replay: 0 });
+// Commits made before the other end has opened are not lost. They are also not sent twice:
+// an end that asked for state is sent the state, which already says everything they did.
+test('commits made before the topic is live go when it goes live', async () => {
+	const here = createObject<Doc>({ n: 0 });
+	const there = twin(here);
+	const [x, y] = inProcess();
+	const seen = watched(x);
+	const a = connect(seen.channel);
+	const b = connect(y);
 
-	let cut: (() => void) | undefined;
-	const session = connect(() => {
-		const [there, here] = inProcess();
-		cut = () => there.close();
-		host.accept(there, { id: 'a' });
-		return here;
-	}, { retry: () => false });
-
-	const refusals: Refused[] = [];
-	const replica = session.join<Record<string, unknown>>('doc', {
-		refused: (group) => refusals.push(...group),
-	});
-	const mirror = await replica.ready;
-
-	// Two commits held while the link is down. The first cannot survive what the host does in
-	// the meantime; the second can, and must not be lost with it.
-	cut!();
+	a.share('board', here);
+	here.n = 1;
+	here.n = 2;
 	await settle(2);
-	(mirror.holder as Record<string, unknown>).child = createObject({ n: 1 });
-	mirror.y = 2;
-
-	delete document.holder;
-	await settle(2);
-
-	session.reconnect();
+	b.share('board', there);
 	await settle();
 
-	assert.equal(refusals.length, 1, 'the doomed one was reported');
-	assert.equal(mirror.y, 2, 'and the one behind it survived');
-	assert.equal(document.y, 2, 'and reached the host');
-	assert.equal(replica.state.get(), 'live', 'the link is still up');
-	same(mirror, document, 'both sides agree');
-	session.close();
+	assert.equal(there.n, 2, 'both of them arrived');
+	const commits = seen.sent.filter((frame) => frame.kind === 'commits');
+	assert.equal(commits.length, 1, 'in one frame, because they were made in one tick');
+	assert.equal(commits[0]!.kind === 'commits' && commits[0]!.commits.length, 2);
+	a.close();
+	b.close();
 });
 
-// One document under two policies would take whichever join arrived first, and every actor
-// after that writes under a policy that was never resolved for them.
-test('one document may not be served under two policies', async () => {
-	const document = createObject<Record<string, unknown>>({ secret: 'kept' });
-	const host = serve((_name, actor) => ({
-		document,
-		policy: actor.id === 'admin' ? 'trusted' : [{ effect: 'allow', path: ['pub'] }],
-	}));
+test('commits made before the topic is live are not sent when the other end wanted state', async () => {
+	const here = createObject<Doc>({ n: 0 });
+	const [x, y] = inProcess();
+	const seen = watched(x);
+	const a = connect(seen.channel);
+	const b = connect(y);
 
-	const admin = connect(() => {
-		const [there, here] = inProcess();
-		host.accept(there, { id: 'admin' });
-		return here;
-	}, { retry: () => false });
-	await admin.join('doc').ready;
+	a.share('board', here);
+	here.n = 1;
+	await settle(2);
+	const shared = b.share<Doc>('board');
+	const there = await shared.ready;
+	await settle();
+
+	assert.equal(seen.sent.filter((f) => f.kind === 'commits').length, 0,
+		'nothing was sent as a commit');
+	assert.equal(seen.sent.filter((f) => f.kind === 'state').length, 1, 'the state covered it');
+	assert.equal(there.n, 1, 'and it arrived');
+	a.close();
+	b.close();
+});
+
+// --- refusals ------------------------------------------------------------------------------
+
+/** Refuse a commit that writes the named slot, which is a node's own rule and nobody else's. */
+const refuseSlot = (key: string): ShareHandlers['accept'] => (commit) =>
+	commit.deltas.some((delta) => delta.ref.kind === 'object' && delta.ref.key === key)
+		? [{ code: 'not-here', message: `${key} is not written at this end`, path: [key] }]
+		: [];
+
+test('a refusal from accept is reported at both ends, and the commit beside it still applies', async () => {
+	const here = createObject<Doc>({ ok: '', no: '' });
+	const there = twin(here);
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
+
+	const mine: Refused[] = [];
+	const theirs: Refused[] = [];
+	a.share('board', here, { refused: (report) => mine.push(report) });
+	b.share('board', there, {
+		accept: refuseSlot('no'),
+		refused: (report) => theirs.push(report),
+	});
+	await settle();
+
+	// One tick, so both commits travel in one frame and the second is behind the refused one.
+	here.no = 'refused';
+	here.ok = 'kept';
+	await settle();
+
+	assert.equal(theirs.length, 1, 'the end that refused it heard about it');
+	assert.equal(theirs[0]!.mine, false, 'as a commit that arrived here');
+	assert.equal(theirs[0]!.reasons[0]!.code, 'not-here');
+	assert.deepEqual(theirs[0]!.reasons[0]!.path, ['no']);
+	assert.notEqual(theirs[0]!.commit, undefined, 'with the commit it refused');
+
+	assert.equal(mine.length, 1, 'and so did the end that sent it');
+	assert.equal(mine[0]!.mine, true, 'as a commit of its own');
+	assert.equal(mine[0]!.seq, theirs[0]!.seq, 'about the same commit');
+	assert.notEqual(mine[0]!.commit, undefined, 'with the commit');
+	assert.notEqual(mine[0]!.undo, undefined, 'and the commit that undoes it');
+
+	assert.equal(there.no, '', 'the refused write never landed');
+	assert.equal(there.ok, 'kept', 'and the commit behind it in the frame still did');
+	a.close();
+	b.close();
+});
+
+// The applier refuses for its own reasons, and the report carries the applier's own word for
+// it, so the two layers never disagree about the cause.
+test('a refusal from the applier is reported at both ends, by the name the applier gave it', async () => {
+	const here = createObject<Doc>();
+	here.holder = createObject<Doc>({ n: 1 });
+
+	const [x, y] = inProcess();
+	const gate = gated(y);
+	const a = connect(x);
+	const b = connect(gate.channel);
+	const mine: Refused[] = [];
+	const theirs: Refused[] = [];
+	a.share('board', here, { refused: (report) => mine.push(report) });
+	const shared = b.share<Doc>('board', undefined, { refused: (report) => theirs.push(report) });
+	const there = await shared.ready;
+	await settle();
+	same(there, here, 'both ends hold the document to start with');
+
+	// One end stops hearing, so it writes into something the other has taken out.
+	gate.hold();
+	delete here.holder;
+	await settle(2);
+	(there.holder as Doc).n = 2;
+	await settle();
+
+	assert.equal(mine.length, 1, 'the end that could not apply it reported it');
+	assert.equal(mine[0]!.mine, false);
+	assert.equal(mine[0]!.reasons[0]!.code, 'unreachable', 'by the applier own name for it');
+	assert.notEqual(mine[0]!.commit, undefined, 'with the commit that would not apply');
+
+	// The refusal is on its way back while that end is still behind, and it arrives with it.
+	gate.release();
+	await settle();
+
+	assert.equal(theirs.length, 1, 'and the end that sent it heard the same');
+	assert.equal(theirs[0]!.mine, true);
+	assert.equal(theirs[0]!.reasons[0]!.code, 'unreachable');
+	assert.notEqual(theirs[0]!.undo, undefined, 'with the commit that undoes it');
+	assert.equal(there.holder, undefined, 'and the removal it had not heard yet landed');
+
+	a.close();
+	b.close();
+});
+
+// The window is what makes a refusal reportable with its commit at all. It is bounded because
+// a link that kept every commit it ever sent grows for as long as it runs.
+test('a refusal past the window is reported with its sequence and nothing else', async () => {
+	const here = createObject<Doc>({ n: 0, no: '' });
+	const there = twin(here);
+	const [x, y] = inProcess();
+	const a = connect(x, { window: 2 });
+	const b = connect(y);
+
+	const mine: Refused[] = [];
+	a.share('board', here, { refused: (report) => mine.push(report) });
+	b.share('board', there, { accept: refuseSlot('no') });
+	await settle();
+
+	here.no = 'first';           // sequence 1, refused, and long gone from a window of two
+	for (let i = 0; i < 4; i++) here.n = i;
+	await settle();
+	here.no = 'last';            // the newest commit, still held
+	await settle();
+
+	assert.equal(mine.length, 2, 'both refusals were reported');
+	assert.equal(mine[0]!.seq, 1);
+	assert.equal(mine[0]!.commit, undefined, 'the first is past the window');
+	assert.equal(mine[0]!.undo, undefined);
+	assert.notEqual(mine[1]!.commit, undefined, 'the last is still in it');
+	assert.notEqual(mine[1]!.undo, undefined);
+	a.close();
+	b.close();
+});
+
+// --- faults -----------------------------------------------------------------------------
+
+test('two documents that are not one document fault at both ends and never go live', async () => {
+	const here = createObject<Doc>({ title: 'mine' });
+	const there = createObject<Doc>({ title: 'theirs' });
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
 
 	const faults: string[] = [];
-	const other = connect(() => {
-		const [there, here] = inProcess();
-		host.accept(there, { id: 'mallory' });
-		return here;
-	}, { retry: () => false });
-	const replica = other.join('doc', { fault: (reason) => faults.push(reason) });
-
-	await assert.rejects(replica.ready, /policy-mismatch/);
-	assert.deepStrictEqual(faults, ['policy-mismatch']);
-	assert.equal(document.secret, 'kept');
-	admin.close();
-	other.close();
-});
-
-// A commit whose deltas all write what the slot already holds changes nothing, so the host
-// publishes nothing for it. It was still decided, and a client that is never told waits on it
-// forever: the replica reads `live` with work pending that will never clear.
-test('a commit that changed nothing is still accepted', async () => {
-	const world = board();
-	world.document.n = 0;
-	const one = world.client('a');
-	const two = world.client('b');
-	const first = one.join<Record<string, unknown>>('board');
-	const second = two.join<Record<string, unknown>>('board');
-	const [a, b] = [await first.ready, await second.ready];
-
-	// Both write the same value. Whichever reaches the host second is a real commit on its own
-	// replica and changes nothing at the host, so the host delivers nothing for it and has
-	// nothing to hang an accept on unless it says so itself.
-	a.n = 7;
-	b.n = 7;
+	a.share('board', here, { fault: (reason) => faults.push(`a:${reason}`) });
+	b.share('board', there, { fault: (reason) => faults.push(`b:${reason}`) });
 	await settle();
 
-	assert.equal(first.pending.get(), 0, 'the first was decided');
-	assert.equal(second.pending.get(), 0, 'and so was the one that did nothing');
-	assert.equal(world.document.n, 7);
-	same(a, world.document, 'both replicas agree with the host');
-	same(b, world.document, 'and with each other');
+	assert.deepEqual(faults.sort(), ['a:root-mismatch', 'b:root-mismatch']);
+	here.n = 1;
+	await settle();
+	assert.equal(there.n, undefined, 'and nothing crossed');
+	a.close();
+	b.close();
+});
+
+test('a frame about a topic nothing is open under is answered with a fault, and the link carries on', async () => {
+	const here = createObject<Doc>({ n: 0 });
+	const [x, y] = inProcess();
+	const a = connect(x);
+	a.share('board', here);
+
+	const heard: Frame[] = [];
+	y.receive((frame) => heard.push(frame));
+	y.send({ kind: 'commits', topic: 99, first: 1, commits: [{
+		deltas: [{ type: 'replace', id: idOf(here), ref: { kind: 'object', key: 'n' }, value: 5 }],
+	}] });
+	await settle();
+
+	const fault = heard.find((frame) => frame.kind === 'fault');
+	assert.notEqual(fault, undefined, 'it said so');
+	assert.equal(fault!.kind === 'fault' && fault!.reason, 'no-topic');
+	assert.equal(fault!.kind === 'fault' && fault!.topic, 99, 'naming the number the sender used');
+	assert.equal(here.n, 0, 'and applied nothing');
+	assert.notEqual(heard.find((frame) => frame.kind === 'open'), undefined,
+		'the link carried on, and the topic that is open is still open');
+	a.close();
+});
+
+test('an end told its topic is not open there hears it as a fault', async () => {
+	const here = createObject<Doc>({ n: 0 });
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const faults: string[] = [];
+	a.share('board', here, { fault: (reason, message) => faults.push(`${reason}:${message}`) });
+	await settle();
+
+	y.send({ kind: 'fault', topic: 1, reason: 'no-topic', message: 'nothing is open as topic 1' });
+	await settle();
+
+	assert.equal(faults.length, 1);
+	assert.ok(faults[0]!.startsWith('no-topic:'), faults[0]);
+	a.close();
+});
+
+test('leaving a topic ends it at the other end too, and the link stays up for the rest', async () => {
+	const here = createObject<Doc>({ n: 0 });
+	const there = twin(here);
+	const other = createObject<Doc>({ n: 0 });
+	const otherThere = twin(other);
+
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
+	const faults: string[] = [];
+	const leaving = a.share('one', here);
+	a.share('two', other);
+	b.share('one', there, { fault: (reason) => faults.push(reason) });
+	b.share('two', otherThere);
+	await settle();
+
+	leaving.stop();
+	await settle();
+	assert.deepEqual(faults, ['left'], 'the other end was told');
+
+	here.n = 1;
+	other.n = 1;
+	await settle();
+	assert.equal(there.n, 0, 'the topic that left carries nothing');
+	assert.equal(otherThere.n, 1, 'and the other topic on the same link is untouched');
+	a.close();
+	b.close();
+});
+
+// --- conflicts ---------------------------------------------------------------------------
+
+// Two ends replacing one slot at the same moment end up swapped, and stay swapped until an
+// application on one side yields. The link never picks the winner (design 054).
+test('a same-slot conflict leaves the two swapped, and resync is how one end yields', async () => {
+	const here = createObject<Doc>({ title: 'start' });
+	const there = twin(here);
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
+	const mine = a.share('board', here);
+	b.share('board', there);
+	await settle();
+
+	here.title = 'from here';
+	there.title = 'from there';
+	await settle();
+
+	assert.equal(here.title, 'from there');
+	assert.equal(there.title, 'from here');
+	assert.notEqual(here.title, there.title, 'swapped, and the link chose nothing');
+
+	mine.resync();
+	await settle();
+	assert.equal(here.title, 'from here', 'the end that yielded took the other end state');
+	same(here, there, 'and the two agree');
+	a.close();
+	b.close();
+});
+
+// The ordinary way an application reacts to a change is to write in answer to it. That write
+// has to replicate, and it must not come back around as an arriving commit.
+test('a watcher that writes in answer to an arriving commit replicates once and does not loop', async () => {
+	const here = createObject<Doc>();
+	atomic(() => {
+		here.from = '';
+		here.echo = '';
+	});
+	const there = twin(here);
+	const [x, y] = inProcess();
+	const seen = watched(y);
+	const a = connect(x);
+	const b = connect(seen.channel);
+	a.share('board', here);
+	const shared = b.share('board', there);
+	await shared.ready;
+	await settle();
+
+	observer(there).path('from').watch(() => { there.echo = `heard ${String(there.from)}`; });
+	const before = seen.sent.length;
+
+	here.from = 'the other end';
+	await settle();
+
+	assert.equal(there.echo, 'heard the other end', 'the answer was made');
+	assert.equal(here.echo, 'heard the other end', 'and replicated');
+	assert.equal(seen.sent.length - before, 1, 'once, and nothing came back around');
+	a.close();
+	b.close();
+});
+
+// --- several networks on one document, design 055 -----------------------------------------
+
+test('a commit arriving over one link is sent over every other link on that document', async () => {
+	const middle = createObject<Doc>({ n: 0 });
+	const left = twin(middle);
+	const right = twin(middle);
+
+	const [lx, ly] = inProcess();
+	const [rx, ry] = inProcess();
+	const toLeft = watched(lx);
+	const hub = connect(toLeft.channel);
+	const hubRight = connect(rx);
+	const leftLink = connect(ly);
+	const rightLink = connect(ry);
+
+	hub.share('board', middle);
+	hubRight.share('board', middle);
+	leftLink.share('board', left);
+	rightLink.share('board', right);
+	await settle();
+
+	// A plain watcher on the document hears an arriving commit like any other change.
+	const heard: number[] = [];
+	observer(middle).path('n').watch(() => heard.push(middle.n as number));
+
+	const before = toLeft.sent.filter((frame) => frame.kind === 'commits').length;
+	left.n = 5;
+	await settle();
+
+	assert.equal(middle.n, 5, 'it landed in the middle');
+	assert.equal(right.n, 5, 'and went on over the other link');
+	assert.deepEqual(heard, [5], 'and an ordinary watcher heard it once');
+	assert.equal(toLeft.sent.filter((frame) => frame.kind === 'commits').length, before,
+		'and nothing went back to the end it came from');
+
+	hub.close();
+	hubRight.close();
+	leftLink.close();
+	rightLink.close();
+});
+
+test('a chain of three ends converges, and the middle one is just an end of two links', async () => {
+	const first = createObject<Doc>({ a: 0, b: 0, c: 0 });
+	const middle = twin(first);
+	const last = twin(first);
+
+	const [p, q] = inProcess();
+	const [r, s] = inProcess();
+	const one = connect(p);
+	const two = connect(q);
+	const three = connect(r);
+	const four = connect(s);
+	one.share('board', first);
+	two.share('board', middle);
+	three.share('board', middle);
+	four.share('board', last);
+	await settle();
+
+	first.a = 1;
+	middle.b = 2;
+	last.c = 3;
+	await settle();
+
+	same(first, middle, 'the first two agree');
+	same(middle, last, 'and so do the last two');
+	assert.equal(last.a, 1, 'a write at one end of the chain reached the other');
+	assert.equal(first.c, 3, 'and back again');
 	one.close();
 	two.close();
+	three.close();
+	four.close();
 });
 
-// A watcher answering an arriving change is the ordinary way an application reacts, and with
-// nothing pending the rebase has no work to do, so it is easy to leave the list being replayed
-// and the list being appended to as the same array. That walks a list it is growing: 100% of a
-// core, then an uncaught throw out of a channel delivery, which takes the process rather than
-// the link.
-test('a watcher answering an arriving commit does not spin the replica', async () => {
-	const world = board();
-	atomic(() => {
-		world.document.from = '';
-		world.document.echo = '';
-	});
-	const session = world.client();
-	const replica = session.join<Record<string, unknown>>('board');
-	const mirror = await replica.ready;
+test('one link carries three documents at once, each with its own numbering', async () => {
+	const names = ['one', 'two', 'three'];
+	const here = names.map(() => createObject<Doc>({ n: 0 }));
+	const there = here.map(twin);
 
-	// On the client, and with nothing pending when the commit lands.
-	observer(mirror).path('from').watch(() => { mirror.echo = `heard ${String(mirror.from)}`; });
-	assert.equal(replica.pending.get(), 0, 'nothing pending, which is the shape that bites');
-
-	world.document.from = 'the host';
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
+	here.forEach((document, at) => a.share(names[at]!, document));
+	there.forEach((document, at) => b.share(names[at]!, document));
 	await settle();
 
-	assert.equal(mirror.echo, 'heard the host', 'the answer was made');
-	assert.equal(world.document.echo, 'heard the host', 'and replicated');
-	assert.equal(replica.state.get(), 'live');
-	same(mirror, world.document, 'in step');
-	session.close();
+	here.forEach((document, at) => { document.n = at + 1; });
+	await settle();
+
+	there.forEach((document, at) => {
+		assert.equal(document.n, at + 1, `${names[at]} carried its own commits`);
+	});
+	a.close();
+	b.close();
 });
 
-// The limit exists so a client that cannot get in step stops rather than starving the machine.
-// A client that is writing collects accepts whatever else is wrong, so counting an accept as
-// progress would leave exactly that client able to ask forever.
-test('a client that keeps writing still gives up on a host it cannot follow', async () => {
-	const document = createObject<Record<string, unknown>>({ n: 0 });
-	const host = serve(() => ({ document, policy: OPEN }), { replay: 0 });
+// --- the same protocol on every transport ---------------------------------------------------
 
-	let joins = 0;
-	const session = connect(() => {
-		const [there, here] = inProcess();
-		host.accept({
-			...there,
-			send: (frame: Frame) => {
-				if (frame.kind === 'joined') joins += 1;
-				// Every broadcast is lost, so the client keeps finding holes, while its own
-				// writes keep being accepted.
-				if (frame.kind === 'commits') return;
-				there.send(frame);
+/** A pair of fakes shaped like a `WebSocket`, wired to each other. */
+const socketPair = (): [SocketLike, SocketLike] => {
+	const build = () => {
+		const listeners: Record<string, ((event: { data?: unknown }) => void)[]> = {};
+		return {
+			binaryType: 'blob',
+			readyState: 1,
+			other: undefined as unknown as { fire(type: string, event: { data?: unknown }): void },
+			send(data: Uint8Array) {
+				queueMicrotask(() => this.other.fire('message', { data }));
 			},
-		}, { id: 'a' });
-		return here;
-	}, { retry: () => false });
-
-	const faults: string[] = [];
-	const replica = session.join<Record<string, unknown>>('doc', {
-		fault: (reason) => faults.push(reason),
-	});
-	const mirror = await replica.ready;
-
-	for (let i = 0; i < 40; i++) {
-		mirror.n = i;
-		document.other = i;
-		await settle(2);
-	}
-
-	assert.deepStrictEqual(faults, ['resync-loop'], 'it said why it stopped');
-	assert.ok(joins < 20, `it stopped asking after ${joins} joins rather than forever`);
-	session.close();
-	host.close();
-});
-
-// The host forgets a client's numbering when that client joins as if it had never been here,
-// so the client has to renumber what it is still holding. Otherwise its next frame states a
-// sequence the host stopped expecting, the host ends the link, and everything behind it goes.
-test('a replica that asks for the document renumbers what it still holds', async () => {
-	const document = createObject<Record<string, unknown>>({ n: 0 });
-	const host = serve(() => ({ document, policy: OPEN }), { replay: 0 });
-
-	let drop = false;
-	const session = connect(() => {
-		const [there, here] = inProcess();
-		host.accept({
-			...there,
-			send: (frame: Frame) => {
-				if (drop && frame.kind === 'commits') return;
-				there.send(frame);
+			close() { this.readyState = 3; },
+			addEventListener(type: string, fn: (event: { data?: unknown }) => void) {
+				(listeners[type] ??= []).push(fn);
 			},
-		}, { id: 'a' });
-		return here;
-	}, { retry: () => false });
+			fire(type: string, event: { data?: unknown }) {
+				for (const fn of listeners[type] ?? []) fn(event);
+			},
+		};
+	};
+	const left = build();
+	const right = build();
+	left.other = right;
+	right.other = left;
+	return [left as unknown as SocketLike, right as unknown as SocketLike];
+};
 
-	const replica = session.join<Record<string, unknown>>('doc');
-	const mirror = await replica.ready;
+const transports: Record<string, () => [Channel, Channel]> = {
+	'in process': () => inProcess(),
+	'a message port': () => {
+		const pair = new MessageChannel();
+		return [
+			fromMessagePort(pair.port1 as unknown as PortLike),
+			fromMessagePort(pair.port2 as unknown as PortLike),
+		];
+	},
+	'a socket': () => {
+		const [left, right] = socketPair();
+		return [fromWebSocket(left), fromWebSocket(right)];
+	},
+};
 
-	// Get the client's own numbering well past one, then make it lose the thread.
-	for (let i = 1; i <= 20; i++) mirror.n = i;
-	await settle();
+for (const [what, build] of Object.entries(transports)) {
+	test(`the same protocol over ${what}: share, converge, refuse`, async () => {
+		const here = createObject<Doc>();
+		atomic(() => {
+			here.title = 'plan';
+			here.sealed = 'held here';
+		});
 
-	drop = true;
-	document.other = 'while it was not listening';
-	await settle(4);
-	drop = false;
-	mirror.n = 99;
-	await settle();
+		const [x, y] = build();
+		const a = connect(x);
+		const b = connect(y);
+		const reports: Refused[] = [];
+		a.share('board', here, {
+			accept: refuseSlot('sealed'),
+			refused: (report) => reports.push(report),
+		});
+		const shared = b.share<Doc>('board', undefined, { refused: (report) => reports.push(report) });
+		const there = await shared.ready;
+		await settle();
+		same(there, here, `${what}: the document crossed whole`);
 
-	assert.equal(replica.state.get(), 'live', 'the link survived');
-	assert.equal(document.n, 99, 'and the write after it got through');
-	same(mirror, document, 'in step');
-	session.close();
-});
+		here.title = 'from here';
+		there.n = 1;
+		await settle();
+		same(there, here, `${what}: concurrent commuting edits converge`);
 
-// Design 043 says what is sent is the pending list in sequence order, and nothing checked
-// it: deleting the sort left every test green while a client diverged for good. The list order
-// and the sequence order only come apart on the rebase path, so the case needs all of it. A
-// link that drops, commits made with nowhere to go, a rejoin that replays the whole document,
-// and a watcher on this side that answers the arriving title with a write of its own. That
-// last commit carries the newest number and lands at the front of the list.
-test('pending commits go out in sequence order, not in the order the list holds them', async () => {
-	const document = createObject<Record<string, unknown>>({ title: 't0', stamp: '', a: '', b: '' });
-	// replay 0 forces the whole document on every rejoin, which is the path that rebases.
-	const host = serve(() => ({ document, policy: 'trusted' }), { replay: 0 });
+		there.sealed = 'written from there';
+		await settle();
+		assert.equal(here.sealed, 'held here', `${what}: the refused write never landed`);
+		assert.equal(reports.length, 2, `${what}: and both ends heard about it`);
+		assert.deepEqual(reports.map((report) => report.mine).sort(), [false, true]);
 
-	let link: { close(): void } | undefined;
-	const session = connect(() => {
-		const [there, here] = inProcess();
-		link = there;
-		host.accept(there, { id: 'a' });
-		return here;
-	}, { retry: () => false });
-
-	const mine = createObject<Record<string, unknown>>(undefined, idOf(document));
-	observer(mine).path('title').watch(() => { mine.stamp = `saw ${String(mine.title)}`; });
-
-	const faults: string[] = [];
-	const replica = session.join<Record<string, unknown>>('doc', {
-		document: mine, fault: (reason) => faults.push(reason),
+		a.close();
+		b.close();
 	});
-	await replica.ready;
+}
 
-	// Two commits the host decides, so `accepted` comes back partway through the list.
-	mine.a = 'one';
-	await settle(2);
-	mine.b = 'two';
-	await settle();
-
-	// The link drops, two more commits are made with nowhere to go, and the host moves on.
-	link!.close();
-	await settle(2);
-	mine.a = 'three';
-	mine.b = 'four';
-	document.title = 't1';
-	await settle();
-
-	session.reconnect();
-	await settle(40);
-
-	assert.deepEqual(faults, [], 'the host never saw a frame out of order');
-	assert.equal(replica.state.get(), 'live');
-	assert.equal(replica.pending.get(), 0, 'nothing is stuck');
-	same(document, mine, 'and the two documents agree');
-
-	session.close();
-	host.close();
+// A frame is a value on one transport and bytes on another, and it is one protocol either
+// way: what an in-process link hands over is what a socket writes.
+test('a frame carried as bytes says what the same frame carried as a value says', () => {
+	const document = createObject<Doc>({ n: 1 });
+	const frame: Frame = {
+		kind: 'open', topic: 1, name: 'board',
+		root: { id: idOf(document), kind: 'object' }, want: true,
+	};
+	assert.deepStrictEqual(decodeFrame(encodeFrame(frame)), frame);
 });
 
-// Design 045 says a host lets go of a document once nothing is joined to it and no session
-// can resume it, and nothing checked that either: making `release` a no-op left every test
-// green. A `resolve` that opens a document per name is the shipped shape, so a host that never
-// lets go grows for as long as it runs and keeps watching every document it ever served.
-test('a host lets go of a document nothing is joined to and no session can resume', async () => {
-	const documents = new Map<string, Record<string, unknown>>();
-	const host = serve((name) => {
-		const held = documents.get(name) ?? createObject<Record<string, unknown>>({ name });
-		documents.set(name, held);
-		return { document: held, policy: 'trusted' };
-	}, { sessions: 0 });
+// A reason an application invents rides across unchanged, because `accept` is the node's own
+// rule and the protocol does not know what it checks.
+test('a reason from accept crosses whole: code, message and path', async () => {
+	const here = createObject<Doc>({ no: '' });
+	const there = twin(here);
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
 
-	const session = connect(() => {
-		const [there, here] = inProcess();
-		host.accept(there, { id: 'a' });
-		return here;
-	}, { retry: () => false });
-
-	const joined = [];
-	for (let i = 0; i < 12; i++) joined.push(session.join<Record<string, unknown>>(`doc-${i}`));
-	for (const replica of joined) await replica.ready;
-	assert.equal(host.documents, 12, 'each name is held while it is joined');
-
-	for (const replica of joined) replica.leave();
+	const reason: WireReason = { code: 'over-budget', message: 'the total is 12', path: ['no'] };
+	const mine: Refused[] = [];
+	a.share('board', here, { refused: (report) => mine.push(report) });
+	b.share('board', there, { accept: () => [reason] });
 	await settle();
-	assert.equal(host.documents, 0, 'and let go once nothing is joined and nothing can resume');
 
-	session.close();
-	host.close();
+	here.no = 'anything';
+	await settle();
+	assert.deepEqual(mine[0]!.reasons, [reason], 'unchanged, whatever the application put in it');
+	a.close();
+	b.close();
+});
+
+test('a throw out of accept is a refusal, reported at both ends, and the rest of the frame still applies', async () => {
+	const [a, b] = inProcess();
+	const source = createObject<Doc>({ n: 0 });
+	const copy = createObject<Doc>(undefined, idOf(source));
+	const heard: Refused[] = [];
+	const left = connect(a);
+	const right = connect(b);
+	left.share('doc', source, { refused: (r) => heard.push(r) });
+	right.share('doc', copy, {
+		accept: (commit) => {
+			if (commit.deltas.some((d) => d.ref.kind === 'object' && d.ref.key === 'boom')) throw new Error('the rule broke');
+			return [];
+		},
+		refused: (r) => heard.push(r),
+	});
+	await settle();
+
+	source.first = 1;
+	source.boom = 2;
+	source.last = 3;
+	await settle();
+
+	assert.equal(copy.first, 1, 'the commit before the throw applied');
+	assert.equal(copy.boom, undefined, 'the commit the rule threw on did not');
+	assert.equal(copy.last, 3, 'the commit after it still applied');
+	assert.deepEqual(heard.map((r) => [r.mine, r.reasons[0]!.code]).sort(), [[false, 'accept-threw'], [true, 'accept-threw']]);
+	assert.match(heard[0]!.reasons[0]!.message, /the rule broke/);
+	left.close();
+});
+
+test('a watcher that throws while a commit lands is the application\'s error, and the rest of the frame still applies', () => {
+	// An uncaught exception cannot be observed from inside the test runner, so the scenario
+	// runs in a child process that reports what it saw.
+	const child = spawnSync(process.execPath, [new URL('./watcher-throws.ts', import.meta.url).pathname], { encoding: 'utf8' });
+	assert.equal(child.status, 0, child.stderr);
+	assert.deepEqual(JSON.parse(child.stdout.trim()), {
+		first: 1, boom: 2, last: 3, raised: ['a watcher broke'],
+	});
+});
+
+test('two ends that both share a name with no document fault each other rather than waiting forever', async () => {
+	const [a, b] = inProcess();
+	const faults: string[] = [];
+	const left = connect(a).share<Doc>('empty', undefined, { fault: (reason) => faults.push(reason) });
+	const right = connect(b).share<Doc>('empty', undefined, { fault: (reason) => faults.push(reason) });
+	await settle();
+	assert.deepEqual(faults, ['no-document', 'no-document']);
+	await assert.rejects(left.ready, { reason: 'no-document' });
+	await assert.rejects(right.ready, { reason: 'no-document' });
+});
+
+test('an end with nothing can share first or second, and gets the document either way', async () => {
+	for (const emptyFirst of [true, false]) {
+		const [a, b] = inProcess();
+		const source = createObject<Doc>({ n: 7 });
+		const left = connect(a);
+		const right = connect(b);
+		const shares = emptyFirst
+			? [right.share<Doc>('doc'), left.share('doc', source)]
+			: [left.share('doc', source), right.share<Doc>('doc')];
+		const minted = await (emptyFirst ? shares[0] : shares[1])!.ready as Doc;
+		assert.equal(minted.n, 7, `the minted end has the state, empty end ${emptyFirst ? 'first' : 'second'}`);
+		source.n = 8;
+		await settle();
+		assert.equal(minted.n, 8);
+		left.close();
+	}
 });

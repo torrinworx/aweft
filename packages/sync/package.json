@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"license": "MIT",
-	"description": "Replication: moving commits between documents over any channel.",
+	"description": "Replication: a link with two equal ends, moving commits between documents over any channel.",
 	"exports": {
 		".": "./src/index.ts"
 	},
@@ -13,8 +13,7 @@
 	},
 	"dependencies": {
 		"@aweftjs/codec": "*",
-		"@aweftjs/core": "*",
-		"@aweftjs/schema": "*"
+		"@aweftjs/core": "*"
 	},
 	"devDependencies": {
 		"@aweftjs/testing": "*"

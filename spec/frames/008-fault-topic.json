@@ -1,0 +1,16 @@
+{
+	"note": "A frame arrived about a topic nothing is open under. The number is the one its sender uses.",
+	"frame": {
+		"kind": "fault",
+		"topic": 6,
+		"reason": "no-topic",
+		"message": "nothing here is open as topic 6"
+	},
+	"wire": [
+		5,
+		6,
+		"no-topic",
+		"nothing here is open as topic 6"
+	],
+	"bytes": "840506686e6f2d746f706963781f6e6f7468696e672068657265206973206f70656e20617320746f7069632036"
+}

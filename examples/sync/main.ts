@@ -1,9 +1,11 @@
-// A shared task board, over three different channels, with the same code on top of each.
+// A shared task board, over four different channels, with the same code on top of each.
 //
-// The job: two people work a board at the same time. One of them tries to write a field the
-// policy reserves for an admin. The link under one of them drops mid-edit and comes back.
-// Everything has to end up saying the same thing, and the person whose write was refused has
-// to be told, with the values they had before it.
+// The job: two people work one board at the same time. Both ends run the same program: there
+// is no end that decides, and the only thing either of them can do about a change it will not
+// take is refuse it and say why. They both add tasks at once, they both rename the board at
+// once, and one of them yields. Then three of them in a chain, and finally a board that is
+// both shared over a link and kept in a store, where a change made by the other person is
+// what the store writes down.
 //
 // Run: node examples/sync/main.ts
 
@@ -12,12 +14,11 @@ import { MessageChannel, Worker } from 'node:worker_threads';
 import { createConnection, createServer as createTcpServer } from 'node:net';
 import type { Socket } from 'node:net';
 
-import { bytesToHex } from '@aweftjs/codec';
-import { atomic, createMap, createObject, idOf, kindOf, snapshot, textIdOf } from '@aweftjs/core';
-import { ANY, REST, type Actor, type Policy } from '@aweftjs/schema';
+import { atomic, createMap, createObject, observer, snapshot, textIdOf } from '@aweftjs/core';
+import { createStore, memoryDriver } from '@aweftjs/store';
 import {
 	type Channel, type Frame, type Refused,
-	connect, decodeFrame, encodeFrame, fromMessagePort, inProcess, mirror, serve,
+	connect, decodeFrame, encodeFrame, fromMessagePort, inProcess, mirror,
 } from '@aweftjs/sync';
 
 let checks = 0;
@@ -53,28 +54,12 @@ const canonical = (value: unknown): string => {
 interface Task extends Record<string, unknown> {
 	title: string;
 	done: boolean;
-	/**
-	 * Absent until an admin sets it. Building a task with it, even set to false, would put a
-	 * delta at an admin-only path in the same commit as the attach, and a commit is authorized
-	 * whole: nobody but an admin could create a task at all. A field with its own authority is
-	 * a field the actors who cannot write it do not construct.
-	 */
-	flagged?: boolean;
 }
 
 interface Board extends Record<string, unknown> {
 	title: string;
 	tasks: ReturnType<typeof createMap<Task>>;
 }
-
-/** Anyone may work the board. Only an admin may flag a task. */
-const POLICY: Policy = [
-	{ effect: 'allow', path: ['title'] },
-	{ effect: 'allow', path: ['tasks', ANY] },
-	{ effect: 'allow', path: ['tasks', ANY, 'title'] },
-	{ effect: 'allow', path: ['tasks', ANY, 'done'] },
-	{ effect: 'allow', path: ['tasks', ANY, 'flagged'], roles: ['admin'] },
-];
 
 const newBoard = (): Board => {
 	const board = createObject<Board>();
@@ -116,8 +101,8 @@ const fromSocket = (socket: Socket): Channel => {
 			try {
 				frame = decodeFrame(new Uint8Array(held.subarray(4, 4 + size)));
 			} catch {
-				// `spec/replication.md` 6: bytes that are not a frame end the link. Raising here
-				// would take the process instead, which is the one thing a transport must not do.
+				// Bytes that are not a frame end the link. Raising here would take the process
+				// instead, which is the one thing a transport must not do.
 				end();
 				socket.destroy();
 				return;
@@ -157,167 +142,110 @@ const fromSocket = (socket: Socket): Channel => {
 
 // --- the scenario, run over whatever pair of channels it is handed -------------------------
 
-type Open = (actor: Actor) => Promise<Channel> | Channel;
+const scenario = async (name: string, pair: () => Promise<[Channel, Channel]>): Promise<void> => {
+	const board = newBoard();
+	const [there, here] = await pair();
 
-const scenario = async (name: string, host: ReturnType<typeof serve>, board: Board, open: Open) => {
+	// Both ends run the same two lines. One of them happens to hold the board already.
+	const kim = connect(there);
+	const alex = connect(here);
 	const refusals: Refused[] = [];
+	const mine = kim.share<Board>('board', board, { refused: (report) => refusals.push(report) });
+	const theirs = alex.share<Board>('board', undefined, { refused: (report) => refusals.push(report) });
 
-	const kim = connect(() => open({ id: 'kim' }), { retry: () => false });
-	const alex = connect(() => open({ id: 'alex' }), { retry: () => false });
+	const copy = await theirs.ready;
+	await settle();
+	check(copy.title === 'this week', `${name}: the end with nothing was handed the board`);
+	check(shape(copy) === shape(board), `${name}: and it says what the other end says`);
 
-	const kimBoard = kim.join<Board>('board');
-	const alexBoard = alex.join<Board>('board', { refused: (group) => refusals.push(...group) });
-
-	const mine = await kimBoard.ready;
-	const theirs = await alexBoard.ready;
-	check(mine.title === 'this week', `${name}: a replica with nothing was handed the board`);
-	check(shape(mine) === shape(board), `${name}: and it says what the host says`);
-
-	// Both work at once, on the same board and on the same task.
+	// Both work at once. Two people filing different tasks is not a conflict and must not
+	// behave like one.
 	const write = task('write it up');
-	mine.tasks.add(write);
-	await settle(4);
-
-	const theirCopy = theirs.tasks.get(textIdOf(write))!;
-	check(theirCopy !== undefined, `${name}: the new task reached the other person`);
-
-	mine.title = 'this week, revised';
-	theirCopy.done = true;
-	mine.tasks.add(task('book the room'));
+	board.tasks.add(write);
+	copy.tasks.add(task('book the room'));
 	await settle();
 
-	check(board.title === 'this week, revised', `${name}: the host took the title`);
-	check(shape(mine) === shape(board), `${name}: one replica is in step`);
-	check(shape(theirs) === shape(board), `${name}: the other replica is in step`);
+	check(board.tasks.size === 2, `${name}: both tasks survived`);
+	check(shape(copy) === shape(board), `${name}: and the two ends agree`);
 
-	// Alex is not an admin, and flagging is an admin's job. The write shows locally, then goes.
-	theirCopy.flagged = true;
-	check(theirCopy.flagged === true, `${name}: the write showed before the host had seen it`);
+	// Both rename the board in the same breath. Neither end decides, so they end up swapped.
+	board.title = 'this week, revised';
+	copy.title = 'the week ahead';
 	await settle();
+	check(board.title === 'the week ahead', `${name}: a same-slot conflict leaves them swapped`);
+	check(copy.title === 'this week, revised', `${name}: each holding the other's word for it`);
+	check(refusals.length === 0, `${name}: with nothing refused, because nothing was refused`);
 
-	check(theirCopy.flagged === undefined, `${name}: and was rolled back once it was refused`);
-	check(refusals.length === 1, `${name}: one refusal, reported once`);
-	check(refusals[0]!.reasons[0]!.code === 'unauthorized', `${name}: named unauthorized`);
-	check(refusals[0]!.undo !== undefined, `${name}: with the values held before it`);
-	check(
-		(board.tasks.get(textIdOf(write)) as Task).flagged === undefined,
-		`${name}: and never reached the host`,
-	);
-	check(shape(mine) === shape(theirs), `${name}: both replicas still agree`);
+	// One of them yields. That is a handler an application writes, not something the link did.
+	theirs.resync();
+	await settle();
+	check(copy.title === 'the week ahead', `${name}: the end that yielded took the other's state`);
+	check(shape(copy) === shape(board), `${name}: and the two agree again`);
 
-	// An edit made while the link is down is held, not lost.
-	const before = board.title;
+	// A task written after the yield still crosses, so yielding is not leaving.
+	copy.tasks.get(textIdOf(write))!.done = true;
+	await settle();
+	check(board.tasks.get(textIdOf(write))!.done === true, `${name}: and the link is still live`);
+
+	mine.stop();
 	kim.close();
-	await settle(2);
-	theirs.title = 'edited while the other side was away';
-	await settle();
-	check(board.title !== before, `${name}: work carried on for whoever was still up`);
-
 	alex.close();
-	return { mine, theirs };
 };
 
-// --- run it on three transports ------------------------------------------------------------
+// --- the four transports --------------------------------------------------------------------
 
-const overInProcess = async (): Promise<void> => {
-	const board = newBoard();
-	const host = serve(() => ({ document: board, policy: POLICY }));
-	await scenario('in process', host, board, (actor) => {
-		const [there, here] = inProcess();
-		host.accept(there, actor);
-		return here;
-	});
-	host.close();
-};
+const overInProcess = (): Promise<void> =>
+	scenario('in process', async () => inProcess());
 
-const overMessagePort = async (): Promise<void> => {
-	const board = newBoard();
-	const host = serve(() => ({ document: board, policy: POLICY }));
-	const ports: MessageChannel[] = [];
-	await scenario('message port', host, board, (actor) => {
+const ports: MessageChannel[] = [];
+const overMessagePort = (): Promise<void> =>
+	scenario('message port', async () => {
 		const pair = new MessageChannel();
 		ports.push(pair);
-		host.accept(fromMessagePort(pair.port1 as unknown as Parameters<typeof fromMessagePort>[0]), actor);
-		return fromMessagePort(pair.port2 as unknown as Parameters<typeof fromMessagePort>[0]);
+		return [
+			fromMessagePort(pair.port1 as unknown as Parameters<typeof fromMessagePort>[0]),
+			fromMessagePort(pair.port2 as unknown as Parameters<typeof fromMessagePort>[0]),
+		];
 	});
-	host.close();
-	for (const pair of ports) {
-		pair.port1.close();
-		pair.port2.close();
-	}
-};
 
 const overTcp = async (): Promise<void> => {
-	const board = newBoard();
-	const host = serve(() => ({ document: board, policy: POLICY }));
-
-	// The host takes whoever connects; the test's own handshake is one line of who they are.
-	const waiting: Actor[] = [];
+	let arrived: ((channel: Channel) => void) | undefined;
 	const server = createTcpServer((socket) => {
 		socket.setNoDelay(true);
-		host.accept(fromSocket(socket), waiting.shift() ?? { id: 'unknown' });
+		arrived!(fromSocket(socket));
 	});
 	await new Promise<void>((ready) => server.listen(0, '127.0.0.1', ready));
 	const port = (server.address() as { port: number }).port;
 
-	await scenario('tcp socket', host, board, async (actor) => {
-		waiting.push(actor);
+	await scenario('tcp socket', async () => {
+		const accepted = new Promise<Channel>((done) => { arrived = done; });
 		const socket = createConnection({ port, host: '127.0.0.1' });
 		socket.setNoDelay(true);
 		await new Promise<void>((ready, fail) => {
 			socket.once('connect', () => ready());
 			socket.once('error', fail);
 		});
-		return fromSocket(socket);
+		return [await accepted, fromSocket(socket)];
 	});
 
-	host.close();
 	await new Promise<void>((done) => server.close(() => done()));
 };
 
-// A second document in the same process, kept in step with the first.
-const overMirror = async (): Promise<void> => {
-	const board = newBoard();
-	const editing = mirror(board);
-	await settle(4);
-
-	const copy = editing.document as Board;
-	check(shape(copy) === shape(board), 'mirror: the second document was built from the first');
-
-	board.tasks.add(task('written on the stored side'));
-	await settle(4);
-	check(shape(copy) === shape(board), 'mirror: a change on one side reaches the other');
-
-	copy.title = 'written on the editing side';
-	await settle(4);
-	check(board.title === 'written on the editing side', 'mirror: and back the other way');
-
-	editing.stop();
-	board.title = 'after the mirror stopped';
-	await settle(4);
-	check(copy.title === 'written on the editing side', 'mirror: stopping it stops it');
-};
-
-// A replica in another thread, over the port adapter, with a real thread boundary between
-// the two. This is the shape a sandboxed module takes: the same protocol, a different medium.
+// The far end in another thread, with a real thread boundary between the two. This is the
+// shape a sandboxed module takes: the same protocol, a different medium.
 const overWorker = async (): Promise<void> => {
 	const board = newBoard();
-	const host = serve(() => ({ document: board, policy: POLICY }));
 	const pair = new MessageChannel();
-	host.accept(
-		fromMessagePort(pair.port1 as unknown as Parameters<typeof fromMessagePort>[0]),
-		{ id: 'worker' },
-	);
+	const link = connect(fromMessagePort(pair.port1 as unknown as Parameters<typeof fromMessagePort>[0]));
+	link.share('board', board);
 
-	// The port is handed over on the way in, and it is the only thing the worker gets besides
-	// which document it is joining.
 	const worker = new Worker(new URL('./worker.ts', import.meta.url), {
-		workerData: { root: bytesToHex(idOf(board)), kind: kindOf(board), port: pair.port2 },
+		workerData: { port: pair.port2 },
 		transferList: [pair.port2],
 	});
 
 	const added = await new Promise<string>((done, fail) => {
-		worker.on('message', (message: { added?: string; refused?: number }) => {
+		worker.on('message', (message: { added?: string }) => {
 			if (message.added !== undefined) done(message.added);
 		});
 		worker.on('error', fail);
@@ -325,21 +253,136 @@ const overWorker = async (): Promise<void> => {
 	});
 
 	await settle();
-	const task = board.tasks.get(added);
-	check(task !== undefined, 'worker: the task written in another thread reached the host');
-	check((task as Task).title === 'written in a worker', 'worker: with the title it was given');
+	const written = board.tasks.get(added);
+	check(written !== undefined, 'worker: the task written in another thread reached this one');
+	check(written!.title === 'written in a worker', 'worker: with the title it was given');
 
 	await worker.terminate();
-	host.close();
+	link.close();
 	pair.port1.close();
+};
+
+// --- three ends in a chain, and two documents in one process ---------------------------------
+
+// Design 055: a node holding one document at the end of two links forwards between them,
+// and nothing in it knows it is in the middle of anything.
+const overChain = async (): Promise<void> => {
+	const first = newBoard();
+	const [leftThere, leftHere] = inProcess();
+	const [rightThere, rightHere] = inProcess();
+
+	const one = connect(leftThere);
+	const two = connect(leftHere);
+	const three = connect(rightThere);
+	const four = connect(rightHere);
+
+	one.share('board', first);
+	const middle = await two.share<Board>('board').ready;
+	await settle();
+	three.share('board', middle);
+	const last = await four.share<Board>('board').ready;
+	await settle();
+
+	first.tasks.add(task('written at one end'));
+	last.title = 'renamed at the other';
+	await settle();
+
+	check(shape(first) === shape(last), 'chain: the two ends of a chain of three agree');
+	check(shape(middle) === shape(last), 'chain: and so does the one in the middle');
+	check(last.tasks.size === 1, 'chain: a task written at one end reached the other');
+	check(first.title === 'renamed at the other', 'chain: and a rename came back the other way');
+
+	for (const link of [one, two, three, four]) link.close();
+};
+
+const overMirror = async (): Promise<void> => {
+	const board = newBoard();
+	const editing = mirror(board);
+	await settle();
+
+	const copy = editing.document as Board;
+	check(shape(copy) === shape(board), 'mirror: the second document was built from the first');
+
+	board.tasks.add(task('written on the stored side'));
+	await settle();
+	check(shape(copy) === shape(board), 'mirror: a change on one side reaches the other');
+
+	copy.title = 'written on the editing side';
+	await settle();
+	check(board.title === 'written on the editing side', 'mirror: and back the other way');
+
+	editing.stop();
+	board.title = 'after the mirror stopped';
+	await settle();
+	check(copy.title === 'written on the editing side', 'mirror: stopping it stops it');
+};
+
+// --- a link and a store on one document -------------------------------------------------------
+
+// The thing design 055 is for: a board being worked on over a link, and written down by a
+// store, with neither of the two knowing the other exists. A change the other person made is
+// an ordinary local change to the store, so it is what the store writes down.
+const overStoreAndLink = async (): Promise<void> => {
+	const store = createStore({ driver: memoryDriver() });
+	const held = await store.open('board:42');
+	const board = held.root as Board;
+	atomic(() => {
+		board.title = 'kept';
+		board.tasks = createMap<Task>();
+	});
+
+	// Anything watching the document hears both, which is what makes the two compose.
+	const seen: string[] = [];
+	observer(board).path('title').watch(() => seen.push(String(board.title)));
+
+	const [there, here] = inProcess();
+	const kept = connect(there);
+	const other = connect(here);
+	kept.share('board', board);
+	const copy = await other.share<Board>('board').ready;
+	await settle();
+	check(shape(copy) === shape(board), 'store: the stored board crossed the link');
+
+	// The other person renames it. Nothing here asked the store to write anything.
+	copy.title = 'renamed by the other end';
+	await settle();
+	await store.settled(held);
+
+	check(board.title === 'renamed by the other end', 'store: the change arrived over the link');
+	check(seen.includes('renamed by the other end'), 'store: and a watcher heard it as a change');
+
+	const history = await store.since('board:42', 0);
+	const wrote = history.filter((entry) => entry.commit.deltas.some((delta) =>
+		delta.ref.kind === 'object' && delta.ref.key === 'title'
+		&& delta.type === 'replace' && delta.value === 'renamed by the other end'));
+	check(wrote.length === 1, 'store: and the store wrote it down, once');
+	check(wrote[0]!.seq > 0, 'store: under a sequence of its own');
+
+	// Reopening from the rows says the same thing, so what the link landed really is stored.
+	await store.close(held);
+	const again = await store.open('board:42');
+	check((again.root as Board).title === 'renamed by the other end',
+		'store: and it is there when the document is opened again');
+
+	kept.close();
+	other.close();
+	await store.close(again);
+	await store.stop();
 };
 
 await overInProcess();
 await overMessagePort();
 await overTcp();
 await overWorker();
+await overChain();
 await overMirror();
+await overStoreAndLink();
+
+for (const pair of ports) {
+	pair.port1.close();
+	pair.port2.close();
+}
 
 console.log(
-	`sync proof: ${checks} checks, three transports, a worker thread and an in-process mirror`,
+	`sync proof: ${checks} checks, four transports, a chain of three, a mirror and a store`,
 );

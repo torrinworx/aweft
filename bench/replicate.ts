@@ -1,6 +1,6 @@
 // What replication costs, on the shipped code.
 //
-// Every performance claim in `packages/sync/README.md` and in decision designs 041 to 043
+// Every performance claim in `packages/sync/README.md` and in decision designs 040 to 042
 // comes from here. Run: node bench/replicate.ts
 //
 // CI does not gate on this.
@@ -10,16 +10,12 @@ import { gzipSync } from 'node:zlib';
 import { decodeCommit, encodeCommit, encodeValue } from '@aweftjs/codec';
 import type { Commit } from '@aweftjs/codec';
 import {
-	atomic, createArray, createMap, createObject, idOf, insertAt, observer, positionsOf, textIdOf,
+	atomic, createArray, createMap, createObject, insertAt, observer, positionsOf, textIdOf,
 } from '@aweftjs/core';
-import { REST, type Policy } from '@aweftjs/schema';
-import {
-	connect, decodeFrame, encodeFrame, inProcess, serve, track,
-} from '@aweftjs/sync';
+import { connect, decodeFrame, encodeFrame, inProcess } from '@aweftjs/sync';
 import type { Frame } from '@aweftjs/sync';
 import { randomBelow, randomFrom } from '@aweftjs/testing';
 
-const OPEN: Policy = [{ effect: 'allow', path: [REST] }];
 const WORDS = ['plan', 'draft', 'ship', 'review', 'fix', 'test', 'write', 'read', 'merge'];
 
 /** A board-shaped edit stream: a map of tasks, an array of columns, the edits a client makes. */
@@ -118,36 +114,6 @@ time('encoded and decoded as bytes', 20000, () => { decodeFrame(encodeFrame(fram
 time('structured-cloned as a commit', 20000, () => { structuredClone(one); });
 time('encoded, cloned, decoded', 20000, () => { decodeCommit(structuredClone(encodeCommit(one))); });
 
-// --- the rebase, design 043 ---------------------------------------------------------------
-
-console.log('\nundo, apply, redo, by how many commits are pending');
-for (const depth of [0, 1, 4, 16]) {
-	const doc = createObject<Record<string, unknown>>();
-	doc.base = 0;
-	const undos: Commit[] = [];
-	const redos: Commit[] = [];
-	const tracker = track(doc, ({ commit, undo, landed }) => {
-		if (landed) return;
-		redos.push(commit);
-		undos.push(undo);
-	});
-	for (let i = 0; i < depth; i++) doc[`pending${i}`] = i;
-
-	// One commit arriving from elsewhere, replacing a slot the document already holds.
-	const arriving = (value: number): Commit => ({
-		deltas: [{ type: 'replace', id: idOf(doc), ref: { kind: 'object', key: 'base' }, value }],
-	});
-	let flip = 0;
-
-	time(`${String(depth).padStart(2)} pending`, 20000, () => {
-		for (let i = undos.length - 1; i >= 0; i--) tracker.receive(undos[i]!);
-		flip = 1 - flip;
-		tracker.receive(arriving(flip));
-		for (const commit of redos) tracker.receive(commit);
-	});
-	tracker.stop();
-}
-
 // --- array positions, design 040 ----------------------------------------------------------
 
 console.log('\narray position keys, four-byte levels of a digit and three random bytes');
@@ -182,26 +148,23 @@ console.log(`  ${'1,000 replicas inserting at one place'.padEnd(44)} ${chosen.si
 // --- end to end -------------------------------------------------------------------------
 
 const roundTrip = async (): Promise<void> => {
-	const document = createObject<Record<string, unknown>>({ n: 0 });
-	const host = serve(() => ({ document, policy: OPEN }));
-	const session = connect(() => {
-		const [there, here] = inProcess();
-		host.accept(there, { id: 'a' });
-		return here;
-	}, { retry: () => false });
-
-	const mirror = await session.join<Record<string, unknown>>('doc').ready;
+	const [there, here] = inProcess();
+	const source = createObject<Record<string, unknown>>({ n: 0 });
+	const left = connect(there);
+	const right = connect(here);
+	left.share('doc', source);
+	const mirror = await right.share<Record<string, unknown>>('doc').ready;
 	const rounds = 20000;
 
 	const t0 = process.hrtime.bigint();
 	for (let i = 1; i <= rounds; i++) mirror.n = i;
-	while (document.n !== rounds) await new Promise((done) => setTimeout(done, 0));
+	while (source.n !== rounds) await new Promise((done) => setTimeout(done, 0));
 	const us = Number(process.hrtime.bigint() - t0) / rounds / 1000;
 
-	console.log(`\nend to end, one client to a host with a policy`);
-	console.log(`  ${'commit written, sent, validated, applied'.padEnd(44)} ${us.toFixed(3)} us`);
-	session.close();
-	host.close();
+	console.log('\nend to end, one end of a link to the other, in process');
+	console.log(`  ${'commit written, sent, accepted, applied'.padEnd(44)} ${us.toFixed(3)} us`);
+	left.close();
+	right.close();
 };
 
 await roundTrip();

@@ -1,5 +1,5 @@
 {
-	"note": "An accept has four elements.",
+	"note": "A leave has two elements.",
 	"reason": "bad-frame",
-	"bytes": "83030001"
+	"bytes": "83040100"
 }

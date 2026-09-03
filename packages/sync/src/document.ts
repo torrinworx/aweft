@@ -55,9 +55,8 @@ const same = (a: SnapshotValue, b: SnapshotValue): boolean => {
  * it. A receiver mints its root with the same id first, `createObject(undefined, rootId)` for
  * an object root, and applies this to it.
  *
- * This is what a replica with nothing is sent, and it is also how a document built by
- * mutation rather than by replay is fed to an authority index: `record(index, asCommit(doc))`
- * says in one commit what the index would otherwise have had to watch happen.
+ * This is what an end with nothing is sent when it asks for the state, and it is also how a
+ * document built by mutation is handed to anything that wants it as one commit.
  *
  * Example:
  *   const whole = asCommit(doc);

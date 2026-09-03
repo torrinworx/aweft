@@ -1,0 +1,28 @@
+{
+	"note": "The whole document, said as one commit of adds, in answer to a want.",
+	"frame": {
+		"kind": "state",
+		"topic": 2,
+		"commit": {
+			"deltas": [
+				{
+					"type": "add",
+					"id": "0102030405060708090a0b0c",
+					"ref": {
+						"kind": "object",
+						"key": "title"
+					},
+					"value": "plan"
+				}
+			]
+		}
+	},
+	"wire": [
+		1,
+		2,
+		{
+			"hex": "818184004c0102030405060708090a0b0c8200657469746c6564706c616e"
+		}
+	],
+	"bytes": "830102581e818184004c0102030405060708090a0b0c8200657469746c6564706c616e"
+}
