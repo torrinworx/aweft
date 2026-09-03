@@ -131,7 +131,7 @@ export const memoryDriver = (): Driver => {
 					index(field).set(write.doc, value);
 				}
 			}
-			held.tail.push({ seq, actor: write.actor, body: write.body.slice() });
+			held.tail.push({ seq, body: write.body.slice() });
 			held.head = seq;
 			return seq;
 		},

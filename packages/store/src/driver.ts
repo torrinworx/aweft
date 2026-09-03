@@ -20,7 +20,7 @@ import type { Indexable, Where } from './query.ts';
  *
  * `parent` and `slot` are null together, and mean the observable has no attach edge. Its
  * slots are kept anyway: detaching is not deleting (design 048), and what collects an
- * orphan is a sweep the host runs rather than the act of writing.
+ * orphan is a sweep the application runs rather than the act of writing.
  */
 export interface Row {
 	readonly id: string;
@@ -52,7 +52,6 @@ export interface Patch {
 /** One commit as it was persisted, with the sequence its document gave it. */
 export interface Entry {
 	readonly seq: number;
-	readonly actor: string;
 	readonly body: Uint8Array;
 	/**
 	 * The declared fields this commit changed, and their new values. Written in the same
@@ -95,7 +94,6 @@ export interface Write {
 	readonly rootKind: ObservableKind;
 	readonly rows: readonly Patch[];
 	readonly dropped: readonly string[];
-	readonly actor: string;
 	readonly body: Uint8Array;
 	/**
 	 * The declared fields this commit changed, and their new values. Written in the same

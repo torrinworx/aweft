@@ -17,7 +17,7 @@ interface Held {
 	root: string;
 	rootKind: ObservableKind;
 	rows: Record<string, Row>;
-	tail: { seq: number; actor: string; body: string }[];
+	tail: { seq: number; body: string }[];
 	head: number;
 	fields: Record<string, Indexable>;
 }
@@ -109,7 +109,7 @@ export const fileDriver = (dir: string): Driver => {
 			}
 			if (w.project !== undefined) Object.assign(held.fields, w.project);
 			held.head += 1;
-			held.tail.push({ seq: held.head, actor: w.actor, body: Buffer.from(w.body).toString('base64') });
+			held.tail.push({ seq: held.head, body: Buffer.from(w.body).toString('base64') });
 			save(w.doc, held);
 			return held.head;
 		},
@@ -124,7 +124,7 @@ export const fileDriver = (dir: string): Driver => {
 			const held = load(doc);
 			if (held === null) return [];
 			return held.tail.filter((e) => e.seq > seq)
-				.map((e) => ({ seq: e.seq, actor: e.actor, body: new Uint8Array(Buffer.from(e.body, 'base64')) }));
+				.map((e) => ({ seq: e.seq, body: new Uint8Array(Buffer.from(e.body, 'base64')) }));
 		},
 
 		async head(doc) { return load(doc)?.head ?? 0; },

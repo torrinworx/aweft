@@ -1,8 +1,8 @@
 // What can be asked, and what has to be declared before it can be.
 //
-// A declared path is literal steps from the root. It is not a policy pattern: `ANY` and `REST`
-// name many paths inside one document, and a projection holds one value per path per document,
-// so a wildcard has nowhere to land (design 049).
+// A declared path is literal steps from the root, never a wildcard: a wildcard names many
+// paths inside one document, and a projection holds one value per path per document, so a
+// wildcard has nowhere to land (design 049).
 
 import type { SnapshotValue } from '@aweftjs/core';
 

@@ -26,7 +26,7 @@ export interface StoreDriver {
 	write(write: {
 		doc: string; root: string; rootKind: string;
 		rows: readonly { id: string; kind: string; edge?: { parent: string; slot: string } | null; set: Record<string, unknown>; unset: readonly string[] }[];
-		dropped: readonly string[]; actor: string; body: Uint8Array;
+		dropped: readonly string[]; body: Uint8Array;
 		project?: Record<string, unknown>;
 	}): Promise<number>;
 	declare(fields: readonly string[]): Promise<void>;
@@ -38,7 +38,7 @@ export interface StoreDriver {
 	scan(limit: number, after?: string): Promise<{ doc: string; fields: Record<string, unknown> }[]>;
 	create(doc: string, root: string, rootKind: string): Promise<boolean>;
 	read(doc: string): Promise<{ root: string; rootKind: string; rows: unknown[] } | null>;
-	since(doc: string, seq: number): Promise<{ seq: number; actor: string; body: Uint8Array }[]>;
+	since(doc: string, seq: number): Promise<{ seq: number; body: Uint8Array }[]>;
 	head(doc: string): Promise<number>;
 	truncate(doc: string, seq: number): Promise<void>;
 	forget(doc: string, ids: readonly string[]): Promise<void>;
@@ -58,8 +58,8 @@ const row = (id: string, set: Record<string, unknown> = {}, parent: string | nul
 	...(id === ROOT ? {} : { edge: parent === null ? null : { parent, slot: id } }),
 });
 const body = (n: number) => new Uint8Array([n & 0xff, (n >> 8) & 0xff]);
-const write = (doc: string, rows: ReturnType<typeof row>[], n: number, actor = 'a') =>
-	({ doc, root: ROOT, rootKind: 'object', rows, dropped: [], actor, body: body(n) });
+const write = (doc: string, rows: ReturnType<typeof row>[], n: number) =>
+	({ doc, root: ROOT, rootKind: 'object', rows, dropped: [], body: body(n) });
 
 /**
  * Every obligation a `store` driver has.
@@ -129,14 +129,13 @@ export const driverChecks = (): DriverCheck[] => [
 		},
 	},
 	{
-		name: 'since returns what came after a sequence, oldest first, with its actor',
+		name: 'since returns what came after a sequence, oldest first',
 		async run(make) {
 			const d = await make();
 			try {
-				for (let i = 1; i <= 5; i++) await d.write(write('a', [row(ROOT)], i, `u${i}`));
+				for (let i = 1; i <= 5; i++) await d.write(write('a', [row(ROOT)], i));
 				const all = await d.since('a', 0);
 				assert.deepEqual(all.map((e) => e.seq), [1, 2, 3, 4, 5]);
-				assert.deepEqual(all.map((e) => e.actor), ['u1', 'u2', 'u3', 'u4', 'u5']);
 				assert.deepEqual([...all[2]!.body], [...body(3)]);
 				assert.deepEqual((await d.since('a', 3)).map((e) => e.seq), [4, 5]);
 				assert.deepEqual(await d.since('a', 5), []);
@@ -199,7 +198,7 @@ export const driverChecks = (): DriverCheck[] => [
 						await d.write(write('a', [
 							{ id: ROOT, kind: 'object', set: { [`w${w}`]: i }, unset: [] },
 							row(`w${w}`, { n: i }),
-						], i, `w${w}`));
+						], i));
 					}
 				})()));
 
@@ -475,7 +474,7 @@ export const driverChecks = (): DriverCheck[] => [
 				await d.write(write('a', [row(ROOT), row('x', { v: 1 })], 1));
 				// A second write about the same row that says nothing about where it is attached.
 				await d.write({
-					doc: 'a', root: ROOT, rootKind: 'object', actor: 'a', body: body(2), dropped: [],
+					doc: 'a', root: ROOT, rootKind: 'object', body: body(2), dropped: [],
 					rows: [{ id: 'x', kind: 'object', set: { v: 2 }, unset: [] }],
 				});
 
@@ -500,7 +499,7 @@ export const driverChecks = (): DriverCheck[] => [
 			const d = await make();
 			try {
 				await d.write({
-					doc: 'a', root: ROOT, rootKind: 'array', actor: 'a', body: body(1), dropped: [],
+					doc: 'a', root: ROOT, rootKind: 'array', body: body(1), dropped: [],
 					rows: [
 						{ id: ROOT, kind: 'array', set: {}, unset: [] },
 						{ id: 'm', kind: 'map', set: {}, unset: [], edge: { parent: ROOT, slot: 'm' } },

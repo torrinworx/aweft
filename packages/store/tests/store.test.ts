@@ -89,7 +89,7 @@ test('opening twice hands back the same document, and the last close tears it do
 	await store.close(two);
 });
 
-test('the tail carries every commit, with its actor, and answers a resume', async () => {
+test('the tail carries every commit and answers a resume', async () => {
 	const store = createStore({ driver: memoryDriver() });
 	const board = await store.open('tail');
 	const root = board.root as Doc;
@@ -100,7 +100,6 @@ test('the tail carries every commit, with its actor, and answers a resume', asyn
 	const all = await store.since('tail', 0);
 	assert.equal(all.length, 2);
 	assert.deepEqual(all.map((h) => h.seq), [1, 2]);
-	assert.deepEqual(all.map((h) => h.actor), ['local', 'local']);
 
 	const missed = await store.since('tail', 1);
 	assert.equal(missed.length, 1);
@@ -108,7 +107,7 @@ test('the tail carries every commit, with its actor, and answers a resume', asyn
 	assert.ok(missed[0]!.commit.deltas.length > 0);
 });
 
-test('a received commit is applied and recorded under its author', async () => {
+test('a received commit is applied and written to the tail', async () => {
 	const driver = memoryDriver();
 	const store = createStore({ driver });
 	const doc = await store.open('remote');
@@ -120,13 +119,12 @@ test('a received commit is applied and recorded under its author', async () => {
 	for (const h of await store.since('remote', 0)) apply(replica, h.commit);
 	const remote = capture(replica, () => { replica.fromElsewhere = 'yes'; })[0]!;
 
-	const seq = await store.receive(doc, remote, 'u_7');
+	const seq = await store.receive(doc, remote);
 	assert.equal((doc.root as Doc).fromElsewhere, 'yes');
 	assert.equal(seq, 2);
 
 	const history = await store.since('remote', 0);
-	assert.equal(history.at(-1)!.actor, 'u_7');
-	assert.equal(history[0]!.actor, 'local');
+	assert.deepEqual(history.map((h) => h.seq), [1, 2], 'a received commit joins the same tail');
 
 	// and it survives a reopen
 	const again = await createStore({ driver }).open('remote');
@@ -214,7 +212,7 @@ test('re-attaching an observable a reopened document does not hold is refused, n
 	assert.deepEqual(second.orphans(again), [textIdOf(item)]);
 
 	await assert.rejects(
-		() => second.receive(again, reattach, 'u_1'),
+		() => second.receive(again, reattach),
 		(e: Error) => e.message.startsWith('detached-elsewhere') && (e as { reason?: string }).reason === 'detached-elsewhere',
 	);
 
@@ -360,6 +358,26 @@ test('a commit naming an observable the document never held changes nothing', as
 	const stray = capture(b.root, () => { (b.root as Doc).v = 1; })[0]!;
 	await store.settled(b);
 
-	await assert.rejects(() => store.receive(a, stray, 'u_1'), /unreachable/);
+	await assert.rejects(() => store.receive(a, stray), /unreachable/);
 	assert.equal((a.root as Doc).v, undefined);
+});
+
+test('orphans and sweep go by reachability, so a detached branch is collected whole', async () => {
+	const driver = memoryDriver();
+	const store = createStore({ driver });
+	const board = await store.open('branch');
+	const root = board.root as Doc;
+	const top = createObject<Doc>({ title: 'top' });
+	const middle = createObject<Doc>({ title: 'middle' });
+	const leaf = createObject<Doc>({ title: 'leaf' });
+	atomic(() => { root.branch = top; top.child = middle; middle.child = leaf; });
+	await store.settled(board);
+	assert.deepEqual(store.orphans(board), []);
+
+	delete root.branch;
+	await store.settled(board);
+	assert.deepEqual(store.orphans(board).sort(), [textIdOf(top), textIdOf(middle), textIdOf(leaf)].sort(),
+		'every row under the detached top is an orphan, not only the one whose parent pointer went');
+	assert.equal(await store.sweep(board), 3);
+	assert.deepEqual(store.orphans(board), []);
 });

@@ -91,10 +91,10 @@ test('a failed write is terminal, and is not handed to only the first caller', a
 	fail = false;
 	root.third = 3;
 	await assert.rejects(() => store.settled(h), /boom/, 'the failure stays, because what is stored is behind');
-	await assert.rejects(() => store.receive(h, capture(root, () => { root.fourth = 4; })[0]!, 'u'), /boom/);
+	await assert.rejects(() => store.receive(h, capture(root, () => { root.fourth = 4; })[0]!), /boom/);
 });
 
-test('a path declared after a document exists is written on the next open', async () => {
+test('a path declared after a document exists is written on the next commit', async () => {
 	const driver = memoryDriver();
 	const first = createStore({ driver, declare: { owner: ['owner'] } });
 	const h = await first.open('later');
@@ -155,14 +155,6 @@ test('find hands back the projection it already read', async () => {
 	assert.equal(hit?.fields.title, 'the title', 'listing must not mean reopening every document');
 });
 
-test('a local write can be attributed to whoever made it', async () => {
-	const store = createStore({ driver: memoryDriver(), actor: 'u_7' });
-	const h = await store.open('attributed');
-	(h.root as Doc).v = 1;
-	await store.settled(h);
-	assert.deepEqual((await store.since('attributed', 0)).map((e) => e.actor), ['u_7']);
-});
-
 test('a declared path may not cross an array, and says so', async () => {
 	const store = createStore({ driver: memoryDriver(), declare: { first: ['tasks', '0', 'title'] } });
 	const h = await store.open('arrayed');
@@ -183,7 +175,7 @@ test('a declared path may not cross an array, and says so', async () => {
 // handle was closed, out of reach of `stop()`. `Promise.all([open(d), open(d)])` is what a
 // server does on every request that arrives in a pair.
 test('two opens of one name in the same tick share one document', async () => {
-	const store = createStore({ driver: memoryDriver(), actor: 'u_1' });
+	const store = createStore({ driver: memoryDriver() });
 
 	const [first, second] = await Promise.all([store.open('board'), store.open('board')]);
 	assert.equal(first.root, second.root, 'one live document, not two');
@@ -201,6 +193,6 @@ test('two opens of one name in the same tick share one document', async () => {
 	await store.close(second);
 	await store.stop();
 
-	const back = createStore({ driver: memoryDriver(), actor: 'u_1' });
+	const back = createStore({ driver: memoryDriver() });
 	await back.stop();
 });

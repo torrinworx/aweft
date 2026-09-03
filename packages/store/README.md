@@ -9,7 +9,7 @@ granularity of the slots that changed. There is no save interval, no flush, and 
 import { atomic } from '@aweftjs/core';
 import { createStore, memoryDriver } from '@aweftjs/store';
 
-const store = createStore({ driver: memoryDriver(), actor: 'u_7' });
+const store = createStore({ driver: memoryDriver() });
 
 const board = await store.open('board:42');
 const root = board.root as Record<string, unknown>;
@@ -26,9 +26,6 @@ own entry in the history. Two bare assignments are two commits, so a watcher see
 half-changed and a replica receives the halves separately. `atomic` makes the whole block one
 commit that applies whole or not at all.
 
-`actor` is who a local write is recorded as. It is what `since` reports later, so a persisted
-history can say who wrote something.
-
 **Finishing.** `close(handle)` lets go of one document. `stop()` ends the whole store and the
 driver with it; nothing can be opened afterwards.
 
@@ -38,13 +35,14 @@ Three things, one job each.
 
 **Rows.** One per observable: its id, its kind, where it is attached, and its slots. A commit
 writes only the slots its deltas name, so the cost of a write follows the change rather than
-the document. Measured against writing the document whole: 0.054 ms and 3.9 KB of write-ahead
-log at a 620 KB document, against 34.98 ms and 571 KB. The rows are the source of truth, and a
+the document. Measured against writing the document whole, in the R1 research run behind design 047
+(embedded Postgres, outside this repo; no script here reproduces it): 0.054 ms and 3.9 KB of
+write-ahead log at a 620 KB document, against 34.98 ms and 571 KB. The rows are the source of truth, and a
 document opens by reading them.
 
-**A commit tail.** Every commit, in order, with the actor that wrote it and a per-document
-sequence. This is what a session that fell behind asks for. It is derived, so losing it costs
-a resynchronization rather than a document, and `truncate` bounds it.
+**A commit tail.** Every commit, in order, with a per-document sequence. This is what a
+session that fell behind asks for. It is derived, so losing it costs a resynchronization
+rather than a document, and `truncate` bounds it.
 
 **A projection.** One record per document, one value per declared path, written in the same
 transaction as the commit that changed it. This is what a query reads.
@@ -118,7 +116,7 @@ Declaring everything is the whole-document index by another route.
 
 ```ts
 const missed = await store.since('board:42', session.seq);
-for (const { seq, actor, commit } of missed) send(seq, actor, commit);
+for (const { seq, commit } of missed) send(seq, commit);
 ```
 
 A sequence older than the tail reaches back to is answered with what the tail still holds, so
@@ -133,10 +131,12 @@ longest outage a session may resume from.
 ```ts
 import { decodeCommit } from '@aweftjs/store';
 
-await store.receive(board, decodeCommit(bytes), 'u_7');
+await store.receive(board, decodeCommit(bytes));
 ```
 
-The actor is recorded beside the commit, so a persisted history can say who wrote something.
+A received commit joins the same tail as a local one, under the next sequence. Apply it
+through the store rather than around it and a commit the document refuses is refused before
+anything is written.
 
 ## Detaching is not deleting
 
@@ -179,8 +179,10 @@ for (const check of driverChecks()) {
 ```
 
 The check that matters most runs four writers concurrently against slots that do not overlap
-and asserts every one of them survives. A driver that writes rows whole passes everything else
-and fails that one.
+and asserts every one of them survives. A driver that writes rows whole fails it, along with
+two others: the row nothing attaches loses its slots, and an unset slot comes back because a
+whole-row write has nothing to unset it with. Three of twenty-seven, measured against a driver
+written to be wrong on purpose rather than reasoned about.
 
 `examples/store/driver-file.ts` is a complete driver written outside the package, and the proof
 program runs the real thing: it writes a document, sends the writing
@@ -197,5 +199,5 @@ that slot when it opens the document rather than failing to open it at all. See 
 
 - **Answer a question about many things inside one document.** See the declaration note above.
 - **Talk to a network.** `sync` moves commits between documents; this one keeps them.
-- **Decide who may write.** `schema` does that, and a host runs it before `receive`.
+- **Decide who may write.** That is the application's rule, run before `receive`.
 - **Sweep on its own.** See above.

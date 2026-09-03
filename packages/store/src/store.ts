@@ -21,7 +21,6 @@ import {
 /** One commit of a document's history, as `store` hands it back. */
 export interface Held {
 	readonly seq: number;
-	readonly actor: string;
 	readonly commit: Commit;
 }
 
@@ -51,7 +50,6 @@ interface State {
 	/** What `sweep` freed. The row it deleted was the only thing that knew. */
 	swept: Set<string>;
 	seq: number;
-	actor: string;
 	stop: () => void;
 	queue: Promise<void>;
 	failure: Error | null;
@@ -89,12 +87,16 @@ export interface Store {
 	open(doc: string, kind?: ObservableKind): Promise<Handle>;
 
 	/**
-	 * Apply a commit that came from somewhere else, and persist it under its author.
+	 * Apply a commit that came from somewhere else, and persist it.
 	 *
 	 * Params:
 	 *   handle: the open document
 	 *   commit: the commit to apply
-	 *   actor: who wrote it, recorded beside it in the history
+	 *
+	 * Returns: the sequence the commit was written under.
+	 *
+	 * Applying through the store rather than around it is what makes a refusal arrive before
+	 * anything is written (design 056).
 	 *
 	 * Throws: whatever the applier throws, having changed nothing. Also `detached-elsewhere`
 	 * when the commit re-attaches an observable this store still holds a row for but the
@@ -102,9 +104,9 @@ export interface Store {
 	 * observable and lose what the row has (design 048).
 	 *
 	 * Example:
-	 *   await store.receive(board, decodeCommit(bytes), 'u_7');
+	 *   await store.receive(board, decodeCommit(bytes));
 	 */
-	receive(handle: Handle, commit: Commit, actor: string): Promise<number>;
+	receive(handle: Handle, commit: Commit): Promise<number>;
 
 	/**
 	 * Wait until everything this document has produced is written.
@@ -176,7 +178,7 @@ export interface Store {
 	 *   doc: the document's name
 	 *   seq: the sequence the asker already has
 	 *
-	 * Returns: what it missed, each with the actor that wrote it.
+	 * Returns: what it missed, oldest first, each with the sequence it was written under.
 	 *
 	 * This is what a resuming session asks for (design 045). A sequence older than the tail
 	 * reaches back to is answered with what the tail still holds, so a caller compares the
@@ -264,7 +266,6 @@ export interface Store {
  * Params:
  *   driver: where the documents go
  *   declare: the paths to index, by the name a query calls each one
- *   actor: who a local write is recorded as, in the history a resuming session reads
  *
  * Returns: a store. Every document it opens is cached by name, so opening one twice hands
  * back the same live observable and the same handle, reference counted.
@@ -276,8 +277,7 @@ export interface Store {
  *   await store.settled(board);
  */
 export const createStore = (
-	{ driver, declare = {}, actor = 'local' }:
-	{ driver: Driver; declare?: Declaration; actor?: string },
+	{ driver, declare = {} }: { driver: Driver; declare?: Declaration },
 ): Store => {
 	checkDeclaration(declare);
 	const open_ = new Map<string, State>();
@@ -314,7 +314,7 @@ export const createStore = (
 		return changed;
 	};
 
-	const persist = async (state: State, commit: Commit, actor: string): Promise<void> => {
+	const persist = async (state: State, commit: Commit): Promise<void> => {
 		const change = record(state.rows, commit);
 		const project = moved(state);
 		state.seq = await driver.write({
@@ -324,7 +324,6 @@ export const createStore = (
 			rootKind: state.rootKind,
 			rows: change.touched,
 			dropped: change.dropped,
-			actor,
 			body: encodeCommit(commit),
 		});
 	};
@@ -339,12 +338,9 @@ export const createStore = (
 			if (state.swept.has(id) && state.failure === null) state.failure = sweptAway(id);
 		}
 
-		// Read the actor now, not when the write runs: writing is deferred by a turn, and by
-		// then a `receive` has already put the local actor back.
-		const actor = state.actor;
 		state.queue = state.queue.then(async () => {
 			if (state.failure !== null) return;
-			try { await persist(state, commit, actor); }
+			try { await persist(state, commit); }
 			catch (e) { state.failure = e as Error; }
 		});
 	};
@@ -432,7 +428,6 @@ export const createStore = (
 			live: new Set(built === null ? [stored.root] : Object.keys(built.snapshot.observables)),
 			swept: new Set<string>(),
 			seq: await driver.head(doc),
-			actor,
 			stop: () => {},
 			queue: Promise.resolve(),
 			failure: null,
@@ -457,7 +452,7 @@ export const createStore = (
 		return state;
 	};
 
-	const receive = async (handle: Handle, commit: Commit, actor: string): Promise<number> => {
+	const receive = async (handle: Handle, commit: Commit): Promise<number> => {
 		const state = stateOf(handle);
 		raise(state);
 
@@ -471,10 +466,7 @@ export const createStore = (
 			);
 		}
 
-		const before = state.actor;
-		state.actor = actor;
-		try { apply(state.root, commit); }
-		finally { state.actor = before; }
+		apply(state.root, commit);
 
 		await state.queue;
 		raise(state);
@@ -501,7 +493,7 @@ export const createStore = (
 			throw truncatedPast(doc, seq, first.seq - 1);
 		}
 
-		return entries.map((e) => ({ seq: e.seq, actor: e.actor, commit: decodeCommit(e.body) }));
+		return entries.map((e) => ({ seq: e.seq, commit: decodeCommit(e.body) }));
 	};
 
 	const truncate = async (doc: string, keep: number): Promise<void> => {

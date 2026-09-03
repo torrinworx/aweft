@@ -160,29 +160,6 @@ export const record = (rows: Rows, commit: Commit): Change => {
 };
 
 /**
- * Read the reachable part of a document's rows out as a snapshot.
- *
- * Params:
- *   rows: the document's rows
- *   root: the id of the root, in text form
- *
- * Returns: a snapshot holding what is reachable from the root, which is what `fromSnapshot`
- * will build.
- *
- * A row with no attach edge is left out, because `fromSnapshot` refuses an observable with no
- * attach path from the root. `store` still holds it: design 048 keeps the row and refuses
- * the commit that would re-attach it, rather than letting the observable come back empty.
- *
- * An alias naming one of those rows is left out too, and its slot with it. `fromSnapshot`
- * refuses a snapshot that names what it does not hold, so carrying the alias would make the
- * document unopenable rather than incomplete. Design 050 has the reasoning and `dropped`
- * says which slots went.
- *
- * Example:
- *   const { snapshot, dropped } = snapshotOf(rows, root);
- *   const doc = fromSnapshot(snapshot);
- */
-/**
  * Every row the document holds, found by walking attach edges down from the root.
  *
  * Params:
@@ -220,6 +197,29 @@ export const reachable = (rows: Rows, root: string): Set<string> => {
 	return held;
 };
 
+/**
+ * Read the reachable part of a document's rows out as a snapshot.
+ *
+ * Params:
+ *   rows: the document's rows
+ *   root: the id of the root, in text form
+ *
+ * Returns: a snapshot holding what is reachable from the root, which is what `fromSnapshot`
+ * will build.
+ *
+ * A row with no attach edge is left out, because `fromSnapshot` refuses an observable with no
+ * attach path from the root. `store` still holds it: design 048 keeps the row and refuses
+ * the commit that would re-attach it, rather than letting the observable come back empty.
+ *
+ * An alias naming one of those rows is left out too, and its slot with it. `fromSnapshot`
+ * refuses a snapshot that names what it does not hold, so carrying the alias would make the
+ * document unopenable rather than incomplete. Design 050 has the reasoning and `dropped`
+ * says which slots went.
+ *
+ * Example:
+ *   const { snapshot, dropped } = snapshotOf(rows, root);
+ *   const doc = fromSnapshot(snapshot);
+ */
 export const snapshotOf = (rows: Rows, root: string): { snapshot: Snapshot; dropped: string[] } => {
 	const observables: Record<string, { kind: ObservableKind; slots: Record<string, SnapshotValue> }> = {};
 
