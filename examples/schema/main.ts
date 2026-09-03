@@ -1,365 +1,266 @@
-// A shared workspace with three actors, and a policy that decides every commit it takes.
+// A task board that two nodes share, and neither of them will hold wrongly.
 //
-// The job is one an application would actually have: members keep their own profile, everyone
-// writes notes, a moderator pins them and keeps an audit trail, and nobody at all touches a
-// verification flag. What makes it a proof rather than a demo is that every commit goes over
-// the real seam, encoded to bytes and decoded on the far side, and the server knows nothing
-// about who sent it beyond the actor on the connection. An unauthorized commit never reaches
-// the document, and the client that sent it converges back to what the server took.
+// The job is an ordinary one: a board with columns and tasks, edited here and mirrored on a
+// second node. What makes it a proof is where the description is enforced. The board carries
+// a guard, so a bad edit written here never lands and never reaches the mirror. The mirror
+// carries no guard and asks `check` at its own door instead, because a node that did not make
+// a commit still has to decide whether to take it. The same description answers both.
 //
 // Run: node examples/schema/main.ts
 
-import { decodeCommit, encodeCommit, idFromText } from '@aweftjs/codec';
-import type { Commit, Delta } from '@aweftjs/codec';
 import {
-	alias, apply, atomic, createArray, createMap, createObject, idOf, observer, snapshot,
-	textIdOf,
+	RefusedError, apply, atomic, createArray, createMap, createObject, fromSnapshot, observer,
+	snapshot, textIdOf,
 } from '@aweftjs/core';
-import type { Change, ObservableMap, Snapshot } from '@aweftjs/core';
-import { ANY, REST, SELF, createIndex, pathOf, record, validate } from '@aweftjs/schema';
-import type { Actor, Policy, Reason } from '@aweftjs/schema';
+import type { Change, Commit, ObservableMap } from '@aweftjs/core';
+import { check, guard, list, shape, table } from '@aweftjs/schema';
+import type { Refusal, StandardSchema } from '@aweftjs/schema';
 
-// --- the application ---------------------------------------------------------------------
+// --- the validators, written here against the interface ----------------------------------
 
-interface Profile extends Record<string, unknown> { name?: string; verified?: boolean }
-interface Note extends Record<string, unknown> { title?: string; pinned?: boolean }
+const rule = (test: (value: unknown) => string | undefined): StandardSchema => ({
+	'~standard': {
+		version: 1,
+		vendor: 'task-board',
+		validate: (value) => {
+			const problem = test(value);
+			return problem === undefined ? { value } : { issues: [{ message: problem }] };
+		},
+	},
+});
 
-interface Space {
-	users?: ObservableMap<Profile>;
-	notes?: Record<string, Note>;
-	audit?: string[];
+const words = (min: number, max: number): StandardSchema =>
+	rule((value) => {
+		if (typeof value !== 'string') return 'expected some text';
+		if (value.trim().length < min) return `expected at least ${min} characters of text`;
+		if (value.length > max) return `expected at most ${max} characters`;
+		return undefined;
+	});
+
+const count = (min: number, max: number): StandardSchema =>
+	rule((value) => {
+		if (typeof value !== 'number' || !Number.isInteger(value)) return 'expected a whole number';
+		return value < min || value > max ? `expected a number between ${min} and ${max}` : undefined;
+	});
+
+const flag = rule((value) => (typeof value === 'boolean' ? undefined : 'expected true or false'));
+
+const maybe = (inner: StandardSchema): StandardSchema => ({
+	'~standard': {
+		version: 1,
+		vendor: 'task-board',
+		validate: (value) => (value === undefined ? { value } : inner['~standard'].validate(value)),
+	},
+});
+
+// --- the description ---------------------------------------------------------------------
+
+const Board = shape({
+	title: words(1, 60),
+	columns: list(shape({ name: words(1, 24), limit: count(1, 20) })),
+	tasks: table(shape({ title: words(1, 80), done: flag, notes: maybe(words(1, 400)) })),
+});
+
+// --- the application -----------------------------------------------------------------------
+
+interface Column extends Record<string, unknown> {
+	name: string;
+	limit: number;
 }
 
-/**
- * Who may write what.
- *
- * This is the whole authority of the application, and it is data: it can be printed, diffed
- * and stored, and nothing else in the program decides a write.
- */
-const policy: Policy = [
-	// Your own profile is yours, and everything in it.
-	{ effect: 'allow', path: ['users', SELF, REST] },
-	// Except the verification flag, which is nobody's. A deny beats every allow, so the
-	// moderator rules below do not quietly reopen it.
-	{ effect: 'deny', path: ['users', ANY, 'verified'] },
-	// Notes are shared: anyone may start one and write what a note says. The fields are named
-	// rather than covered by one subtree grant, because `pinned` below has different authority
-	// and a grant of ['notes', REST] would hand it out with the rest.
-	{ effect: 'allow', path: ['notes', ANY] },
-	{ effect: 'allow', path: ['notes', ANY, 'title'] },
-	{ effect: 'allow', path: ['notes', ANY, 'body'] },
-	// Pinning and the audit trail belong to moderators.
-	{ effect: 'allow', path: ['notes', ANY, 'pinned'], roles: ['moderator'] },
-	{ effect: 'allow', path: ['audit', REST], roles: ['moderator'] },
-];
+interface Task extends Record<string, unknown> {
+	title: string;
+	done: boolean;
+	notes?: string;
+}
 
-// --- the checks --------------------------------------------------------------------------
+interface BoardDoc extends Record<string, unknown> {
+	title: string;
+	columns: Column[];
+	tasks: ObservableMap<Task>;
+}
+
+const newBoard = (title: string): BoardDoc => createObject<BoardDoc>({
+	title,
+	columns: createArray<Column>(),
+	tasks: createMap<Task>(),
+});
+
+const addColumn = (board: BoardDoc, name: string, limit: number): void => {
+	board.columns.push(createObject<Column>({ name, limit }));
+};
+
+const addTask = (board: BoardDoc, title: string): string => {
+	const task = createObject<Task>({ title, done: false });
+	board.tasks.add(task);
+	return textIdOf(task);
+};
+
+// --- the checks ----------------------------------------------------------------------------
 
 let checks = 0;
 
-const check = (ok: boolean, what: string): void => {
+const ok = (passed: boolean, what: string): void => {
 	checks += 1;
-	if (!ok) {
+	if (!passed) {
 		console.error(`FAIL: ${what}`);
 		process.exit(1);
 	}
 };
 
-const canonical = (value: unknown): string => {
-	if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
-	if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-
-	return `{${Object.entries(value as Record<string, unknown>)
-		.sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
-		.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`)
-		.join(',')}}`;
-};
-
-const same = (a: unknown, b: unknown): boolean => canonical(a) === canonical(b);
-
-const codes = (report: Report): string[] =>
-	report.refused.flatMap((r) => r.reasons.map((reason) => reason.code));
-
-// --- the server --------------------------------------------------------------------------
-
-const server = createObject<Space>();
-const index = createIndex(idOf(server));
-
-interface Sent { readonly bytes: Uint8Array; readonly commit: Commit; readonly inverse: Commit }
-
-/** Everything one refusal window produced, handed to the application as one event. */
-interface Report { readonly refused: readonly { readonly reasons: readonly Reason[] }[] }
-
-interface Client {
-	actor: Actor;
-	readonly doc: Space;
-	outgoing: Sent[];
-	receiving: boolean;
-}
-
-const clients: Client[] = [];
-let sender: Client | undefined;
-
-/** What the server has taken and not yet sent on, with who it came from. */
-const outbound: Array<{ readonly commit: Commit; readonly from: Client | undefined }> = [];
-
-// Everything the server takes, from a client or from its own hand, goes to the index and into
-// the outbound queue. Recording after the commit was applied is the contract: a commit the
-// applier refused must never reach the index.
-observer(server).watch((change: Change) => {
-	record(index, change);
-	outbound.push({ commit: { deltas: [...change.deltas] }, from: sender });
-});
-
-/**
- * Send what the server took to every replica but the one it came from.
- *
- * Queued rather than sent from inside the watcher, because delivery is deferred: a commit
- * applied from inside a watcher reaches that document's own watchers after the outer watcher
- * has returned, so a flag held across the `apply` call would already be false when they run.
- * A real transport queues here anyway, since writing to a socket is not synchronous.
- */
-const deliver = (): void => {
-	while (outbound.length > 0) {
-		const { commit, from } = outbound.shift()!;
-
-		for (const client of clients) {
-			if (client === from) continue;
-			client.receiving = true;
-			apply(client.doc, commit);
-			client.receiving = false;
-		}
-	}
-};
-
-type Verdict = { ok: true } | { ok: false; reasons: readonly Reason[] };
-
-/**
- * Take a commit from a client.
- *
- * The connection says who is speaking and the policy says what they may do. A refusal refuses
- * the commit and the connection stays up.
- */
-const submit = (from: Client, bytes: Uint8Array): Verdict => {
-	const commit = decodeCommit(bytes);
-
-	const verdict = validate(commit, { index, policy, actor: from.actor });
-	if (!verdict.ok) return { ok: false, reasons: verdict.reasons };
-
-	sender = from;
-	apply(server, commit);
-	sender = undefined;
-	return { ok: true };
-};
-
-// --- the clients -------------------------------------------------------------------------
-
-const connect = (actor: Actor): Client => {
-	const client: Client = {
-		actor,
-		doc: createObject<Space>(undefined, idOf(server)),
-		outgoing: [],
-		receiving: false,
-	};
-
-	observer(client.doc).watch((change: Change) => {
-		// A watcher cannot tell an applied commit from a local mutation, so this flag is what
-		// keeps the server's own broadcasts out of this client's outbox.
-		if (client.receiving) return;
-		client.outgoing.push({
-			bytes: encodeCommit(change),
-			commit: { deltas: [...change.deltas] },
-			inverse: change.inverse(),
-		});
-	});
-
-	clients.push(client);
-	return client;
-};
-
-/**
- * Send everything this client has written, and converge if any of it was refused.
- *
- * Rolling back to the last state the server accepted and replaying what it took is the only
- * recovery that works in every case, and it is the framework's job rather than the
- * application's. What the application gets is one report for the whole window.
- */
-const flush = (client: Client): Report => {
-	const sent = client.outgoing;
-	client.outgoing = [];
-
-	const accepted: Sent[] = [];
-	const refused: { reasons: readonly Reason[] }[] = [];
-
-	for (const item of sent) {
-		const verdict = submit(client, item.bytes);
-		if (verdict.ok) accepted.push(item);
-		else refused.push({ reasons: verdict.reasons });
+const refused = (run: () => void): readonly Refusal[] => {
+	try {
+		run();
+	} catch (error) {
+		if (error instanceof RefusedError) return error.refusals;
+		console.error(`FAIL: expected a refusal, got ${String(error)}`);
+		process.exit(1);
 	}
 
-	deliver();
+	console.error('FAIL: expected a refusal, the change went through');
+	return process.exit(1);
+};
 
-	if (refused.length > 0) {
-		client.receiving = true;
-		for (let i = sent.length - 1; i >= 0; i--) apply(client.doc, sent[i]!.inverse);
-		for (const item of accepted) apply(client.doc, item.commit);
-		client.receiving = false;
+/** Deep equality, because a snapshot's slots are a plain object and their order is not the
+ * document: two nodes that applied the same commits in a different order still hold one board. */
+const same = (a: unknown, b: unknown): boolean => {
+	if (a === b) return true;
+	if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
+
+	const left = a as Record<string, unknown>;
+	const right = b as Record<string, unknown>;
+	const keys = Object.keys(left);
+	if (keys.length !== Object.keys(right).length) return false;
+	return keys.every((key) => key in right && same(left[key], right[key]));
+};
+
+// --- the run ---------------------------------------------------------------------------------
+
+const board = newBoard('release 1');
+const stopGuard = guard(board, Board);
+
+// The second node. It starts as a copy of the board, so the two agree about every id, and it
+// takes commits at its own door, where nothing has been applied yet: a commit it turns away
+// costs it nothing at all.
+const mirror = fromSnapshot(snapshot(board)) as BoardDoc;
+let arrived = 0;
+let turnedAway = 0;
+
+const receive = (commit: Commit): boolean => {
+	const problems = check(Board, mirror, commit);
+	if (problems.length > 0) {
+		turnedAway += 1;
+		return false;
 	}
 
-	return { refused };
+	apply(mirror, commit);
+	arrived += 1;
+	return true;
 };
 
-// --- the run -----------------------------------------------------------------------------
-
-const alice = connect({ id: 'not yet known' });
-const bob = connect({ id: 'not yet known' });
-const mod = connect({ id: 'not yet known', roles: ['moderator'] });
-
-// The server lays the space out by hand. A local write on the machine that holds the document
-// needs no wire and no policy; the policy is what guards the wire, which is where everything
-// below this line goes.
-atomic(() => {
-	server.users = createMap<Profile>();
-	server.notes = createObject<Record<string, Note>>();
-	server.audit = createArray<string>();
-});
-
-const profileFor = (name: string): string => {
-	let id = '';
-	atomic(() => {
-		const profile = createObject<Profile>();
-		server.users!.add(profile);
-		profile.name = name;
-		profile.verified = false;
-		id = textIdOf(profile);
-	});
-	return id;
+const outbound: Commit[] = [];
+observer(board).watch((change: Change) => outbound.push({ deltas: [...change.deltas] }));
+const flush = (): void => {
+	while (outbound.length > 0) receive(outbound.shift()!);
 };
 
-alice.actor = { id: profileFor('Alice') };
-bob.actor = { id: profileFor('Bob') };
-mod.actor = { id: profileFor('Mod'), roles: ['moderator'] };
-deliver();
-
-check(server.users!.size === 3, 'the space starts with three profiles');
-check(same(snapshot(alice.doc), snapshot(server)), 'every replica has the space the server laid out');
-
-// 1. An actor writes their own region, and it lands everywhere.
-alice.doc.users!.get(alice.actor.id)!.name = 'Alice A';
-check(flush(alice).refused.length === 0, 'writing your own profile is authorized');
-check(server.users!.get(alice.actor.id)!.name === 'Alice A', 'the authorized write reached the server');
-check(bob.doc.users!.get(alice.actor.id)!.name === 'Alice A', 'and reached the other replicas');
-
-// 2. The same write into somebody else's region is refused, and the sender converges.
-alice.doc.users!.get(bob.actor.id)!.name = 'Bob B';
-const intrusion = flush(alice);
-check(codes(intrusion).join() === 'unauthorized', 'writing another profile is refused as unauthorized');
-check(server.users!.get(bob.actor.id)!.name === 'Bob', 'the refused write never reached the document');
-check(alice.doc.users!.get(bob.actor.id)!.name === 'Bob', 'and the client rolled back to what the server took');
-check(same(snapshot(alice.doc), snapshot(server)), 'a refusal leaves the replica in step, not forked');
-
-// 3. A whole subtree in one commit is judged at the paths that commit gives it.
+// The good changes. A column and three tasks, each one a whole subtree built and attached in
+// one commit, so the description is met at the place it lands rather than where it was made.
+addColumn(board, 'doing', 5);
+const first = addTask(board, 'write the proof');
+addTask(board, 'run the gate');
 atomic(() => {
-	const note = createObject<Note>();
-	alice.doc.notes!.n1 = note;
-	note.title = 'first note';
+	addColumn(board, 'done', 20);
+	addTask(board, 'read it back');
 });
-check(flush(alice).refused.length === 0, 'a new note and its contents are one authorized commit');
-check(server.notes!.n1!.title === 'first note', 'the subtree landed whole');
+board.tasks.get(first)!.done = true;
+flush();
 
-// 4. A rule that names a role reaches only actors holding it.
-alice.doc.notes!.n1!.pinned = true;
-check(codes(flush(alice)).join() === 'unauthorized', 'a member cannot pin a note');
-check(server.notes!.n1!.pinned === undefined, 'and the pin did not land');
+ok(board.columns.length === 2, 'the columns did not land');
+ok(board.tasks.size === 3, 'the tasks did not land');
+ok(board.tasks.get(first)!.done, 'the task was not marked done');
+ok(same(snapshot(mirror), snapshot(board)), 'the mirror does not hold the same board');
 
-mod.doc.notes!.n1!.pinned = true;
-check(flush(mod).refused.length === 0, 'a moderator can pin a note');
-check(server.notes!.n1!.pinned === true, 'and the pin landed');
+const settled = snapshot(board);
 
-mod.doc.audit!.push('pinned n1');
-check(flush(mod).refused.length === 0, 'a moderator writes the audit trail');
-alice.doc.audit!.push('and so do I');
-check(codes(flush(alice)).join() === 'unauthorized', 'a member does not');
-check(server.audit!.length === 1, 'the audit trail holds only what a moderator wrote');
+// A bad local write. The guard refuses it, the document is untouched, and because nothing was
+// delivered the mirror never hears about it either.
+const emptyTitle = refused(() => { board.title = ''; });
+ok(emptyTitle.length === 1, 'an empty title should be one refusal');
+ok(emptyTitle[0]!.code === 'invalid', `expected an invalid refusal, got ${String(emptyTitle[0]!.code)}`);
+ok(same(emptyTitle[0]!.path, ['title']), 'the refusal did not name the title');
+ok(board.title === 'release 1', 'the refused title landed anyway');
 
-// 5. A deny beats every allow, including the one a role gave.
-mod.doc.users!.get(mod.actor.id)!.verified = true;
-check(codes(flush(mod)).join() === 'unauthorized', 'a deny beats the role grant that would have allowed it');
-check(server.users!.get(mod.actor.id)!.verified === false, 'so the flag nobody may set is still false');
+// A bad subtree, attached in one commit. Every delta in it is about a slot the description
+// names; what is wrong is the value in one of them, and the limit that is missing entirely.
+const badColumn = refused(() => { board.columns.push(createObject({ name: '' } as Column)); });
+ok(badColumn.length === 2, `a nameless column with no limit should be two refusals, got ${badColumn.length}`);
+ok(board.columns.length === 2, 'the refused column landed anyway');
 
-// 6. A refusal arrives as a group: the commit that was refused, and everything that depended
-//    on it, in one report against a document that is already consistent.
-const stranger = createObject<Profile>();
-atomic(() => {
-	alice.doc.users!.get(bob.actor.id)!.pet = stranger;
-	stranger.name = 'rex';
+// A block is one commit, so a good change and a bad one in the same block go back together.
+refused(() => atomic(() => {
+	board.title = 'release 2';
+	addTask(board, '');
+}));
+ok(board.title === 'release 1', 'the good half of a refused block stayed');
+ok(board.tasks.size === 3, 'the refused task landed anyway');
+
+flush();
+ok(same(snapshot(board), settled), 'the board moved during the refusals');
+ok(same(snapshot(mirror), settled), 'a refused commit reached the mirror');
+
+// A commit arriving from somewhere the guard does not cover. It is built on a scratch copy of
+// the board, which nothing guards, and handed to the mirror's door, which is where a node
+// decides. `check` answers there with nothing applied.
+const scratch = fromSnapshot(snapshot(board)) as BoardDoc;
+const scratchCommits: Commit[] = [];
+const stopScratch = observer(scratch).watch((change: Change) => {
+	scratchCommits.push({ deltas: [...change.deltas] });
 });
-stranger.kind = 'cat';
-stranger.age = 3;
 
-const group = flush(alice);
-check(group.refused.length === 3, 'three commits were sent inside the refusal window');
-check(
-	codes(group).join() === 'unauthorized,unauthorized,unreachable,unreachable',
-	`the first is refused on authority and the rest as unreachable, got ${codes(group).join()}`,
+scratch.columns[0]!.limit = 999;
+addTask(scratch, 'a fine task from elsewhere');
+stopScratch();
+
+const [tooBig, fine] = scratchCommits;
+ok(receive(tooBig!) === false, 'the mirror took a commit that breaks the description');
+ok(mirror.columns[0]!.limit === 5, 'the refused commit landed on the mirror anyway');
+ok(receive(fine!) === true, 'the mirror turned away a good commit');
+ok(mirror.tasks.size === 4, 'the good commit did not land on the mirror');
+
+// The same commit at the other end: the guarded board refuses it inside `apply`, before any
+// watcher hears anything, so the two nodes agree about what the document may hold.
+const heardBefore = outbound.length;
+const overTheLimit = refused(() => apply(board, tooBig!));
+ok(overTheLimit[0]!.code === 'invalid', 'the guard refused the arriving commit for the wrong reason');
+ok(board.columns[0]!.limit === 5, 'the arriving commit landed on the board anyway');
+ok(outbound.length === heardBefore, 'a refused arriving commit was delivered to a watcher');
+
+// The board catches up with the task the mirror already has, so both nodes end up holding one
+// document that fits the description from both directions.
+apply(board, fine!);
+// That commit came from the mirror, so handing it straight back is an echo. Suppressing one is
+// a link's job and not this program's; here there is simply nothing left to send.
+outbound.length = 0;
+ok(board.tasks.size === 4, 'the board did not take the good commit');
+ok(same(snapshot(board), snapshot(mirror)), 'the two nodes disagree about the board');
+
+// Standalone, with no guard anywhere: the description alone answers for a whole document.
+const audit = fromSnapshot(snapshot(board)) as BoardDoc;
+const auditCommits: Commit[] = [];
+const stopAudit = observer(audit).watch((change: Change) => {
+	auditCommits.push({ deltas: [...change.deltas] });
+});
+audit.tasks.get(first)!.notes = 'the notes field is allowed to be missing, and allowed to be here';
+stopAudit();
+ok(check(Board, audit, auditCommits[0]!).length === 0, 'an optional field was refused when it was filled');
+
+stopGuard();
+board.title = '';
+ok(board.title === '', 'the guard kept refusing after it was stopped');
+
+console.log(
+	`schema proof: ${checks} checks, ${board.columns.length} columns and ${board.tasks.size} tasks, ` +
+	`${arrived} commits taken and ${turnedAway} turned away at the door, ` +
+	'every refusal rolled back before any watcher saw it',
 );
-check(same(snapshot(alice.doc), snapshot(server)), 'the whole window rolled back, leaving no fork');
-check(server.users!.get(bob.actor.id)!.pet === undefined, 'and none of it reached the document');
-
-// 7. A hostile client does not have to use the framework. This frame is built by hand and
-//    gives another actor's profile a second home inside the sender's own region, which no
-//    mutation through the API could produce, so the seam is the only thing standing in
-//    the way.
-const capture: Delta = {
-	type: 'add',
-	id: idFromText(alice.actor.id),
-	ref: { kind: 'object', key: 'captured' },
-	value: { edge: 'attach', kind: 'object', id: idFromText(bob.actor.id) },
-};
-const stolen = submit(alice, encodeCommit({ deltas: [capture] }));
-check(!stolen.ok, 'a hand built frame does not get past the seam');
-check(
-	!stolen.ok && stolen.reasons.map((r) => r.code).join() === 'multiple-attach',
-	'and it is refused because no path would decide who owns the profile',
-);
-check(server.users!.get(alice.actor.id)!.captured === undefined, 'nothing of it reached the document');
-
-// 8. An alias is not a capture: it is authorized where it is written, and grants nothing about
-//    what it names.
-alice.doc.users!.get(alice.actor.id)!.friend = alias(alice.doc.users!.get(bob.actor.id)!);
-check(flush(alice).refused.length === 0, 'naming another actor profile from your own region is fine');
-(alice.doc.users!.get(alice.actor.id)!.friend as Profile).name = 'through the alias';
-check(codes(flush(alice)).join() === 'unauthorized', 'and writing through the alias is still refused');
-check(server.users!.get(bob.actor.id)!.name === 'Bob', 'so the profile the alias names is untouched');
-
-// 9. Every replica, and the index, still agree with the document.
-const places = (state: Snapshot): Map<string, readonly string[]> => {
-	const found = new Map<string, readonly string[]>([[state.root, []]]);
-	const queue = [state.root];
-
-	while (queue.length > 0) {
-		const at = queue.shift()!;
-		const here = found.get(at)!;
-		for (const [slot, value] of Object.entries(state.observables[at]?.slots ?? {})) {
-			if (value === null || typeof value !== 'object' || value instanceof Uint8Array) continue;
-			if (value.edge !== 'attach' || found.has(value.ref)) continue;
-			found.set(value.ref, [...here, slot]);
-			queue.push(value.ref);
-		}
-	}
-	return found;
-};
-
-for (const client of clients) {
-	check(same(snapshot(client.doc), snapshot(server)), 'every replica ends where the server is');
-}
-
-let placed = 0;
-for (const [id, path] of places(snapshot(server))) {
-	const at = pathOf(index, idFromText(id));
-	check(at !== undefined && same(at, path), `the index places ${id} where the document does`);
-	placed += 1;
-}
-check(placed >= 8, `the document has enough in it to be worth checking, saw ${placed}`);
-
-console.log(`schema proof: ${checks} checks, ${placed} observables placed, ${server.users!.size} actors`);

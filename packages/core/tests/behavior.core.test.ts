@@ -10,7 +10,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-	alias, atomic, createArray, createObject, isReachable, observer, parentOf, snapshot, textIdOf,
+	RefusedError, alias, atomic, createArray, createObject, intercept, isReachable, observer,
+	parentOf, snapshot, textIdOf,
 } from '../src/index.ts';
 import type { Change } from '../src/index.ts';
 
@@ -485,4 +486,64 @@ test('turning the one attach edge into an alias takes the observable out of the 
 		(e: Error & { reason?: string }) => e.reason === 'unreachable',
 		'a write into it is refused, the same as any receiver refuses the same delta',
 	);
+});
+
+test('a refused commit is a commit nobody ever saw', () => {
+	// A check that runs after some watchers have been told is not a check, it is a repair
+	// job: the deltas are already out and whatever recorded them has to be told to forget.
+	// So a refusal has to land in the same place a throwing block lands, before delivery,
+	// and leave the document byte for byte where it was.
+	const doc = createObject<Doc>({ a: 1, held: createObject({ n: 1 }) });
+	const before = snapshot(doc);
+	const heard: Change[] = [];
+
+	observer(doc).watch((change) => heard.push(change));
+	intercept(doc, () => [{ code: 'test', message: 'no' }]);
+
+	assert.throws(
+		() => atomic(() => {
+			doc.a = 2;
+			doc.b = 3;
+			doc.list = createArray([1, 2, 3]);
+		}),
+		RefusedError,
+	);
+
+	assert.deepEqual(snapshot(doc), before, 'the document is exactly what it was');
+	assert.deepEqual(heard, [], 'and no watcher was told anything');
+});
+
+test('a rule reads the document the commit would leave, not the one it started from', () => {
+	// A rule across two slots is the reason the seam runs after the deltas are applied rather
+	// than before. Reading the old value of one slot and the new value of another answers a
+	// question about a state that never exists.
+	const doc = createObject<Doc>({ a: 1, b: 1 });
+	const readings: Array<[unknown, unknown]> = [];
+
+	intercept(doc, () => {
+		readings.push([doc.a, doc.b]);
+		return (doc.a as number) > (doc.b as number) ? [{ code: 'order', message: 'a must not pass b' }] : [];
+	});
+
+	atomic(() => {
+		doc.a = 5;
+		doc.b = 9;
+	});
+	assert.deepEqual(readings, [[5, 9]], 'both slots read as the commit leaves them');
+
+	assert.throws(() => { doc.a = 20; }, RefusedError);
+	assert.equal(doc.a, 5, 'and the rollback puts back the value the rule was reading');
+});
+
+test('a rule covers the document, however deep the observable it was registered on', () => {
+	// The alternative is a rule per subtree, and then a commit that writes above the subtree
+	// closes unchecked while the application believes the document is guarded.
+	const leaf = createObject<Record<string, unknown>>({ n: 1 });
+	const middle = createObject<Record<string, unknown>>({ leaf });
+	const doc = createObject<Doc>({ held: middle });
+
+	intercept(leaf, () => [{ code: 'test', message: 'no' }]);
+
+	assert.throws(() => { doc.a = 1; }, RefusedError, 'a write at the root is refused');
+	assert.throws(() => { leaf.n = 2; }, RefusedError, 'and so is one at the leaf');
 });

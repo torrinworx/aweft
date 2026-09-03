@@ -1,71 +1,76 @@
-// A second reading of "where does this live", to check the first one against.
+// A second reading of what a description means, done the slow obvious way.
 //
-// The index under test keeps a parent pointer per observable and answers by walking up. This
-// walks the other way: it replays a whole history into a map of attach edges and then walks
-// down from the root, so the two share no code and no direction. G1a required exactly this,
-// and the rule of evidence requires it: an expected value that came from the implementation
-// under test compares that implementation against its own past behaviour.
-//
-// The slot spelling comes from the conformance harness, which is what the fixtures are
-// written in, so this file does not restate the mapping the index states either.
+// It resolves nothing and applies nothing: it takes a document that already holds whatever
+// happened and walks it from the root, holding every slot it finds against the description at
+// that place. It shares no code with `check`, which is the whole point. An expected value
+// taken from the thing under test compares that thing against its own past behaviour and
+// cannot see it disagree with what was specified.
 
-import { type Commit, idToText, isReference } from '@aweftjs/codec';
-import { slotKey } from '@aweftjs/testing';
+import { snapshot } from '@aweftjs/core';
+import type { SnapshotValue } from '@aweftjs/core';
 
-/**
- * Every reachable observable and where it sits, rebuilt from scratch.
- *
- * Params:
- *   root: the document root's id in text form
- *   commits: the whole accepted history, in order
- *
- * Returns: a map from id in text form to its attach path, holding only what the root reaches.
- */
-export const pathsFrom = (
-	root: string,
-	commits: readonly Commit[],
-): Map<string, readonly string[]> => {
-	// holder -> slot -> the observable that slot attaches.
-	const edges = new Map<string, Map<string, string>>();
+import type { Shape } from '../src/index.ts';
 
-	const slotsOf = (holder: string): Map<string, string> => {
-		const existing = edges.get(holder);
-		if (existing !== undefined) return existing;
+/** What a slot may hold, named by pulling it back out of the exported description type. */
+type Field = Extract<Shape, { kind: 'array' }>['item'];
 
-		const made = new Map<string, string>();
-		edges.set(holder, made);
-		return made;
+const isRef = (value: SnapshotValue): value is Extract<SnapshotValue, { ref: string }> =>
+	value !== null && typeof value === 'object' && !(value instanceof Uint8Array);
+
+const isLeaf = (field: Field): field is Extract<Field, { '~standard': unknown }> =>
+	'~standard' in field;
+
+/** Every place the document disagrees with the description, as a path and a word for why. */
+export const disagreements = (document: object, form: Shape): string[] => {
+	const snap = snapshot(document);
+	const problems: string[] = [];
+
+	const walk = (id: string, described: Shape, at: readonly string[]): void => {
+		const entry = snap.observables[id]!;
+		if (entry.kind !== described.kind) {
+			problems.push(`${at.join('/')}: kind`);
+			return;
+		}
+
+		// An object says which slots it has, so a slot the description names and the document
+		// does not is as much a disagreement as the other way round. An array or a map has
+		// whatever elements it has.
+		const names = described.kind === 'object'
+			? new Set([...Object.keys(described.fields), ...Object.keys(entry.slots)])
+			: new Set(Object.keys(entry.slots));
+
+		for (const slot of names) {
+			const path = [...at, slot].join('/');
+			const wanted: Field | undefined = described.kind === 'object'
+				? described.fields[slot]
+				: described.kind === 'array' ? described.item : described.value;
+
+			if (wanted === undefined) {
+				problems.push(`${path}: unexpected`);
+				continue;
+			}
+
+			const held = entry.slots[slot];
+
+			if (isLeaf(wanted)) {
+				if (held !== undefined && isRef(held)) {
+					problems.push(`${path}: kind`);
+					continue;
+				}
+				const answer = wanted['~standard'].validate(held);
+				const issues = (answer as { issues?: ReadonlyArray<unknown> }).issues;
+				if (issues !== undefined) problems.push(`${path}: invalid`);
+				continue;
+			}
+
+			if (held === undefined || !isRef(held) || held.kind !== wanted.kind) {
+				problems.push(`${path}: kind`);
+				continue;
+			}
+			if (held.edge === 'attach') walk(held.ref, wanted, [...at, slot]);
+		}
 	};
 
-	for (const commit of commits) {
-		for (const delta of commit.deltas) {
-			const slots = slotsOf(idToText(delta.id));
-			const slot = slotKey(delta.ref);
-			const value = delta.value;
-
-			if (value !== undefined && isReference(value) && value.edge === 'attach') {
-				slots.set(slot, idToText(value.id));
-			} else {
-				slots.delete(slot);
-			}
-		}
-	}
-
-	const paths = new Map<string, readonly string[]>([[root, []]]);
-	const queue: string[] = [root];
-
-	while (queue.length > 0) {
-		const at = queue.shift()!;
-		const here = paths.get(at)!;
-
-		for (const [slot, child] of slotsOf(at)) {
-			// A cycle among detached observables never reaches here, and an observable already
-			// placed is one the history attached twice, which `record` refuses before this runs.
-			if (paths.has(child)) continue;
-			paths.set(child, [...here, slot]);
-			queue.push(child);
-		}
-	}
-
-	return paths;
+	walk(snap.root, form, []);
+	return problems;
 };

@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"license": "MIT",
-	"description": "Commit validation and mutation authority: who may write what, decided by path.",
+	"description": "The shape a document keeps: describe it, and answer whether a commit keeps it that way.",
 	"exports": {
 		".": "./src/index.ts"
 	},
@@ -12,10 +12,10 @@
 		"test": "node --test tests/*.test.ts"
 	},
 	"dependencies": {
-		"@aweftjs/codec": "*"
+		"@aweftjs/codec": "*",
+		"@aweftjs/core": "*"
 	},
 	"devDependencies": {
-		"@aweftjs/core": "*",
 		"@aweftjs/testing": "*"
 	},
 	"aweft": {

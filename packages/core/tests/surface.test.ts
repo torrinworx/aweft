@@ -12,11 +12,12 @@ import * as core from '../src/index.ts';
 
 test('the entry file exports exactly what was decided', () => {
 	const decided = [
-		'alias', 'all', 'apply', 'atomic',
+		'RefusedError',
+		'alias', 'all', 'apply', 'atomic', 'byId',
 		'createArray', 'createMap', 'createObject',
 		'fromEvent', 'fromSnapshot',
-		'idOf', 'immutable', 'insertAt', 'isObservable', 'isReachable',
-		'kindOf', 'mutable', 'observer', 'parentOf', 'positionsOf',
+		'idOf', 'immutable', 'insertAt', 'intercept', 'isObservable', 'isReachable',
+		'kindOf', 'mutable', 'observer', 'parentOf', 'pathOf', 'positionsOf',
 		'snapshot', 'textIdOf', 'timer',
 	];
 

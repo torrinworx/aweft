@@ -1,8 +1,8 @@
 // Reading an observable's identity and where it lives.
 
-import { codecError, type ObservableKind } from '@aweftjs/codec';
+import { codecError, idToText, type ObservableKind } from '@aweftjs/codec';
 
-import { isReachable as reachable } from './node.ts';
+import { isReachable as reachable, lookup } from './node.ts';
 import type { Node } from './types.ts';
 import { nodeOf } from './value.ts';
 
@@ -90,3 +90,45 @@ export const parentOf = (observable: unknown): object | undefined => need(observ
  *   if (isReachable(task)) task.done = true;
  */
 export const isReachable = (observable: unknown): boolean => reachable(need(observable));
+
+/**
+ * The observable in a document with a given id.
+ *
+ * Params:
+ *   document: any observable in the document
+ *   id: the twelve bytes a delta carries, or the same id in text form
+ *
+ * Returns: the observable, or undefined when the document holds nothing by that id. An
+ * observable nothing attaches is still found, because the document keeps it; `isReachable`
+ * says whether anything reaches it.
+ *
+ * Example:
+ *   const task = byId(board, delta.id);
+ */
+export const byId = (document: unknown, id: Uint8Array | string): object | undefined =>
+	lookup(need(document).root, typeof id === 'string' ? id : idToText(id))?.proxy;
+
+/**
+ * The attach path from the document root down to an observable.
+ *
+ * Params:
+ *   observable: any observable
+ *
+ * Returns: the slot names from the root down, spelled the way the format spells a slot: an
+ * object key, a map id in text form, an array position in hex. Empty for the root, and
+ * undefined for anything nothing attaches. A walk up the parent pointers, so it costs the
+ * depth and never the document.
+ *
+ * Example:
+ *   pathOf(task);   // ['tasks', '80a1c2e3']
+ */
+export const pathOf = (observable: unknown): readonly string[] | undefined => {
+	const node = need(observable);
+	const steps: string[] = [];
+	let at = node;
+	while (at.parent !== null) {
+		steps.push(at.slot!);
+		at = at.parent;
+	}
+	return at === node.root ? steps.reverse() : undefined;
+};

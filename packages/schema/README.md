@@ -1,281 +1,197 @@
 # @aweftjs/schema
 
-Commit validation and mutation authority: who may write what, decided by path.
+The shape a document keeps, and the answer to whether a commit keeps it.
 
-A commit arrives from somewhere you do not control. Before it is applied, this answers one
-question about it: may this actor make this change. The answer is decided by where each
-delta lands in the document and by a policy written as data, and a commit is authorized whole
-or refused whole.
-
-An authenticated client is not an authorized one. Nothing is granted by default, so a policy
-with a gap in it refuses rather than permits.
+You describe a document with three words. `check` says whether a commit would take it outside
+that description, and `guard` runs that check on every commit, wherever the commit came from.
+Nothing here knows who wrote anything.
 
 ## Quickstart
 
-A commit is what arrived on the wire. On the sending side it is what a watcher handed you;
-on the receiving side it is what came out of the decoder. Both are the same shape:
-
 ```ts
-observer(clientDoc).watch((change) => send(encodeCommit(change)));  // one commit, on the wire
-const commit = decodeCommit(bytes);                                 // and off it again
-```
+import { createArray, createObject, RefusedError } from '@aweftjs/core';
+import { guard, list, shape } from '@aweftjs/schema';
 
-An actor is who is speaking, and it comes from the connection, never from the message.
-`validate` believes `actor.id`: whoever calls it has already decided who this is. Reading the
-id out of the client's own message would let anyone claim to be anyone, which is the whole
-point of the line above.
+// `text` and `flag` are validators you already have, or hand-written ones like the two
+// under "Three words, and a leaf" below.
+const Board = shape({
+	title: text({ min: 1, max: 60 }),
+	tasks: list(shape({ title: text({ min: 1 }), done: flag() })),
+});
 
-`actor.id` is compared against a path step exactly as written, so it is whatever the document
-names this actor by: `textIdOf(record)` when members are filed in a map by their own id, or
-the key itself when they sit in an object.
+const board = createObject({ title: 'release 1', tasks: createArray() });
+const stop = guard(board, Board);
 
-```ts
-import { decodeCommit, encodeCommit } from '@aweftjs/codec';
-import { apply, createObject, idOf, observer, textIdOf } from '@aweftjs/core';
-import { ANY, REST, SELF, createIndex, record, validate } from '@aweftjs/schema';
-import type { Policy } from '@aweftjs/schema';
+board.title = 'release 2';        // fine
+board.tasks.push(createObject({ title: 'ship it', done: false }));  // fine
 
-const doc = createObject();
-const index = createIndex(idOf(doc));
-
-const policy: Policy = [
-	// Anyone may write their own record, and everything under it.
-	{ effect: 'allow', path: ['users', SELF, REST] },
-	// Anyone may set any post's title, and nothing else about a post.
-	{ effect: 'allow', path: ['posts', ANY, 'title'] },
-	// Nobody may touch a verified flag, whatever else they were granted.
-	{ effect: 'deny', path: ['users', ANY, 'verified'] },
-	// A moderator may write anything the deny above does not cover, because it does not.
-	{ effect: 'allow', path: [REST], roles: ['moderator'] },
-];
-
-const actor = { id: textIdOf(memberRecord) };  // who the connection authenticated
-
-const verdict = validate(commit, { index, policy, actor });
-if (verdict.ok) {
-	apply(doc, commit);   // the applier decides whether it is well formed
-	record(index, commit);  // fold it in, after it applied, never before
-} else {
-	for (const reason of verdict.reasons) console.warn(reason.code, reason.message);
+try {
+	board.title = '';
+} catch (error) {
+	if (error instanceof RefusedError) console.log(error.refusals[0]!.message);
 }
+// board.title is still 'release 2'. Nothing was delivered to any watcher.
+
+stop();
 ```
 
-`validate` never mutates anything and never throws for a refusal. It throws only for a policy
-that cannot mean what it says.
+Registering the guard returns the function that stops it, always.
 
-## A policy is patterns over paths
+## Three words, and a leaf
 
-A rule names the paths it is about. A path is the slot names from the document root down, so
-the `title` slot of the post at `posts/p1` is `['posts', 'p1', 'title']`.
-
-| step | matches |
-|---|---|
-| a string | that exact step |
-| `ANY` | any one step |
-| `SELF` | one step equal to `actor.id` |
-| `REST` | every remaining step, including none. Only ever the last step |
-
-Without a trailing `REST`, a pattern matches that slot and nothing under it: `['a', 'b']`
-covers the `b` slot of `a` and not `a/b/c`. With one, `['a', REST]` covers the `a` slot and
-everything below it.
-
-Steps are strings and plain objects, so a policy survives `JSON.stringify` and comes back
-meaning the same thing. `ANY`, `REST` and `SELF` are those objects, exported so you do not
-have to write them out.
-
-An object slot is named by its key and a map slot by the identity in text form, so both can
-be written literally. An array slot is named by its position in hex, which nothing stops you
-writing literally and which you should not: a position is chosen by whoever inserted, and it
-is a different string after an unrelated edit. Reach array slots through `ANY` and `REST`, and
-if you need an authority boundary inside a collection, put those elements in a map or an
-object where the key is yours to choose.
-
-A wildcard matches every slot, including one whose name begins with an underscore. That
-convention makes a slot private from wildcard *observers*, which is a delivery rule; it is not
-an authority rule, and a `_` slot is ordinary state that still has to have an owner. So
-`['users', SELF, REST]` grants `_internal` along with everything else. Design 039 has the
-reasoning.
-
-## Nothing is granted, and a deny wins
-
-A delta is authorized when at least one `allow` rule matches it and no `deny` rule matches
-it. Order does not matter: a deny cannot be undone by an allow written later, and an allow
-cannot escape a deny written earlier. Policies grow by having rules appended, and this is
-what stops an append from silently widening or killing what is already there.
-
-`effect` is required. Allowing everything is a rule you have to type:
+`shape(fields)`, `list(item)` and `table(value)` describe the three observable kinds: an
+object, an array, a map. That is the whole vocabulary. A field, an item or a value is either
+one of those three again or a **leaf**.
 
 ```ts
-const trusted: Policy = [{ effect: 'allow', path: [REST] }];
+const Person = shape({ name: text({ min: 1 }), tags: list(text()) });
+const People = table(Person);                 // a map of people, keyed by id
+const Everything = shape({ people: People, motto: text() });
 ```
 
-`roles` narrows a rule to actors holding one of them, and `types` narrows it to some of
-`add`, `replace` and `remove`. Omit either and it does not narrow.
-
-`roles` narrows a deny exactly as it narrows an allow: `{ effect: 'deny', path, roles }`
-refuses only actors holding one of those roles, and an actor holding none is reached by no
-role-scoped rule at all. What a deny cannot do is be reopened: no allow written anywhere
-survives a deny that matches. So there is no "deny everyone except", and a field that only
-some actors may write is **granted** to them and not covered by a wider grant:
+A leaf is any validator implementing the Standard Schema interface: an object with a
+`'~standard'` property carrying `{ version: 1, vendor, validate }`. Every validator library
+that implements it works here, and this package takes no dependency on any of them, because
+the interface is a contract rather than a library. Writing one by hand is a few lines:
 
 ```ts
-{ effect: 'allow', path: ['notes', ANY] },                                  // start a note
-{ effect: 'allow', path: ['notes', ANY, 'title'] },                         // anyone
-{ effect: 'allow', path: ['notes', ANY, 'pinned'], roles: ['moderator'] },  // moderators
+const text = ({ min = 0 } = {}) => ({
+	'~standard': {
+		version: 1,
+		vendor: 'my-app',
+		validate: (value) => typeof value === 'string' && value.length >= min
+			? { value }
+			: { issues: [{ message: `expected at least ${min} characters` }] },
+	},
+});
+
+const flag = () => ({
+	'~standard': {
+		version: 1,
+		vendor: 'my-app',
+		validate: (value) => typeof value === 'boolean'
+			? { value }
+			: { issues: [{ message: 'expected true or false' }] },
+	},
+});
 ```
 
-`['notes', REST]` instead of the two narrow allows would hand `pinned` to everyone, because
-two allows are still an allow. Reach for a subtree grant when the whole subtree really does
-have one authority.
+**An alias is judged where it is filed, once.** Filing an observable that already lives
+elsewhere into a described slot holds the whole of it to that slot's description at filing
+time. Afterwards a write into it is judged at the one path it lives at, which is what an
+alias is: a second name, not a second home.
+
+**A named object field is expected to be there.** Removing it is judged by validating
+`undefined` against its leaf, so a field that may be absent is one whose validator accepts
+`undefined`, which is the same question asked once instead of twice. An array and a map say
+what an element is and never how many there are, so removing an element or an entry is always
+fine, and an empty one is fine.
+
+## What a refusal looks like
+
+Every answer is a list of refusals, empty when there is nothing wrong.
 
 ```ts
-// Comments can be written and edited by their author, and removed by nobody.
-{ effect: 'allow', path: ['comments', SELF, REST], types: ['add', 'replace'] }
+[{ code: 'invalid', message: 'expected at least 1 characters', path: ['tasks', '80', 'title'] }]
 ```
 
-## A field with its own authority is a field you do not construct
+- `code` is `invalid` when a leaf refused the value, `kind` when an observable lands where a
+  value belongs or an observable of the wrong kind lands, and `unexpected` for a slot the
+  description does not name.
+- `message` is the validator's own.
+- `path` is the way down from the document root, spelled the way the document spells its own
+  keys: an object key as itself, an array position in hex, a map id in text form.
 
-Attaching an observable into a document emits the slots it was built with, in the same commit
-as the attach. So building a task with a field only a moderator may write puts a delta at a
-moderator-only path in the same commit, and a commit is authorized whole:
+`Refusal` is core's type, so a rule, a link and an application all say refusal the same way.
+
+## `check` at a door, `guard` on the document
+
+`check(Board, board, commit)` answers about one commit and changes nothing. Reach for it where
+a node decides whether to take a commit at all:
 
 ```ts
-{ effect: 'allow', path: ['tasks', ANY] },
-{ effect: 'allow', path: ['tasks', ANY, 'title'] },
-{ effect: 'allow', path: ['tasks', ANY, 'flagged'], roles: ['moderator'] },
+import { apply } from '@aweftjs/core';
+import { check } from '@aweftjs/schema';
 
-tasks.add(createObject({ title: 'write it up', flagged: false }));  // refused for everyone else
+const receive = (commit) => {
+	const problems = check(Board, board, commit);
+	if (problems.length > 0) return problems;   // turned away, nothing applied
+	apply(board, commit);
+	return [];
+};
 ```
 
-The refusal names `tasks/<id>/flagged`, which is a field the author never meant to write and
-only set to its default. Leave it out and let a moderator add it: an absent slot and a slot
-holding `false` are the same thing to everyone who cannot write it.
+`guard(board, Board)` is that same check on every commit, through core's `intercept`. A local
+assignment that breaks the description throws a `RefusedError` carrying the refusals and the
+document is exactly as it was; a commit arriving through `apply` is refused before any watcher
+hears about it. A block is one commit, so a block with one bad write in it goes back whole.
 
-## Three refusals, and what they mean
+The answer does not depend on when you ask. `check` gives the same refusals before the commit
+has been applied and after, which is what lets one description serve a door, where nothing has
+landed, and a guard, where everything has.
+
+**What a commit attaches is judged whole, at the path it lands on.** A subtree built and
+attached in one breath has no path of its own until the commit closes, and it is judged at the
+one it lands at, not at the place it was built. That includes what is missing: an object that
+arrives without a field the description names is refused, though no delta in the commit is
+wrong on its own.
+
+**Judging a commit is not judging a document.** `check` answers for what the commit changes
+and takes the rest of the document as it finds it. A document that was already outside its
+description stays that way until something writes to the slot that is wrong. Put the guard on
+before the first write, or read the whole document yourself once.
+
+## Two ends with the same guard never refuse each other
+
+A guard refuses a commit before it closes, so a guarded end never makes a commit that breaks
+the shape, and nothing invalid ever reaches the wire from it. Put the same guard at both ends
+of a link and every refusal is local: the write that broke the shape threw where it was made.
+An arriving commit is refused only when the end that sent it was running weaker rules, or
+none, which is exactly the case a `guard` on the receiving end exists for. To see that path
+in a test, run the guard at one end only.
+
+## A draft is not document state
+
+A guarded field refuses a half-written value. That is what it is for, and it is why a draft
+under edit does not belong in the document: an email address is invalid for every character
+but the last one.
 
 ```ts
-if (!verdict.ok) for (const { code, path, message } of verdict.reasons) ...
+import { mutable } from '@aweftjs/core';
+
+const draft = mutable('');
+input.oninput = () => draft.set(input.value);   // no commit, no rule, no replication
+form.onsubmit = () => { person.email = draft.get(); };  // one commit, checked once
 ```
 
-| code | when |
-|---|---|
-| `unauthorized` | the policy does not allow that delta's path, or denies it |
-| `unreachable` | the delta's target has no attach path from the root |
-| `multiple-attach` | the delta would leave an observable in two places, so no path decides it |
+That is already the rule for interface state (design 024): what is being typed lives in a
+cell, and the document holds what was submitted.
 
-There is one reason per refused delta, so a policy with a gap in it shows you every path it
-missed rather than the first.
+## A validator has to answer now
 
-Reachability counts the commit's own attachments, so a whole new subtree arriving in one
-commit is judged at the paths that commit gives it, and its own detachments, so an observable
-a commit takes out cannot be written to in the same breath. A commit that depended on a
-refused commit to give it a path is refused as unreachable with no bookkeeping about what
-went before.
-
-## What this does not decide
-
-Whether the commit can be applied. A slot that is occupied when the delta says `add`, a slot
-that is empty when it says `replace`, one observable called two kinds: those need the
-document's values, and an authority index holds attach edges and nothing else. So an
-authorized commit still goes through the applier, and a refusal from either refuses the
-commit. Neither closes the connection.
-
-`unreachable` and `multiple-attach` are the applier's own words, deliberately. Neither layer
-lets past what the other would refuse for one of those two causes, and that is checked on a
-real commit stream rather than intended. The stated cause can still differ when a commit
-breaks two rules at once, because the applier can see things an authority index does not, such
-as whether a slot is already taken. Design 037 states it exactly.
-
-## A move re-homes authority
-
-Authority is the attach chain, so moving an object changes which rules govern it. An actor
-who may take an object out of a collection may put it where their own rules govern it, in the
-same commit, and a rule about its old path stops applying:
-
-```ts
-{ effect: 'allow', path: ['tasks', ANY] },                              // anyone may remove a task
-{ effect: 'allow', path: ['tasks', ANY, 'archived'], roles: ['admin'] },
-{ effect: 'allow', path: ['users', SELF, REST] },
-```
-
-One commit that removes `tasks/t1`, attaches the task under `users/<them>`, and sets
-`archived` is **authorized**, because at the path that commit gives it the flag is inside
-their own subtree. The same write in place is refused.
-
-The guard is the removal, not the field. Granting an actor the power to take something out of
-a shared collection is granting them the power to take it somewhere else, so grant removal
-where objects are genuinely theirs to take, and not where a rule about a field is the only
-thing protecting it. Design 010 has the model: a move needs remove authority at the old
-parent and add authority at the new one, and nothing else decides.
-
-## Detaching is not deleting
-
-An observable with no attach edge is owned by nobody, so any actor who may write a slot may
-attach it there and becomes the only actor who may write it after that. Authority is the
-chain of attach edges and nothing else, which is what makes "where does this live" a walk up
-rather than a search, and it means authority does not linger where something used to be.
-
-So taking an item out of a list leaves its contents alive and adoptable by anyone who learns
-its id. If a policy has to stop content coming back, remove the content, not only the edge
-that reached it. Design 036 has the reasoning and the alternative it rejected.
-
-## The index, and the one contract you have to keep
-
-`createIndex(rootId)` starts empty. `record(index, commit)` folds in one commit, and it goes
-**after** the commit was applied:
-
-```ts
-if (verdict.ok) {
-	apply(doc, commit);
-	record(index, commit);
-}
-```
-
-Recording a commit the applier refused leaves the index describing a document that does not
-exist, and the symptom is an authority answer about a path that is not there. `record` throws
-`multiple-attach` on the one breach it can see for itself; the rest is this contract.
-
-`pathOf(index, id)` is where an observable lives, or undefined when nothing attaches it. A
-detached observable stays in the index, so the index grows the way the document does.
-
-**Bootstrapping.** An index is fed commits, and a server that builds its own document mutates
-rather than applies, so wire the watcher **before** the first mutation and record what it
-hands you:
-
-```ts
-const doc = createObject();
-const index = createIndex(idOf(doc));
-observer(doc).watch((change) => record(index, change));  // before anything is written
-
-atomic(() => { doc.users = createMap(); doc.tasks = createMap(); });
-```
-
-Wire it late and the index silently lacks paths for whatever it missed, and the symptom is an
-authority answer about a path that is not there. A document restored from a snapshot rather
-than from its history has no commits to replay, so say it as one: a commit of `add` deltas,
-one per slot, fed to `record`. There is no entry point for that yet, because nothing needs one
-until something persists a document.
-
-**Do not send a client back the commit it sent you.** It already applied it locally, and
-applying it a second time gives whatever it attached two attach edges. Broadcast an accepted
-commit to every replica except the one it came from.
-
-Measured on the shipped code with `bench/authority.ts`, against a document of 30,941
-observables at depth 4: finding where a leaf lives costs 0.334 us, deciding a one-delta commit
-costs 0.513 us against one pattern and 0.669 us against twenty, and taking a 2,380-entry
-branch out of the document or putting it back is one commit at 0.564 us. The measurements
-behind the design, the per-commit rebuild that costs 57,486 us and the path cache that costs
-1,098 us to move that same branch, are in design 034.
+A commit closes synchronously, so a validator that returns a promise cannot decide one.
+`check` throws `async-validator` at the first leaf that does, naming the path, rather than
+letting the commit close and refusing it once watchers have already seen it. Asynchronous
+answers, such as asking a server whether a name is taken, belong before the write: hold the
+draft in a cell, ask, then commit.
 
 ## Boundaries
 
-This package knows about commits and paths. It does not know about transport, storage, or the
-runtime that holds the document: it never imports `@aweftjs/core`, and a validator never
-touches a live tree. That is what lets the server side judge a commit before deciding whether
-to build anything from it.
+Deliberately not here:
 
-Deliberately not here: read authority. Everything above is about who may **write**. Filtering
-what an actor may read is not decided.
+- **Anything about who.** There is no actor, user, role, permission or policy in this package,
+  and no argument threaded through to carry one. A description says what a document may hold.
+  Which node may write where is the application's rule, and the place to put it is the same
+  seam: `intercept` in core takes any function that can refuse.
+- **Transport and storage.** `sync` moves commits between documents and `store` keeps them.
+  This one answers a question about a commit and returns a list.
+- **Rules across two slots.** This package holds each slot against its own leaf. A rule
+  like "ends after it starts" is a refinement on a description, which is the natural extension
+  and changes nothing on the wire. It is not built until an application asks for it. Until
+  then, write it as your own `intercept` beside the guard: inside one, the document reads as
+  the commit would leave it.
+- **Repairing anything.** A commit is refused whole or taken whole. Nothing here rewrites a
+  commit to make it fit.
 
-The reasoning is in `docs/design/` designs 009 to 012 and 032 to 035, and a multi-actor
-program using all of the above is in `examples/schema/`.
+The reasoning lives in `docs/design/057` and `058`, and a complete program using all of the
+above in `examples/schema/`.

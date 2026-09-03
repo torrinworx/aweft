@@ -13,6 +13,7 @@ import {
 
 import type { Cell, Change, Listener, Node } from './types.ts';
 import { stamp } from './clock.ts';
+import { RefusedError, hasInterceptors, hasRulesFor, refusalsFor } from './refusal.ts';
 import {
 	anchorOf, attachNode, cellValue, detachNode, isAncestor, reroot, resolveKey, sameCell,
 	setCell, slotRef,
@@ -34,6 +35,8 @@ interface Move {
 }
 
 let depth = 0;
+/** Set while an interceptor is deciding a commit, which is the one moment nothing may write. */
+let sealed = false;
 let touched = new Map<string, Touch>();
 let undos: Array<() => void> = [];
 let moves: Move[] = [];
@@ -136,6 +139,12 @@ const release = (child: Node, from: Node, slot: string): void => {
  * in one place instead of once per kind.
  */
 export const write = (node: Node, slot: string, next: Cell | undefined): void => {
+	// An interceptor answers a commit; changing the tree from inside one would change the
+	// commit it has already been asked about, and the answer would be about something else.
+	if (sealed) {
+		throw codecError('sealed', 'an interceptor decides a commit and cannot change one');
+	}
+
 	mutate(() => {
 		const prior = node.slots.get(slot);
 		if (sameCell(prior, next)) return;
@@ -435,29 +444,63 @@ const collect = (entry: Entry, out: Map<Listener, Entry[]>): void => {
 	}
 };
 
-const deliveries = (): Array<() => void> => {
+/**
+ * What this commit says, per document it touched.
+ *
+ * `unwatched` keeps the documents nobody is listening to, which is what an interceptor needs:
+ * a rule answers for a commit whether or not anything is watching.
+ */
+const grouped = (unwatched: boolean): Map<Node, Entry[]> => {
 	const byRoot = new Map<Node, Entry[]>();
 
 	for (const touch of touched.values()) {
 		if (admits(touch.node) === 'drop') continue;
-		if (touch.node.root.watchers === 0) continue;
+
+		const root = touch.node.root;
+		// A document nobody watches is built only when a rule on it has to read the commit.
+		if (root.watchers === 0 && !(unwatched && hasRulesFor(root))) continue;
 
 		const entry = entryFor(touch);
 		if (entry === null) continue;
 
-		const root = touch.node.root;
 		const list = byRoot.get(root);
 		if (list === undefined) byRoot.set(root, [entry]);
 		else list.push(entry);
 	}
 
+	// One mutation is one commit, so most commits carry one delta and there is nothing to
+	// order. Ordering is what the format says a commit is written in, and it costs a
+	// comparison per pair rather than an encoded key per delta.
+	for (const entries of byRoot.values()) {
+		if (entries.length > 1) entries.sort((a, b) => compareDeltas(a.delta, b.delta));
+	}
+
+	return byRoot;
+};
+
+/**
+ * Let the rules on each document read the commit before anything else does.
+ *
+ * Throwing here is how a refusal reaches the caller, because the transaction already turns a
+ * throw into a rollback that tells nobody, which is exactly what refusing means.
+ */
+const screen = (byRoot: Map<Node, Entry[]>): void => {
+	sealed = true;
+	try {
+		for (const [root, entries] of byRoot) {
+			const refusals = refusalsFor(root, entries.map((e) => e.delta));
+			if (refusals.length > 0) throw new RefusedError(refusals);
+		}
+	} finally {
+		sealed = false;
+	}
+};
+
+const deliveries = (byRoot: Map<Node, Entry[]>): Array<() => void> => {
 	const jobs: Array<() => void> = [];
 
-	for (const entries of byRoot.values()) {
-		// One mutation is one commit, so most commits carry one delta and there is nothing to
-		// order. Ordering is what the format says a commit is written in, and it costs a
-		// comparison per pair rather than an encoded key per delta.
-		if (entries.length > 1) entries.sort((a, b) => compareDeltas(a.delta, b.delta));
+	for (const [root, entries] of byRoot) {
+		if (root.watchers === 0) continue;
 
 		const perListener = new Map<Listener, Entry[]>();
 		for (const entry of entries) collect(entry, perListener);
@@ -477,7 +520,10 @@ const close = (): void => {
 
 	try {
 		checkMoves();
-		jobs = deliveries();
+		const screened = hasInterceptors();
+		const byRoot = grouped(screened);
+		if (screened) screen(byRoot);
+		jobs = deliveries(byRoot);
 	} catch (error) {
 		rollback();
 		reset();

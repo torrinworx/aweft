@@ -1,12 +1,11 @@
-export { ANY, REST, SELF } from './pattern.ts';
-export type { Pattern, PatternStep } from './pattern.ts';
+export { list, shape, table } from './shape.ts';
+export type { Shape } from './shape.ts';
 
-export { createIndex, pathOf, record } from './document.ts';
-export type { DocumentIndex } from './document.ts';
+export { check } from './check.ts';
+export { guard } from './guard.ts';
 
-export { checkPolicy, validate } from './validate.ts';
-export type { Actor, Context, Policy, Reason, Rule, Verdict } from './validate.ts';
+export type { StandardSchema } from './standard.ts';
 
-// The types this package's own signatures take and hand back, so a caller can type a
-// validation pipeline without importing below it.
-export type { Commit, Delta, DeltaType } from '@aweftjs/codec';
+// The types a caller needs to type a pipeline across this package, so a commit going in and a
+// refusal coming out do not have to be imported from below it.
+export type { Commit, Refusal } from '@aweftjs/core';

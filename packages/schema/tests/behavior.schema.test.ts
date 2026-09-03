@@ -1,318 +1,223 @@
-// The behavioral corpus: bypass attempts, each stated as a requirement.
+// The behavioral corpus for schema.
 //
-// Every case here is a way someone could try to write where they were not granted, or a way a
-// policy could quietly grant more than it says. Append-only: removing one needs a decision
-// record, because each is here for a reason someone paid for.
+// Each case is a requirement this package must meet, taken from a class of failure that
+// validating live state is known to contain: a rule that runs on a keystroke, a rule that
+// answers differently depending on when it is asked, a subtree judged where it was built
+// rather than where it landed, and a half-refused change left in the document. The corpus is
+// append-only. Removing a case needs a design note.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ANY, REST, SELF, createIndex, record, validate } from '../src/index.ts';
-import type { Actor, DocumentIndex, Policy, Verdict } from '../src/index.ts';
-import { shuffle } from '@aweftjs/testing';
+import {
+	RefusedError, apply, atomic, createArray, createMap, createObject, fromSnapshot, mutable,
+	observer, snapshot, textIdOf,
+} from '@aweftjs/core';
+import type { Change } from '@aweftjs/core';
 
-import { commit, id, key, ref, slot } from './documents.ts';
+import { check, guard, list, shape, table } from '../src/index.ts';
+import type { Commit, Shape } from '../src/index.ts';
+import { flag, later, optional, text } from './validators.ts';
 
-// A document with two actors' regions and a shared region nobody may write.
-//   root(1): users -> 2, secrets -> 6
-//   users(2): key(3) -> 3 (mine), key(4) -> 4 (theirs)
-//   mine(3): name, verified
-//   secrets(6): token
-const built = (): DocumentIndex => {
-	const index = createIndex(id(1));
-	record(index, commit(
-		slot(1, 'users', ref(2, 'map')),
-		slot(1, 'secrets', ref(6)),
-		slot(6, 'token', 'shhh'),
-	));
-	record(index, commit(
-		{ type: 'add', id: id(2), ref: { kind: 'map', key: id(3) }, value: ref(3) },
-		{ type: 'add', id: id(2), ref: { kind: 'map', key: id(4) }, value: ref(4) },
-		slot(3, 'name', 'mine'),
-		slot(3, 'verified', false),
-		slot(4, 'name', 'theirs'),
-	));
-	return index;
-};
+interface Person extends Record<string, unknown> {
+	email?: string;
+	nickname?: string;
+}
 
-const mine: Actor = { id: key(3) };
-const theirs: Actor = { id: key(4) };
+interface Task extends Record<string, unknown> {
+	title?: string;
+	done?: boolean;
+}
 
-/** What every actor gets: their own record, and nothing else. */
-const ordinary: Policy = [{ effect: 'allow', path: ['users', SELF, REST] }];
+interface Board extends Record<string, unknown> {
+	title?: string;
+	tasks?: Task[];
+	people?: unknown;
+}
 
-const judge = (
-	policy: Policy,
-	deltas: Parameters<typeof commit>,
-	actor: Actor = mine,
-): Verdict => validate(commit(...deltas), { index: built(), policy, actor });
-
-const codes = (verdict: Verdict): string[] =>
-	verdict.ok ? [] : verdict.reasons.map((r) => r.code).sort();
-
-test('an actor cannot write another actor region by naming it', () => {
-	assert.deepEqual(codes(judge(ordinary, [slot(4, 'name', 'stolen', 'replace')])), ['unauthorized']);
-	assert.equal(judge(ordinary, [slot(4, 'name', 'stolen', 'replace')], theirs).ok, true);
+const email = text({ min: 3, max: 60 });
+const Board: Shape = shape({
+	title: text({ min: 1 }),
+	tasks: list(shape({ title: text({ min: 1 }), done: flag() })),
+	people: table(shape({ email, nickname: optional(text({ min: 1 })) })),
 });
 
-test('an alias into an authorized region grants nothing about what it names', () => {
-	assert.equal(judge(ordinary, [slot(3, 'peek', ref(6, 'object', 'alias'))]).ok, true);
-	assert.deepEqual(codes(judge(ordinary, [slot(6, 'token', 'mine now', 'replace')])), ['unauthorized']);
+const board = (): Board => createObject<Board>({
+	title: 'plan',
+	tasks: createArray<Task>(),
+	people: createMap(),
 });
 
-test('attaching a protected observable into an authorized region is refused, not adopted', () => {
-	assert.deepEqual(
-		codes(judge(ordinary, [slot(3, 'stolen', ref(6))])),
-		['multiple-attach'],
-	);
-});
-
-test('moving a protected observable needs authority where it is now, not only where it is going', () => {
-	assert.deepEqual(
-		codes(judge(ordinary, [slot(1, 'secrets', undefined), slot(3, 'secrets', ref(6))])),
-		['unauthorized'],
-	);
-});
-
-test('a new observable is judged at the path the same commit gives it, not waved through as unknown', () => {
-	assert.equal(judge(ordinary, [slot(3, 'pet', ref(9)), slot(9, 'name', 'rex')]).ok, true);
-	assert.deepEqual(
-		codes(judge(ordinary, [slot(6, 'pet', ref(9)), slot(9, 'name', 'rex')])),
-		['unauthorized', 'unauthorized'],
-	);
-});
-
-test('a commit may write into a subtree it detaches, judged where that subtree was', () => {
-	// Design 037: an edge the commit removes is not counted, which is the applier's rule, so
-	// one atomic block that writes a slot and drops its parent is one commit both halves take.
-	// The authority question is unchanged, because the path is the one the subtree had.
-	const detachAndWrite: Parameters<typeof commit> = [
-		slot(1, 'users', undefined),
-		slot(3, 'name', 'still mine', 'replace'),
-	];
-
-	assert.equal(
-		judge([{ effect: 'allow', path: [REST] }], detachAndWrite).ok,
-		true,
-		'the applier takes this commit, so the validator must not refuse it',
-	);
-
-	// And detaching is not a way out of a rule: the write is still judged at users/<id>/name,
-	// so a deny on that path refuses it however the same commit rearranges the tree above it.
-	const guarded = judge([
-		{ effect: 'allow', path: ['users', REST] },
-		{ effect: 'deny', path: ['users', ANY, 'name'] },
-	], detachAndWrite);
-
-	assert.deepEqual(codes(guarded), ['unauthorized']);
-	assert.deepEqual(
-		guarded.ok ? [] : guarded.reasons.map((r) => r.path?.join('/')),
-		[`users/${key(3)}/name`],
-	);
-});
-
-test('observables that only reach each other reach nothing, and are refused', () => {
-	assert.deepEqual(
-		codes(judge([{ effect: 'allow', path: [REST] }], [
-			slot(9, 'down', ref(10)),
-			slot(10, 'up', ref(9)),
-		])),
-		['unreachable', 'unreachable'],
-	);
-});
-
-test('a deny cannot be escaped by appending an allow after it', () => {
-	const guarded: Policy = [
-		{ effect: 'deny', path: ['users', ANY, 'verified'] },
-		{ effect: 'allow', path: ['users', SELF, REST] },
-		{ effect: 'allow', path: ['users', SELF, 'verified'] },
-	];
-
-	assert.deepEqual(codes(judge(guarded, [slot(3, 'verified', true, 'replace')])), ['unauthorized']);
-	assert.equal(judge(guarded, [slot(3, 'name', 'still fine', 'replace')]).ok, true);
-});
-
-test('a grant on a slot does not cascade into what sits in it', () => {
-	const policy: Policy = [{ effect: 'allow', path: ['users', SELF] }];
-
-	assert.deepEqual(codes(judge(policy, [slot(3, 'name', 'x', 'replace')])), ['unauthorized']);
-});
-
-test('ANY does not stand in for no step at all', () => {
-	const policy: Policy = [{ effect: 'allow', path: ['users', ANY] }];
-
-	assert.deepEqual(codes(judge(policy, [slot(1, 'users', 'flattened', 'replace')])), ['unauthorized']);
-});
-
-test('an actor cannot claim a role by what their id says', () => {
-	const policy: Policy = [{ effect: 'allow', path: [REST], roles: ['moderator'] }];
-	const pretender: Actor = { id: 'moderator' };
-
-	assert.deepEqual(
-		codes(validate(commit(slot(6, 'token', 'x', 'replace')), {
-			index: built(), policy, actor: pretender,
-		})),
-		['unauthorized'],
-	);
-});
-
-test('a commit whose deltas are shuffled gets the same verdict', () => {
-	const deltas = [
-		slot(3, 'name', 'a', 'replace'),
-		slot(3, 'verified', true, 'replace'),
-		slot(4, 'name', 'b', 'replace'),
-		slot(3, 'pet', ref(9)),
-		slot(9, 'kind', 'cat'),
-	];
-	const policy: Policy = [
-		{ effect: 'allow', path: ['users', SELF, REST] },
-		{ effect: 'deny', path: ['users', ANY, 'verified'] },
-	];
-
-	const first = validate(commit(...deltas), { index: built(), policy, actor: mine });
-	assert.equal(first.ok, false);
-	const expected = first.ok ? [] : first.reasons.map((r) => r.path?.join('/')).sort();
-
-	for (let seed = 1; seed <= 20; seed++) {
-		const verdict = validate(commit(...shuffle(deltas, seed * 20260901)), {
-			index: built(), policy, actor: mine,
-		});
-		assert.equal(verdict.ok, false, `a shuffle changed the verdict, at seed ${seed * 20260901}`);
-		assert.deepEqual(
-			verdict.ok ? [] : verdict.reasons.map((r) => r.path?.join('/')).sort(),
-			expected,
-			`a shuffle changed which deltas were refused, at seed ${seed * 20260901}`,
-		);
-	}
-});
-
-test('detaching is not deleting: an observable nothing attaches has no owner, and may be adopted', () => {
-	// Design 010 decides this: authority is the single chain of attach edges and nothing
-	// else, so an observable with no chain has nobody to protect it. A policy that must stop
-	// content coming back removes the content, not only the edge.
-	const index = built();
-	record(index, commit(slot(1, 'secrets', undefined)));
-
-	const verdict = validate(commit(slot(3, 'adopted', ref(6))), {
-		index, policy: ordinary, actor: mine,
+const commitFrom = (doc: object, run: () => void): Commit => {
+	let out: Commit | undefined;
+	const stop = observer(doc).watch((change) => {
+		out = { deltas: [...change.deltas] };
 	});
 
-	assert.equal(verdict.ok, true);
-});
+	run();
+	stop();
 
-test('a move re-homes authority, so removal authority is authority to take something away', () => {
-	// Design 010: moving needs remove authority at the old parent and add authority at the
-	// new one, and authority is the attach chain and nothing else. So an actor who may take an
-	// object out of a shared collection may put it where their own rules govern it, and a rule
-	// about the object's old path stops applying. The refusing half of this, writing into a
-	// subtree the same commit detaches, is above; this is the half that is allowed, and it is
-	// the one somebody reaches for.
-	const index = createIndex(id(1));
-	record(index, commit(slot(1, 'tasks', ref(2)), slot(1, 'users', ref(7, 'map'))));
-	record(index, commit(
-		slot(2, 't1', ref(8)),
-		slot(8, 'title', 'shared work'),
-		{ type: 'add', id: id(7), ref: { kind: 'map', key: id(9) }, value: ref(9) },
-	));
+	assert.ok(out !== undefined, 'the mutation produced no commit');
+	return out;
+};
 
-	const actor: Actor = { id: key(9) };
-	const policy: Policy = [
-		{ effect: 'allow', path: ['tasks', ANY] },
-		{ effect: 'allow', path: ['tasks', ANY, 'title'] },
-		{ effect: 'allow', path: ['tasks', ANY, 'archived'], roles: ['admin'] },
-		{ effect: 'allow', path: ['users', SELF, REST] },
-	];
+test('a guarded field refuses a half-written value, so a draft is held outside the document', () => {
+	// The oldest way to make a validator useless is to run it on every keystroke: an email
+	// address is invalid for every character but the last one, so the field either refuses
+	// what the person is typing or the rule is turned off where it was needed. The rule here
+	// is not softened. The draft lives in a cell instead (design 024) and reaches the
+	// document once, on submit.
+	const doc = board();
+	const person = createObject<Person>({ email: 'someone@example.com' });
+	(doc.people as { add(v: object): void }).add(person);
 
-	const inPlace = commit(slot(8, 'archived', true));
-	assert.deepEqual(
-		codes(validate(inPlace, { index, policy, actor })),
-		['unauthorized'],
-		'the flag is admin only where the task lives',
-	);
+	const stop = guard(doc, Board);
+	const draft = mutable('');
 
-	const moved = commit(
-		slot(2, 't1', undefined),
-		slot(9, 'taken', ref(8)),
-		slot(8, 'archived', true),
-	);
-	assert.equal(
-		validate(moved, { index, policy, actor }).ok,
-		true,
-		'and it is theirs once the same commit moves the task into their own region',
-	);
-
-	// The guard is the removal, not the flag: take that grant away and the move stops.
-	const held: Policy = policy.filter((rule) => rule.path.length !== 2);
-	assert.deepEqual(codes(validate(moved, { index, policy: held, actor })), ['unauthorized']);
-});
-
-test('roles narrow a deny exactly as they narrow an allow, and reach no roleless actor', () => {
-	// Design 038. The record this corrects said a deny is about the path and not about who,
-	// which the code never did, and nothing here checked either reading.
-	const policy: Policy = [
-		{ effect: 'allow', path: [REST] },
-		{ effect: 'deny', path: ['secrets', 'token'], roles: ['member'] },
-	];
-	const write: Parameters<typeof commit> = [slot(6, 'token', 'x', 'replace')];
-
-	assert.deepEqual(codes(judge(policy, write, { id: key(3), roles: ['member'] })), ['unauthorized']);
-	assert.equal(judge(policy, write, { id: key(3), roles: ['moderator'] }).ok, true);
-	assert.equal(judge(policy, write, { id: key(3) }).ok, true, 'no roles means no role-scoped rule reaches');
-
-	// And an unscoped deny still refuses everyone, which is what makes it worth having.
-	const blanket: Policy = [
-		{ effect: 'allow', path: [REST] },
-		{ effect: 'deny', path: ['secrets', 'token'] },
-	];
-	for (const actor of [{ id: key(3) }, { id: key(3), roles: ['moderator'] }]) {
-		assert.deepEqual(codes(judge(blanket, write, actor)), ['unauthorized']);
+	for (const character of 'ab@c.d') {
+		draft.set(draft.get() + character);
+		assert.equal(person.email, 'someone@example.com', 'nothing typed has touched the document');
 	}
+
+	assert.throws(() => { person.email = 'a'; }, RefusedError, 'and a partial value is still refused');
+	person.email = draft.get();
+	assert.equal(person.email, 'ab@c.d');
+	stop();
 });
 
-test('a wildcard grants a leading-underscore slot, because that convention is about delivery', () => {
-	// Design 039. The underscore rule makes a slot private from wildcard observers, which is a
-	// delivery rule. A _ slot is ordinary state that crosses the wire and has to have an owner,
-	// so a subtree grant covers it, and the error direction is the permissive one.
-	const index = createIndex(id(1));
-	record(index, commit(slot(1, 'users', ref(7, 'map'))));
-	record(index, commit(
-		{ type: 'add', id: id(7), ref: { kind: 'map', key: id(9) }, value: ref(9) },
-		slot(9, '_internal', 'private by convention'),
-	));
+test('one commit gets one answer, whether it has been applied or not', () => {
+	// The same function serves a node deciding whether to apply an arriving commit, where
+	// nothing has landed, and a guard on the document, where everything has. Two answers for
+	// one commit means a node refuses what its own guard would have accepted, and the two ends
+	// of a link disagree about what the document is allowed to hold.
+	const doc = board();
+	const before = fromSnapshot(snapshot(doc));
 
-	const actor: Actor = { id: key(9) };
-	const write = commit(slot(9, '_internal', 'written anyway', 'replace'));
+	const good = commitFrom(doc, () => {
+		doc.tasks!.push(createObject<Task>({ title: 'ship', done: false }));
+	});
+	assert.deepEqual(check(Board, before, good), check(Board, doc, good));
+	assert.deepEqual(check(Board, doc, good), []);
 
-	assert.equal(
-		validate(write, { index, policy: [{ effect: 'allow', path: ['users', SELF, REST] }], actor }).ok,
-		true,
-	);
-	assert.equal(
-		validate(write, { index, policy: [{ effect: 'allow', path: ['users', SELF, ANY] }], actor }).ok,
-		true,
-	);
-	// Which is why a policy that means to keep one out says so.
-	assert.equal(
-		validate(write, {
-			index,
-			policy: [
-				{ effect: 'allow', path: ['users', SELF, REST] },
-				{ effect: 'deny', path: ['users', ANY, '_internal'] },
-			],
-			actor,
-		}).ok,
-		false,
-	);
+	const after = fromSnapshot(snapshot(doc));
+	const bad = commitFrom(doc, () => { doc.tasks![0]!.title = ''; });
+	assert.deepEqual(check(Board, after, bad), check(Board, doc, bad));
+	assert.equal(check(Board, doc, bad).length, 1);
 });
 
-test('SELF matches an object key as readily as a map identity, since a step is a step', () => {
-	const index = createIndex(id(1));
-	record(index, commit(slot(1, 'people', ref(7))));
-	record(index, commit(slot(7, 'alice', ref(9)), slot(9, 'name', 'Alice')));
+test('a subtree is judged where it lands, not where it was built', () => {
+	// An observable is built detached and attached in the same commit, so at the moment the
+	// commit is judged it has no path of its own to be judged at. Reading it where it was
+	// built means reading it against no description at all, and every constructed subtree
+	// walks past the rule.
+	const doc = board();
+	const stop = guard(doc, Board);
 
-	const policy: Policy = [{ effect: 'allow', path: ['people', SELF, REST] }];
-	const write = commit(slot(9, 'name', 'Alice A', 'replace'));
+	assert.throws(
+		() => atomic(() => { doc.tasks!.push(createObject<Task>({ title: '', done: false })); }),
+		RefusedError,
+	);
+	assert.equal(doc.tasks!.length, 0);
 
-	assert.equal(validate(write, { index, policy, actor: { id: 'alice' } }).ok, true);
-	assert.equal(validate(write, { index, policy, actor: { id: 'bob' } }).ok, false);
+	doc.tasks!.push(createObject<Task>({ title: 'ship', done: false }));
+	assert.equal(doc.tasks!.length, 1);
+	stop();
+});
+
+test('a subtree that arrives incomplete is refused, though no delta is wrong on its own', () => {
+	// Every delta of this commit is fine where it lands. What is wrong is what is missing, and
+	// a rule that only reads deltas cannot see a field that has none. A guard that lets this
+	// through cannot claim the document keeps its shape.
+	const doc = board();
+	const stop = guard(doc, Board);
+
+	assert.throws(
+		() => { doc.tasks!.push(createObject<Task>({ title: 'no flag on this one' })); },
+		RefusedError,
+	);
+	assert.equal(doc.tasks!.length, 0);
+	stop();
+});
+
+test('a refused commit leaves nothing behind and tells nobody', () => {
+	// A rule that runs after delivery is a repair job, not a rule: the deltas are already out,
+	// and everything that recorded them has to be told to forget. Refusing has to cost the
+	// document nothing and reach no watcher.
+	const doc = board();
+	const before = snapshot(doc);
+	const heard: Change[] = [];
+	observer(doc).watch((change) => heard.push(change));
+
+	const stop = guard(doc, Board);
+
+	assert.throws(() => atomic(() => {
+		doc.title = 'a good title';
+		doc.tasks!.push(createObject<Task>({ title: '', done: false }));
+	}), RefusedError);
+
+	assert.deepEqual(snapshot(doc), before);
+	assert.deepEqual(heard, []);
+	stop();
+});
+
+test('a commit that arrives is refused the same way one written here is', () => {
+	// A rule that only covers local writes guards the one path an application controls anyway.
+	// The commit that has to be refused is the one that came from somewhere else.
+	const doc = board();
+	const stop = guard(doc, Board);
+
+	const copy = fromSnapshot(snapshot(doc)) as Board;
+	const arriving = commitFrom(copy, () => { copy.title = ''; });
+
+	const local = (() => {
+		try { doc.title = ''; return undefined; } catch (error) { return error as RefusedError; }
+	})();
+	const remote = (() => {
+		try { apply(doc, arriving); return undefined; } catch (error) { return error as RefusedError; }
+	})();
+
+	assert.ok(local instanceof RefusedError);
+	assert.ok(remote instanceof RefusedError);
+	assert.deepEqual(local.refusals, remote.refusals, 'one document, one rule, one message');
+	assert.equal(doc.title, 'plan');
+	stop();
+});
+
+test('a named field is required and an entry is not', () => {
+	// Requiredness is a property of the description, not of the document: an object says which
+	// slots it has and therefore which ones may go missing, while an array and a map say what
+	// an element is and never how many there are. Treating the three alike makes removing the
+	// last element of a list a refusal, which no application means.
+	const doc = board();
+	const person = createObject<Person>({ email: 'someone@example.com', nickname: 'sam' });
+	(doc.people as { add(v: object): void }).add(person);
+	doc.tasks!.push(createObject<Task>({ title: 'ship', done: false }));
+
+	const stop = guard(doc, Board);
+
+	delete person.nickname;
+	assert.equal(person.nickname, undefined, 'a leaf that accepts nothing being there may go');
+
+	assert.throws(() => { delete person.email; }, RefusedError, 'one that does not, may not');
+
+	doc.tasks!.splice(0, 1);
+	assert.equal(doc.tasks!.length, 0, 'and a list empties without complaint');
+
+	(doc.people as { delete(k: string): boolean }).delete(textIdOf(person));
+	stop();
+});
+
+test('a validator that answers later cannot decide a commit', () => {
+	// A commit closes now. A rule that returns a promise would have to let the commit close and
+	// refuse it afterwards, which is a rollback of something watchers have already seen. Saying
+	// so by name at the first slot that does it beats discovering it as an accepted bad value.
+	const doc = createObject<Record<string, unknown>>();
+	const stop = guard(doc, shape({ title: later() }));
+
+	assert.throws(
+		() => { doc.title = 'anything'; },
+		(error: Error & { reason?: string }) => error.reason === 'async-validator',
+	);
+	assert.equal(doc.title, undefined);
+	stop();
 });

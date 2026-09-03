@@ -102,6 +102,37 @@ object, so the order they were inserted in is part of the string and is not part
 document: applying the same commits in two orders gives two strings for one document.
 `canonicalJson` in the sibling testing package is the comparison that holds.
 
+## Refusing a change before it lands
+
+`intercept(doc, fn)` puts a rule on a document. It is called with the commit about to close,
+after every delta has been applied and before any watcher is told, and it answers with the
+reasons to refuse. Empty means the commit closes.
+
+```ts
+const stop = intercept(doc, (commit) =>
+	doc.title === '' ? [{ code: 'invalid', message: 'a title needs a name', path: ['title'] }] : []);
+
+doc.title = '';        // throws RefusedError; doc.title is what it was
+apply(doc, arriving);  // refused the same way, and nothing was delivered
+stop();
+```
+
+A refusal rolls the whole commit back and tells nobody, exactly as a throwing `atomic` block
+does, then throws a `RefusedError` carrying the refusals at whoever made the commit: the
+assignment, the block, or the `apply`. Catching it is a complete recovery, because there is
+no half-applied state to repair.
+
+One seam covers every way a commit is made, so an assignment, a block and an arriving commit
+are all read by the same rule, and a block is read once with everything it wrote. A rule is
+about a whole document, not the subtree under the observable it was registered on.
+
+Inside a rule the document reads as the commit would leave it, which is what a rule across
+two slots needs. Writing to it from in there throws `sealed`: a change made from inside the
+answer would be a change to the commit being answered for. Several rules on one document all
+run, refusals and all, so one commit reports every problem it has rather than one per retry.
+
+`@aweftjs/schema` is this with the rule written for you from a description of the document.
+
 ## Scope where you read, not at the root
 
 A scope registers its listener on the observable it was built from, and delivery walks each
@@ -227,6 +258,20 @@ task.done = true;   // throws unreachable
 
 Ask `isReachable` rather than catching the throw. `parentOf` cannot answer it: it returns
 undefined for a document root, which is reachable, and for something detached, which is not.
+
+## Finding a thing by its id
+
+A delta names the observable it changes by id. `byId(doc, id)` answers with the observable,
+and `pathOf(observable)` answers with the slot names from the root down, spelled the way the
+format spells a slot. Both cost the depth, never the document, so a check that runs on every
+commit can afford them.
+
+```ts
+const task = byId(board, delta.id);
+pathOf(task);        // ['tasks', '80a1c2e3']
+pathOf(board);       // []
+pathOf(orphan);      // undefined: nothing attaches it, though byId still finds it
+```
 
 ## Boundaries
 

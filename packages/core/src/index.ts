@@ -4,9 +4,12 @@ export { createMap } from './map.ts';
 export type { ObservableMap } from './map.ts';
 
 export { alias, isObservable } from './value.ts';
-export { idOf, isReachable, kindOf, parentOf, textIdOf } from './identity.ts';
+export { byId, idOf, isReachable, kindOf, parentOf, pathOf, textIdOf } from './identity.ts';
 
 export { atomic } from './transaction.ts';
+export { intercept } from './intercept.ts';
+export { RefusedError } from './refusal.ts';
+export type { Interceptor, Refusal } from './refusal.ts';
 export { observer } from './observer.ts';
 export type { Observer, ScopeKey } from './observer.ts';
 

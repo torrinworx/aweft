@@ -9,7 +9,7 @@
 //
 // CI does not gate on this. A performance claim cites this script and its recorded output.
 
-import { atomic, createObject, observer } from '@aweftjs/core';
+import { atomic, createObject, intercept, observer } from '@aweftjs/core';
 
 const measure = (label: string, runs: number, step: (iteration: number) => void): void => {
 	for (let i = 0; i < Math.max(10, runs / 5); i++) step(i);
@@ -126,4 +126,17 @@ for (const count of [100, 1000, 10000]) {
 		const target = children[0]!;
 		measure(`${count} scopes on their own observable, one write`, 2000, (i) => { target.a = i; });
 	}
+}
+
+console.log('\n## the seam a rule can refuse a commit at, design 058');
+{
+	const doc = createObject<Doc>();
+	const other = createObject<Doc>();
+	measure('one slot, nothing registered anywhere', 20000, (i) => { doc.a = i; });
+	const stopOther = intercept(other, () => []);
+	measure('one slot, a rule on another document', 20000, (i) => { doc.a = i; });
+	stopOther();
+	const stopHere = intercept(doc, () => []);
+	measure('one slot, a rule on this document that accepts', 20000, (i) => { doc.a = i; });
+	stopHere();
 }
