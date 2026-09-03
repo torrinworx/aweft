@@ -109,8 +109,8 @@ version in lockstep.
 | `schema` | The shape a document must keep, and whether a commit keeps it | Who made a commit, transport, storage |
 | `sync` | Moving commits between documents over a channel, both ends equal | Who may write, what a commit means, DOM, storage internals |
 | `store` | Persisting a document as observable rows, its commit tail, the driver interface | DOM, transport |
-| `modules` | Discovery, dependency order, injection, lifecycle | Whether it runs on a client or a server |
-| `sandbox` | Isolated execution and the capability bridge | What the code it runs is for |
+| `modules` | Reading module definitions from a directory, a bundle map or a document; dependency order; injection; load and unload | Whether it runs on a client or a server; storage, transport, history; who may load or run anything; which modules load or when |
+| `sandbox` | Isolated execution and the capability bridge. Not started; behind G4 | What the code it runs is for |
 | `dom` | Mounting, hydration, static render, URL and history | Storage, transport, components |
 | `ui` | Components, theming | Storage, transport, server |
 | `server` | HTTP and websockets, wiring modules to sync and store | Component internals |
@@ -175,6 +175,12 @@ superseded it.
 | Persistence | One row per observable and a bounded, derived commit tail; a detached observable keeps its row; a dangling alias is dropped when a document opens; a tail that cannot answer says so; nothing recorded about who wrote a commit | 047, 048, 050, 051, 056 |
 | Queries | A query names a declared path and an undeclared one is refused rather than scanned | 049 |
 | Giving up | "In a row" is measured in time, not in commits taken | 052 |
+| Paging | Every hit carries a cursor the driver minted, naming a position in the order asked for; `after` takes it, so a page after a document that was removed or re-ranked carries on from where it was | 060 |
+| The module contract | A module exports `deps`, `defaults`, optional `config` and `extensions`, and a default factory; an instance may return `stop`; `imports` is keyed by the last segment of a dependency's name | 061 |
+| Where modules come from | Directories, a bundle map, or a document keyed by module name whose entries carry `source`; a source yields candidates and evaluates nothing until `load`; `compile` turns source into exports, plain ES module import by default | 062 |
+| What `modules` does and decides | `load`, `unload`, `dependents`, `dependencies`, and `follow` as an opt-in helper; a loader is an instance; nothing decides which modules load, when, how many, or for how long | 063 |
+| What `modules` refuses to know | No history, no authority, no storage, no transport: a module document is an ordinary document and everything that works for one works for it | 064 |
+| Isolation | Later, behind G4, after `modules` is proven; `modules` claims none and says that loading a module runs its code | 065 |
 
 ---
 
@@ -272,7 +278,7 @@ about what a proof is. This is what each one has to demonstrate.
 | schema | a real document under a guard: the good change applied, the bad local write thrown and rolled back, the bad arriving commit refused before anything lands, a subtree checked at the path it lands on, and `check` used alone at a boundary |
 | sync | two live documents over a real channel converge under concurrent edits; the same protocol runs over a second channel unchanged; a conflict is left swapped and then resolved by a handler that yields; a chain of three converges; a document shared over a link and persisted by a store at once |
 | store | write, kill the process, reopen, verify; find-or-create under concurrent open |
-| modules | an app assembled from modules through both loaders (filesystem and bundle map), with dependency order and injection proven |
+| modules | an app assembled from all three sources (a directory, a bundle map, a document), with dependency order and injection asserted; a module document shared over a link loads on the far end; `follow` reloads a changed module and its dependents; `unload` calls `stop`; nothing inside the package touches store or sync |
 | sandbox | a hostile module runs the escape suite and stays contained, while a benign module does real work through granted capabilities |
 | dom | mount and hydrate a page with a dynamic list; edits assert exact DOM operations against the mock |
 | ui | an interactive page composed from components, driven and asserted against the mock (plus a manual browser page, outside CI) |
@@ -295,7 +301,8 @@ defined in `AGENTS.md`.
 2. `core`.
 3. `schema`. The shape a document must keep, checked before a commit lands.
 4. `store` + `sync`.
-5. `modules` + `sandbox`.
+5. `modules`.
+5b. `sandbox`, after `modules` is proven and G4 is answered.
 6. `dom` + `build`, with hydration and route data designed in rather than bolted on.
 7. `ui`, `icons`, `ssg`.
 8. `server`, `jobs`, the batteries.
@@ -327,24 +334,33 @@ exported symbol or a documented subpath export, never a naming convention.
 
 ---
 
-## Serialized modules
+## Modules as documents
 
-The most important capability in the stack: **modules stored as data, transmitted, validated,
-compiled, and executed in a sandbox.** This is the primitive that lets a program write a
-program and run it safely.
+The most important capability in the stack: **a module stored as data, transmitted, compiled,
+and run.** This is the primitive that lets a program write a program, and later, with
+`sandbox`, run it safely.
 
-Architectural consequences:
+A module document is an ordinary document. Everything that already works for a document works
+for a module, and `modules` does nothing to make that so:
 
-- **`sync` must be channel agnostic.** The same replication protocol runs over a websocket,
-  over `postMessage` to sandboxed code, and in process. Design around a channel interface,
-  not around a websocket.
-- **`modules` has two halves.** Static modules, imported at build time, and dynamic modules,
-  stored as data with their imports derived from the source and validated by compiling before
-  storage.
-- **`sandbox` is its own package.** An opaque-origin frame on a client, a permission-limited
-  child process on a server, both bridged by the same protocol.
-- **Capability grants are the application's rule, and later `sandbox`'s.** `schema` checks
-  what a document may hold, never who may change it.
+- **Stored** by opening the document through `store`. `modules` never sees a store.
+- **Sent** by sharing the document over a link. `modules` never sees a link.
+- **Versioned** by the document's commit history, which `store` keeps and `truncate` bounds;
+  undo is core's inverse. `modules` adds nothing and requires nothing of the history.
+- **Run** by handing the document to a loader as one of its sources. The loader reads each
+  entry's `source`, turns it into exports through `compile`, and instantiates it through the
+  same graph a module from a directory goes through (design 062).
+
+What `modules` does not decide: which modules load, when, how many, for how long, in which
+process, or at what rate; and who may read, write, load or run one. Those are the
+application's, above the library, and a loader is an instance so an application makes as many
+as its tenancy needs (design 063, 064).
+
+**Isolation is a separate package and a later phase.** `sandbox` is behind G4 and starts after
+`modules` is proven (design 065). Because a link has two equal ends and the `MessagePort`
+adapter already ships, a sandbox is a frame or a child process running a loader on the far end
+of a link; `modules` needs no change for it. Until then `modules` claims no isolation and says
+so: loading a module runs its code.
 
 ---
 
@@ -380,23 +396,19 @@ only auth.
 
 ---
 
-## Module history rides on deltas
+## Module history is the document's history
 
-If a module's source lives in the state tree, every edit already produces a delta, so the
-delta log is the version history. That gives full history, undo and redo by inversion, time
-travel, an agent searching its own earlier attempts, and replication of history over the same
-protocol, with no new machinery.
+A module document's source is a slot, so every edit is a commit, and the commit tail `store`
+keeps is the version history: undo by inversion, any earlier version by replay, replication of
+the history over the same protocol, with no machinery in `modules` (design 064).
 
-Three things to handle:
+Two things that follow:
 
-1. **Storage growth is the application's policy, not the library's.** The module system does
-   not get an opinion about how much history is too much. It exposes the history and the
-   tools to prune it: drop before a time, keep the last few, compact a range into a snapshot.
-   It must not silently discard versions, and it must not refuse a write because a history
-   got large.
-2. **Metadata.** A delta carries a time and an id, not an author or an intent. The arguments
-   threaded through commit application are the natural carrier for the actor.
-3. **Granularity.** Agents rewrite whole files, so whole-source deltas match the real edit
+1. **How much history to keep is the application's policy**, set with `truncate` on the
+   document, the same as for any document. Nothing in `modules` discards a version or refuses
+   a write because a history grew. An application that wants versions readable as data rather
+   than by replay keeps them as state in the module document, which is its shape to choose.
+2. **Granularity.** Agents rewrite whole files, so whole-source commits match the real edit
    pattern. Do not reach for a structured source tree to get finer deltas.
 
 ---
