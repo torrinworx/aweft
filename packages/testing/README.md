@@ -111,6 +111,32 @@ suite importing this harness creates no dependency in anything a user installs, 
 definition of done requires exactly that import. They are still printed on every run, so an
 exclusion that starts hiding something is visible rather than silent.
 
+## Testing a module in isolation
+
+`loadModule` instantiates one module the way `@aweftjs/modules` would, with its dependencies
+replaced by whatever the test hands over, so a module's own tests do not need a directory, a
+document or the modules it depends on.
+
+```ts
+import { loadModule } from '@aweftjs/testing';
+import * as Create from './modules/posts/Create.ts';
+
+const { instance, stop } = await loadModule({
+	exports: Create,
+	imports: { 'auth/Session': { userOf: () => 'u_1' }, 'lib/Log': { log: () => {} } },
+	config: { maxLength: 10 },     // merged over the module's defaults, as an extension would be
+	props: { site: 'test' },       // what the application would pass the loader
+});
+
+assert.equal((instance as Post).make('a long title'), 'post:a long ti');
+await stop();                    // unloads it, calling the instance's stop if it has one
+```
+
+Every name in the module's `deps` needs an entry in `imports`, keyed by the full dependency
+name; a missing one is refused by name before anything is instantiated. The module is loaded
+through the real loader, so `imports` reaches the factory keyed by the last segment of each
+name, exactly as it would in an application.
+
 ## Seeded randomness
 
 A property test is worth having only if a failure can be run again, so a failing assertion

@@ -5,8 +5,10 @@ type DocumentJson: interface DocumentJson { readonly root: string; readonly obse
 type DriverCheck: interface DriverCheck { readonly name: string; run(make: MakeDriver): Promise<void>; }
 type Fixture: interface Fixture { readonly name: string; readonly description: string; readonly initial: DocumentJson; readonly commits: readonly CommitJson[]; readonly final: DocumentJson; }
 type InvalidFixture: interface InvalidFixture { readonly name: string; readonly description: string; readonly stage: 'decode' | 'apply'; readonly reason: string; readonly bytes: string; readonly initial?: DocumentJson; }
+type LoadedModule: interface LoadedModule { readonly instance: unknown; stop(): Promise<void>; }
 type MakeDriver: type MakeDriver = () => Promise<StoreDriver> | StoreDriver;
 type Manifest: interface Manifest { readonly name: string; readonly dependencies?: Readonly<Record<string, string>> | undefined; readonly devDependencies?: Readonly<Record<string, string>> | undefined; }
+type ModuleUnderTest: interface ModuleUnderTest { readonly exports: ModuleExports; readonly imports?: Readonly<Record<string, unknown>>; readonly config?: Readonly<Record<string, unknown>>; readonly props?: Readonly<Record<string, unknown>>; }
 type ObservableJson: interface ObservableJson { readonly kind: ObservableKind; readonly slots: Readonly<Record<string, ValueJson>>; }
 type PackageInfo: interface PackageInfo { readonly tier: number | 'integrator'; readonly plane: Plane; readonly imports: readonly string[] | '*'; }
 type Plane: type Plane = 'client' | 'server' | 'isomorphic';
@@ -31,6 +33,7 @@ value idFromText: (text: string) => Uint8Array<ArrayBufferLike> (from @aweftjs/c
 value idToText: (id: Uint8Array<ArrayBufferLike>) => string (from @aweftjs/codec)
 value loadFixtures: (dir: string | URL) => Fixture[]
 value loadInvalidFixtures: (dir: string | URL) => InvalidFixture[]
+value loadModule: (test: ModuleUnderTest) => Promise<LoadedModule>
 value modelApplier: Applier
 value moduleSpecifiers: (source: string, fileName?: string) => string[]
 value randomBelow: (random: () => number, bound: number) => number

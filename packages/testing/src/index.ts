@@ -5,6 +5,9 @@ export { aweftPackageOf, moduleSpecifiers } from './imports.ts';
 export { loadFixtures, loadInvalidFixtures } from './fixtures.ts';
 
 export { driverChecks } from './drivers.ts';
+
+export { loadModule } from './modules.ts';
+export type { LoadedModule, ModuleUnderTest } from './modules.ts';
 export type { DriverCheck, MakeDriver, StoreDriver } from './drivers.ts';
 
 export { checkManifests } from './manifests.ts';
@@ -17,7 +20,7 @@ export { checkDecisionHeader } from './decisions.ts';
 
 export { surfaceOf, surfaceProgram } from './surface.ts';
 
-export { applyCommit, canonicalJson, slotKey, valueFromJson, valueToJson } from './document.ts';
+export { applyCommit, canonicalJson, valueFromJson, valueToJson } from './document.ts';
 export type { DocumentJson, ObservableJson, ValueJson } from './document.ts';
 
 export {
