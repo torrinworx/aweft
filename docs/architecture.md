@@ -343,8 +343,9 @@ concurrent edits that touch nothing in common into lost updates.
 An observable that loses its attach edge keeps its row and nulls its parent, so re-attaching
 returns it whole. Collecting is a sweep the host runs on a policy. See designs 047 and 048.
 
-The query surface is not decided. Open research gates it, because one DSL over an index
-lookup on one driver and a capped scan on another says nothing about which it is.
+A query names a declared path and an undeclared one is refused rather than scanned, so one
+query means one thing on every driver. R2 measured that a declaration compiles to a real index
+even on IndexedDB, which is the driver that cannot build one lazily. See design 049.
 
 ---
 
