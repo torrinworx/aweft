@@ -55,9 +55,7 @@ test('the intended dependency graph is legal under the table', () => {
 		['testing', 'codec'],
 		['schema', 'core'],
 		['sync', 'core'],
-		['sync', 'schema'],
 		['store', 'core'],
-		['store', 'schema'],
 		['modules', 'core'],
 		['dom', 'core'],
 		['ui', 'dom'],
@@ -88,4 +86,23 @@ test('the table rejects the edges the architecture forbids', () => {
 
 	const violations = checkGraph(forbidden, packages);
 	assert.equal(violations.length, forbidden.length, 'every forbidden edge should be caught');
+});
+
+test('every entry declares an allowlist, and every name in one is a package in the table', () => {
+	for (const [name, info] of Object.entries(packages)) {
+		if (info.imports === '*') continue;
+
+		assert.ok(Array.isArray(info.imports), `${name} declares no imports allowlist`);
+		for (const target of info.imports) {
+			assert.ok(packages[target], `${name} allows ${target}, which is not in the table`);
+		}
+	}
+});
+
+test('an integrator allows everything, since nothing may narrow what it composes', () => {
+	for (const [name, info] of Object.entries(packages)) {
+		if (info.tier === 'integrator') {
+			assert.equal(info.imports, '*', `${name} is an integrator with a narrowed allowlist`);
+		}
+	}
 });

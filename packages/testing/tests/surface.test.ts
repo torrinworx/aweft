@@ -12,6 +12,7 @@ import * as testing from '../src/index.ts';
 test('the entry file exports exactly what was decided', () => {
 	const decided = [
 		'applyCommit', 'aweftPackageOf', 'canonicalJson',
+		'checkDecisionHeader',
 		'checkEdge', 'checkFixture', 'checkGraph', 'checkInvalidFixture', 'checkManifests',
 		'commitToJson', 'deltaFromJson', 'deltaToJson',
 	'driverChecks',
@@ -21,6 +22,7 @@ test('the entry file exports exactly what was decided', () => {
 		'randomBelow', 'randomFrom',
 		'refFromJson', 'refToJson',
 		'seedFrom', 'shuffle', 'slotKey',
+		'surfaceOf', 'surfaceProgram',
 		'valueFromJson', 'valueToJson',
 	];
 

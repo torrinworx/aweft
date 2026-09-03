@@ -13,6 +13,10 @@ export type { Manifest } from './manifests.ts';
 export { checkEdge, checkGraph } from './boundaries.ts';
 export type { Plane, PackageInfo, Violation } from './boundaries.ts';
 
+export { checkDecisionHeader } from './decisions.ts';
+
+export { surfaceOf, surfaceProgram } from './surface.ts';
+
 export { applyCommit, canonicalJson, slotKey, valueFromJson, valueToJson } from './document.ts';
 export type { DocumentJson, ObservableJson, ValueJson } from './document.ts';
 

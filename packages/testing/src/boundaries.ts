@@ -1,9 +1,14 @@
-// Package boundary checking: tiers and planes.
+// Package boundary checking: tiers, planes, and the per-package import allowlist.
 //
 // A package may import from its own tier or any tier below it. Never upward, and never
 // across the client/server plane boundary. Two exceptions, both named rather than implied:
 // integrators compose across the whole stack by definition, and tooling sits outside the
 // runtime rule.
+//
+// The tier rule alone permits far more than the architecture intends: everything below a
+// package is legal to it, so a new dependency on a distant lower package passes without
+// anyone deciding it should exist. The allowlist is the narrower statement, one line per
+// package, and it is the line that has to change before the edge does.
 //
 // This is a function with tests rather than a lint config because an unenforceable rule is
 // worse than no rule: it reads as a guarantee and delivers nothing.
@@ -11,18 +16,20 @@
 /** Which side a package runs on. `isomorphic` may be imported from either. */
 export type Plane = 'client' | 'server' | 'isomorphic';
 
-/** A package's place in the table: how high it sits, and which side it runs on. */
+/** A package's place in the table: how high it sits, which side it runs on, what it reaches. */
 export interface PackageInfo {
 	/** Tier number, or 'integrator' for packages exempt from the ordering. */
 	readonly tier: number | 'integrator';
 	readonly plane: Plane;
+	/** aweft packages this one may import at runtime. `'*'` is every package. */
+	readonly imports: readonly string[] | '*';
 }
 
 /** One illegal import edge, and which rule it broke. */
 export interface Violation {
 	readonly from: string;
 	readonly to: string;
-	readonly rule: 'upward-tier' | 'cross-plane' | 'unknown-package';
+	readonly rule: 'upward-tier' | 'cross-plane' | 'unknown-package' | 'not-allowed';
 	readonly detail: string;
 }
 
@@ -80,6 +87,17 @@ export const checkEdge = (
 			to,
 			rule: 'cross-plane',
 			detail: `${from} is ${a.plane} and may not import ${to} on the ${b.plane} plane`,
+		};
+	}
+
+	// Last, so a wrong tier or a crossed plane keeps the rule name that explains it. An edge
+	// that is legal by tier and plane and still not listed is a dependency nobody decided on.
+	if (a.imports !== '*' && !a.imports.includes(to)) {
+		return {
+			from,
+			to,
+			rule: 'not-allowed',
+			detail: `${to} is not in the imports allowlist for ${from}`,
 		};
 	}
 

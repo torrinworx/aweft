@@ -1,19 +1,19 @@
 {
 	"packages": {
-		"codec":   { "tier": 1, "plane": "isomorphic" },
-		"core":    { "tier": 2, "plane": "isomorphic" },
-		"schema":  { "tier": 3, "plane": "isomorphic" },
-		"sync":    { "tier": 4, "plane": "isomorphic" },
-		"store":   { "tier": 4, "plane": "isomorphic" },
-		"modules": { "tier": 5, "plane": "isomorphic" },
-		"dom":     { "tier": 6, "plane": "client" },
-		"server":  { "tier": 6, "plane": "server" },
-		"ui":      { "tier": 7, "plane": "client" },
-		"icons":   { "tier": 7, "plane": "client" },
-		"jobs":    { "tier": 7, "plane": "server" },
-		"aweft":   { "tier": "integrator", "plane": "isomorphic" },
-		"ssg":     { "tier": "integrator", "plane": "isomorphic" },
-		"testing": { "tier": "integrator", "plane": "isomorphic" },
-		"build":   { "tier": "integrator", "plane": "isomorphic" }
+		"codec":   { "tier": 1, "plane": "isomorphic", "imports": [] },
+		"core":    { "tier": 2, "plane": "isomorphic", "imports": ["codec"] },
+		"schema":  { "tier": 3, "plane": "isomorphic", "imports": ["codec", "core"] },
+		"sync":    { "tier": 4, "plane": "isomorphic", "imports": ["codec", "core"] },
+		"store":   { "tier": 4, "plane": "isomorphic", "imports": ["codec", "core"] },
+		"modules": { "tier": 5, "plane": "isomorphic", "imports": ["core"] },
+		"dom":     { "tier": 6, "plane": "client", "imports": ["core"] },
+		"server":  { "tier": 6, "plane": "server", "imports": ["core", "modules", "store", "sync"] },
+		"ui":      { "tier": 7, "plane": "client", "imports": ["core", "dom"] },
+		"icons":   { "tier": 7, "plane": "client", "imports": ["core"] },
+		"jobs":    { "tier": 7, "plane": "server", "imports": ["modules"] },
+		"aweft":   { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
+		"ssg":     { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
+		"testing": { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
+		"build":   { "tier": "integrator", "plane": "isomorphic", "imports": "*" }
 	}
 }

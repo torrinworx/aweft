@@ -15,11 +15,14 @@
 		"fixtures": "node packages/testing/scripts/generate-fixtures.ts",
 		"frames": "node packages/sync/scripts/generate-frames.ts",
 		"proofs": "node examples/codec/main.ts && node examples/core/main.ts && node examples/schema/main.ts && node examples/sync/main.ts && node examples/store/main.ts",
-		"bench": "node bench/derived.ts && node bench/write.ts && node bench/authority.ts && node bench/replicate.ts",
-		"test": "npm run typecheck && npm run deps && npm run boundaries && npm run dependencies && node packages/testing/scripts/run-tests.ts && npm run proofs",
+		"bench": "node bench/derived.ts && node bench/write.ts && node bench/replicate.ts && node bench/guard.ts",
+		"test": "npm run typecheck && npm run deps && npm run boundaries && npm run dependencies && npm run decisions && npm run surface:check && node packages/testing/scripts/run-tests.ts && npm run proofs",
 		"gate": "npm test",
 		"boundaries": "node packages/testing/scripts/check-boundaries.ts",
-		"dependencies": "node packages/testing/scripts/check-dependencies.ts"
+		"dependencies": "node packages/testing/scripts/check-dependencies.ts",
+		"decisions": "node packages/testing/scripts/check-decisions.ts",
+		"surface": "node packages/testing/scripts/check-surface.ts --write",
+		"surface:check": "node packages/testing/scripts/check-surface.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^24.13.3",

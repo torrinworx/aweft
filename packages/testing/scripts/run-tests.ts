@@ -52,6 +52,9 @@ for (const name of readdirSync(packagesDir).sort()) {
 
 	const args = [
 		'--test',
+		// A test that waits forever is a red test, not a stuck gate: without this cap a link
+		// test that never gets its answer hangs the suite instead of failing it.
+		'--test-timeout=120000',
 		'--experimental-test-coverage',
 		`--test-coverage-branches=${threshold}`,
 		`--test-coverage-include=packages/${name}/src/**`,

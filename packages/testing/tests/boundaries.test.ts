@@ -3,18 +3,28 @@ import assert from 'node:assert/strict';
 
 import { checkEdge, checkGraph, type PackageInfo } from '../src/boundaries.ts';
 
+// The tier and plane cases below are about ordering, so every allowlist here is '*' and
+// leaves them to the rule under test. The allowlist has its own table further down.
 const table: Record<string, PackageInfo> = {
-	core: { tier: 1, plane: 'isomorphic' },
-	schema: { tier: 2, plane: 'isomorphic' },
-	sync: { tier: 3, plane: 'isomorphic' },
-	store: { tier: 3, plane: 'isomorphic' },
-	modules: { tier: 4, plane: 'isomorphic' },
-	dom: { tier: 5, plane: 'client' },
-	server: { tier: 5, plane: 'server' },
-	ui: { tier: 6, plane: 'client' },
-	jobs: { tier: 6, plane: 'server' },
-	testing: { tier: 'integrator', plane: 'isomorphic' },
-	aweft: { tier: 'integrator', plane: 'isomorphic' },
+	core: { tier: 1, plane: 'isomorphic', imports: '*' },
+	schema: { tier: 2, plane: 'isomorphic', imports: '*' },
+	sync: { tier: 3, plane: 'isomorphic', imports: '*' },
+	store: { tier: 3, plane: 'isomorphic', imports: '*' },
+	modules: { tier: 4, plane: 'isomorphic', imports: '*' },
+	dom: { tier: 5, plane: 'client', imports: '*' },
+	server: { tier: 5, plane: 'server', imports: '*' },
+	ui: { tier: 6, plane: 'client', imports: '*' },
+	jobs: { tier: 6, plane: 'server', imports: '*' },
+	testing: { tier: 'integrator', plane: 'isomorphic', imports: '*' },
+	aweft: { tier: 'integrator', plane: 'isomorphic', imports: '*' },
+};
+
+// Three packages the tier and plane rules have nothing to say about: b sits above both a
+// and c, and all three are isomorphic. Only the allowlist separates b -> a from b -> c.
+const allowlist: Record<string, PackageInfo> = {
+	a: { tier: 1, plane: 'isomorphic', imports: [] },
+	c: { tier: 1, plane: 'isomorphic', imports: [] },
+	b: { tier: 2, plane: 'isomorphic', imports: ['a'] },
 };
 
 test('a package may import a lower tier', () => {
@@ -87,4 +97,27 @@ test('checkGraph reports every violation, in input order', () => {
 
 test('checkGraph returns empty for a legal graph', () => {
 	assert.deepEqual(checkGraph([['ui', 'core'], ['sync', 'schema']], table), []);
+});
+
+test('an edge the allowlist omits is a violation, tier and plane notwithstanding', () => {
+	assert.equal(checkEdge('b', 'a', allowlist), null);
+
+	const v = checkEdge('b', 'c', allowlist);
+	assert.ok(v);
+	assert.equal(v.rule, 'not-allowed');
+	assert.match(v.detail, /c is not in the imports allowlist for b/);
+});
+
+test('an allowlist of "*" leaves the edge to the tier and plane rules', () => {
+	const wide: Record<string, PackageInfo> = {
+		...allowlist,
+		b: { tier: 2, plane: 'isomorphic', imports: '*' },
+	};
+
+	assert.equal(checkEdge('b', 'c', wide), null);
+});
+
+test('a wrong tier keeps its own rule name rather than the allowlist one', () => {
+	// a lists nothing, so both rules apply to a -> b. The tier answer is the useful one.
+	assert.equal(checkEdge('a', 'b', allowlist)?.rule, 'upward-tier');
 });
