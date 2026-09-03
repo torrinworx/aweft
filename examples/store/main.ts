@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 import { atomic, createArray, createObject } from '@aweftjs/core';
 import { createStore } from '@aweftjs/store';
+import { driverChecks } from '@aweftjs/testing';
 
 import { fileDriver } from './driver-file.ts';
 
@@ -28,11 +29,18 @@ const check = (ok: boolean, what: string): void => {
 
 // --- the child: writes, then dies without ever being told to stop ----------------------------
 if (process.argv[2] === 'write') {
-	const store = createStore({ driver: fileDriver(process.argv[3]!) });
+	const store = createStore({
+		driver: fileDriver(process.argv[3]!),
+		declare: { title: ['title'], author: ['meta', 'authorId'] },
+	});
 	const board = await store.open('board');
 	const root = board.root as Doc;
 	const tasks = createArray<Doc>();
-	atomic(() => { root.title = 'the board'; root.tasks = tasks; });
+	atomic(() => {
+		root.title = 'the board';
+		root.tasks = tasks;
+		root.meta = createObject<Doc>({ authorId: 'u_7' });
+	});
 	for (let i = 0; i < 5; i++) tasks.push(createObject<Doc>({ title: `task ${i}`, done: i % 2 === 0 }));
 	(tasks[2] as Doc).title = 'task two, renamed';
 	await store.settled(board);
@@ -48,7 +56,10 @@ try {
 	const child = spawnSync(process.execPath, [here, 'write', dir], { encoding: 'utf8' });
 	check(child.signal === 'SIGKILL', `the writer was killed, not shut down (signal ${child.signal})`);
 
-	const store = createStore({ driver: fileDriver(dir) });
+	const store = createStore({
+		driver: fileDriver(dir),
+		declare: { title: ['title'], author: ['meta', 'authorId'] },
+	});
 	const board = await store.open('board');
 	const root = board.root as Doc;
 	const tasks = root.tasks as Doc[];
@@ -67,6 +78,28 @@ try {
 	await store.settled(board);
 	const after = await createStore({ driver: fileDriver(dir) }).open('board');
 	check(((after.root as Doc).tasks as Doc[])[0]!.done === true, 'and it carries on being written to');
+
+	console.log('\nqueries survive the kill too');
+	check((await store.find({ where: [{ field: 'title', op: 'eq', value: 'the board' }] }))[0] === 'board',
+		'a declared path finds the document the dead process wrote');
+	check((await store.find({ where: [{ field: 'author', op: 'eq', value: 'u_7' }] }))[0] === 'board',
+		'and so does one that crosses a nested observable');
+	root.title = 'renamed after the kill';
+	await store.settled(board);
+	check((await store.find({ where: [{ field: 'title', op: 'eq', value: 'the board' }] })).length === 0,
+		'the projection moves with the document');
+	let refused = false;
+	try { await store.find({ where: [{ field: 'nobodyDeclaredThis', op: 'eq', value: 1 }] }); }
+	catch { refused = true; }
+	check(refused, 'and an undeclared path is refused rather than scanned');
+
+	console.log('\nthe file driver against the conformance suite');
+	let red = 0;
+	for (const c of driverChecks()) {
+		try { await c.run(() => fileDriver(mkdtempSync(join(tmpdir(), 'aweft-conf-')))); }
+		catch (e) { red++; console.log(`  FAIL ${c.name}\n       ${(e as Error).message.split('\n')[0]}`); }
+	}
+	check(red === 0, `a driver written outside the package meets the contract (${driverChecks().length} checks)`);
 
 	console.log('\nfind-or-create under concurrent open');
 	const racers = Array.from({ length: 8 }, () => createStore({ driver: fileDriver(dir) }));

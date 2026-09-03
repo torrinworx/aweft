@@ -11,8 +11,12 @@ import {
 import { apply, createArray, createMap, createObject, fromSnapshot, idOf, observer } from '@aweftjs/core';
 import { idFromText } from '@aweftjs/codec';
 
-import type { Driver } from './driver.ts';
+import type { Driver, Found } from './driver.ts';
 import { attachedBy, record, rowsFor, rowsFrom, snapshotOf, type Rows } from './rows.ts';
+import {
+	checkDeclaration, checkQuery, holds, projectionOf,
+	type Declaration, type Indexable, type Query,
+} from './query.ts';
 
 /** One commit of a document's history, as `store` hands it back. */
 export interface Held {
@@ -40,6 +44,8 @@ interface State {
 	rootId: string;
 	rootKind: ObservableKind;
 	rows: Rows;
+	fields: Record<string, Indexable>;
+	projected: boolean;
 	live: Set<string>;
 	seq: number;
 	actor: string;
@@ -70,13 +76,41 @@ const rootOf = (id: Uint8Array | undefined, kind: ObservableKind): object => {
  *   (board.root as Record<string, unknown>).title = 'a board';
  *   await store.settled(board);
  */
-export const createStore = ({ driver }: { driver: Driver }) => {
+export const createStore = ({ driver, declare = {} }: { driver: Driver; declare?: Declaration }) => {
+	checkDeclaration(declare);
 	const open_ = new Map<string, State>();
+	const declared = driver.declare(Object.keys(declare));
 
 	/** Write one commit: rows and tail together, and move the sequence. */
+	// Recompute the declared fields and send only what moved. Reading them is a walk of the
+	// declared depth and does not grow with the commit, so this is cheaper than asking of every
+	// delta whether it landed on a declared path, and it cannot disagree with the rows.
+	const moved = (state: State): Record<string, Indexable> | undefined => {
+		const now = projectionOf(state.rows, state.rootId, declare);
+
+		// A document nobody has projected yet writes every declared field, including the ones
+		// that are null. Sending only what changed would leave a document whose declared path is
+		// empty out of the index entirely, and `field eq null` would not find it.
+		if (!state.projected) {
+			state.projected = true;
+			state.fields = now;
+			return Object.keys(now).length === 0 ? undefined : now;
+		}
+
+		let changed: Record<string, Indexable> | undefined;
+		for (const [field, value] of Object.entries(now)) {
+			if (state.fields[field] === value) continue;
+			state.fields[field] = value;
+			(changed ??= {})[field] = value;
+		}
+		return changed;
+	};
+
 	const persist = async (state: State, commit: Commit, actor: string): Promise<void> => {
 		const change = record(state.rows, commit);
+		const project = moved(state);
 		state.seq = await driver.write({
+			...(project === undefined ? {} : { project }),
 			doc: state.doc,
 			root: state.rootId,
 			rootKind: state.rootKind,
@@ -121,6 +155,7 @@ export const createStore = ({ driver }: { driver: Driver }) => {
 		// Find or create, and the create has to be atomic: two callers opening the same name at
 		// once must not build two documents with different roots, which is what a login path
 		// does every time two requests for one account arrive together.
+		await declared;
 		let stored = await driver.read(doc);
 		if (stored === null) {
 			const rootId = idToText(idOf(rootOf(undefined, kind))!);
@@ -142,6 +177,8 @@ export const createStore = ({ driver }: { driver: Driver }) => {
 			rootId: stored.root,
 			rootKind: stored.rootKind,
 			rows,
+			fields: projectionOf(rows, stored.root, declare),
+			projected: !fresh,
 			live: new Set(snap === null ? [stored.root] : Object.keys(snap.observables)),
 			seq: await driver.head(doc),
 			actor: 'local',
@@ -321,6 +358,74 @@ export const createStore = ({ driver }: { driver: Driver }) => {
 		return gone.length;
 	};
 
+	/**
+	 * Find documents by a declared path.
+	 *
+	 * Params:
+	 *   query: its conditions, and how to order and page them
+	 *
+	 * Returns: the names of the documents that match, in the order asked for.
+	 *
+	 * Throws `undeclared` when a condition or the sort names a path nothing indexed. That is
+	 * refused rather than answered by a scan, because the scan is not slow in the same way on
+	 * two drivers, and a query whose cost depends on where it runs is a cliff wearing a
+	 * portable API. Declare the path, or reach for `scan` and say so.
+	 *
+	 * The FIRST condition is the one an index answers, and it does the pruning; the rest narrow
+	 * what it returned. So order the conditions with the most selective one first, which is the
+	 * whole of the tuning advice.
+	 *
+	 * Example:
+	 *   const mine = await store.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_7' }] });
+	 */
+	const find = async (query: Query): Promise<string[]> => {
+		await declared;
+		checkQuery(query, declare);
+
+		const [first, ...rest] = query.where;
+		const sort = query.sort === undefined
+			? undefined
+			: { field: query.sort.field, direction: query.sort.direction ?? 'asc' as const };
+
+		// Only the driver's own limit is safe to push down when nothing narrows afterwards.
+		const pushLimit = rest.length === 0 ? query.limit : undefined;
+		const hits = await driver.find({
+			where: first!,
+			...(sort === undefined ? {} : { sort }),
+			...(pushLimit === undefined ? {} : { limit: pushLimit }),
+			...(query.after === undefined ? {} : { after: query.after }),
+		});
+
+		const kept = rest.length === 0
+			? hits
+			: hits.filter((found) => rest.every((w) => holds(w, found.fields[w.field] ?? null)));
+
+		const limited = query.limit === undefined ? kept : kept.slice(0, query.limit);
+		return limited.map((f) => f.doc);
+	};
+
+	/**
+	 * Read documents without an index.
+	 *
+	 * Params:
+	 *   limit: how many to return, required
+	 *   after: the last document of the previous page
+	 *
+	 * Returns: document names, in a stable order.
+	 *
+	 * This is the un-indexed read, and it is a separate call with a required limit so that
+	 * reaching for one is a decision rather than something a query falls into. What it costs
+	 * depends on the driver, which is exactly why `find` will not do it.
+	 *
+	 * Example:
+	 *   for (const doc of await store.scan(100)) await migrate(doc);
+	 */
+	const scan = async (limit: number, after?: string): Promise<string[]> => {
+		await declared;
+		if (!Number.isInteger(limit) || limit <= 0) throw new Error('store: scan needs a positive limit');
+		return (await driver.scan(limit, after)).map((f: Found) => f.doc);
+	};
+
 	/** Stop following a document. The last closer tears it down. */
 	const close = async (handle: Handle): Promise<void> => {
 		const state = open_.get(handle.doc);
@@ -346,5 +451,8 @@ export const createStore = ({ driver }: { driver: Driver }) => {
 		await driver.close();
 	};
 
-	return { open, receive, settled, since, truncate, orphans, sweep, close, remove, stop, head: driver.head.bind(driver) };
+	return {
+		open, receive, settled, since, truncate, orphans, sweep, find, scan, close, remove, stop,
+		head: driver.head.bind(driver),
+	};
 };

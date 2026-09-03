@@ -5,12 +5,15 @@
 // widening the interface until it fits one is how the weakest backend ends up deciding what
 // the strongest may offer.
 //
-// The query surface is deliberately absent. open research gates it, because one
-// query that is an index lookup on one driver and a capped scan on another is a performance
-// cliff wearing a portable API.
+// The query half is four more: declare the paths to index, carry a commit's changes to them,
+// answer a condition through one of those indexes, and read rows for the escape hatch. A
+// driver never invents an index, because IndexedDB cannot: `createIndex` is legal only inside
+// a version change, so the declaration arrives before any data does (design 049).
 
 import type { ObservableKind } from '@aweftjs/codec';
 import type { SnapshotValue } from '@aweftjs/core';
+
+import type { Indexable, Where } from './query.ts';
 
 /**
  * One observable, as a store holds it.
@@ -51,6 +54,31 @@ export interface Entry {
 	readonly seq: number;
 	readonly actor: string;
 	readonly body: Uint8Array;
+	/**
+	 * The declared fields this commit changed, and their new values. Written in the same
+	 * transaction as the commit, so a query never reads a state that was never committed.
+	 * Absent fields did not change.
+	 */
+	readonly project?: Readonly<Record<string, Indexable>>;
+}
+
+/** One document as a query answers it: its name, and the declared fields it holds. */
+export interface Found {
+	readonly doc: string;
+	readonly fields: Readonly<Record<string, Indexable>>;
+}
+
+/**
+ * What a driver is asked for: one indexed condition, and how to order and page what it finds.
+ *
+ * Exactly one condition, because that is the one an index answers. `store` narrows the result
+ * with the rest of the query, so every driver does the same amount of the work.
+ */
+export interface Lookup {
+	readonly where: Where;
+	readonly sort?: { readonly field: string; readonly direction: 'asc' | 'desc' };
+	readonly limit?: number;
+	readonly after?: string;
 }
 
 /**
@@ -69,6 +97,31 @@ export interface Write {
 	readonly dropped: readonly string[];
 	readonly actor: string;
 	readonly body: Uint8Array;
+	/**
+	 * The declared fields this commit changed, and their new values. Written in the same
+	 * transaction as the commit, so a query never reads a state that was never committed.
+	 * Absent fields did not change.
+	 */
+	readonly project?: Readonly<Record<string, Indexable>>;
+}
+
+/** One document as a query answers it: its name, and the declared fields it holds. */
+export interface Found {
+	readonly doc: string;
+	readonly fields: Readonly<Record<string, Indexable>>;
+}
+
+/**
+ * What a driver is asked for: one indexed condition, and how to order and page what it finds.
+ *
+ * Exactly one condition, because that is the one an index answers. `store` narrows the result
+ * with the rest of the query, so every driver does the same amount of the work.
+ */
+export interface Lookup {
+	readonly where: Where;
+	readonly sort?: { readonly field: string; readonly direction: 'asc' | 'desc' };
+	readonly limit?: number;
+	readonly after?: string;
 }
 
 /**
@@ -78,6 +131,26 @@ export interface Write {
  * pretending otherwise would let a consumer depend on synchrony the real ones cannot give.
  */
 export interface Driver {
+	/**
+	 * Name the paths this store indexes, before anything is written.
+	 *
+	 * Called once, when the store is made. A driver that has to build its indexes up front
+	 * does it here; one that can add them later still may not, because the store's behaviour
+	 * must not depend on which driver it is running on.
+	 */
+	declare(fields: readonly string[]): Promise<void>;
+
+	/** Answer one indexed condition. Only fields passed to `declare` are ever asked for. */
+	find(lookup: Lookup): Promise<Found[]>;
+
+	/**
+	 * Every document, for the escape hatch. `limit` is required, and a driver stops there.
+	 *
+	 * This is the un-indexed read, and it is separate so that reaching for one is a decision
+	 * rather than an accident.
+	 */
+	scan(limit: number, after?: string): Promise<Found[]>;
+
 	/**
 	 * Apply one commit's rows and append it to the tail, atomically, and return the sequence
 	 * the commit was given. Sequences start at 1 and are contiguous within a document.

@@ -5,11 +5,13 @@
 // did not design it. One JSON file per document, replaced by rename so a kill lands either on
 // the old file or the new one and never on half of either.
 
-import { closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeSync } from 'node:fs';
+import { closeSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { Driver, Entry, Patch, Row, Write } from '@aweftjs/store';
+import type { Driver, Entry, Found, Lookup, Patch, Row, Write } from '@aweftjs/store';
+import type { Indexable } from '@aweftjs/store';
 import type { ObservableKind } from '@aweftjs/codec';
+import { compare, holds } from '@aweftjs/store';
 
 interface Held {
 	root: string;
@@ -17,11 +19,22 @@ interface Held {
 	rows: Record<string, Row>;
 	tail: { seq: number; actor: string; body: string }[];
 	head: number;
+	fields: Record<string, Indexable>;
 }
 
 export const fileDriver = (dir: string): Driver => {
 	mkdirSync(dir, { recursive: true });
 	const path = (doc: string): string => join(dir, `${encodeURIComponent(doc)}.json`);
+	let declared: readonly string[] = [];
+
+	// One file per document means the index is the directory, so a lookup reads every
+	// document's projection. That is honest for a driver this small, and it is why the real
+	// ones keep an index: the contract is the same, the cost is not.
+	const all = (): { doc: string; held: Held }[] => readdirSync(dir)
+		.filter((f) => f.endsWith('.json'))
+		.map((f) => decodeURIComponent(f.slice(0, -5)))
+		.sort()
+		.flatMap((doc) => { const held = load(doc); return held === null ? [] : [{ doc, held }]; });
 
 	const load = (doc: string): Held | null => {
 		try { return JSON.parse(readFileSync(path(doc), 'utf8')) as Held; }
@@ -38,14 +51,48 @@ export const fileDriver = (dir: string): Driver => {
 	};
 
 	return {
+		async declare(fields) { declared = fields; },
+
+		async find(lookup: Lookup): Promise<Found[]> {
+			if (!declared.includes(lookup.where.field)) {
+				throw new Error(`store: ${lookup.where.field} was not declared`);
+			}
+			let hits = all()
+				.filter(({ held }) => holds(lookup.where, held.fields[lookup.where.field] ?? null))
+				.map(({ doc, held }) => ({ doc, fields: { ...held.fields } }));
+
+			const sort = lookup.sort;
+			if (sort !== undefined) {
+				const sign = sort.direction === 'desc' ? -1 : 1;
+				hits.sort((a, b) => {
+					const by = compare(a.fields[sort.field] ?? null, b.fields[sort.field] ?? null) * sign;
+					return by !== 0 ? by : (a.doc < b.doc ? -1 : a.doc > b.doc ? 1 : 0);
+				});
+			}
+			if (lookup.after !== undefined) {
+				const at = hits.findIndex((h) => h.doc === lookup.after);
+				if (at !== -1) hits = hits.slice(at + 1);
+			}
+			return lookup.limit === undefined ? hits : hits.slice(0, lookup.limit);
+		},
+
+		async scan(limit, after) {
+			let names = all();
+			if (after !== undefined) {
+				const at = names.findIndex((n) => n.doc === after);
+				if (at !== -1) names = names.slice(at + 1);
+			}
+			return names.slice(0, limit).map(({ doc, held }) => ({ doc, fields: { ...held.fields } }));
+		},
+
 		async create(doc, root, rootKind) {
 			if (load(doc) !== null) return false;
-			save(doc, { root, rootKind, rows: {}, tail: [], head: 0 });
+			save(doc, { root, rootKind, rows: {}, tail: [], head: 0, fields: {} });
 			return true;
 		},
 
 		async write(w: Write) {
-			const held = load(w.doc) ?? { root: w.root, rootKind: w.rootKind, rows: {}, tail: [], head: 0 };
+			const held = load(w.doc) ?? { root: w.root, rootKind: w.rootKind, rows: {}, tail: [], head: 0, fields: {} };
 			if (held.root !== w.root) throw new Error(`store: ${w.doc} has root ${held.root}, not ${w.root}`);
 			for (const patch of w.rows) {
 				const was = held.rows[patch.id];
@@ -57,6 +104,7 @@ export const fileDriver = (dir: string): Driver => {
 					: patch.edge === null ? { parent: null, slot: null } : patch.edge;
 				held.rows[patch.id] = { id: patch.id, kind: patch.kind, parent: edge.parent, slot: edge.slot, slots };
 			}
+			if (w.project !== undefined) Object.assign(held.fields, w.project);
 			held.head += 1;
 			held.tail.push({ seq: held.head, actor: w.actor, body: Buffer.from(w.body).toString('base64') });
 			save(w.doc, held);

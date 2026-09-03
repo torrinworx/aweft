@@ -27,7 +27,15 @@ export interface StoreDriver {
 		doc: string; root: string; rootKind: string;
 		rows: readonly { id: string; kind: string; edge?: { parent: string; slot: string } | null; set: Record<string, unknown>; unset: readonly string[] }[];
 		dropped: readonly string[]; actor: string; body: Uint8Array;
+		project?: Record<string, unknown>;
 	}): Promise<number>;
+	declare(fields: readonly string[]): Promise<void>;
+	find(lookup: {
+		where: { field: string; op: string; value: unknown };
+		sort?: { field: string; direction: 'asc' | 'desc' };
+		limit?: number; after?: string;
+	}): Promise<{ doc: string; fields: Record<string, unknown> }[]>;
+	scan(limit: number, after?: string): Promise<{ doc: string; fields: Record<string, unknown> }[]>;
 	create(doc: string, root: string, rootKind: string): Promise<boolean>;
 	read(doc: string): Promise<{ root: string; rootKind: string; rows: unknown[] } | null>;
 	since(doc: string, seq: number): Promise<{ seq: number; actor: string; body: Uint8Array }[]>;
@@ -236,6 +244,118 @@ export const driverChecks = (): DriverCheck[] => [
 				await d.create('a', ROOT, 'object');
 				await d.write(write('a', [row(ROOT)], 1));
 				await assert.rejects(() => d.write({ ...write('a', [row('x')], 2), root: 'DIFFERENTROOTAAAA' }));
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'a declared path answers a query through an index',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare(['owner', 'weight']);
+				for (let i = 0; i < 12; i++) {
+					await d.create(`d${i}`, `${ROOT}${i}`, 'object');
+					await d.write({
+						...write(`d${i}`, [{ id: `${ROOT}${i}`, kind: 'object', set: {}, unset: [] }], 1),
+						root: `${ROOT}${i}`,
+						project: { owner: `u_${i % 3}`, weight: i },
+					});
+				}
+				const mine = await d.find({ where: { field: 'owner', op: 'eq', value: 'u_1' } });
+				assert.deepEqual(mine.map((f) => f.doc).sort(), ['d1', 'd10', 'd4', 'd7']);
+				assert.equal(mine[0]!.fields.weight !== undefined,
+					true, 'a hit carries its declared fields, so a caller can narrow without a second read');
+
+				const heavy = await d.find({ where: { field: 'weight', op: 'gte', value: 10 } });
+				assert.deepEqual(heavy.map((f) => f.doc).sort(), ['d10', 'd11']);
+				assert.deepEqual((await d.find({ where: { field: 'weight', op: 'lt', value: 2 } })).map((f) => f.doc).sort(),
+					['d0', 'd1']);
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'a projection follows the document, and a removed document leaves the index',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare(['owner']);
+				await d.create('a', ROOT, 'object');
+				await d.write({ ...write('a', [row(ROOT)], 1), project: { owner: 'first' } });
+				assert.equal((await d.find({ where: { field: 'owner', op: 'eq', value: 'first' } })).length, 1);
+
+				await d.write({ ...write('a', [row(ROOT)], 2), project: { owner: 'second' } });
+				assert.equal((await d.find({ where: { field: 'owner', op: 'eq', value: 'first' } })).length, 0,
+					'the old value still answers, so the projection was added to rather than moved');
+				assert.equal((await d.find({ where: { field: 'owner', op: 'eq', value: 'second' } })).length, 1);
+
+				await d.remove('a');
+				assert.equal((await d.find({ where: { field: 'owner', op: 'eq', value: 'second' } })).length, 0,
+					'a removed document still answers a query');
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'sort and cursor pagination cover every document exactly once',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare(['owner', 'weight']);
+				for (let i = 0; i < 20; i++) {
+					await d.create(`d${i}`, `${ROOT}${i}`, 'object');
+					await d.write({
+						...write(`d${i}`, [{ id: `${ROOT}${i}`, kind: 'object', set: {}, unset: [] }], 1),
+						root: `${ROOT}${i}`, project: { owner: 'u', weight: i },
+					});
+				}
+				const seen: string[] = [];
+				let after: string | undefined;
+				for (let page = 0; page < 10; page++) {
+					const got = await d.find({
+						where: { field: 'owner', op: 'eq', value: 'u' },
+						sort: { field: 'weight', direction: 'asc' }, limit: 4,
+						...(after === undefined ? {} : { after }),
+					});
+					if (got.length === 0) break;
+					seen.push(...got.map((f) => f.doc));
+					after = got.at(-1)!.doc;
+				}
+				assert.equal(seen.length, 20, 'paging saw every document');
+				assert.equal(new Set(seen).size, 20, 'and saw none of them twice');
+				assert.deepEqual(seen.slice(0, 4), ['d0', 'd1', 'd2', 'd3'], 'in the order asked for');
+
+				const desc = await d.find({
+					where: { field: 'owner', op: 'eq', value: 'u' },
+					sort: { field: 'weight', direction: 'desc' }, limit: 3,
+				});
+				assert.deepEqual(desc.map((f) => f.doc), ['d19', 'd18', 'd17']);
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'a field nobody declared is refused rather than scanned',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare(['owner']);
+				await d.create('a', ROOT, 'object');
+				await d.write({ ...write('a', [row(ROOT)], 1), project: { owner: 'u' } });
+				await assert.rejects(() => d.find({ where: { field: 'title', op: 'eq', value: 'x' } }),
+					'a driver must refuse an undeclared field, not fall back to reading everything');
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'scan stops at its limit and pages without repeating',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare([]);
+				for (let i = 0; i < 10; i++) await d.create(`d${i}`, `${ROOT}${i}`, 'object');
+				const first = await d.scan(4);
+				assert.equal(first.length, 4);
+				const second = await d.scan(4, first.at(-1)!.doc);
+				assert.equal(second.length, 4);
+				assert.equal(new Set([...first, ...second].map((f) => f.doc)).size, 8);
 			} finally { await d.close(); }
 		},
 	},
