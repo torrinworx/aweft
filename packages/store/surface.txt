@@ -1,0 +1,21 @@
+type Commit: interface Commit { readonly deltas: readonly Delta[]; readonly tag?: Uint8Array; } (from @aweftjs/codec)
+type Declaration: type Declaration = Readonly<Record<string, readonly string[]>>;
+type Driver: interface Driver { declare(fields: readonly string[]): Promise<void>; find(lookup: Lookup): Promise<Found[]>; scan(limit: number, after?: string): Promise<Found[]>; write(write: Write): Promise<number>; create(doc: string, root: string, rootKind: ObservableKind): Promise<boolean>; read(doc: string): Promise<{ root: string; rootKind: ObservableKind; rows: Row[]; } | null>; since(doc: string, seq: number): Promise<Entry[]>; head(doc: string): Promise<number>; truncate(doc: string, seq: number): Promise<void>; forget(doc: string, ids: readonly string[]): Promise<void>; remove(doc: string): Promise<void>; close(): Promise<void>; }
+type Entry: interface Entry { readonly seq: number; readonly body: Uint8Array; readonly project?: Readonly<Record<string, Indexable>>; }
+type Found: interface Found { readonly doc: string; readonly fields: Readonly<Record<string, Indexable>>; }
+type Handle: interface Handle { readonly doc: string; readonly root: object; readonly seq: number; }
+type Held: interface Held { readonly seq: number; readonly commit: Commit; }
+type Indexable: type Indexable = string | number | boolean | null;
+type Lookup: interface Lookup { readonly where: Where; readonly sort?: { readonly field: string; readonly direction: 'asc' | 'desc'; }; readonly limit?: number; readonly after?: string; }
+type Patch: interface Patch { readonly id: string; readonly kind: ObservableKind; readonly edge?: { readonly parent: string; readonly slot: string; } | null; readonly set: Readonly<Record<string, SnapshotValue>>; readonly unset: readonly string[]; }
+type Query: interface Query { readonly where: readonly Where[]; readonly sort?: { readonly field: string; readonly direction?: 'asc' | 'desc'; }; readonly limit?: number; readonly after?: string; }
+type Row: interface Row { readonly id: string; readonly kind: ObservableKind; readonly parent: string | null; readonly slot: string | null; readonly slots: Readonly<Record<string, SnapshotValue>>; }
+type Store: interface Store { open(doc: string, kind?: ObservableKind): Promise<Handle>; receive(handle: Handle, commit: Commit): Promise<number>; settled(handle: Handle): Promise<void>; find(query: Query): Promise<Found[]>; scan(limit: number, after?: string): Promise<Found[]>; since(doc: string, seq: number): Promise<Held[]>; truncate(doc: string, keep: number): Promise<void>; orphans(handle: Handle): string[]; sweep(handle: Handle): Promise<number>; close(handle: Handle): Promise<void>; remove(doc: string): Promise<void>; stop(): Promise<void>; head(doc: string): Promise<number>; }
+type Where: interface Where { readonly field: string; readonly op: 'eq' | 'gt' | 'gte' | 'lt' | 'lte'; readonly value: Indexable; }
+type Write: interface Write { readonly doc: string; readonly root: string; readonly rootKind: ObservableKind; readonly rows: readonly Patch[]; readonly dropped: readonly string[]; readonly body: Uint8Array; readonly project?: Readonly<Record<string, Indexable>>; }
+value compare: (a: Indexable, b: Indexable) => number
+value createStore: ({ driver, declare }: { driver: Driver; declare?: Readonly<Record<string, readonly string[]>> | undefined; }) => Store
+value decodeCommit: (bytes: Uint8Array<ArrayBufferLike>) => Commit (from @aweftjs/codec)
+value encodeCommit: (commit: Commit) => Uint8Array<ArrayBufferLike> (from @aweftjs/codec)
+value holds: (where: Where, value: Indexable) => boolean
+value memoryDriver: () => Driver

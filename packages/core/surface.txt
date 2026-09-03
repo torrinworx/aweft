@@ -1,0 +1,43 @@
+type Change: interface Change extends Commit { readonly deltas: readonly Delta[]; inverse(): Commit; }
+type Commit: interface Commit { readonly deltas: readonly Delta[]; readonly tag?: Uint8Array; } (from @aweftjs/codec)
+type Delta: interface Delta { readonly type: DeltaType; readonly id: Uint8Array; readonly ref: Ref; readonly value?: Value; } (from @aweftjs/codec)
+type Derived: interface Derived<T> { get(): T; set(value: T): void; isImmutable(): boolean; watch(fn: (value: T) => void): () => void; effect(fn: (value: T) => void): () => void; map<U>(fn: (value: T) => U): Derived<U>; setter(fn: (value: T) => void): Derived<T>; unwrap(): Derived<unknown>; bool<U, V>(truthy: U, falsy: V): Derived<U | V>; def<U>(fallback: U): Derived<NonNullable<T> | U>; defined(): Derived<boolean>; selector(compare?: (value: T, key: unknown) => boolean): (key: unknown) => Derived<boolean>; throttle(ms: number): Derived<T>; wait(ms: number): Derived<T>; }
+type EdgeKind: type EdgeKind = 'attach' | 'alias'; (from @aweftjs/codec)
+type EventEmitting: interface EventEmitting<E> { addEventListener(type: string, listener: (event: E) => void): void; removeEventListener(type: string, listener: (event: E) => void): void; }
+type Interceptor: type Interceptor = (commit: Commit) => readonly Refusal[];
+type ObservableKind: type ObservableKind = 'object' | 'array' | 'map'; (from @aweftjs/codec)
+type ObservableMap: interface ObservableMap<T> { get(key: unknown): T | undefined; has(key: unknown): boolean; set(key: unknown, value: T): void; add(observable: T & object): void; delete(key: unknown): boolean; readonly size: number; keys(): string[]; values(): T[]; entries(): Generator<[ string, T ]>; [Symbol.iterator](): Generator<[ string, T ]>; }
+type Observer: interface Observer extends Omit<Derived<unknown>, 'get' | 'set' | 'watch' | 'effect'> { get(): unknown; set(value: unknown): void; path(...keys: ScopeKey[]): Observer; ignore(...keys: ScopeKey[]): Observer; shallow(): Observer; skip(count?: number): Observer; tree(key: ScopeKey): Observer; watch(fn: (change: Change) => void): () => void; effect(fn: (value: unknown) => void): () => void; }
+type Primitive: type Primitive = null | boolean | number | string | Uint8Array;
+type Refusal: interface Refusal { readonly code: string; readonly message: string; readonly path?: readonly string[]; }
+value RefusedError: typeof RefusedError
+type ScopeKey: type ScopeKey = string | number;
+type Snapshot: interface Snapshot { readonly root: string; readonly observables: Record<string, SnapshotObservable>; }
+type SnapshotObservable: interface SnapshotObservable { readonly kind: ObservableKind; readonly slots: Record<string, SnapshotValue>; }
+type SnapshotRef: interface SnapshotRef { readonly ref: string; readonly kind: ObservableKind; readonly edge: EdgeKind; }
+type SnapshotValue: type SnapshotValue = Primitive | SnapshotRef;
+value alias: (observable: object) => object
+value all: (inputs: readonly unknown[]) => Derived<unknown[]>
+value apply: (observable: unknown, commit: Commit) => void
+value atomic: <T>(run: () => T) => T
+value byId: (document: unknown, id: string | Uint8Array<ArrayBufferLike>) => object | undefined
+value createArray: <T = unknown>(items?: Iterable<T> | undefined, id?: Uint8Array<ArrayBufferLike> | undefined) => T[]
+value createMap: <T = unknown>(entries?: Iterable<readonly [unknown, T]> | undefined, id?: Uint8Array<ArrayBufferLike> | undefined) => ObservableMap<T>
+value createObject: <T extends object = Record<string, unknown>>(init?: Readonly<Partial<T>> | undefined, id?: Uint8Array<ArrayBufferLike> | undefined) => T
+value fromEvent: <E>(target: EventEmitting<E>, type: string) => Derived<E | undefined>
+value fromSnapshot: (snap: Snapshot) => object
+value idOf: (observable: unknown) => Uint8Array<ArrayBufferLike>
+value immutable: { <T>(value: Derived<T>): Derived<T>; <T>(value: T): Derived<T>; }
+value insertAt: (list: object, position: Uint8Array<ArrayBufferLike>, value: unknown) => void
+value intercept: (document: unknown, fn: Interceptor) => () => void
+value isObservable: (value: unknown) => boolean
+value isReachable: (observable: unknown) => boolean
+value kindOf: (observable: unknown) => ObservableKind
+value mutable: <T>(initial: T) => Derived<T>
+value observer: (observable: unknown) => Observer
+value parentOf: (observable: unknown) => object | undefined
+value pathOf: (observable: unknown) => readonly string[] | undefined
+value positionsOf: (list: object) => Uint8Array<ArrayBufferLike>[]
+value snapshot: (observable: unknown) => Snapshot
+value textIdOf: (observable: unknown) => string
+value timer: (ms: number) => Derived<number>

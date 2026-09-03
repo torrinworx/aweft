@@ -1,0 +1,36 @@
+type CodecError: interface CodecError extends Error { readonly reason: string; }
+type Commit: interface Commit { readonly deltas: readonly Delta[]; readonly tag?: Uint8Array; }
+type Delta: interface Delta { readonly type: DeltaType; readonly id: Uint8Array; readonly ref: Ref; readonly value?: Value; }
+type DeltaType: type DeltaType = 'add' | 'replace' | 'remove';
+type EdgeKind: type EdgeKind = 'attach' | 'alias';
+value ID_BYTES: 12
+value ID_TEXT_LENGTH: 16
+value MAX_INT: number
+value MAX_TAG_BYTES: 32
+value MIN_INT: number
+value MIN_TAG_BYTES: 4
+type ObservableKind: type ObservableKind = 'object' | 'array' | 'map';
+type Ref: type Ref = { readonly kind: 'object'; readonly key: string; } | { readonly kind: 'array'; readonly key: Uint8Array; } | { readonly kind: 'map'; readonly key: Uint8Array; };
+type Reference: interface Reference { readonly edge: EdgeKind; readonly kind: ObservableKind; readonly id: Uint8Array; }
+type Value: type Value = null | boolean | number | string | Uint8Array | Reference;
+type WireValue: type WireValue = null | boolean | number | string | Uint8Array | readonly WireValue[];
+value assertId: (id: Uint8Array<ArrayBufferLike>) => Uint8Array<ArrayBufferLike>
+value assertPosition: (p: Uint8Array<ArrayBufferLike>) => Uint8Array<ArrayBufferLike>
+value assertValue: (value: Value) => void
+value bytesFromHex: (hex: string) => Uint8Array<ArrayBufferLike>
+value bytesToHex: (b: Uint8Array<ArrayBufferLike>) => string
+value codecError: (reason: string, detail: string) => CodecError
+value compareBytes: (a: Uint8Array<ArrayBufferLike>, b: Uint8Array<ArrayBufferLike>) => number
+value compareDeltas: (a: Delta, b: Delta) => number
+value comparePositions: (a: Uint8Array<ArrayBufferLike>, b: Uint8Array<ArrayBufferLike>) => number
+value createId: () => Uint8Array<ArrayBufferLike>
+value decodeCommit: (bytes: Uint8Array<ArrayBufferLike>) => Commit
+value decodeValue: (bytes: Uint8Array<ArrayBufferLike>) => WireValue
+value encodeCommit: (commit: Commit) => Uint8Array<ArrayBufferLike>
+value encodeValue: (v: WireValue) => Uint8Array<ArrayBufferLike>
+value equalBytes: (a: Uint8Array<ArrayBufferLike>, b: Uint8Array<ArrayBufferLike>) => boolean
+value idFromText: (text: string) => Uint8Array<ArrayBufferLike>
+value idToText: (id: Uint8Array<ArrayBufferLike>) => string
+value isReference: (v: Value) => v is Reference
+value isValidPosition: (p: Uint8Array<ArrayBufferLike>) => boolean
+value slotKeyOf: (ref: Ref) => string
