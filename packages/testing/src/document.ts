@@ -7,7 +7,7 @@
 
 import {
 	type Commit, type EdgeKind, type ObservableKind, type Ref, type Value,
-	bytesFromHex, bytesToHex, codecError, idFromText, idToText, isReference,
+	bytesFromHex, bytesToHex, codecError, idFromText, idToText, isReference, slotKeyOf,
 } from '@aweftjs/codec';
 
 /** A value as plain JSON: a primitive, `{ bytes }` for a byte string, or a reference. */
@@ -61,11 +61,7 @@ const asReference = (v: ValueJson | undefined): { ref: string; edge: EdgeKind } 
  * textual form of the identity. The observable's kind says which reading applies, so the
  * three never collide in practice.
  */
-export const slotKey = (ref: Ref): string => {
-	if (ref.kind === 'object') return ref.key;
-	if (ref.kind === 'array') return bytesToHex(ref.key);
-	return idToText(ref.key);
-};
+export const slotKey = (ref: Ref): string => slotKeyOf(ref);
 
 /**
  * Apply one commit to a document.

@@ -80,9 +80,9 @@ try {
 	check(((after.root as Doc).tasks as Doc[])[0]!.done === true, 'and it carries on being written to');
 
 	console.log('\nqueries survive the kill too');
-	check((await store.find({ where: [{ field: 'title', op: 'eq', value: 'the board' }] }))[0] === 'board',
+	check((await store.find({ where: [{ field: 'title', op: 'eq', value: 'the board' }] }))[0]?.doc === 'board',
 		'a declared path finds the document the dead process wrote');
-	check((await store.find({ where: [{ field: 'author', op: 'eq', value: 'u_7' }] }))[0] === 'board',
+	check((await store.find({ where: [{ field: 'author', op: 'eq', value: 'u_7' }] }))[0]?.doc === 'board',
 		'and so does one that crosses a nested observable');
 	root.title = 'renamed after the kill';
 	await store.settled(board);

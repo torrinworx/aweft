@@ -41,6 +41,7 @@ export interface StoreDriver {
 	since(doc: string, seq: number): Promise<{ seq: number; actor: string; body: Uint8Array }[]>;
 	head(doc: string): Promise<number>;
 	truncate(doc: string, seq: number): Promise<void>;
+	forget(doc: string, ids: readonly string[]): Promise<void>;
 	remove(doc: string): Promise<void>;
 	close(): Promise<void>;
 }
@@ -356,6 +357,110 @@ export const driverChecks = (): DriverCheck[] => [
 				const second = await d.scan(4, first.at(-1)!.doc);
 				assert.equal(second.length, 4);
 				assert.equal(new Set([...first, ...second].map((f) => f.doc)).size, 8);
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'an unset slot is removed, not merely overwritten',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare([]);
+				await d.create('a', ROOT, 'object');
+				await d.write(write('a', [row(ROOT, { secret: 'gone', keep: 1 })], 1));
+				await d.write(write('a', [{ id: ROOT, kind: 'object', set: {}, unset: ['secret'] }], 2));
+
+				const rows = (await d.read('a'))!.rows as { id: string; slots: Record<string, unknown> }[];
+				const root = rows.find((r) => r.id === ROOT);
+				assert.deepEqual(root?.slots, { keep: 1 },
+					'a slot the document deleted is still stored, so a delete does not reach the disk');
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'a declared field holding null still answers a query for null',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare(['owner']);
+				await d.create('a', ROOT, 'object');
+				await d.write({ ...write('a', [row(ROOT)], 1), project: { owner: null } });
+				const hits = await d.find({ where: { field: 'owner', op: 'eq', value: null } });
+				assert.deepEqual(hits.map((f) => f.doc), ['a'],
+					'a document whose declared path is empty must be findable, or it is invisible forever');
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'the rows a driver returns are a copy, not its own storage',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare([]);
+				await d.create('a', ROOT, 'object');
+				await d.write(write('a', [row(ROOT, { title: 'original' })], 1));
+
+				const first = (await d.read('a'))!.rows as { id: string; slots: Record<string, unknown> }[];
+				first.find((r) => r.id === ROOT)!.slots.title = 'edited through the returned object';
+
+				const second = (await d.read('a'))!.rows as { id: string; slots: Record<string, unknown> }[];
+				assert.equal(second.find((r) => r.id === ROOT)!.slots.title, 'original',
+					'a caller must not be able to edit stored rows through what read handed back');
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'forget frees a row, and dropped does not',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare([]);
+				await d.create('a', ROOT, 'object');
+				await d.write(write('a', [row(ROOT), row('x', { title: 'kept' })], 1));
+
+				// dropped says an observable lost its edge. Its row stays: detaching is not deleting.
+				await d.write({ ...write('a', [row('x', {}, null)], 2), dropped: ['x'] });
+				let rows = (await d.read('a'))!.rows as { id: string }[];
+				assert.ok(rows.some((r) => r.id === 'x'), 'dropped must not delete the row');
+
+				// forget is the sweep, and it is the only thing that frees one.
+				await d.forget('a', ['x']);
+				rows = (await d.read('a'))!.rows as { id: string }[];
+				assert.ok(!rows.some((r) => r.id === 'x'), 'forget must actually free the row');
+				assert.ok(rows.some((r) => r.id === ROOT), 'and must leave the rest alone');
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'a cursor that has left the result set does not restart the paging',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare(['owner', 'weight']);
+				for (let i = 0; i < 6; i++) {
+					await d.create(`d${i}`, `${ROOT}${i}`, 'object');
+					await d.write({
+						...write(`d${i}`, [{ id: `${ROOT}${i}`, kind: 'object', set: {}, unset: [] }], 1),
+						root: `${ROOT}${i}`, project: { owner: 'u', weight: i },
+					});
+				}
+				const first = await d.find({
+					where: { field: 'owner', op: 'eq', value: 'u' },
+					sort: { field: 'weight', direction: 'asc' }, limit: 2,
+				});
+				assert.deepEqual(first.map((f) => f.doc), ['d0', 'd1']);
+
+				// d1 stops matching between the two pages, which is ordinary in a live collection
+				await d.write({
+					...write('d1', [{ id: `${ROOT}1`, kind: 'object', set: {}, unset: [] }], 2),
+					root: `${ROOT}1`, project: { owner: 'someone else' },
+				});
+				const second = await d.find({
+					where: { field: 'owner', op: 'eq', value: 'u' },
+					sort: { field: 'weight', direction: 'asc' }, limit: 2, after: 'd1',
+				});
+				assert.deepEqual(second.map((f) => f.doc), ['d2', 'd3'],
+					'a cursor whose document left the results must not send the paging back to the top');
 			} finally { await d.close(); }
 		},
 	},

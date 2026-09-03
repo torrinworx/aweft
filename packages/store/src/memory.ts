@@ -78,20 +78,26 @@ export const memoryDriver = (): Driver => {
 				.filter(([, value]) => holds(lookup.where, value))
 				.map(([doc]) => doc);
 
+			// Order by the sort value and then by name, so the ordering is total and a cursor
+			// names a position rather than a row. Sorting by name alone when nothing was asked
+			// for is the same rule with an empty sort key.
 			const sort = lookup.sort;
-			if (sort === undefined) hits.sort();
-			else {
-				const on = indexes.get(sort.field);
-				const sign = sort.direction === 'desc' ? -1 : 1;
-				hits.sort((a, b) => {
-					const by = compare(on?.get(a) ?? null, on?.get(b) ?? null) * sign;
-					return by !== 0 ? by : (a < b ? -1 : a > b ? 1 : 0);
-				});
-			}
+			const keyOf = (doc: string): Indexable => sort === undefined
+				? null
+				: indexes.get(sort.field)?.get(doc) ?? null;
+			const sign = sort?.direction === 'desc' ? -1 : 1;
+			const order = (a: string, b: string): number => {
+				const by = compare(keyOf(a), keyOf(b)) * sign;
+				return by !== 0 ? by : (a < b ? -1 : a > b ? 1 : 0);
+			};
+			hits.sort(order);
 
+			// Seek past the cursor's POSITION, not its index in this result. A document that
+			// stopped matching between two pages is ordinary in a live collection, and looking
+			// its name up in the current hits would find nothing and page from the top again.
 			if (lookup.after !== undefined) {
-				const at = hits.indexOf(lookup.after);
-				hits = at === -1 ? hits : hits.slice(at + 1);
+				const at = lookup.after;
+				hits = hits.filter((doc) => order(at, doc) < 0);
 			}
 			if (lookup.limit !== undefined) hits = hits.slice(0, lookup.limit);
 			return hits.map(found);
@@ -99,11 +105,8 @@ export const memoryDriver = (): Driver => {
 
 		async scan(limit: number, after?: string): Promise<Found[]> {
 			open();
-			let names = [...docs.keys()].sort();
-			if (after !== undefined) {
-				const at = names.indexOf(after);
-				names = at === -1 ? names : names.slice(at + 1);
-			}
+			const names = [...docs.keys()].sort()
+				.filter((doc) => after === undefined || doc > after);
 			return names.slice(0, limit).map(found);
 		},
 
@@ -144,7 +147,10 @@ export const memoryDriver = (): Driver => {
 			open();
 			const held = docs.get(doc);
 			if (held === undefined) return null;
-			return { root: held.root, rootKind: held.rootKind, rows: [...held.rows.values()] };
+			return {
+				root: held.root, rootKind: held.rootKind,
+				rows: [...held.rows.values()].map((r) => ({ ...r, slots: { ...r.slots } })),
+			};
 		},
 
 		async since(doc: string, seq: number): Promise<Entry[]> {
@@ -164,6 +170,13 @@ export const memoryDriver = (): Driver => {
 			const held = docs.get(doc);
 			if (held === undefined) return;
 			held.tail = held.tail.filter((e) => e.seq > seq);
+		},
+
+		async forget(doc: string, ids: readonly string[]): Promise<void> {
+			open();
+			const held = docs.get(doc);
+			if (held === undefined) return;
+			for (const id of ids) held.rows.delete(id);
 		},
 
 		async remove(doc: string): Promise<void> {

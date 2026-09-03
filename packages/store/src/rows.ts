@@ -4,8 +4,8 @@
 // of rows it touches is read straight off its deltas. Nothing walks the document, and nothing
 // re-serialises it, so the work is proportional to the change rather than to what is stored.
 
-import { idToText, isReference, type Commit, type ObservableKind } from '@aweftjs/codec';
-import { slotKeyOf, type Snapshot, type SnapshotValue } from '@aweftjs/core';
+import { idToText, isReference, slotKeyOf, type Commit, type ObservableKind } from '@aweftjs/codec';
+import type { Snapshot, SnapshotValue } from '@aweftjs/core';
 
 import type { Patch, Row } from './driver.ts';
 
@@ -77,11 +77,17 @@ export const record = (rows: Rows, commit: Commit): Change => {
 		return p;
 	};
 
-	const detach = (prev: SnapshotValue | undefined): void => {
+	// Taking an attach reference out of a slot orphans what it named, unless an earlier delta of
+	// this same commit already moved that observable somewhere else. Deltas are in canonical
+	// order rather than dependency order, so a move arrives as the add before the remove, and
+	// reading the remove literally would report a live observable as an orphan. Core guards the
+	// same case in its own release path.
+	const detach = (prev: SnapshotValue | undefined, from: string, slot: string): void => {
 		if (prev === undefined || prev === null || typeof prev !== 'object') return;
 		if (!('ref' in prev) || prev.edge !== 'attach') return;
 		const child = rows.get(prev.ref);
 		if (child === undefined) return;
+		if (child.parent !== from || child.slot !== slot) return;
 		child.parent = null;
 		child.slot = null;
 		mark(child.id).edge = null;
@@ -107,7 +113,7 @@ export const record = (rows: Rows, commit: Commit): Change => {
 		const slot = slotKeyOf(delta.ref);
 		const change = mark(ownerId);
 
-		detach(owner.slots[slot]);
+		detach(owner.slots[slot], ownerId, slot);
 
 		if (delta.type === 'remove') {
 			delete owner.slots[slot];
@@ -167,13 +173,21 @@ export const record = (rows: Rows, commit: Commit): Change => {
  * attach path from the root. `store` still holds it: design 048 keeps the row and refuses
  * the commit that would re-attach it, rather than letting the observable come back empty.
  *
+ * An alias naming one of those rows is left out too, and its slot with it. `fromSnapshot`
+ * refuses a snapshot that names what it does not hold, so carrying the alias would make the
+ * document unopenable rather than incomplete. Design 050 has the reasoning and `dropped`
+ * says which slots went.
+ *
  * Example:
- *   const doc = fromSnapshot(snapshotOf(rows, root));
+ *   const { snapshot, dropped } = snapshotOf(rows, root);
+ *   const doc = fromSnapshot(snapshot);
  */
-export const snapshotOf = (rows: Rows, root: string): Snapshot => {
+export const snapshotOf = (rows: Rows, root: string): { snapshot: Snapshot; dropped: string[] } => {
 	const observables: Record<string, { kind: ObservableKind; slots: Record<string, SnapshotValue> }> = {};
 	const stack = [root];
 
+	// Two passes: the attach edges decide what the document holds, and only then can an alias
+	// be judged, because an alias may name something reached later in the same walk.
 	while (stack.length > 0) {
 		const id = stack.pop()!;
 		if (observables[id] !== undefined) continue;
@@ -187,7 +201,18 @@ export const snapshotOf = (rows: Rows, root: string): Snapshot => {
 		}
 	}
 
-	return { root, observables };
+	const dropped: string[] = [];
+	for (const [id, held] of Object.entries(observables)) {
+		for (const [slot, value] of Object.entries(held.slots)) {
+			if (value === null || typeof value !== 'object' || !('ref' in value)) continue;
+			if (value.edge === 'alias' && observables[value.ref] === undefined) {
+				delete held.slots[slot];
+				dropped.push(`${id}.${slot}`);
+			}
+		}
+	}
+
+	return { snapshot: { root, observables }, dropped };
 };
 
 /** Every id a document holds, whether or not anything attaches it. */

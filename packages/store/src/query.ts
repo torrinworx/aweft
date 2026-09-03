@@ -13,7 +13,10 @@ import type { SnapshotValue } from '@aweftjs/core';
  * builds it. `driver.ts` needs the types here, and `rows.ts` needs the types there, so an
  * import back would close a cycle.
  */
-type Slots = ReadonlyMap<string, { readonly slots: Readonly<Record<string, SnapshotValue>> }>;
+type Slots = ReadonlyMap<string, {
+	readonly kind: string;
+	readonly slots: Readonly<Record<string, SnapshotValue>>;
+}>;
 
 /** What a declared path can hold. A reference is indexed as the id it names. */
 export type Indexable = string | number | boolean | null;
@@ -79,6 +82,8 @@ export const checkQuery = (query: Query, declaration: Declaration): void => {
 /**
  * Read a declared path out of a document's rows.
  *
+ * Throws when the path crosses an array, which is a mistake rather than an empty result.
+ *
  * Returns: what the path holds, or null when any step of it is missing. A slot holding another
  * observable is indexed as that observable's id, so a path can ask which document points at
  * something.
@@ -88,6 +93,17 @@ export const valueAt = (rows: Slots, root: string, path: readonly string[]): Ind
 	for (let i = 0; i < path.length; i++) {
 		const row = rows.get(at);
 		if (row === undefined) return null;
+
+		// An array slot is an ordered byte string that the runtime chooses and nothing keeps
+		// stable, so a literal step into one names a place rather than a thing. Left to itself
+		// it would index nothing, quietly, for the life of the declaration.
+		if (row.kind === 'array') {
+			throw new Error(
+				`store: a declared path may not cross an array (at ${path.slice(0, i).join('.')}), `
+				+ 'because an array position is not a stable name',
+			);
+		}
+
 		const held: SnapshotValue | undefined = row.slots[path[i]!];
 		if (held === undefined) return null;
 

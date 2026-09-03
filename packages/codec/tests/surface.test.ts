@@ -16,7 +16,8 @@ test('the entry file exports exactly what was decided', () => {
 		'bytesFromHex', 'bytesToHex',
 		'codecError', 'compareBytes', 'compareDeltas', 'comparePositions',
 		'createId', 'decodeCommit', 'decodeValue', 'encodeCommit', 'encodeValue', 'equalBytes',
-		'idFromText', 'idToText', 'isReference', 'isValidPosition',
+		'idFromText', 'idToText', 'isReference',
+		'isValidPosition', 'slotKeyOf',
 	];
 
 	assert.deepEqual(Object.keys(codec).sort(), decided);

@@ -57,31 +57,34 @@ export const fileDriver = (dir: string): Driver => {
 			if (!declared.includes(lookup.where.field)) {
 				throw new Error(`store: ${lookup.where.field} was not declared`);
 			}
-			let hits = all()
-				.filter(({ held }) => holds(lookup.where, held.fields[lookup.where.field] ?? null))
-				.map(({ doc, held }) => ({ doc, fields: { ...held.fields } }));
+			const everything = all();
+			const fieldsOf = (doc: string): Record<string, Indexable> =>
+				everything.find((e) => e.doc === doc)?.held.fields ?? {};
 
 			const sort = lookup.sort;
-			if (sort !== undefined) {
-				const sign = sort.direction === 'desc' ? -1 : 1;
-				hits.sort((a, b) => {
-					const by = compare(a.fields[sort.field] ?? null, b.fields[sort.field] ?? null) * sign;
-					return by !== 0 ? by : (a.doc < b.doc ? -1 : a.doc > b.doc ? 1 : 0);
-				});
-			}
+			const sign = sort?.direction === 'desc' ? -1 : 1;
+			const order = (a: string, b: string): number => {
+				const by = sort === undefined
+					? 0
+					: compare(fieldsOf(a)[sort.field] ?? null, fieldsOf(b)[sort.field] ?? null) * sign;
+				return by !== 0 ? by : (a < b ? -1 : a > b ? 1 : 0);
+			};
+
+			let hits = everything
+				.filter(({ held }) => holds(lookup.where, held.fields[lookup.where.field] ?? null))
+				.map(({ doc, held }) => ({ doc, fields: { ...held.fields } }));
+			hits.sort((a, b) => order(a.doc, b.doc));
+
+			// Past the cursor's position, never its index: see the memory driver for why.
 			if (lookup.after !== undefined) {
-				const at = hits.findIndex((h) => h.doc === lookup.after);
-				if (at !== -1) hits = hits.slice(at + 1);
+				const at = lookup.after;
+				hits = hits.filter((h) => order(at, h.doc) < 0);
 			}
 			return lookup.limit === undefined ? hits : hits.slice(0, lookup.limit);
 		},
 
 		async scan(limit, after) {
-			let names = all();
-			if (after !== undefined) {
-				const at = names.findIndex((n) => n.doc === after);
-				if (at !== -1) names = names.slice(at + 1);
-			}
+			const names = all().filter(({ doc }) => after === undefined || doc > after);
 			return names.slice(0, limit).map(({ doc, held }) => ({ doc, fields: { ...held.fields } }));
 		},
 
@@ -130,6 +133,13 @@ export const fileDriver = (dir: string): Driver => {
 			const held = load(doc);
 			if (held === null) return;
 			held.tail = held.tail.filter((e) => e.seq > seq);
+			save(doc, held);
+		},
+
+		async forget(doc, ids) {
+			const held = load(doc);
+			if (held === null) return;
+			for (const id of ids) delete held.rows[id];
 			save(doc, held);
 		},
 

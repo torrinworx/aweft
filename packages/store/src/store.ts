@@ -6,7 +6,7 @@
 // yet written.
 
 import {
-	decodeCommit, encodeCommit, idToText, type Commit, type ObservableKind,
+	decodeCommit, encodeCommit, idToText, type Commit, type Delta, type ObservableKind,
 } from '@aweftjs/codec';
 import { apply, createArray, createMap, createObject, fromSnapshot, idOf, observer } from '@aweftjs/core';
 import { idFromText } from '@aweftjs/codec';
@@ -46,6 +46,7 @@ interface State {
 	rows: Rows;
 	fields: Record<string, Indexable>;
 	projected: boolean;
+	droppedAliases: string[];
 	live: Set<string>;
 	seq: number;
 	actor: string;
@@ -66,6 +67,8 @@ const rootOf = (id: Uint8Array | undefined, kind: ObservableKind): object => {
  *
  * Params:
  *   driver: where the documents go
+ *   declare: the paths to index, by the name a query calls each one
+ *   actor: who a local write is recorded as, in the history a resuming session reads
  *
  * Returns: a store. Every document it opens is cached by name, so opening one twice hands
  * back the same live observable and the same handle, reference counted.
@@ -76,7 +79,204 @@ const rootOf = (id: Uint8Array | undefined, kind: ObservableKind): object => {
  *   (board.root as Record<string, unknown>).title = 'a board';
  *   await store.settled(board);
  */
-export const createStore = ({ driver, declare = {} }: { driver: Driver; declare?: Declaration }) => {
+/**
+ * A place that keeps documents.
+ *
+ * Made by `createStore`. Every document it opens is cached by name, so opening one twice
+ * hands back the same live observable, reference counted.
+ */
+export interface Store {
+	/**
+	 * Open a document, creating it when it is not there.
+	 *
+	 * Params:
+	 *   doc: the document's name
+	 *   kind: the root's kind, used only when the document is being created
+	 *
+	 * Returns: a handle whose `root` is live. Changes to it are persisted as they are made.
+	 *
+	 * A document is rebuilt from its rows, not by replaying its history: the rows are written
+	 * in the same transaction as the commit, so they are never behind it.
+	 *
+	 * Example:
+	 *   const board = await store.open('board:42');
+	 */
+	open(doc: string, kind?: ObservableKind): Promise<Handle>;
+
+	/**
+	 * Apply a commit that came from somewhere else, and persist it under its author.
+	 *
+	 * Params:
+	 *   handle: the open document
+	 *   commit: the commit to apply
+	 *   actor: who wrote it, recorded beside it in the history
+	 *
+	 * Throws: whatever the applier throws, having changed nothing. Also `detached-elsewhere`
+	 * when the commit re-attaches an observable this store still holds a row for but the
+	 * reopened document does not hold, which would otherwise apply cleanly against an empty
+	 * observable and lose what the row has (design 048).
+	 *
+	 * Example:
+	 *   await store.receive(board, decodeCommit(bytes), 'u_7');
+	 */
+	receive(handle: Handle, commit: Commit, actor: string): Promise<number>;
+
+	/**
+	 * Wait until everything this document has produced is written.
+	 *
+	 * Params:
+	 *   handle: the open document
+	 *
+	 * Throws: the first write that failed, if one did. The document is then ahead of what is
+	 * stored, and the caller decides whether to reopen it or stop.
+	 *
+	 * Mutating is synchronous and writing is not, so there is a window of one turn between
+	 * the two. This closes it. It is not a save interval: nothing is being held back.
+	 *
+	 * Example:
+	 *   board.title = 'renamed';
+	 *   await store.settled(board);
+	 */
+	settled(handle: Handle): Promise<void>;
+
+	/**
+	 * Find documents by a declared path.
+	 *
+	 * Params:
+	 *   query: its conditions, and how to order and page them
+	 *
+	 * Returns: one entry per match, each carrying the declared fields the index already held,
+	 * so listing what was found does not mean reopening every document.
+	 *
+	 * Throws `undeclared` when a condition or the sort names a path nothing indexed. That is
+	 * refused rather than answered by a scan, because the scan is not slow in the same way on
+	 * two drivers, and a query whose cost depends on where it runs is a cliff wearing a
+	 * portable API. Declare the path, or reach for `scan` and say so.
+	 *
+	 * The FIRST condition is the one an index answers, and it does the pruning; the rest narrow
+	 * what it returned. So order the conditions with the most selective one first, which is the
+	 * whole of the tuning advice.
+	 *
+	 * Paging is by `after`, which takes the `doc` of the last entry of the previous page.
+	 *
+	 * Example:
+	 *   for (const { doc, fields } of await store.find({
+	 *     where: [{ field: 'ownerId', op: 'eq', value: 'u_7' }],
+	 *   })) console.log(doc, fields.title);
+	 */
+	find(query: Query): Promise<Found[]>;
+
+	/**
+	 * Read documents without an index.
+	 *
+	 * Params:
+	 *   limit: how many to return, required
+	 *   after: the `doc` of the last entry of the previous page
+	 *
+	 * Returns: one entry per document, in a stable order, each with its declared fields.
+	 *
+	 * This is the un-indexed read, and it is a separate call with a required limit so that
+	 * reaching for one is a decision rather than something a query falls into. What it costs
+	 * depends on the driver, which is exactly why `find` will not do it.
+	 *
+	 * Example:
+	 *   for (const { doc } of await store.scan(100, lastSeen)) await migrate(doc);
+	 */
+	scan(limit: number, after?: string): Promise<Found[]>;
+
+	/**
+	 * The commits after a sequence, oldest first.
+	 *
+	 * Params:
+	 *   doc: the document's name
+	 *   seq: the sequence the asker already has
+	 *
+	 * Returns: what it missed, each with the actor that wrote it.
+	 *
+	 * This is what a resuming session asks for (design 045). A sequence older than the tail
+	 * reaches back to is answered with what the tail still holds, so a caller compares the
+	 * first sequence it gets against the one it asked for and resynchronizes when there is a
+	 * hole.
+	 *
+	 * Example:
+	 *   const missed = await store.since('board:42', session.seq);
+	 */
+	since(doc: string, seq: number): Promise<Held[]>;
+
+	/**
+	 * Drop the history a session can no longer ask for.
+	 *
+	 * Params:
+	 *   doc: the document's name
+	 *   keep: how many of the most recent commits to keep
+	 *
+	 * The tail is derived, so this loses nothing the document holds. Keep at least as much as
+	 * the longest outage a session is allowed to resume from; past that a session
+	 * resynchronizes instead, which costs one document rather than one commit.
+	 *
+	 * Example:
+	 *   await store.truncate('board:42', 1000);
+	 */
+	truncate(doc: string, keep: number): Promise<void>;
+
+	/**
+	 * The observables this document holds that nothing attaches.
+	 *
+	 * Params:
+	 *   handle: the open document
+	 *
+	 * Returns: their ids. Detaching is not deleting, so these keep their rows until something
+	 * collects them (design 048).
+	 *
+	 * Example:
+	 *   if (store.orphans(board).length > 10_000) await store.sweep(board);
+	 */
+	orphans(handle: Handle): string[];
+
+	/**
+	 * Forget every observable nothing attaches.
+	 *
+	 * Params:
+	 *   handle: the open document
+	 *
+	 * Returns: how many rows went. They are gone from storage, not just from this handle.
+	 *
+	 * This is the policy call, and it is the application's: nothing here sweeps on its own,
+	 * because the growth is visible and bounded while an automatic sweep is data leaving at a
+	 * moment nothing announces. A swept observable cannot be re-attached afterwards.
+	 *
+	 * Example:
+	 *   const gone = await store.sweep(board);
+	 */
+	sweep(handle: Handle): Promise<number>;
+
+	/**
+	 * Stop following a document.
+	 *
+	 * The last closer tears it down. Anything still unwritten is written first, and a write
+	 * that failed is raised here rather than going quiet.
+	 */
+	close(handle: Handle): Promise<void>;
+
+	/** Forget a document entirely: its rows, its history, and anything open on it. */
+	remove(doc: string): Promise<void>;
+
+	/**
+	 * Close every open document and release the driver.
+	 *
+	 * The driver is finished afterwards and this store cannot be used again. To finish with
+	 * one document and keep the store, use `close`.
+	 */
+	stop(): Promise<void>;
+
+	/** The sequence of a document's most recent commit, or 0 when it has none. */
+	head(doc: string): Promise<number>;
+}
+
+export const createStore = (
+	{ driver, declare = {}, actor = 'local' }:
+	{ driver: Driver; declare?: Declaration; actor?: string },
+): Store => {
 	checkDeclaration(declare);
 	const open_ = new Map<string, State>();
 	const declared = driver.declare(Object.keys(declare));
@@ -133,21 +333,21 @@ export const createStore = ({ driver, declare = {} }: { driver: Driver; declare?
 		});
 	};
 
-	/**
-	 * Open a document, creating it when it is not there.
-	 *
-	 * Params:
-	 *   doc: the document's name
-	 *   kind: the root's kind, used only when the document is being created
-	 *
-	 * Returns: a handle whose `root` is live. Changes to it are persisted as they are made.
-	 *
-	 * A document is rebuilt from its rows, not by replaying its history: the rows are written
-	 * in the same transaction as the commit, so they are never behind it.
-	 *
-	 * Example:
-	 *   const board = await store.open('board:42');
-	 */
+	// A write that failed is terminal for its document, and the error keeps being thrown rather
+	// than handed to whoever asked first. The document has gone on mutating and the commits
+	// behind the failure were skipped, so what is stored is not what the document says and no
+	// later write can make it so. Reopen it, which rebuilds from what is actually stored.
+	const watcher = (state: State) => (change: { deltas: readonly Delta[] }): void => {
+		const commit: Commit = { deltas: [...change.deltas] };
+		for (const id of attachedBy(commit)) state.live.add(id);
+		enqueue(state, commit);
+	};
+
+	const raise = (state: State): void => {
+		if (state.failure === null) return;
+		throw state.failure;
+	};
+
 	const open = async (doc: string, kind: ObservableKind = 'object'): Promise<Handle> => {
 		const already = open_.get(doc);
 		if (already !== undefined) { already.refs++; return handleOf(already); }
@@ -169,30 +369,29 @@ export const createStore = ({ driver, declare = {} }: { driver: Driver; declare?
 
 		const fresh = stored.rows.length === 0;
 		const rows = fresh ? rowsFor(stored.root, stored.rootKind) : rowsFrom(stored.rows);
-		const snap = fresh ? null : snapshotOf(rows, stored.root);
+		const built = fresh ? null : snapshotOf(rows, stored.root);
 
 		const state: State = {
 			doc,
-			root: snap === null ? rootOf(idFromText(stored.root), stored.rootKind) : fromSnapshot(snap),
+			root: built === null
+				? rootOf(idFromText(stored.root), stored.rootKind)
+				: fromSnapshot(built.snapshot),
 			rootId: stored.root,
 			rootKind: stored.rootKind,
 			rows,
-			fields: projectionOf(rows, stored.root, declare),
-			projected: !fresh,
-			live: new Set(snap === null ? [stored.root] : Object.keys(snap.observables)),
+			fields: {},
+			projected: false,
+			droppedAliases: built?.dropped ?? [],
+			live: new Set(built === null ? [stored.root] : Object.keys(built.snapshot.observables)),
 			seq: await driver.head(doc),
-			actor: 'local',
+			actor,
 			stop: () => {},
 			queue: Promise.resolve(),
 			failure: null,
 			refs: 1,
 		};
 
-		state.stop = observer(state.root).watch((change) => {
-			const commit: Commit = { deltas: [...change.deltas] };
-			for (const id of attachedBy(commit)) state.live.add(id);
-			enqueue(state, commit);
-		});
+		state.stop = observer(state.root).watch(watcher(state));
 
 		open_.set(doc, state);
 		return handleOf(state);
@@ -210,24 +409,9 @@ export const createStore = ({ driver, declare = {} }: { driver: Driver; declare?
 		return state;
 	};
 
-	/**
-	 * Apply a commit that came from somewhere else, and persist it under its author.
-	 *
-	 * Params:
-	 *   handle: the open document
-	 *   commit: the commit to apply
-	 *   actor: who wrote it, recorded beside it in the history
-	 *
-	 * Throws: whatever the applier throws, having changed nothing. Also `detached-elsewhere`
-	 * when the commit re-attaches an observable this store still holds a row for but the
-	 * reopened document does not hold, which would otherwise apply cleanly against an empty
-	 * observable and lose what the row has (design 048).
-	 *
-	 * Example:
-	 *   await store.receive(board, decodeCommit(bytes), 'u_7');
-	 */
 	const receive = async (handle: Handle, commit: Commit, actor: string): Promise<number> => {
 		const state = stateOf(handle);
+		raise(state);
 
 		for (const id of attachedBy(commit)) {
 			if (state.live.has(id)) continue;
@@ -243,86 +427,27 @@ export const createStore = ({ driver, declare = {} }: { driver: Driver; declare?
 		try { apply(state.root, commit); }
 		finally { state.actor = before; }
 
-		await settled(handle);
-		if (state.failure !== null) { const e = state.failure; state.failure = null; throw e; }
+		await state.queue;
+		raise(state);
 		return state.seq;
 	};
 
-	/**
-	 * Wait until everything this document has produced is written.
-	 *
-	 * Params:
-	 *   handle: the open document
-	 *
-	 * Throws: the first write that failed, if one did. The document is then ahead of what is
-	 * stored, and the caller decides whether to reopen it or stop.
-	 *
-	 * Mutating is synchronous and writing is not, so there is a window of one turn between
-	 * the two. This closes it. It is not a save interval: nothing is being held back.
-	 *
-	 * Example:
-	 *   board.title = 'renamed';
-	 *   await store.settled(board);
-	 */
 	const settled = async (handle: Handle): Promise<void> => {
 		const state = stateOf(handle);
 		await state.queue;
-		if (state.failure !== null) { const e = state.failure; state.failure = null; throw e; }
+		raise(state);
 	};
 
-	/**
-	 * The commits after a sequence, oldest first.
-	 *
-	 * Params:
-	 *   doc: the document's name
-	 *   seq: the sequence the asker already has
-	 *
-	 * Returns: what it missed, each with the actor that wrote it.
-	 *
-	 * This is what a resuming session asks for (design 045). A sequence older than the tail
-	 * reaches back to is answered with what the tail still holds, so a caller compares the
-	 * first sequence it gets against the one it asked for and resynchronizes when there is a
-	 * hole.
-	 *
-	 * Example:
-	 *   const missed = await store.since('board:42', session.seq);
-	 */
 	const since = async (doc: string, seq: number): Promise<Held[]> => {
 		const entries = await driver.since(doc, seq);
 		return entries.map((e) => ({ seq: e.seq, actor: e.actor, commit: decodeCommit(e.body) }));
 	};
 
-	/**
-	 * Drop the history a session can no longer ask for.
-	 *
-	 * Params:
-	 *   doc: the document's name
-	 *   keep: how many of the most recent commits to keep
-	 *
-	 * The tail is derived, so this loses nothing the document holds. Keep at least as much as
-	 * the longest outage a session is allowed to resume from; past that a session
-	 * resynchronizes instead, which costs one document rather than one commit.
-	 *
-	 * Example:
-	 *   await store.truncate('board:42', 1000);
-	 */
 	const truncate = async (doc: string, keep: number): Promise<void> => {
 		const head = await driver.head(doc);
 		if (head > keep) await driver.truncate(doc, head - keep);
 	};
 
-	/**
-	 * The observables this document holds that nothing attaches.
-	 *
-	 * Params:
-	 *   handle: the open document
-	 *
-	 * Returns: their ids. Detaching is not deleting, so these keep their rows until something
-	 * collects them (design 048).
-	 *
-	 * Example:
-	 *   if (store.orphans(board).length > 10_000) await store.sweep(board);
-	 */
 	const orphans = (handle: Handle): string[] => {
 		const state = stateOf(handle);
 		const out: string[] = [];
@@ -330,55 +455,7 @@ export const createStore = ({ driver, declare = {} }: { driver: Driver; declare?
 		return out;
 	};
 
-	/**
-	 * Forget every observable nothing attaches.
-	 *
-	 * Params:
-	 *   handle: the open document
-	 *
-	 * Returns: how many rows went.
-	 *
-	 * This is the policy call, and it is the application's: nothing here sweeps on its own,
-	 * because the growth is visible and bounded while an automatic sweep is data leaving at a
-	 * moment nothing announces.
-	 *
-	 * Example:
-	 *   const gone = await store.sweep(board);
-	 */
-	const sweep = async (handle: Handle): Promise<number> => {
-		const state = stateOf(handle);
-		const gone = orphans(handle);
-		for (const id of gone) state.rows.delete(id);
-		if (gone.length > 0) {
-			await driver.write({
-				doc: state.doc, root: state.rootId, rootKind: state.rootKind,
-				rows: [], dropped: gone, actor: 'sweep', body: new Uint8Array(0),
-			});
-		}
-		return gone.length;
-	};
-
-	/**
-	 * Find documents by a declared path.
-	 *
-	 * Params:
-	 *   query: its conditions, and how to order and page them
-	 *
-	 * Returns: the names of the documents that match, in the order asked for.
-	 *
-	 * Throws `undeclared` when a condition or the sort names a path nothing indexed. That is
-	 * refused rather than answered by a scan, because the scan is not slow in the same way on
-	 * two drivers, and a query whose cost depends on where it runs is a cliff wearing a
-	 * portable API. Declare the path, or reach for `scan` and say so.
-	 *
-	 * The FIRST condition is the one an index answers, and it does the pruning; the rest narrow
-	 * what it returned. So order the conditions with the most selective one first, which is the
-	 * whole of the tuning advice.
-	 *
-	 * Example:
-	 *   const mine = await store.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_7' }] });
-	 */
-	const find = async (query: Query): Promise<string[]> => {
+	const find = async (query: Query): Promise<Found[]> => {
 		await declared;
 		checkQuery(query, declare);
 
@@ -400,30 +477,25 @@ export const createStore = ({ driver, declare = {} }: { driver: Driver; declare?
 			? hits
 			: hits.filter((found) => rest.every((w) => holds(w, found.fields[w.field] ?? null)));
 
-		const limited = query.limit === undefined ? kept : kept.slice(0, query.limit);
-		return limited.map((f) => f.doc);
+		return query.limit === undefined ? kept : kept.slice(0, query.limit);
 	};
 
-	/**
-	 * Read documents without an index.
-	 *
-	 * Params:
-	 *   limit: how many to return, required
-	 *   after: the last document of the previous page
-	 *
-	 * Returns: document names, in a stable order.
-	 *
-	 * This is the un-indexed read, and it is a separate call with a required limit so that
-	 * reaching for one is a decision rather than something a query falls into. What it costs
-	 * depends on the driver, which is exactly why `find` will not do it.
-	 *
-	 * Example:
-	 *   for (const doc of await store.scan(100)) await migrate(doc);
-	 */
-	const scan = async (limit: number, after?: string): Promise<string[]> => {
+	const scan = async (limit: number, after?: string): Promise<Found[]> => {
 		await declared;
 		if (!Number.isInteger(limit) || limit <= 0) throw new Error('store: scan needs a positive limit');
-		return (await driver.scan(limit, after)).map((f: Found) => f.doc);
+		return after === undefined ? driver.scan(limit) : driver.scan(limit, after);
+	};
+
+	const sweep = async (handle: Handle): Promise<number> => {
+		const state = stateOf(handle);
+		await state.queue;
+		raise(state);
+
+		const gone = orphans(handle);
+		if (gone.length === 0) return 0;
+		for (const id of gone) state.rows.delete(id);
+		await driver.forget(state.doc, gone);
+		return gone.length;
 	};
 
 	/** Stop following a document. The last closer tears it down. */
@@ -434,7 +506,11 @@ export const createStore = ({ driver, declare = {} }: { driver: Driver; declare?
 		if (state.refs > 0) return;
 		state.stop();
 		await state.queue;
+		// A reopen can land inside that await and take a reference back. Deleting anyway would
+		// hand that caller a handle whose observer is already stopped.
+		if (state.refs > 0) { state.stop = observer(state.root).watch(watcher(state)); return; }
 		open_.delete(state.doc);
+		raise(state);
 	};
 
 	/** Forget a document entirely: its rows, its history, and anything open on it. */

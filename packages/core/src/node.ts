@@ -34,13 +34,6 @@ export const createNode = (kind: ObservableKind, id: Uint8Array = createId()): N
 	return node;
 };
 
-/** The slot key an array position, map identity or object key is filed under. */
-export const slotKeyOf = (ref: Ref): string => {
-	if (ref.kind === 'object') return ref.key;
-	if (ref.kind === 'array') return bytesToHex(ref.key);
-	return idToText(ref.key);
-};
-
 /** The reverse: the ref a delta carries for one of this observable's slots. */
 export const slotRef = (node: Node, slot: string): Ref => {
 	if (node.kind === 'object') return { kind: 'object', key: slot };

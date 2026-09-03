@@ -17,8 +17,7 @@ test('the entry file exports exactly what was decided', () => {
 		'fromEvent', 'fromSnapshot',
 		'idOf', 'immutable', 'insertAt', 'isObservable', 'isReachable',
 		'kindOf', 'mutable', 'observer', 'parentOf', 'positionsOf',
-		'slotKeyOf',
-	'snapshot', 'textIdOf', 'timer',
+		'snapshot', 'textIdOf', 'timer',
 	];
 
 	assert.deepEqual(Object.keys(core).sort(), decided);

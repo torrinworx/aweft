@@ -6,18 +6,31 @@ Open a document and mutate it. Every commit it produces is written when it is pr
 granularity of the slots that changed. There is no save interval, no flush, and no reload.
 
 ```ts
+import { atomic } from '@aweftjs/core';
 import { createStore, memoryDriver } from '@aweftjs/store';
 
-const store = createStore({ driver: memoryDriver() });
+const store = createStore({ driver: memoryDriver(), actor: 'u_7' });
 
 const board = await store.open('board:42');
 const root = board.root as Record<string, unknown>;
-root.title = 'a board';
+
+atomic(() => { root.title = 'a board'; root.owner = 'u_7'; });
 
 await store.settled(board);        // wait for the writes already in flight
 ```
 
 Reopen it anywhere over the same driver and it is what you left.
+
+**Reach for `atomic` from the start.** Every assignment outside it is its own commit, and its
+own entry in the history. Two bare assignments are two commits, so a watcher sees the document
+half-changed and a replica receives the halves separately. `atomic` makes the whole block one
+commit that applies whole or not at all.
+
+`actor` is who a local write is recorded as. It is what `since` reports later, so a persisted
+history can say who wrote something.
+
+**Finishing.** `close(handle)` lets go of one document. `stop()` ends the whole store and the
+driver with it; nothing can be opened afterwards.
 
 ## What it holds
 
@@ -50,18 +63,21 @@ const store = createStore({
 	},
 });
 
-const mine = await store.find({
+for (const { doc, fields } of await store.find({
 	where: [
 		{ field: 'ownerId', op: 'eq', value: 'u_7' },
 		{ field: 'status', op: 'eq', value: 'open' },
 	],
 	sort: { field: 'ownerId' },
 	limit: 20,
-});
+})) console.log(doc, fields.status);
 ```
 
-`op` is `eq`, `gt`, `gte`, `lt` or `lte`. Page with `after`, which takes the last document of
-the previous page; there is no offset, because an offset re-reads what you already saw.
+A hit carries the declared fields the index already held, so listing what you found does not
+mean reopening every document. Page with `after`, which takes the `doc` of the last hit.
+
+`op` is `eq`, `gt`, `gte`, `lt` or `lte`. There is no offset, because an offset re-reads what
+you already saw.
 
 **The first condition is the one an index answers**, and it does the pruning. The rest narrow
 what it returned. So put the most selective condition first, and that is the whole of the
@@ -82,10 +98,16 @@ read, say so and give it a limit:
 for (const doc of await store.scan(100, lastSeen)) await migrate(doc);
 ```
 
-**A declaration holds literal steps only.** `['tasks', ANY, 'status']` names many paths inside
-one document, and a projection has one value per path per document, so there is nowhere for
-them to go. "Which documents have an urgent task" wants one row per match, which is a
-different index shape and is not built. See design 049.
+**A declaration holds literal steps only, and may not cross an array.** `['tasks', ANY,
+'status']` names many paths inside one document, and a projection has one value per path per
+document, so there is nowhere for them to go. Writing the position out literally does not
+rescue it: an array slot is a byte string the runtime chooses and nothing keeps stable, so
+`['tasks', '0', 'title']` is refused at the first write rather than indexing nothing quietly.
+"Which documents have an urgent task" wants one row per match, which is a different index shape
+and is not built. See design 049.
+
+Keep a scalar on the document instead: an application that needs "the top priority in this
+project" maintains that number as a slot and declares it.
 
 **Declaring is a schema decision.** IndexedDB may only create an index during a version
 change, so a path declared later is a migration rather than a lazy index build. And indexes
@@ -109,6 +131,8 @@ longest outage a session may resume from.
 ## Commits from elsewhere
 
 ```ts
+import { decodeCommit } from '@aweftjs/store';
+
 await store.receive(board, decodeCommit(bytes), 'u_7');
 ```
 
@@ -123,6 +147,9 @@ until you say so:
 if (store.orphans(board).length > 10_000) await store.sweep(board);
 ```
 
+`sweep` frees the rows for good, in storage and not just in this handle. A swept observable
+cannot be re-attached afterwards, which is why nothing sweeps on its own.
+
 This is the application's call, not the store's. The growth is visible and bounded while an
 automatic sweep is data leaving at a moment nothing announces.
 
@@ -135,10 +162,10 @@ that does not exist yet; that is the open question.
 
 ## Writing a driver
 
-A driver is ten methods: take the list of declared paths, claim a name, write a commit's slots
-and its tail entry and its projection together, read the rows back, read a range of the tail,
-say where the head is, answer one indexed condition, read documents for `scan`, truncate, and
-forget. Nothing else. The interface stays this narrow on purpose, because widening it until the
+A driver is twelve methods: take the list of declared paths, claim a name, write a commit's
+slots and its tail entry and its projection together, read the rows back, read a range of the
+tail, say where the head is, answer one indexed condition, read documents for `scan`, truncate
+the tail, forget swept rows, forget a whole document, and close. Nothing else. The interface stays this narrow on purpose, because widening it until the
 weakest target fits is how the weakest target ends up deciding what the strongest may offer.
 
 Prove it rather than claim it:
@@ -155,9 +182,16 @@ The check that matters most runs four writers concurrently against slots that do
 and asserts every one of them survives. A driver that writes rows whole passes everything else
 and fails that one.
 
-`examples/store/driver-file.ts` is a complete driver in about eighty lines, written outside the
-package, and the proof program runs the real thing: it writes a document, sends the writing
+`examples/store/driver-file.ts` is a complete driver written outside the package, and the proof
+program runs the real thing: it writes a document, sends the writing
 process a `SIGKILL`, and reopens what survived.
+
+## One thing to know about aliases
+
+A snapshot holds what a document holds, so an observable nothing attaches is not in one. If a
+slot still names that observable through `alias`, opening the document would mean rebuilding a
+snapshot that names what it does not contain, which `fromSnapshot` refuses. So `store` drops
+that slot when it opens the document rather than failing to open it at all. See design 050.
 
 ## What this does not do
 

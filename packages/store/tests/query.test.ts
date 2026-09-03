@@ -7,6 +7,9 @@ import { createStore, memoryDriver } from '../src/index.ts';
 import type { Declaration } from '../src/index.ts';
 
 type Doc = Record<string, unknown>;
+
+/** `find` hands back the projection it already read, and these assertions are about which. */
+const names = (found: readonly { doc: string }[]): string[] => found.map((f) => f.doc);
 const DECLARE: Declaration = {
 	ownerId: ['ownerId'],
 	status: ['status'],
@@ -32,62 +35,62 @@ const seeded = async (n = 12) => {
 
 test('a declared path answers a query, and the projection follows the document', async () => {
 	const store = await seeded();
-	assert.deepEqual(await store.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_1' }] }),
+	assert.deepEqual(names(await store.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_1' }] })),
 		['d01', 'd04', 'd07', 'd10']);
 
 	const h = await store.open('d01');
 	(h.root as Doc).ownerId = 'u_9';
 	await store.settled(h);
 
-	assert.deepEqual(await store.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_1' }] }),
+	assert.deepEqual(names(await store.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_1' }] })),
 		['d04', 'd07', 'd10']);
-	assert.deepEqual(await store.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_9' }] }), ['d01']);
+	assert.deepEqual(names(await store.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_9' }] })), ['d01']);
 });
 
 test('a nested declared path is read through the observables it crosses', async () => {
 	const store = await seeded();
-	assert.deepEqual(await store.find({ where: [{ field: 'author', op: 'eq', value: 'a_1' }] }),
+	assert.deepEqual(names(await store.find({ where: [{ field: 'author', op: 'eq', value: 'a_1' }] })),
 		['d01', 'd03', 'd05', 'd07', 'd09', 'd11']);
 
 	const h = await store.open('d03');
 	((h.root as Doc).meta as Doc).authorId = 'a_7';
 	await store.settled(h);
-	assert.deepEqual(await store.find({ where: [{ field: 'author', op: 'eq', value: 'a_7' }] }), ['d03']);
+	assert.deepEqual(names(await store.find({ where: [{ field: 'author', op: 'eq', value: 'a_7' }] })), ['d03']);
 });
 
 test('ranges, and a second condition narrowing what the index returned', async () => {
 	const store = await seeded();
-	assert.deepEqual(await store.find({ where: [{ field: 'weight', op: 'gte', value: 9 }] }),
+	assert.deepEqual(names(await store.find({ where: [{ field: 'weight', op: 'gte', value: 9 }] })),
 		['d09', 'd10', 'd11']);
-	assert.deepEqual(await store.find({ where: [{ field: 'weight', op: 'lt', value: 3 }] }),
+	assert.deepEqual(names(await store.find({ where: [{ field: 'weight', op: 'lt', value: 3 }] })),
 		['d00', 'd01', 'd02']);
 	assert.deepEqual(
-		await store.find({
+		names(await store.find({
 			where: [
 				{ field: 'ownerId', op: 'eq', value: 'u_0' },
 				{ field: 'status', op: 'eq', value: 'urgent' },
 			],
-		}),
+		})),
 		['d00'],
 	);
 });
 
 test('sort and cursor pagination', async () => {
 	const store = await seeded();
-	const desc = await store.find({
+	const desc = names(await store.find({
 		where: [{ field: 'ownerId', op: 'eq', value: 'u_2' }],
 		sort: { field: 'weight', direction: 'desc' },
-	});
+	}));
 	assert.deepEqual(desc, ['d11', 'd08', 'd05', 'd02']);
 
-	const first = await store.find({
+	const first = names(await store.find({
 		where: [{ field: 'weight', op: 'gte', value: 0 }],
 		sort: { field: 'weight' }, limit: 5,
-	});
-	const next = await store.find({
+	}));
+	const next = names(await store.find({
 		where: [{ field: 'weight', op: 'gte', value: 0 }],
 		sort: { field: 'weight' }, limit: 5, after: first.at(-1)!,
-	});
+	}));
 	assert.deepEqual(first, ['d00', 'd01', 'd02', 'd03', 'd04']);
 	assert.deepEqual(next, ['d05', 'd06', 'd07', 'd08', 'd09']);
 });
@@ -110,8 +113,8 @@ test('an undeclared path is refused, not scanned', async () => {
 
 test('scan is the escape, and it insists on a limit', async () => {
 	const store = await seeded();
-	assert.deepEqual(await store.scan(3), ['d00', 'd01', 'd02']);
-	assert.deepEqual(await store.scan(3, 'd02'), ['d03', 'd04', 'd05']);
+	assert.deepEqual(names(await store.scan(3)), ['d00', 'd01', 'd02']);
+	assert.deepEqual(names(await store.scan(3, 'd02')), ['d03', 'd04', 'd05']);
 	await assert.rejects(() => store.scan(0), /positive limit/);
 	await assert.rejects(() => store.scan(-1), /positive limit/);
 });
@@ -131,8 +134,8 @@ test('a declared path that is missing, or crosses a primitive, reads as null', a
 	atomic(() => { root.ownerId = 'u_x'; root.meta = 'not an object'; });
 	await store.settled(h);
 
-	assert.deepEqual(await store.find({ where: [{ field: 'author', op: 'eq', value: null }] }), ['sparse']);
-	assert.deepEqual(await store.find({ where: [{ field: 'status', op: 'eq', value: null }] }), ['sparse']);
+	assert.deepEqual(names(await store.find({ where: [{ field: 'author', op: 'eq', value: null }] })), ['sparse']);
+	assert.deepEqual(names(await store.find({ where: [{ field: 'status', op: 'eq', value: null }] })), ['sparse']);
 });
 
 test('a slot holding another observable is indexed as the id it names', async () => {
@@ -143,7 +146,7 @@ test('a slot holding another observable is indexed as the id it names', async ()
 	await store.settled(h);
 
 	const { textIdOf } = await import('@aweftjs/core');
-	assert.deepEqual(await store.find({ where: [{ field: 'meta', op: 'eq', value: textIdOf(meta) }] }),
+	assert.deepEqual(names(await store.find({ where: [{ field: 'meta', op: 'eq', value: textIdOf(meta) }] })),
 		['pointing']);
 });
 
@@ -156,6 +159,6 @@ test('a query survives a reopen, because the projection is stored beside the row
 	await first.close(h);
 
 	const second = createStore({ driver, declare: DECLARE });
-	assert.deepEqual(await second.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_kept' }] }), ['kept']);
-	assert.deepEqual(await second.find({ where: [{ field: 'weight', op: 'gt', value: 40 }] }), ['kept']);
+	assert.deepEqual(names(await second.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_kept' }] })), ['kept']);
+	assert.deepEqual(names(await second.find({ where: [{ field: 'weight', op: 'gt', value: 40 }] })), ['kept']);
 });

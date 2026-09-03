@@ -9,8 +9,8 @@ import {
 	type WireValue, type Writer, codecError, createWriter, decodeValue, writeHead, writeValue,
 	written,
 } from './wire.ts';
-import { compareBytes } from './bytes.ts';
-import { assertId } from './id.ts';
+import { bytesToHex, compareBytes } from './bytes.ts';
+import { assertId, idToText } from './id.ts';
 import { assertPosition } from './position.ts';
 
 /**
@@ -97,6 +97,26 @@ export interface Commit {
 	readonly deltas: readonly Delta[];
 	readonly tag?: Uint8Array;
 }
+
+/**
+ * The name a slot has in a path, and the key a document files it under.
+ *
+ * Params:
+ *   ref: the slot a delta names
+ *
+ * Returns: an object key as itself, an array position in hex, a map identity in text form.
+ *
+ * This is one mapping with one implementation, because a second copy is a second chance to
+ * disagree about what a document's own keys are.
+ *
+ * Example:
+ *   slotKeyOf({ kind: 'object', key: 'title' });   // 'title'
+ */
+export const slotKeyOf = (ref: Ref): string => {
+	if (ref.kind === 'object') return ref.key;
+	if (ref.kind === 'array') return bytesToHex(ref.key);
+	return idToText(ref.key);
+};
 
 const DELTA_TYPES = ['add', 'replace', 'remove'] as const;
 const KINDS = ['object', 'array', 'map'] as const;

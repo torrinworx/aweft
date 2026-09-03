@@ -105,31 +105,6 @@ export interface Write {
 	readonly project?: Readonly<Record<string, Indexable>>;
 }
 
-/** One document as a query answers it: its name, and the declared fields it holds. */
-export interface Found {
-	readonly doc: string;
-	readonly fields: Readonly<Record<string, Indexable>>;
-}
-
-/**
- * What a driver is asked for: one indexed condition, and how to order and page what it finds.
- *
- * Exactly one condition, because that is the one an index answers. `store` narrows the result
- * with the rest of the query, so every driver does the same amount of the work.
- */
-export interface Lookup {
-	readonly where: Where;
-	readonly sort?: { readonly field: string; readonly direction: 'asc' | 'desc' };
-	readonly limit?: number;
-	readonly after?: string;
-}
-
-/**
- * A place to keep documents.
- *
- * Every method is asynchronous because the interesting drivers are, and a memory driver
- * pretending otherwise would let a consumer depend on synchrony the real ones cannot give.
- */
 export interface Driver {
 	/**
 	 * Name the paths this store indexes, before anything is written.
@@ -178,6 +153,14 @@ export interface Driver {
 
 	/** Forget the tail up to and including `seq`. What bounds the history. */
 	truncate(doc: string, seq: number): Promise<void>;
+
+	/**
+	 * Forget these observables, for good.
+	 *
+	 * Distinct from `Write.dropped`, which says an observable lost its attach edge and whose
+	 * rows are KEPT (design 048). This is the sweep, and it is the only thing that frees one.
+	 */
+	forget(doc: string, ids: readonly string[]): Promise<void>;
 
 	/** Forget a document entirely: rows, tail and all. */
 	remove(doc: string): Promise<void>;

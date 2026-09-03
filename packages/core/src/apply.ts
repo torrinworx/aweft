@@ -8,11 +8,11 @@
 
 import {
 	type Commit, type Delta, type ObservableKind,
-	assertId, assertPosition, codecError, idToText, isReference,
+	assertId, assertPosition, codecError, idToText, isReference, slotKeyOf,
 } from '@aweftjs/codec';
 
 import type { Cell, Node } from './types.ts';
-import { anchorOf, slotKeyOf } from './node.ts';
+import { anchorOf } from './node.ts';
 import { nodeFor } from './create.ts';
 import { atomic, write } from './transaction.ts';
 import { nodeOf } from './value.ts';

@@ -49,12 +49,16 @@ test('ordering is total, and nulls sort first', () => {
 
 test('a path that runs into a primitive, or into bytes, reads as null', () => {
 	const rows = new Map([
-		['root', { slots: { a: 'not an object', b: new Uint8Array([1]), c: 5 } }],
+		['root', { kind: 'object', slots: { a: 'not an object', b: new Uint8Array([1]), c: 5 } }],
 	]);
 	assert.equal(valueAt(rows, 'root', ['a', 'deeper']), null, 'a primitive part way down');
 	assert.equal(valueAt(rows, 'root', ['b']), null, 'bytes are not an index key');
 	assert.equal(valueAt(rows, 'root', ['missing']), null);
 	assert.equal(valueAt(rows, 'root', ['c']), 5);
 	assert.equal(valueAt(new Map(), 'root', ['c']), null, 'a row that is not there');
+
+	const arrayed = new Map([['root', { kind: 'array', slots: { '0a': 1 } }]]);
+	assert.throws(() => valueAt(arrayed, 'root', ['0a']), /may not cross an array/,
+		'an array position is not a stable name, so a literal step into one is a mistake');
 	assert.equal(valueAt(rows, 'root', []), null, 'an empty path names nothing');
 });

@@ -4,7 +4,6 @@ export { createMap } from './map.ts';
 export type { ObservableMap } from './map.ts';
 
 export { alias, isObservable } from './value.ts';
-export { slotKeyOf } from './node.ts';
 export { idOf, isReachable, kindOf, parentOf, textIdOf } from './identity.ts';
 
 export { atomic } from './transaction.ts';
