@@ -1,0 +1,16 @@
+type BundleEntry: type BundleEntry = ModuleExports | (() => Promise<ModuleExports>);
+type Candidate: interface Candidate { readonly name: string; exports(): Promise<ModuleExports>; }
+type Compile: type Compile = (source: string) => Promise<ModuleExports>;
+type Factory: type Factory = (props: ModuleProps) => unknown;
+type FollowHandlers: interface FollowHandlers { readonly failed?: ((name: string, error: unknown) => void) | undefined; readonly applied?: ((name: string, action: 'reloaded' | 'unloaded') => void) | undefined; }
+type Loader: interface Loader { load(names: readonly string[]): Promise<Readonly<Record<string, unknown>>>; unload(name: string): Promise<boolean>; loaded(): readonly string[]; get(name: string): unknown; dependencies(name: string): readonly string[] | undefined; dependents(name: string): readonly string[]; }
+type ModuleExports: interface ModuleExports { readonly deps?: readonly string[]; readonly defaults?: Readonly<Record<string, unknown>>; readonly config?: Readonly<Record<string, unknown>>; readonly extensions?: Readonly<Record<string, unknown>>; readonly default?: Factory; }
+type ModuleProps: interface ModuleProps { readonly imports: Readonly<Record<string, unknown>>; readonly config: Readonly<Record<string, unknown>>; readonly extensions: Readonly<Record<string, unknown>>; readonly [key: string]: unknown; }
+type ModulesError: interface ModulesError extends Error { readonly reason: string; readonly module: string; }
+type Source: interface Source { candidates(): Promise<readonly Candidate[]>; }
+value compile: Compile
+value createLoader: ({ sources, props }: { sources: readonly Source[]; props?: Readonly<Record<string, unknown>> | undefined; }) => Loader
+value follow: (loader: Loader, document: object, handlers?: FollowHandlers) => () => void
+value fromBundle: (map: Readonly<Record<string, BundleEntry>>, options?: { readonly prefix?: string | undefined; }) => Source
+value fromDocument: (document: object, options?: { readonly compile?: Compile | undefined; }) => Source
+./node value fromDirectory: (path: string) => Source

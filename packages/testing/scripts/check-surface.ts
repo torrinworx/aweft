@@ -19,15 +19,28 @@ const packages = readdirSync(join(root, 'packages'))
 	.filter((name) => existsSync(join(root, 'packages', name, 'src', 'index.ts')))
 	.sort();
 
+// Every entry the exports map names, the main one first. A subpath is as public as the main
+// entry, so its surface is recorded too, each line prefixed with the subpath it belongs to.
+const entriesOf = (name: string): Array<readonly [string, string]> => {
+	const manifest = JSON.parse(readFileSync(join(root, 'packages', name, 'package.json'), 'utf8')) as {
+		exports?: Record<string, string>;
+	};
+	const exports = manifest.exports ?? { '.': './src/index.ts' };
+	return Object.entries(exports)
+		.sort(([a], [b]) => (a === '.' ? -1 : b === '.' ? 1 : a < b ? -1 : 1))
+		.map(([subpath, file]) => [subpath, join(root, 'packages', name, file)] as const);
+};
+
 // One program over every entry file. Six programs would reparse the shared lower packages six
 // times, and the checker is the expensive part of both.
 const program = surfaceProgram(
-	packages.map((name) => join(root, 'packages', name, 'src', 'index.ts')),
+	packages.flatMap((name) => entriesOf(name).map(([, file]) => file)),
 );
 
 let changed = 0;
 for (const name of packages) {
-	const generated = surfaceOf(join(root, 'packages', name, 'src', 'index.ts'), program);
+	const generated = entriesOf(name).flatMap(([subpath, file]) =>
+		surfaceOf(file, program).map((line) => (subpath === '.' ? line : `${subpath} ${line}`)));
 	const text = generated.join('\n') + '\n';
 	const path = join(root, 'packages', name, 'surface.txt');
 

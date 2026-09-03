@@ -1,0 +1,25 @@
+{
+	"name": "@aweftjs/modules",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"description": "Modules from a directory, a bundle or a document, loaded in dependency order with their dependencies injected.",
+	"exports": {
+		".": "./src/index.ts",
+		"./node": "./src/node.ts"
+	},
+	"scripts": {
+		"test": "node --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/core": "*"
+	},
+	"devDependencies": {
+		"@aweftjs/testing": "*"
+	},
+	"aweft": {
+		"tier": 5,
+		"branchCoverage": 90
+	}
+}

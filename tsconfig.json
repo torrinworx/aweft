@@ -6,6 +6,7 @@
 		{ "path": "packages/schema" },
 		{ "path": "packages/sync" },
 		{ "path": "packages/store" },
+		{ "path": "packages/modules" },
 		{ "path": "packages/testing" }
 	]
 }
