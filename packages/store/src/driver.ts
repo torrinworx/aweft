@@ -61,10 +61,19 @@ export interface Entry {
 	readonly project?: Readonly<Record<string, Indexable>>;
 }
 
-/** One document as a query answers it: its name, and the declared fields it holds. */
+/**
+ * One document as a query answers it: its name, the declared fields it holds, and where it sat
+ * in the order it was found in.
+ *
+ * `cursor` is minted by the driver and opaque to everyone else. It carries the sort value and
+ * the name, so that seeking past it works whether or not the document is still there or still
+ * ranks where it did (design 060). It means something only to the driver that minted it, and
+ * only under the sort it was minted for.
+ */
 export interface Found {
 	readonly doc: string;
 	readonly fields: Readonly<Record<string, Indexable>>;
+	readonly cursor: string;
 }
 
 /**
@@ -72,6 +81,10 @@ export interface Found {
  *
  * Exactly one condition, because that is the one an index answers. `store` narrows the result
  * with the rest of the query, so every driver does the same amount of the work.
+ *
+ * `after` is the `cursor` of the last hit of the previous page. A driver seeks past the
+ * position the cursor names, by the value inside it, and never by looking the document up
+ * again. A cursor minted under a different sort is refused with `reason: 'cursor'`.
  */
 export interface Lookup {
 	readonly where: Where;
@@ -118,6 +131,7 @@ export interface Driver {
 
 	/**
 	 * Every document, for the escape hatch. `limit` is required, and a driver stops there.
+	 * `after` is the `cursor` of the last hit of a previous `scan`.
 	 *
 	 * This is the un-indexed read, and it is separate so that reaching for one is a decision
 	 * rather than an accident.

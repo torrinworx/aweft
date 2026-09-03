@@ -144,7 +144,10 @@ export interface Store {
 	 * what it returned. So order the conditions with the most selective one first, which is the
 	 * whole of the tuning advice.
 	 *
-	 * Paging is by `after`, which takes the `doc` of the last entry of the previous page.
+	 * Paging is by `after`, which takes the `cursor` of the last hit of the previous page. A
+	 * cursor names a position in the order asked for, not a document, so a page after a hit
+	 * that has since been removed or re-ranked carries on from where it was. A cursor is only
+	 * meaningful under the sort it came from; one from another sort is refused.
 	 *
 	 * Example:
 	 *   for (const { doc, fields } of await store.find({
@@ -158,7 +161,7 @@ export interface Store {
 	 *
 	 * Params:
 	 *   limit: how many to return, required
-	 *   after: the `doc` of the last entry of the previous page
+	 *   after: the `cursor` of the last hit of the previous page
 	 *
 	 * Returns: one entry per document, in a stable order, each with its declared fields.
 	 *

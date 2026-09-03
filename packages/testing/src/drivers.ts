@@ -34,8 +34,8 @@ export interface StoreDriver {
 		where: { field: string; op: string; value: unknown };
 		sort?: { field: string; direction: 'asc' | 'desc' };
 		limit?: number; after?: string;
-	}): Promise<{ doc: string; fields: Record<string, unknown> }[]>;
-	scan(limit: number, after?: string): Promise<{ doc: string; fields: Record<string, unknown> }[]>;
+	}): Promise<{ doc: string; fields: Record<string, unknown>; cursor: string }[]>;
+	scan(limit: number, after?: string): Promise<{ doc: string; fields: Record<string, unknown>; cursor: string }[]>;
 	create(doc: string, root: string, rootKind: string): Promise<boolean>;
 	read(doc: string): Promise<{ root: string; rootKind: string; rows: unknown[] } | null>;
 	since(doc: string, seq: number): Promise<{ seq: number; body: Uint8Array }[]>;
@@ -317,7 +317,7 @@ export const driverChecks = (): DriverCheck[] => [
 					});
 					if (got.length === 0) break;
 					seen.push(...got.map((f) => f.doc));
-					after = got.at(-1)!.doc;
+					after = got.at(-1)!.cursor;
 				}
 				assert.equal(seen.length, 20, 'paging saw every document');
 				assert.equal(new Set(seen).size, 20, 'and saw none of them twice');
@@ -353,7 +353,7 @@ export const driverChecks = (): DriverCheck[] => [
 				for (let i = 0; i < 10; i++) await d.create(`d${i}`, `${ROOT}${i}`, 'object');
 				const first = await d.scan(4);
 				assert.equal(first.length, 4);
-				const second = await d.scan(4, first.at(-1)!.doc);
+				const second = await d.scan(4, first.at(-1)!.cursor);
 				assert.equal(second.length, 4);
 				assert.equal(new Set([...first, ...second].map((f) => f.doc)).size, 8);
 			} finally { await d.close(); }
@@ -456,10 +456,115 @@ export const driverChecks = (): DriverCheck[] => [
 				});
 				const second = await d.find({
 					where: { field: 'owner', op: 'eq', value: 'u' },
-					sort: { field: 'weight', direction: 'asc' }, limit: 2, after: 'd1',
+					sort: { field: 'weight', direction: 'asc' }, limit: 2, after: first.at(-1)!.cursor,
 				});
 				assert.deepEqual(second.map((f) => f.doc), ['d2', 'd3'],
 					'a cursor whose document left the results must not send the paging back to the top');
+			} finally { await d.close(); }
+		},
+	},
+	{
+		// The two shapes design 060 exists for. A cursor that looked its document up again
+		// would restart from the top when the document is gone, and skip the rest of the
+		// collection when the document's sort value moved past everything. Both silent.
+		name: 'a cursor whose document was removed, or re-ranked, carries on from its position',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare(['owner', 'weight']);
+				for (let i = 0; i < 6; i++) {
+					await d.create(`d${i}`, `${ROOT}${i}`, 'object');
+					await d.write({
+						...write(`d${i}`, [{ id: `${ROOT}${i}`, kind: 'object', set: {}, unset: [] }], 1),
+						root: `${ROOT}${i}`, project: { owner: 'u', weight: i },
+					});
+				}
+				const page = () => d.find({
+					where: { field: 'owner', op: 'eq', value: 'u' },
+					sort: { field: 'weight', direction: 'asc' }, limit: 2,
+				});
+				const first = await page();
+				assert.deepEqual(first.map((f) => f.doc), ['d0', 'd1']);
+				const cursor = first.at(-1)!.cursor;
+
+				// Re-rank d1 past everything, then page after the cursor minted before the move.
+				await d.write({
+					...write('d1', [{ id: `${ROOT}1`, kind: 'object', set: {}, unset: [] }], 2),
+					root: `${ROOT}1`, project: { owner: 'u', weight: 100 },
+				});
+				const afterMove = await d.find({
+					where: { field: 'owner', op: 'eq', value: 'u' },
+					sort: { field: 'weight', direction: 'asc' }, limit: 2, after: cursor,
+				});
+				assert.deepEqual(afterMove.map((f) => f.doc), ['d2', 'd3'],
+					'a re-ranked cursor document must not skip the rest of the collection');
+
+				// Remove d1 outright, then page after the same cursor.
+				await d.remove('d1');
+				const afterRemove = await d.find({
+					where: { field: 'owner', op: 'eq', value: 'u' },
+					sort: { field: 'weight', direction: 'asc' }, limit: 2, after: cursor,
+				});
+				assert.deepEqual(afterRemove.map((f) => f.doc), ['d2', 'd3'],
+					'a removed cursor document must not restart the paging from the top');
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'a cursor is refused under a sort other than the one it was minted for',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare(['owner', 'weight']);
+				for (let i = 0; i < 3; i++) {
+					await d.create(`d${i}`, `${ROOT}${i}`, 'object');
+					await d.write({
+						...write(`d${i}`, [{ id: `${ROOT}${i}`, kind: 'object', set: {}, unset: [] }], 1),
+						root: `${ROOT}${i}`, project: { owner: 'u', weight: i },
+					});
+				}
+				const first = await d.find({
+					where: { field: 'owner', op: 'eq', value: 'u' },
+					sort: { field: 'weight', direction: 'asc' }, limit: 1,
+				});
+				await assert.rejects(
+					() => d.find({
+						where: { field: 'owner', op: 'eq', value: 'u' },
+						sort: { field: 'owner', direction: 'asc' }, limit: 1, after: first[0]!.cursor,
+					}),
+					(e: Error) => (e as { reason?: string }).reason === 'cursor',
+					'a cursor from another sort names a position that means nothing here',
+				);
+				await assert.rejects(
+					() => d.find({ where: { field: 'owner', op: 'eq', value: 'u' }, after: 'd0' }),
+					(e: Error) => (e as { reason?: string }).reason === 'cursor',
+					'a document name is not a cursor',
+				);
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'scan pages by cursor and covers every document exactly once',
+		async run(make) {
+			const d = await make();
+			try {
+				for (let i = 0; i < 7; i++) {
+					await d.create(`d${i}`, `${ROOT}${i}`, 'object');
+					await d.write({
+						...write(`d${i}`, [{ id: `${ROOT}${i}`, kind: 'object', set: {}, unset: [] }], 1),
+						root: `${ROOT}${i}`,
+					});
+				}
+				const seen: string[] = [];
+				let after: string | undefined;
+				for (let page = 0; page < 10; page++) {
+					const got = await d.scan(3, after);
+					if (got.length === 0) break;
+					seen.push(...got.map((f) => f.doc));
+					after = got.at(-1)!.cursor;
+				}
+				assert.equal(seen.length, 7, 'scan saw every document');
+				assert.equal(new Set(seen).size, 7, 'and saw none of them twice');
 			} finally { await d.close(); }
 		},
 	},

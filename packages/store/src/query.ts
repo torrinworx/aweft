@@ -42,7 +42,11 @@ export interface Query {
 	readonly where: readonly Where[];
 	readonly sort?: { readonly field: string; readonly direction?: 'asc' | 'desc' };
 	readonly limit?: number;
-	/** The last document of the previous page. Paging is by cursor, never by an offset. */
+	/**
+	 * The `cursor` of the last hit of the previous page. Paging is by cursor, never by an
+	 * offset, and a cursor names a position in the order asked for rather than a document, so
+	 * the next page carries on even when that document has since been removed or re-ranked.
+	 */
 	readonly after?: string;
 }
 

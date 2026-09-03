@@ -50,6 +50,21 @@ export const fileDriver = (dir: string): Driver => {
 		renameSync(tmp, path(doc));
 	};
 
+	// This driver's own cursor: the sort field, the value the hit had under it, and the name, as
+	// one JSON text. A cursor means something only to the driver that minted it, so the shape
+	// is this file's business; it carries these three because that is what seeking past a
+	// position needs, and JSON because a name or a value may contain any character.
+	const mint = (field: string | null, value: Indexable, doc: string): string =>
+		JSON.stringify([field, value, doc]);
+	const parse = (cursor: string, field: string | null): { value: Indexable; doc: string } => {
+		let parts: unknown;
+		try { parts = JSON.parse(cursor); } catch { parts = undefined; }
+		if (!Array.isArray(parts) || parts.length !== 3 || typeof parts[2] !== 'string' || parts[0] !== field) {
+			throw Object.assign(new Error('store: not a cursor this driver minted under this sort'), { reason: 'cursor' });
+		}
+		return { value: parts[1] as Indexable, doc: parts[2] };
+	};
+
 	return {
 		async declare(fields) { declared = fields; },
 
@@ -61,31 +76,32 @@ export const fileDriver = (dir: string): Driver => {
 			const fieldsOf = (doc: string): Record<string, Indexable> =>
 				everything.find((e) => e.doc === doc)?.held.fields ?? {};
 
-			const sort = lookup.sort;
-			const sign = sort?.direction === 'desc' ? -1 : 1;
-			const order = (a: string, b: string): number => {
-				const by = sort === undefined
-					? 0
-					: compare(fieldsOf(a)[sort.field] ?? null, fieldsOf(b)[sort.field] ?? null) * sign;
+			const field = lookup.sort?.field ?? null;
+			const sign = lookup.sort?.direction === 'desc' ? -1 : 1;
+			const keyOf = (doc: string): Indexable => field === null ? null : fieldsOf(doc)[field] ?? null;
+			const order = (aKey: Indexable, a: string, bKey: Indexable, b: string): number => {
+				const by = compare(aKey, bKey) * sign;
 				return by !== 0 ? by : (a < b ? -1 : a > b ? 1 : 0);
 			};
 
 			let hits = everything
 				.filter(({ held }) => holds(lookup.where, held.fields[lookup.where.field] ?? null))
-				.map(({ doc, held }) => ({ doc, fields: { ...held.fields } }));
-			hits.sort((a, b) => order(a.doc, b.doc));
+				.map(({ doc, held }) => ({ doc, fields: { ...held.fields }, cursor: mint(field, keyOf(doc), doc) }));
+			hits.sort((a, b) => order(keyOf(a.doc), a.doc, keyOf(b.doc), b.doc));
 
-			// Past the cursor's position, never its index: see the memory driver for why.
+			// Past the position the cursor carries, never past where its document ranks now.
 			if (lookup.after !== undefined) {
-				const at = lookup.after;
-				hits = hits.filter((h) => order(at, h.doc) < 0);
+				const at = parse(lookup.after, field);
+				hits = hits.filter((h) => order(at.value, at.doc, keyOf(h.doc), h.doc) < 0);
 			}
 			return lookup.limit === undefined ? hits : hits.slice(0, lookup.limit);
 		},
 
 		async scan(limit, after) {
-			const names = all().filter(({ doc }) => after === undefined || doc > after);
-			return names.slice(0, limit).map(({ doc, held }) => ({ doc, fields: { ...held.fields } }));
+			const at = after === undefined ? undefined : parse(after, null).doc;
+			const names = all().filter(({ doc }) => at === undefined || doc > at);
+			return names.slice(0, limit).map(({ doc, held }) =>
+				({ doc, fields: { ...held.fields }, cursor: mint(null, null, doc) }));
 		},
 
 		async create(doc, root, rootKind) {

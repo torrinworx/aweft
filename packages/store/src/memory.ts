@@ -61,7 +61,28 @@ export const memoryDriver = (): Driver => {
 		if (closed) throw new Error('store: the driver is closed');
 	};
 
-	const found = (doc: string): Found => ({ doc, fields: { ...(docs.get(doc)?.fields ?? {}) } });
+	const found = (doc: string, cursor: string): Found =>
+		({ doc, fields: { ...(docs.get(doc)?.fields ?? {}) }, cursor });
+
+	// A cursor is the sort field, the value the hit had under it, and the name: enough to seek
+	// past the position without looking the document up again, which is the whole point
+	// (design 060). Plain JSON, because opaque means "do not parse it", not "unreadable".
+	const mint = (field: string | null, value: Indexable, doc: string): string =>
+		JSON.stringify([field, value, doc]);
+	const refuse = (message: string): never => {
+		throw Object.assign(new Error(`store: ${message}`), { reason: 'cursor' });
+	};
+	const parseCursor = (cursor: string, field: string | null): { value: Indexable; doc: string } => {
+		let parsed: unknown;
+		try { parsed = JSON.parse(cursor); } catch { parsed = undefined; }
+		if (!Array.isArray(parsed) || parsed.length !== 3 || typeof parsed[2] !== 'string') {
+			return refuse('not a cursor this driver minted');
+		}
+		if (parsed[0] !== field) {
+			return refuse(`the cursor was minted under sort ${String(parsed[0])}, not ${String(field)}`);
+		}
+		return { value: parsed[1] as Indexable, doc: parsed[2] };
+	};
 
 	return {
 		async declare(fields: readonly string[]): Promise<void> {
@@ -81,33 +102,34 @@ export const memoryDriver = (): Driver => {
 			// Order by the sort value and then by name, so the ordering is total and a cursor
 			// names a position rather than a row. Sorting by name alone when nothing was asked
 			// for is the same rule with an empty sort key.
-			const sort = lookup.sort;
-			const keyOf = (doc: string): Indexable => sort === undefined
+			const field = lookup.sort?.field ?? null;
+			const keyOf = (doc: string): Indexable => field === null
 				? null
-				: indexes.get(sort.field)?.get(doc) ?? null;
-			const sign = sort?.direction === 'desc' ? -1 : 1;
-			const order = (a: string, b: string): number => {
-				const by = compare(keyOf(a), keyOf(b)) * sign;
+				: indexes.get(field)?.get(doc) ?? null;
+			const sign = lookup.sort?.direction === 'desc' ? -1 : 1;
+			const order = (aKey: Indexable, a: string, bKey: Indexable, b: string): number => {
+				const by = compare(aKey, bKey) * sign;
 				return by !== 0 ? by : (a < b ? -1 : a > b ? 1 : 0);
 			};
-			hits.sort(order);
+			hits.sort((a, b) => order(keyOf(a), a, keyOf(b), b));
 
-			// Seek past the cursor's POSITION, not its index in this result. A document that
-			// stopped matching between two pages is ordinary in a live collection, and looking
-			// its name up in the current hits would find nothing and page from the top again.
+			// Seek past the position the cursor carries, never past where its document ranks
+			// now. A document that stopped matching, moved, or is gone between two pages is
+			// ordinary in a live collection; looking it up again would restart or skip.
 			if (lookup.after !== undefined) {
-				const at = lookup.after;
-				hits = hits.filter((doc) => order(at, doc) < 0);
+				const at = parseCursor(lookup.after, field);
+				hits = hits.filter((doc) => order(at.value, at.doc, keyOf(doc), doc) < 0);
 			}
 			if (lookup.limit !== undefined) hits = hits.slice(0, lookup.limit);
-			return hits.map(found);
+			return hits.map((doc) => found(doc, mint(field, keyOf(doc), doc)));
 		},
 
 		async scan(limit: number, after?: string): Promise<Found[]> {
 			open();
+			const at = after === undefined ? undefined : parseCursor(after, null).doc;
 			const names = [...docs.keys()].sort()
-				.filter((doc) => after === undefined || doc > after);
-			return names.slice(0, limit).map(found);
+				.filter((doc) => at === undefined || doc > at);
+			return names.slice(0, limit).map((doc) => found(doc, mint(null, null, doc)));
 		},
 
 		async write(write: Write): Promise<number> {

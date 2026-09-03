@@ -72,7 +72,10 @@ for (const { doc, fields } of await store.find({
 ```
 
 A hit carries the declared fields the index already held, so listing what you found does not
-mean reopening every document. Page with `after`, which takes the `doc` of the last hit.
+mean reopening every document. Page with `after`, which takes the `cursor` of the last hit. A
+cursor names a position in the order you asked for, not a document, so the next page carries
+on even when that document has since been removed or re-ranked. It belongs to the sort it came
+from: handing it to a query with a different sort is refused (`reason: 'cursor'`).
 
 `op` is `eq`, `gt`, `gte`, `lt` or `lte`. There is no offset, because an offset re-reads what
 you already saw.
@@ -179,10 +182,10 @@ for (const check of driverChecks()) {
 ```
 
 The check that matters most runs four writers concurrently against slots that do not overlap
-and asserts every one of them survives. A driver that writes rows whole fails it, along with
-two others: the row nothing attaches loses its slots, and an unset slot comes back because a
-whole-row write has nothing to unset it with. Three of twenty-seven, measured against a driver
-written to be wrong on purpose rather than reasoned about.
+and asserts every one of them survives. Two more exist for the same mistake from other angles:
+a row nothing attaches keeps its slots, and an unset slot stays unset. A driver that writes rows
+whole rather than slot by slot fails all three, which is what they are there to catch. Thirty
+checks in all, and the example driver below passes every one in the proof program.
 
 `examples/store/driver-file.ts` is a complete driver written outside the package, and the proof
 program runs the real thing: it writes a document, sends the writing

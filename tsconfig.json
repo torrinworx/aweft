@@ -5,6 +5,7 @@
 		{ "path": "packages/core" },
 		{ "path": "packages/schema" },
 		{ "path": "packages/sync" },
+		{ "path": "packages/store" },
 		{ "path": "packages/testing" }
 	]
 }

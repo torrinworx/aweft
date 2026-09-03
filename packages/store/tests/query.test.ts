@@ -83,16 +83,31 @@ test('sort and cursor pagination', async () => {
 	}));
 	assert.deepEqual(desc, ['d11', 'd08', 'd05', 'd02']);
 
-	const first = names(await store.find({
+	const first = await store.find({
 		where: [{ field: 'weight', op: 'gte', value: 0 }],
 		sort: { field: 'weight' }, limit: 5,
-	}));
+	});
 	const next = names(await store.find({
 		where: [{ field: 'weight', op: 'gte', value: 0 }],
-		sort: { field: 'weight' }, limit: 5, after: first.at(-1)!,
+		sort: { field: 'weight' }, limit: 5, after: first.at(-1)!.cursor,
 	}));
-	assert.deepEqual(first, ['d00', 'd01', 'd02', 'd03', 'd04']);
+	assert.deepEqual(names(first), ['d00', 'd01', 'd02', 'd03', 'd04']);
 	assert.deepEqual(next, ['d05', 'd06', 'd07', 'd08', 'd09']);
+
+	// A cursor belongs to the order it came from. Under another sort the position it names
+	// means nothing, and a silent wrong page is the failure this guards against.
+	await assert.rejects(
+		() => store.find({
+			where: [{ field: 'weight', op: 'gte', value: 0 }],
+			sort: { field: 'ownerId' }, limit: 5, after: first.at(-1)!.cursor,
+		}),
+		(e: Error) => (e as { reason?: string }).reason === 'cursor',
+	);
+	await assert.rejects(
+		() => store.find({ where: [{ field: 'weight', op: 'gte', value: 0 }], after: 'd04' }),
+		(e: Error) => (e as { reason?: string }).reason === 'cursor',
+		'a document name is not a cursor',
+	);
 });
 
 test('an undeclared path is refused, not scanned', async () => {
@@ -113,8 +128,9 @@ test('an undeclared path is refused, not scanned', async () => {
 
 test('scan is the escape, and it insists on a limit', async () => {
 	const store = await seeded();
-	assert.deepEqual(names(await store.scan(3)), ['d00', 'd01', 'd02']);
-	assert.deepEqual(names(await store.scan(3, 'd02')), ['d03', 'd04', 'd05']);
+	const first = await store.scan(3);
+	assert.deepEqual(names(first), ['d00', 'd01', 'd02']);
+	assert.deepEqual(names(await store.scan(3, first.at(-1)!.cursor)), ['d03', 'd04', 'd05']);
 	await assert.rejects(() => store.scan(0), /positive limit/);
 	await assert.rejects(() => store.scan(-1), /positive limit/);
 });
