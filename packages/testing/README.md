@@ -31,8 +31,12 @@ deltas inside one commit are unordered.
 
 The encode direction matters more than it looks. Bytes checked only by decoding them are
 checked against the package that produced them, so the fixture asks the implementation
-whether it agrees with itself. The stated JSON is written by hand, so encoding it asks a
-question the decoder's own output cannot answer.
+whether it agrees with itself. The stated JSON is authored (the documents by hand, the delta
+order by the generator's own rule), so encoding it asks a question the decoder's own output
+cannot answer. The bytes in a fixture were produced by the reference encoder when the fixture
+was generated; what anchors that encoder to the prose of the format is a pair of commits
+spelled out by hand, head by head, in codec's own tests. A second implementation proves itself
+by agreeing with those fixtures byte for byte.
 
 `checkInvalidFixture` is the other half. Each case in `spec/fixtures/invalid/` names a
 `reason` and a `stage`, and an implementation that refuses the input for a different reason

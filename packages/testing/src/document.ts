@@ -55,15 +55,6 @@ const asReference = (v: ValueJson | undefined): { ref: string; edge: EdgeKind } 
 	v !== null && typeof v === 'object' && 'ref' in v ? v : null;
 
 /**
- * The string a slot is filed under in the model.
- *
- * Object slots keep their key, array slots use the position in hex, and map slots use the
- * textual form of the identity. The observable's kind says which reading applies, so the
- * three never collide in practice.
- */
-export const slotKey = (ref: Ref): string => slotKeyOf(ref);
-
-/**
  * Apply one commit to a document.
  *
  * Params:
@@ -122,7 +113,7 @@ export const applyCommit = (doc: DocumentJson, commit: Commit): DocumentJson => 
 
 	for (const d of commit.deltas) {
 		const holder = doc.observables[idToText(d.id)];
-		const displaced = asReference(holder?.slots[slotKey(d.ref)]);
+		const displaced = asReference(holder?.slots[slotKeyOf(d.ref)]);
 		if (d.type !== 'add' && displaced && displaced.edge === 'attach') bump(displaced.ref, -1);
 
 		if (d.value !== undefined && isReference(d.value) && d.value.edge === 'attach') {
@@ -186,7 +177,7 @@ export const applyCommit = (doc: DocumentJson, commit: Commit): DocumentJson => 
 
 	for (const d of commit.deltas) {
 		const target = observables[idToText(d.id)]!;
-		const key = slotKey(d.ref);
+		const key = slotKeyOf(d.ref);
 		const present = Object.hasOwn(target.slots, key);
 
 		if (d.type === 'add' && present) {
@@ -199,7 +190,7 @@ export const applyCommit = (doc: DocumentJson, commit: Commit): DocumentJson => 
 
 	for (const d of commit.deltas) {
 		const target = observables[idToText(d.id)]!;
-		const key = slotKey(d.ref);
+		const key = slotKeyOf(d.ref);
 
 		if (d.type === 'remove') delete target.slots[key];
 		else target.slots[key] = valueToJson(d.value!);

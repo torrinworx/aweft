@@ -94,7 +94,11 @@ export const refusalsFor = (root: Node, deltas: readonly Delta[]): readonly Refu
 	const held = rules.get(root);
 	if (held === undefined) return NONE;
 
-	for (const rule of held) {
+	// A rule is user code and may register or remove rules while it runs. Walk a copy, so this
+	// commit is judged by the rules that stood when it closed: one added now waits for the
+	// next commit, one removed now still had its say. Never call user code mid-walk of a
+	// structure that code can mutate.
+	for (const rule of [...held]) {
 		const found = rule.fn(commit);
 		if (found.length === 0) continue;
 		if (out === undefined) out = [...found];

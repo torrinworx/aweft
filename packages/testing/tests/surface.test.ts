@@ -21,7 +21,7 @@ test('the entry file exports exactly what was decided', () => {
 		'modelApplier', 'moduleSpecifiers',
 		'randomBelow', 'randomFrom',
 		'refFromJson', 'refToJson',
-		'seedFrom', 'shuffle', 'slotKey',
+		'seedFrom', 'shuffle', 'slotKeyOf',
 		'surfaceOf', 'surfaceProgram',
 		'valueFromJson', 'valueToJson',
 	];

@@ -256,3 +256,33 @@ test('a commit that changes nothing never reaches a rule', () => {
 	doc.title = 'a';
 	assert.equal(runs, 0, 'no delta, no commit, nothing to answer for');
 });
+
+test('a rule may register or remove rules while it runs, and the commit is judged by the rules that stood', () => {
+	const doc = createObject<Doc>();
+	const ran: string[] = [];
+	let stopLate: (() => void) | undefined;
+
+	// The first rule removes itself and registers another. The set it lives in changes under
+	// the walk; neither the removed rule nor the new one may be run twice or skipped wrongly.
+	let stopFirst: () => void = () => {};
+	stopFirst = intercept(doc, () => {
+		ran.push('first');
+		stopFirst();
+		stopLate = intercept(doc, () => { ran.push('late'); return NO_REFUSAL; });
+		return NO_REFUSAL;
+	});
+	const stopSecond = intercept(doc, () => { ran.push('second'); return NO_REFUSAL; });
+
+	doc.title = 'one';
+	assert.deepEqual(ran, ['first', 'second'], 'the rule added during the walk waits for the next commit');
+
+	ran.length = 0;
+	doc.title = 'two';
+	assert.deepEqual(ran, ['second', 'late'], 'the removed rule is gone and the added one runs now');
+
+	stopSecond();
+	stopLate?.();
+	ran.length = 0;
+	doc.title = 'three';
+	assert.deepEqual(ran, []);
+});

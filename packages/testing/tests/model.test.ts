@@ -12,16 +12,16 @@ import { bytesFromHex, type Commit, type Delta, type Ref, type Value } from '@aw
 import {
 	type DocumentJson,
 	applyCommit, canonicalJson, commitToJson, deltaFromJson, deltaToJson, modelApplier,
-	refFromJson, refToJson, slotKey, valueFromJson, valueToJson,
+	refFromJson, refToJson, slotKeyOf, valueFromJson, valueToJson,
 } from '../src/index.ts';
 
 const A = bytesFromHex('000000000000000000000001');
 const B = bytesFromHex('000000000000000000000002');
 
 test('a slot key is the same string the three kinds file under', () => {
-	assert.equal(slotKey({ kind: 'object', key: 'title' }), 'title');
-	assert.equal(slotKey({ kind: 'array', key: Uint8Array.of(0x80) }), '80');
-	assert.equal(slotKey({ kind: 'map', key: A }), 'AAAAAAAAAAAAAAAB');
+	assert.equal(slotKeyOf({ kind: 'object', key: 'title' }), 'title');
+	assert.equal(slotKeyOf({ kind: 'array', key: Uint8Array.of(0x80) }), '80');
+	assert.equal(slotKeyOf({ kind: 'map', key: A }), 'AAAAAAAAAAAAAAAB');
 });
 
 test('every kind of value survives the trip to JSON and back', () => {

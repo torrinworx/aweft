@@ -8,13 +8,13 @@
 
 import {
 	type Commit, type Delta, type DeltaType, type ObservableKind, type Ref,
-	bytesFromHex, bytesToHex, decodeCommit, encodeCommit, idFromText, idToText,
+	bytesFromHex, bytesToHex, decodeCommit, encodeCommit, idFromText, idToText, slotKeyOf,
 } from '@aweftjs/codec';
 
 import { randomBelow, randomFrom } from './random.ts';
 
 import {
-	type DocumentJson, type ValueJson, applyCommit, canonicalJson, slotKey, valueFromJson,
+	type DocumentJson, type ValueJson, applyCommit, canonicalJson, valueFromJson,
 	valueToJson,
 } from './document.ts';
 
@@ -82,7 +82,7 @@ export interface InvalidFixture {
 }
 
 /** A ref in its JSON form, and back. The pair round trips, which the fixtures depend on. */
-export const refToJson = (ref: Ref): RefJson => ({ kind: ref.kind, key: slotKey(ref) });
+export const refToJson = (ref: Ref): RefJson => ({ kind: ref.kind, key: slotKeyOf(ref) });
 
 /** The ref a JSON one names. The inverse of refToJson, and the fixtures rely on it round tripping. */
 export const refFromJson = (r: RefJson): Ref => {
@@ -236,11 +236,13 @@ export const checkFixture = (f: Fixture, applier: Applier = modelApplier): void 
 		const again = bytesToHex(encodeCommit(decoded));
 		if (again !== c.bytes) fail(f.name, 're-encoding is not byte equal', again, c.bytes);
 
-		// The other direction, and the one that is not circular. Above, the deltas came out of
-		// the decoder, so re-encoding them asks the package whether it agrees with itself.
-		// These are built from the JSON the fixture states, whose deltas the generator orders
-		// independently of the encoder's own sort and whose documents a person wrote,
-		// so the bytes are checked against something outside the implementation.
+		// The other direction. Above, the deltas came out of the decoder, so re-encoding them
+		// asks the package whether it agrees with itself. These are built from the JSON the
+		// fixture states, whose deltas the generator orders independently of the encoder's own
+		// sort and whose documents a person wrote. The bytes themselves are still the encoder's
+		// output at generation time; what ties the encoder to the prose of `spec/format.md` is
+		// the pair of commits spelled out by hand in codec's own tests, and this check is what
+		// makes every other implementation agree with that encoder on every fixture.
 		const fromStated = withTag(c.deltas.map(deltaFromJson), c.tag === undefined ? undefined : bytesFromHex(c.tag));
 		const encoded = bytesToHex(encodeCommit(fromStated));
 		if (encoded !== c.bytes) {

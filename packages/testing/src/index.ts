@@ -31,4 +31,4 @@ export type {
 // The id conversions a fixture consumer needs: DocumentJson is keyed by an id's text form
 // while a Commit carries bytes, so the function across the gap rides along, the same way
 // core re-exports the codec types its own signatures hand out.
-export { idFromText, idToText } from '@aweftjs/codec';
+export { idFromText, idToText, slotKeyOf } from '@aweftjs/codec';
