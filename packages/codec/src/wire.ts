@@ -120,10 +120,25 @@ export const writeHead = (w: Writer, major: number, arg: number): void => {
 
 const textEncoder = new TextEncoder();
 
-export const writeText = (w: Writer, s: string): void => {
-	// A surrogate without its pair has no UTF-8 spelling. TextEncoder substitutes U+FFFD
-	// instead of failing, which would let a value change on its way through the encoder and
-	// still decode cleanly. Refuse it here, where the caller can still see what it was.
+/**
+ * Refuse a string the format cannot carry.
+ *
+ * Params:
+ *   s: the string to check
+ *
+ * Returns: nothing. It throws or it does not.
+ *
+ * Throws: a CodecError with reason `lone-surrogate` for an unpaired surrogate.
+ *
+ * A surrogate without its pair has no UTF-8 spelling. TextEncoder substitutes U+FFFD instead
+ * of failing, which would let a value change on its way through the encoder and still decode
+ * cleanly. Refuse it where the caller can still see what it was. Callers that hold a string
+ * before it reaches the encoder use this, so the format's rule has one implementation.
+ *
+ * Example:
+ *   assertText('hello \u{1F600}');
+ */
+export const assertText = (s: string): void => {
 	for (let i = 0; i < s.length; i++) {
 		const c = s.charCodeAt(i);
 		if (c >= 0xd800 && c <= 0xdbff) {
@@ -136,6 +151,10 @@ export const writeText = (w: Writer, s: string): void => {
 			throw codecError('lone-surrogate', `unpaired low surrogate at index ${i}`);
 		}
 	}
+};
+
+export const writeText = (w: Writer, s: string): void => {
+	assertText(s);
 
 	const bytes = textEncoder.encode(s);
 	writeHead(w, 3, bytes.length);

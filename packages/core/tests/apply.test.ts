@@ -189,6 +189,45 @@ test('the same commit applied outside a delivery does reach the mirror watcher i
 	assert.deepEqual(seen, [true], 'applying outside the delivery keeps the flag meaningful');
 });
 
+// The same argument as the slot-key test below, one field over. A value the encoder refuses
+// is worse than a bad key, because a local write is checked and an applied commit was not:
+// the document then holds something its own bytes cannot say, every byte client is refused
+// for good, and on a served document the encoder's throw arrives in an outbox microtask,
+// where it takes the process rather than the link.
+test('a value the format cannot carry is refused where it is applied', () => {
+	for (const [what, value, reason] of [
+		['a lone high surrogate', 'hello \ud83d', 'lone-surrogate'],
+		['a lone low surrogate', '\udc00 alone', 'lone-surrogate'],
+		['Infinity', Infinity, 'invalid-number'],
+		['NaN', NaN, 'invalid-number'],
+	] as const) {
+		const doc = createObject() as Record<string, unknown>;
+		assert.throws(
+			() => apply(doc, {
+				deltas: [{ type: 'add', id: idOf(doc), ref: { kind: 'object', key: 'x' }, value }],
+			}),
+			(error: Error & { reason?: string }) => {
+				assert.equal(error.reason, reason, what);
+				return true;
+			},
+			what,
+		);
+		assert.equal('x' in doc, false, `${what} left nothing behind`);
+	}
+});
+
+test('a local write refuses the same values, at the write', () => {
+	const doc = createObject() as Record<string, unknown>;
+
+	assert.throws(() => { doc.title = 'hello \ud83d'; }, /lone-surrogate/);
+	assert.throws(() => { doc.count = Infinity; }, /invalid-number/);
+
+	doc.title = 'fine';
+	assert.deepEqual(
+		{ ...doc }, { title: 'fine' }, 'and the document carries neither refused value',
+	);
+});
+
 // The decoder refuses a slot key the format forbids, so a commit that arrived as bytes has
 // been through that check. One handed straight over in the same process has not, and a key
 // the format forbids applied here makes a document nothing can ever encode: every later

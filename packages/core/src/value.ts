@@ -4,7 +4,7 @@
 // (design 007). So this is where a plain object handed to a slot is refused rather than
 // quietly copied: a copy would look like it worked, and then never report a change.
 
-import { codecError } from '@aweftjs/codec';
+import { assertValue, codecError } from '@aweftjs/codec';
 
 import type { Cell, Node } from './types.ts';
 import { sourceOf } from './derived.ts';
@@ -72,11 +72,10 @@ export const toCell = (value: unknown): Cell => {
 	switch (typeof value) {
 		case 'boolean':
 		case 'string':
-			return { kind: 'value', value };
 		case 'number':
-			if (!Number.isFinite(value)) {
-				throw codecError('invalid-number', `${String(value)} has no encoding in this format`);
-			}
+			// The format's rule, not a copy of it: a value core accepts and the encoder then
+			// refuses is a document that cannot be sent anywhere.
+			assertValue(value);
 			return { kind: 'value', value };
 		case 'undefined':
 			throw codecError('invalid-value', 'a slot holds a value or does not exist; delete it instead');

@@ -31,9 +31,25 @@ export const outbox = (channel: Channel): Outbox => {
 	const queued: Frame[] = [];
 	let scheduled = false;
 
-	const flush = (): void => {
+	// A frame that will not go down this link ends this link, per `spec/replication.md` 7.
+	// Nothing is left queued: a channel that cannot carry one frame will not carry the ones
+	// behind it. `raise` says whether the caller is in a position to hear about it. A flush
+	// the caller asked for hands the error back; the scheduled one runs in a microtask, where
+	// throwing takes the whole process and every other link on it, so there the closed link
+	// is the report.
+	const drain = (raise: boolean): void => {
 		scheduled = false;
-		while (queued.length > 0) channel.send(queued.shift()!);
+		while (queued.length > 0) {
+			const frame = queued.shift()!;
+			try {
+				channel.send(frame);
+			} catch (error) {
+				queued.length = 0;
+				channel.close();
+				if (raise) throw error;
+				return;
+			}
+		}
 	};
 
 	return {
@@ -50,8 +66,8 @@ export const outbox = (channel: Channel): Outbox => {
 
 			if (scheduled) return;
 			scheduled = true;
-			queueMicrotask(() => { if (scheduled) flush(); });
+			queueMicrotask(() => { if (scheduled) drain(false); });
 		},
-		flush,
+		flush: () => drain(true),
 	};
 };

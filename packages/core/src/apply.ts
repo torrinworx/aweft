@@ -8,7 +8,7 @@
 
 import {
 	type Commit, type Delta, type ObservableKind,
-	assertId, assertPosition, codecError, idToText, isReference, slotKeyOf,
+	assertId, assertPosition, assertValue, codecError, idToText, isReference, slotKeyOf,
 } from '@aweftjs/codec';
 
 import type { Cell, Node } from './types.ts';
@@ -26,10 +26,15 @@ import { nodeOf } from './value.ts';
  * encode: every later reader of it is refused, and the refusal comes from the encoder rather
  * than from whoever wrote the bad key.
  */
-const checkRefs = (commit: Commit): void => {
+// A delta says a slot and what goes in it, and both have to be things the format can spell.
+// Checking the slot key and not the value let a commit put a value in a document that the
+// encoder then refuses, which makes the document unserveable to every byte client and lands
+// the failure on whoever encodes rather than on whoever wrote it.
+const checkWire = (commit: Commit): void => {
 	for (const delta of commit.deltas) {
 		if (delta.ref.kind === 'array') assertPosition(delta.ref.key);
 		else if (delta.ref.kind === 'map') assertId(delta.ref.key);
+		if (delta.value !== undefined) assertValue(delta.value);
 	}
 };
 
@@ -218,7 +223,7 @@ export const apply = (observable: unknown, commit: Commit): void => {
 		throw codecError('empty-commit', 'a commit carries at least one delta');
 	}
 
-	checkRefs(commit);
+	checkWire(commit);
 	const kinds = kindsIn(commit, index);
 	const attachedBy = new Map<string, string>();
 	checkAttachments(commit, index, attachedBy);

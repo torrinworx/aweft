@@ -12,7 +12,7 @@ import * as codec from '../src/index.ts';
 test('the entry file exports exactly what was decided', () => {
 	const decided = [
 		'ID_BYTES', 'ID_TEXT_LENGTH', 'MAX_INT', 'MAX_TAG_BYTES', 'MIN_INT', 'MIN_TAG_BYTES',
-		'assertId', 'assertPosition',
+		'assertId', 'assertPosition', 'assertValue',
 		'bytesFromHex', 'bytesToHex',
 		'codecError', 'compareBytes', 'compareDeltas', 'comparePositions',
 		'createId', 'decodeCommit', 'decodeValue', 'encodeCommit', 'encodeValue', 'equalBytes',

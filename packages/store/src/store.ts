@@ -279,6 +279,12 @@ export const createStore = (
 ): Store => {
 	checkDeclaration(declare);
 	const open_ = new Map<string, State>();
+	// A document being built, before it is a State. `open` awaits the driver four times, so
+	// without this two callers in one tick both miss `open_` and both build one, and the
+	// second overwrites the first: two live copies of one document, writes through one
+	// invisible to the other, and the loser's observer still writing to the driver after its
+	// handle is closed. `Promise.all([open(d), open(d)])` is the ordinary shape in a server.
+	const opening_ = new Map<string, Promise<State>>();
 	const declared = driver.declare(Object.keys(declare));
 
 	/** Write one commit: rows and tail together, and move the sequence. */
@@ -352,6 +358,27 @@ export const createStore = (
 		const already = open_.get(doc);
 		if (already !== undefined) { already.refs++; return handleOf(already); }
 
+		const inFlight = opening_.get(doc);
+		if (inFlight !== undefined) {
+			const shared = await inFlight;
+			// It can have been closed while this caller waited, in which case there is nothing
+			// to take a reference to and the whole thing starts again.
+			if (open_.get(doc) !== shared) return open(doc, kind);
+			shared.refs++;
+			return handleOf(shared);
+		}
+
+		// Registered before the first await, so every caller in this tick joins this build.
+		const building = build(doc, kind);
+		opening_.set(doc, building);
+		try {
+			return handleOf(await building);
+		} finally {
+			opening_.delete(doc);
+		}
+	};
+
+	const build = async (doc: string, kind: ObservableKind): Promise<State> => {
 		// Find or create, and the create has to be atomic: two callers opening the same name at
 		// once must not build two documents with different roots, which is what a login path
 		// does every time two requests for one account arrive together.
@@ -394,7 +421,7 @@ export const createStore = (
 		state.stop = observer(state.root).watch(watcher(state));
 
 		open_.set(doc, state);
-		return handleOf(state);
+		return state;
 	};
 
 	const handleOf = (state: State): Handle => ({

@@ -174,3 +174,33 @@ test('a declared path may not cross an array, and says so', async () => {
 		'an array position is not a stable name, so a literal step into one is a mistake, not an empty result');
 	void apply;
 });
+
+// `open` awaits the driver four times between checking the map of open documents and writing
+// to it, so two callers in one tick both missed and both built a document. The second
+// overwrote the first, which left two live copies of one name: a write through one was
+// invisible to the other, one `close` unregistered the document so the other handle's
+// `settled` threw, and the losing copy's observer went on writing to the driver after its
+// handle was closed, out of reach of `stop()`. `Promise.all([open(d), open(d)])` is what a
+// server does on every request that arrives in a pair.
+test('two opens of one name in the same tick share one document', async () => {
+	const store = createStore({ driver: memoryDriver(), actor: 'u_1' });
+
+	const [first, second] = await Promise.all([store.open('board'), store.open('board')]);
+	assert.equal(first.root, second.root, 'one live document, not two');
+
+	const root = first.root as Doc;
+	root.title = 'written through the first handle';
+	assert.equal((second.root as Doc).title, 'written through the first handle');
+
+	// Two openers means two references, so one close leaves the document open for the other.
+	await store.close(first);
+	await store.settled(second);
+	(second.root as Doc).after = 'still writing';
+	await store.settled(second);
+
+	await store.close(second);
+	await store.stop();
+
+	const back = createStore({ driver: memoryDriver(), actor: 'u_1' });
+	await back.stop();
+});

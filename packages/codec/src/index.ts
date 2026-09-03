@@ -8,7 +8,8 @@ export { assertId, createId, ID_BYTES, ID_TEXT_LENGTH, idFromText, idToText } fr
 export { assertPosition, comparePositions, isValidPosition } from './position.ts';
 
 export {
-	compareDeltas, decodeCommit, encodeCommit, isReference, MAX_TAG_BYTES, MIN_TAG_BYTES, slotKeyOf,
+	assertValue, compareDeltas, decodeCommit, encodeCommit, isReference, MAX_TAG_BYTES,
+	MIN_TAG_BYTES, slotKeyOf,
 } from './commit.ts';
 export type {
 	Commit, Delta, DeltaType, EdgeKind, ObservableKind, Ref, Reference, Value,

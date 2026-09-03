@@ -6,8 +6,8 @@
 // re-encode of anything decoded reproduces the input exactly.
 
 import {
-	type WireValue, type Writer, codecError, createWriter, decodeValue, writeHead, writeValue,
-	written,
+	type WireValue, type Writer, assertText, codecError, createWriter, decodeValue, writeHead,
+	writeValue, written,
 } from './wire.ts';
 import { bytesToHex, compareBytes } from './bytes.ts';
 import { assertId, idToText } from './id.ts';
@@ -143,6 +143,45 @@ export const MAX_TAG_BYTES = 32;
 export const isReference = (v: Value): v is Reference =>
 	typeof v === 'object' && v !== null && !(v instanceof Uint8Array) && !Array.isArray(v)
 	&& 'edge' in v && 'kind' in v && 'id' in v;
+
+/**
+ * Refuse a slot value the format cannot carry.
+ *
+ * Params:
+ *   value: what a delta puts in a slot, a reference included
+ *
+ * Returns: nothing. It throws or it does not.
+ *
+ * Throws: a CodecError. `invalid-number` for a non-finite number, `lone-surrogate` for an
+ * unpaired surrogate, `invalid-value` for anything else with no encoding.
+ *
+ * A reference passes: its id and its slot key are checked where they are read, and what it
+ * points at is not this function's business. Callers holding a value before it reaches the
+ * encoder use this, so a document can never hold something its own bytes cannot say. A value
+ * that gets in without passing here makes the document unserveable to every byte client, and
+ * the failure lands on whoever tries to encode it rather than on whoever wrote it.
+ *
+ * Example:
+ *   assertValue(delta.value);
+ */
+export const assertValue = (value: Value): void => {
+	if (value === null || isReference(value) || value instanceof Uint8Array) return;
+
+	switch (typeof value) {
+		case 'boolean':
+			return;
+		case 'number':
+			if (!Number.isFinite(value)) {
+				throw codecError('invalid-number', `${String(value)} has no encoding in this format`);
+			}
+			return;
+		case 'string':
+			assertText(value);
+			return;
+		default:
+			throw codecError('invalid-value', `a ${typeof value} cannot be stored`);
+	}
+};
 
 // --- writing ---------------------------------------------------------------------------
 

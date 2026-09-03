@@ -526,3 +526,46 @@ test('the defaults are the ones the README and design 045 state', async () => {
 	assert.equal(answer.whole, false, '200 missed commits is inside the default window of 256');
 	host.close();
 });
+
+// A frame that will not go down a link ends that link. Most of a flush runs in a microtask,
+// so a send that throws there has nowhere to go: it leaves as an uncaught exception and takes
+// the whole process, along with every other link the host was serving. The shape that found
+// this was a value the encoder refuses reaching a byte transport, which core now stops at the
+// write, but any transport can throw for its own reasons and the containment is what matters.
+test('a channel whose send throws ends that link rather than the process', async () => {
+	const doc = createObject() as Record<string, unknown>;
+	doc.title = 'fine';
+
+	const [there, here] = inProcess();
+	let poisoned = false;
+	let sent = 0;
+	// Everything a real channel does, until it cannot carry a frame any more.
+	const brittle: Channel = {
+		send: (frame) => {
+			if (!poisoned) return there.send(frame);
+			sent++;
+			throw new Error('this transport cannot carry that');
+		},
+		receive: (fn) => there.receive(fn),
+		closed: (fn) => there.closed(fn),
+		close: () => there.close(),
+	};
+
+	const host = serve(() => ({ document: doc, policy: 'trusted' }));
+	host.accept(brittle, { id: 'a' });
+	const client = connect(() => here);
+	const replica = await client.join<Record<string, unknown>>('board').ready;
+	assert.equal(replica.title, 'fine', 'the join worked while the channel still carried frames');
+
+	// The host publishes on its own, from a microtask, which is the path with no caller to
+	// hand the throw back to.
+	poisoned = true;
+	doc.title = 'a change worth sending';
+	await settle();
+
+	assert.equal(sent, 1, 'nothing behind the bad frame was pushed at a dead channel');
+	assert.equal(client.connected.get(), false, 'and the client saw the link end');
+
+	client.close();
+	host.close();
+});
