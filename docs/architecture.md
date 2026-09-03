@@ -28,7 +28,7 @@ boundary in the system.
                                    DATA PLANE
                                   sync      store                (isomorphic)
                                         |
-                                   CONTRACTS
+                                    SHAPE
                                      schema                      (isomorphic)
                                         |
                                       CORE
@@ -73,8 +73,8 @@ aweft/
   packages/
     codec/                 the encoding: values, deltas, commits, ids, positions
     core/                  observers, observables, deltas, commits, scopes
-    schema/                commit validation and mutation authority
-    sync/                  commit replication over any channel
+    schema/                the shape a document must keep, checked before a commit lands
+    sync/                  commits between documents over any channel, both ends equal
     store/                 persistence and its driver interface
     modules/               the isomorphic module system, static and dynamic
     sandbox/               isolated execution for stored module code
@@ -105,9 +105,9 @@ version in lockstep.
 | Package | Owns | Must not know about |
 |---|---|---|
 | `codec` | The encoding: values, refs, deltas, commits, ids, array positions | Observables, reactivity, transport, storage |
-| `core` | Observers, observables, deltas, commits, scopes, identity | DOM, network, storage, schema |
-| `schema` | Validating a commit, and who may mutate what | Transport, storage |
-| `sync` | Moving commits between trees and over a channel | DOM, storage internals |
+| `core` | Observers, observables, deltas, commits, scopes, identity, the seam that can refuse a commit | DOM, network, storage, schema |
+| `schema` | The shape a document must keep, and whether a commit keeps it | Who made a commit, transport, storage |
+| `sync` | Moving commits between documents over a channel, both ends equal | Who may write, what a commit means, DOM, storage internals |
 | `store` | Persisting a document as observable rows, its commit tail, the driver interface | DOM, transport |
 | `modules` | Discovery, dependency order, injection, lifecycle | Whether it runs on a client or a server |
 | `sandbox` | Isolated execution and the capability bridge | What the code it runs is for |
@@ -144,208 +144,37 @@ This is the list `AGENTS.md` refers to.
 
 ## Decisions already taken
 
-Each has a record in `docs/design/`. This is the summary, not the reasoning.
+Each has a design note in `docs/design/`, and the note carries the reasoning and the evidence.
+This is the one-line summary. A superseded note stays in `docs/design/` and says what
+superseded it.
 
-### The commit is the unit that crosses every boundary
-
-`sync` replicates commits, `store` persists commits, `schema` validates commits. A consumer
-that rebuilds state by applying deltas one at a time passes through states where invariants
-spanning two slots are false. Applying a whole commit does not, because every delta is
-validated, then every delta is applied, then listeners are notified once.
-
-The consequence for the API: whether a local listener sees a torn state depends on whether
-the mutations were made atomically, not on which subscription it used. Two assignments in one
-synchronous block outside an atomic section are two commits, and both callbacks see the
-break. So the atomic primitive has to be ergonomic enough that people reach for it.
-
-### The wire format needs no merge rules
-
-Coalescing keyed by slot is lossless. The producer guarantees a commit is minimal, and the
-format states the rules a coalescer must satisfy rather than defining an algebra for
-receivers to re-derive. See `spec/format.md` section 5 and design 003.
-
-### Identity and credentials use different doors
-
-`core` produces object identity: cryptographically secure, no weak fallback, and no global
-generator that a test can replace. `server` produces credentials, in a different module with
-a different call site, so using an id as a session token is not expressible. See
-`spec/identity.md` and design 005.
-
-### One observable array, and no identity option
-
-There is one array implementation and it has no identity mode. Every element is addressed by
-an ordered position key, which does not shift when the array is edited elsewhere, so tracking
-identity separately would add a second internal path and buy nothing the addressing does not
-already give. See design 014.
-
-### Cross-tree bridging is a supported seam, not a reach-in
-
-Bridging two live trees that do not share an id space needs three things, and all three are
-public API rather than something a caller improvises: applying a commit with caller-supplied
-refs, an insert-at-position primitive on identity arrays, and echo suppression. Needing an
-unexported internal is an escalation, never a deep import.
-
-### `schema` is mandatory at the wire
-
-The server side of `sync` refuses a remote commit that has no mutation authority policy, even
-if that policy is an explicit allow-everything the developer had to type. An authenticated
-client is not an authorized one, and making the check optional by configuration ships the
-hole it exists to close. Local-only trees may skip it.
-
-### Authority is per path, and actions are a pattern built on it
-
-A policy is declarative patterns over paths, and that is the only authority the wire checks.
-An application that wants named intents writes the intent into the document as state, and a
-server-side handler with wider authority reads it and writes the outcome. Both writes pass the
-same validator, so there is one enforcement mechanism rather than two. See design 009.
-
-### One attach edge decides where an observable lives
-
-Every reachable observable has exactly one attach edge; every other reference to it is an
-alias that grants nothing and revokes nothing. This is what makes "where does this live" a
-walk up rather than a search, and it makes privilege escalation and privilege freezing through
-a reference unrepresentable rather than merely guarded against. See design 010 and
-`spec/format.md` section 1.1.
-
-### A refused commit converges the client, then reports
-
-When the server refuses a commit, the client rolls back to the last accepted state and replays
-what was accepted. That is the framework's job, not the application's choice, because anything
-else is a replica fork. The refused commits are then handed to the application as one group,
-with their reasons and prior values, after the document is consistent again.
-
-A refusal refuses the commit and never the connection. A well-behaved client produces refusals
-through ordinary races, and disconnecting turns every race into a full resynchronization at
-the moment the client is busiest. See designs 011 and 012.
-
-### A replica is what the host said, plus what still applies on top
-
-A client applies its own commits at once and holds them until the host decides them. Every
-case where the host says something unexpected runs one mechanism: undo the pending commits
-newest first, apply what arrived, redo them oldest first. A commit that cannot be redone is
-one the host would refuse for the same cause, so it is dropped and reported. That is the
-stated outcome for a client mutating an object another client just removed: the write is
-refused as `unreachable`, rolled back, and handed to the application with its prior values.
-See design 043.
-
-### A link carries frames, and a resynchronization moves the document
-
-A channel is four functions and carries frames, not bytes; encoding is what an adapter does
-when its transport needs bytes. A frame names its topic by a number agreed at the join and
-states the sequence of its first commit, so one link carries many documents and a hole is
-caught where it happens. When a client needs the whole document it is sent one commit of
-adds and applies the difference against what it holds, so the document an application is
-holding is never swapped for another one. See designs 041, 042 and 044.
-
-### A commit closes with the mutation, or with the atomic block
-
-One mutation is one commit, and `atomic(fn)` makes everything inside it one commit. A block
-that throws rolls back and emits nothing. See design 015.
-
-### The inverse is captured where the prior value is free
-
-Core captures prior values as it applies a change, in both directions, and every change it
-delivers can build the commit that undoes it. Nothing about the wire changes. See decision
-016.
-
-### A scope is a prefix of the path a delta names
-
-A listener narrows what it sees with `path`, `ignore` and `shallow` on an observer chain, and
-a delta is in scope when the path from the observer's base to the delta starts with the
-scope's keys. A scoped watcher sees the deltas in its scope, not the whole commit. See
-design 017.
-
-### Scopes and values are two surfaces of one chain
-
-A scope is about a place in a document and its `watch` delivers commits. A derived value is
-about a value: `map` and `all` produce one, its `watch` delivers the value, and both surfaces
-carry the same combinators. A derived value is memoized while observed; while unobserved it
-holds no subscription and its cache is trusted only while a global write clock has not moved.
-Settling is two-phase, marks then one flush behind the commit's own deliveries, so a value
-combining two branches never computes against half a commit. See design 023 and its dated
-revision.
-
-### Cells are state outside the document
-
-`mutable`, `immutable`, `timer` and `fromEvent` carry the value surface with no deltas, no
-commits and no place on any wire, and a cell cannot be attached into a document: the write is
-refused. Which tab is open is a cell; the document is the document. Rate limiting (`throttle`,
-`wait`) exists only on the value surface, so a commit stream cannot lose a commit to a
-limiter by construction. See designs 024 and 026.
-
-### A scope step can be a wildcard
-
-`skip(count)` and `tree(key)` are steps in the ordinary scope grammar, so `path`, `ignore`
-and `shallow` compose with them. A wildcard scope names many places and has no single value:
-`get()` is undefined and `set()` throws. Only wildcard scopes pay for the backtracking
-matcher. See design 025.
-
-### Writing through a derived value is declared, never inferred
-
-`map` is read-only; `setter` declares the write half; `selector` writes back by its own
-meaning; `isImmutable` answers before an input renders, and immutability propagates through
-derivation. One caching layer exists, at the transform, and deduplication happens there once.
-See designs 027 and 028.
-
-### A snapshot rebuilds into a document
-
-`fromSnapshot` inverts `snapshot`: same ids, kinds, slots, positions and aliases, validated
-before building. It holds what the document says, not the detached observables the original
-still indexes, so replaying resurrection history is the commit log's job. See design 029.
-
-### The delivery plumbing is not public, and there are no view-layer adapters
-
-The listener registry, walkers and dispatch queue stay internal; the public seams are the two
-surfaces and `apply`. The stack ships one view binding, `dom`. See designs 030 and 031.
-
-### A policy is patterns over paths, and it is data
-
-A rule names a pattern over the attach path a delta lands on, plus optionally the roles and
-the delta types it covers. A step is a literal, `ANY` for one step, `SELF` for the actor's own
-id, or `REST` for the remainder. Every step is a string or a plain object, so a policy
-survives a round trip through JSON. See design 032.
-
-### Nothing is granted by default, and a deny wins
-
-A delta is authorized when an allow matches it and no deny does, whatever order the rules are
-written in. `effect` is required, an empty policy authorizes nothing, and allowing everything
-is a rule that has to be typed. A deny is about the path rather than about who, so a field
-some actors may write is granted to them and not covered by a wider grant. See design 033.
-
-### The authority index is resident and holds attach edges only
-
-One parent and one slot per observable, folded from the commits the document accepted, after
-each is applied. Rebuilding per commit is four orders of magnitude more expensive, and cached
-paths lose by the same margin whenever a subtree moves. `schema` therefore depends on `codec`
-and nothing else, and never touches a live document. See design 034.
-
-### The validator decides authority and reachability, and the applier decides the rest
-
-Three refusals: `unauthorized`, `unreachable`, `multiple-attach`. Whether a slot is free or
-taken needs the document's values, which an authority index deliberately does not hold, so an
-authorized commit still goes through the applier and a refusal from either refuses the commit.
-The two shared reason tokens are the applier's own words. See design 035.
-
-### An observable nothing attaches has no owner
-
-Authority is the chain of attach edges and nothing else, including nothing about where
-something used to be. So detaching is not deleting: an orphan may be adopted by any actor who
-may write the slot they attach it to. See design 036.
-
-### `store` persists observable rows, and the delta stream does not stop at persistence
-
-A document is one row per observable, and a commit writes only the rows its deltas name.
-Nothing writes a whole document. Beside the rows is a commit tail, bounded by what `sync`'s
-resume window needs, derived rather than authoritative. R1 measured the alternative at 648
-times the write latency for the same edit, and found that a document-sized write turns
-concurrent edits that touch nothing in common into lost updates.
-
-An observable that loses its attach edge keeps its row and nulls its parent, so re-attaching
-returns it whole. Collecting is a sweep the host runs on a policy. See designs 047 and 048.
-
-A query names a declared path and an undeclared one is refused rather than scanned, so one
-query means one thing on every driver. R2 measured that a declaration compiles to a real index
-even on IndexedDB, which is the driver that cannot build one lazily. See design 049.
+| Concept | Decided, in one line | Design notes |
+|---|---|---|
+| The unit that crosses a boundary | The commit. Every delta is validated, then applied, then listeners hear it once. Whether a local listener sees a torn state is a matter of `atomic`, not of which subscription it used | 001 |
+| Merge rules | None. Coalescing keyed by slot is lossless, and the producer keeps a commit minimal | 003 |
+| Identity and credentials | `core` mints object identity, `server` mints credentials, in different modules with different call sites | 005 |
+| The observable array | One implementation, addressed by ordered positions that carry randomness, and no identity option | 014, 040 |
+| Cross-tree bridging | A supported seam, not a reach-in: apply with caller-supplied refs, insert at a position, echo suppression. Not built yet | none |
+| Authority | None in the library. Who may write where is the application's rule, written into a link's `accept` or a node's own code | 053, 057; 009 superseded |
+| Attach edges and aliases | One attach edge decides where an observable lives; every other reference is an alias that grants and revokes nothing. On the wire as the edge kind | 010 |
+| A refused commit | Reported at both ends of the link with its commit and undo; the link picks no winner, and `reconcile` is how an end yields. A refusal never closes the link | 054; 011, 012, 043 superseded |
+| A link | Two equal ends running one protocol. A channel is four functions and carries frames; each end numbers its own topics; a state moves the document rather than replacing it; nothing resumes | 053, 041, 042, 044; 045 superseded |
+| Several networks on one document | Every link, store and watcher on a document hears what the others land, so a link over a socket and a store on one document work together and a node forwards between two links | 055 |
+| Echo suppression | The first delivery inside an apply is the applied commit; everything after it was made here | 046 |
+| A commit closes | With the mutation, or with the `atomic` block. A block that throws rolls back and emits nothing | 015 |
+| The inverse | Captured where the prior value is free, in core, in both directions. Nothing on the wire | 016 |
+| Scopes | A scope is a prefix of the path a delta names; a step can be a wildcard; an effect follows the depth of its scope | 017, 018, 025 |
+| Scopes and values | Two surfaces of one chain: a scope's `watch` delivers commits, a derived value's delivers the value; memoized while observed, two-phase settling | 023 |
+| Cells | State outside the document: `mutable`, `immutable`, `timer`, `fromEvent`. Not attachable; rate limiting exists only here | 024, 026 |
+| Writing through a derived value | Declared, never inferred: `map` is read-only, `setter` declares the write half, one caching layer at the transform | 027, 028 |
+| A snapshot | `fromSnapshot` inverts `snapshot`, holding what the document says and not what it still indexes | 029 |
+| What is public | The delivery plumbing is not; the stack ships one view binding | 030, 031 |
+| Style | Terse helper aliases dropped; trailing-underscore properties kept and mangled; a map carries its methods | 019, 020, 022 |
+| The shape of a document | `shape`, `list` and `table` for the three kinds, any Standard Schema validator at a leaf; `check` answers whether a commit keeps the shape, `guard` runs it before every commit lands | 057; 032 to 039 superseded |
+| Refusing a commit | `intercept` runs before a commit closes, after every delta applied and before any delivery; a refusal rolls back and throws with its reasons, from any source alike | 058 |
+| Persistence | One row per observable and a bounded, derived commit tail; a detached observable keeps its row; a dangling alias is dropped when a document opens; a tail that cannot answer says so; nothing recorded about who wrote a commit | 047, 048, 050, 051, 056 |
+| Queries | A query names a declared path and an undeclared one is refused rather than scanned | 049 |
+| Giving up | "In a row" is measured in time, not in commits taken | 052 |
 
 ---
 
@@ -421,13 +250,13 @@ onboarding rule.
 |---|---|---|
 | `auth` | integrator | Sessions and identity are state, but a vertical slice crosses both planes |
 | `files` | split | A `store` driver plus a `ui` component. Two packages, because of the plane rule |
-| `agent` | above `schema` | A language model writes state, and `schema` is what makes that safe |
+| `agent` | above `schema` | A language model writes state, and `schema` is what keeps the document well formed while it does |
 | `crdt` | data plane, beside `sync` | An alternative merge strategy behind the same commit interface |
 | `native` | client plane, beside `dom` | A different render target, parallel to the DOM binding |
 
 The agentic goal is not a package. It is what `core`, `schema`, `store` and `sandbox` are
-for. `schema` is the piece that makes an agent a safe writer instead of a dangerous one,
-which is why it sits low in the stack rather than being bolted on at the application layer.
+for. `schema` keeps what an agent writes well formed, and what an agent may write at all is
+the application's rule, checked where the application chooses.
 
 ---
 
@@ -440,15 +269,15 @@ about what a proof is. This is what each one has to demonstrate.
 |---|---|
 | codec | a stored commit log validates: every frame re-encodes to the bytes it was read from, and every single byte of damage to it is either refused or accepted as the one spelling of what it decoded to |
 | core | a headless app model with cross-field invariants: mutation bursts, commit atomicity observed through watch, undo and redo by commit inversion |
-| schema | a multi-actor scenario: the authorized commit is applied, the unauthorized one is rejected, through the real seam |
-| sync | two live trees over a real channel converge under concurrent edits; the same protocol runs over a second channel (postMessage or in-process) unchanged |
+| schema | a real document under a guard: the good change applied, the bad local write thrown and rolled back, the bad arriving commit refused before anything lands, a subtree checked at the path it lands on, and `check` used alone at a boundary |
+| sync | two live documents over a real channel converge under concurrent edits; the same protocol runs over a second channel unchanged; a conflict is left swapped and then resolved by a handler that yields; a chain of three converges; a document shared over a link and persisted by a store at once |
 | store | write, kill the process, reopen, verify; find-or-create under concurrent open |
 | modules | an app assembled from modules through both loaders (filesystem and bundle map), with dependency order and injection proven |
 | sandbox | a hostile module runs the escape suite and stays contained, while a benign module does real work through granted capabilities |
 | dom | mount and hydrate a page with a dynamic list; edits assert exact DOM operations against the mock |
 | ui | an interactive page composed from components, driven and asserted against the mock (plus a manual browser page, outside CI) |
 | icons | a page rendering through the driver interface with the iconify driver |
-| server | a full-stack app: an authenticated client syncs state through schema to store and back |
+| server | a full-stack app: an authenticated connection syncs state through the application's rules to store and back |
 | jobs | a scheduled job runs, persists an effect, and survives a restart |
 | ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM |
 | build | the transforms build a real example app; assert stripping is verified in the output |
@@ -464,7 +293,7 @@ defined in `AGENTS.md`.
 1. `spec` + `codec` + `testing`. Nothing else compiles without these, and the fixture suite
    has to exist before there is a second consumer of the format.
 2. `core`.
-3. `schema`. The genuinely new library. Mutation authority is the piece nothing else has.
+3. `schema`. The shape a document must keep, checked before a commit lands.
 4. `store` + `sync`.
 5. `modules` + `sandbox`.
 6. `dom` + `build`, with hydration and route data designed in rather than bolted on.
@@ -514,8 +343,8 @@ Architectural consequences:
   storage.
 - **`sandbox` is its own package.** An opaque-origin frame on a client, a permission-limited
   child process on a server, both bridged by the same protocol.
-- **Capability grants belong with `schema`.** "May this actor write this path" and "may this
-  module reach this host" are the same authority question at different grains.
+- **Capability grants are the application's rule, and later `sandbox`'s.** `schema` checks
+  what a document may hold, never who may change it.
 
 ---
 
@@ -683,13 +512,3 @@ failure lands somewhere recoverable.
 All packages version in lockstep.
 
 ---
-
-## Gaps with no owner yet
-
-Each needs a home before the build order past phase 4 is final.
-
-- **Stored data migration.** `spec/CHANGELOG.md` versions the wire format. Nothing yet owns
-  the evolution of data already stored, and upcasting old records is the classically hard part
-  of any log-shaped design.
-- **Quotas, secrets, and resident processes.** `modules` owns discovery and injection only.
-  A platform running other people's code needs all three and none has an owner.
