@@ -74,6 +74,13 @@ export interface Host {
 	close(): void;
 	/** How many connections are open. */
 	readonly connections: number;
+	/**
+	 * How many documents this host is holding. A host holds one while anything is joined to it
+	 * and while any remembered session could still resume it, and lets it go after that. A
+	 * `resolve` that opens a document per name would otherwise grow for as long as the host
+	 * runs, so this is the number that says it does not.
+	 */
+	readonly documents: number;
 }
 
 /** A document being served, shared by every connection that reached it. */
@@ -191,11 +198,31 @@ export const serve = (resolve: Resolve, options: HostOptions = {}): Host => {
 		}
 	};
 
+	// One rule, written the same way twice. Key order is an accident of how the object was
+	// built, so it is sorted out. Array order is kept, because a `path` is a sequence and its
+	// order is its meaning.
+	const ruleText = (value: unknown): string => {
+		if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+		if (Array.isArray(value)) return `[${value.map(ruleText).join(',')}]`;
+		const entries = Object.entries(value as Record<string, unknown>).sort(
+			([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
+		);
+		return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${ruleText(v)}`).join(',')}}`;
+	};
+
+	// What a policy says, rather than how it was spelled. The rules themselves are sorted
+	// because a deny wins whatever order the rules are in (design 033), so two orderings are
+	// one authority and refusing the second as a mismatch would be refusing a document to a
+	// client whose rules are identical. Local and small on purpose: the alternative was a
+	// runtime dependency on a package that exists for tests.
+	const authorityOf = (policy: Topic['policy']): string =>
+		policy === 'trusted' ? 'trusted' : `[${policy.map(ruleText).sort().join(',')}]`;
+
 	const liveFor = (topic: Topic): Live => {
 		const key = idToText(idOf(topic.document));
 		// A policy is plain data, so this is what it says rather than which array it is, and a
 		// resolve that builds its rules fresh every call still matches itself.
-		const authority = JSON.stringify(topic.policy);
+		const authority = authorityOf(topic.policy);
 		const known = documents.get(key);
 		if (known !== undefined) {
 			// Two names for one document is fine and two authorities over it is not: whichever
@@ -310,13 +337,22 @@ export const serve = (resolve: Resolve, options: HostOptions = {}): Host => {
 				refuseJoin(topic, 'topic-in-use', `${topic} already names ${existing.name} on this connection`);
 				return;
 			}
+			// Unhooking the old member can make it the last thing holding that document, and the
+			// rejoin that follows may not put it back: `resolve` can turn it away, or hand back
+			// a different document under the same name. Either way nothing else would ever let
+			// go of the old one, so it is released on exactly those paths and kept on the
+			// ordinary rejoin, where letting go would throw away the window that makes the
+			// reconnect cheap.
+			let orphaned: Live | undefined;
 			if (existing !== undefined) {
 				existing.live.members.delete(existing);
 				conn.members.delete(topic);
+				orphaned = existing.live;
 			}
 
 			const resolved = resolve(name, actor);
 			if (resolved === undefined) {
+				if (orphaned !== undefined) release(orphaned);
 				refuseJoin(topic, 'no-topic', `nothing is served as ${name}`);
 				return;
 			}
@@ -327,11 +363,13 @@ export const serve = (resolve: Resolve, options: HostOptions = {}): Host => {
 			} catch (error) {
 				// Whatever is wrong with what `resolve` handed back, the answer is to turn this
 				// join away. The link carries on for whatever else is on it (design 012).
+				if (orphaned !== undefined) release(orphaned);
 				const reason = (error as { reason?: string }).reason;
 				if (reason === undefined) throw error;
 				refuseJoin(topic, reason, (error as Error).message);
 				return;
 			}
+			if (orphaned !== undefined && orphaned !== live) release(orphaned);
 			const prior = resume === undefined ? undefined : remembered.get(idToText(resume));
 			// A resume only counts when this host is the one that handed out the session and the
 			// actor is the same. Anything else is a client that has to be sent the document.
@@ -406,7 +444,18 @@ export const serve = (resolve: Resolve, options: HostOptions = {}): Host => {
 				member.next = seq + 1;
 
 				if (live.index !== undefined && live.policy !== 'trusted') {
-					const verdict = validate(commit, { index: live.index, policy: live.policy, actor });
+					// The validator reads a commit that arrived from somewhere else, so a malformed
+					// one makes it throw rather than return a verdict. Outside this try that throw
+					// reached the channel and ended the link, while the same commit on a trusted
+					// topic was refused and the link stayed up: two authority modes disagreeing
+					// about one input, against `spec/replication.md` 7.
+					let verdict;
+					try {
+						verdict = validate(commit, { index: live.index, policy: live.policy, actor });
+					} catch (error) {
+						sendTo(member, { kind: 'refuse', topic: member.topic, seq, reasons: reasonsOf(error) });
+						continue;
+					}
 					if (!verdict.ok) {
 						sendTo(member, {
 							kind: 'refuse', topic: member.topic, seq,
@@ -489,9 +538,18 @@ export const serve = (resolve: Resolve, options: HostOptions = {}): Host => {
 		accept,
 		close: () => {
 			for (const conn of [...conns]) conn.channel.close();
+			// Nothing can resume into a closed host, so the remembered sessions stop being a
+			// reason to hold a document. Without this, `close` left every document it ever
+			// served watched forever: a mirror per editing session is the shipped example, and
+			// each stopped one went on paying for every write to the source.
+			remembered.clear();
+			for (const live of [...documents.values()]) release(live);
 		},
 		get connections() {
 			return conns.size;
+		},
+		get documents() {
+			return documents.size;
 		},
 	};
 };

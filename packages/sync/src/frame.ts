@@ -234,9 +234,12 @@ export const encodeFrame = (frame: Frame): Uint8Array => {
  *
  * Returns: the frame.
  *
- * Throws a `CodecError` whose `reason` is `bad-frame` when the bytes are not one, naming the
- * field that was wrong. A frame that does not decode is a fault and may close a link; a
- * commit that is refused never does (design 012).
+ * Throws a `CodecError` when the bytes are not a frame, naming the field that was wrong. The
+ * `reason` is `bad-frame` for a frame this package can read but does not accept, and whatever
+ * the byte layer says otherwise: `truncated`, `trailing-bytes`, `unsupported-major`,
+ * `invalid-utf8` and the rest. Branch on there being a `CodecError`, not on one reason. A
+ * frame that does not decode is a fault and may close a link; a commit that is refused never
+ * does (design 012).
  *
  * Example:
  *   const frame = decodeFrame(event.data);

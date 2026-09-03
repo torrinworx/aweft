@@ -182,23 +182,52 @@ export const record = (rows: Rows, commit: Commit): Change => {
  *   const { snapshot, dropped } = snapshotOf(rows, root);
  *   const doc = fromSnapshot(snapshot);
  */
-export const snapshotOf = (rows: Rows, root: string): { snapshot: Snapshot; dropped: string[] } => {
-	const observables: Record<string, { kind: ObservableKind; slots: Record<string, SnapshotValue> }> = {};
+/**
+ * Every row the document holds, found by walking attach edges down from the root.
+ *
+ * Params:
+ *   rows: the document's rows
+ *   root: the id of the root
+ *
+ * Returns: the ids reachable from the root, the root included.
+ *
+ * A row's own parent pointer cannot answer this. Detaching a branch takes the edge off the
+ * top of it and leaves every descendant pointing at a parent that is itself unreachable, so
+ * asking each row about its parent finds the top of a dead subtree and nothing under it.
+ * There is one walk, and both what the document holds and what it has stopped holding are
+ * read off it.
+ *
+ * Example:
+ *   const held = reachable(rows, rootId);
+ */
+export const reachable = (rows: Rows, root: string): Set<string> => {
+	const held = new Set<string>();
 	const stack = [root];
 
-	// Two passes: the attach edges decide what the document holds, and only then can an alias
-	// be judged, because an alias may name something reached later in the same walk.
 	while (stack.length > 0) {
 		const id = stack.pop()!;
-		if (observables[id] !== undefined) continue;
+		if (held.has(id)) continue;
 		const row = rows.get(id);
 		if (row === undefined) continue;
 
-		observables[id] = { kind: row.kind, slots: { ...row.slots } };
+		held.add(id);
 		for (const value of Object.values(row.slots)) {
 			if (value === null || typeof value !== 'object' || !('ref' in value)) continue;
 			if (value.edge === 'attach') stack.push(value.ref);
 		}
+	}
+
+	return held;
+};
+
+export const snapshotOf = (rows: Rows, root: string): { snapshot: Snapshot; dropped: string[] } => {
+	const observables: Record<string, { kind: ObservableKind; slots: Record<string, SnapshotValue> }> = {};
+
+	// An alias can only be judged once every attach edge has been followed, because it may
+	// name something the walk reaches later.
+	for (const id of reachable(rows, root)) {
+		const row = rows.get(id)!;
+		observables[id] = { kind: row.kind, slots: { ...row.slots } };
 	}
 
 	const dropped: string[] = [];
@@ -215,8 +244,7 @@ export const snapshotOf = (rows: Rows, root: string): { snapshot: Snapshot; drop
 	return { snapshot: { root, observables }, dropped };
 };
 
-/** Every id a document holds, whether or not anything attaches it. */
-export const idsIn = (rows: Rows): string[] => [...rows.keys()];
+
 
 /** The ids a commit attaches, so a caller can tell whether the document still holds them. */
 export const attachedBy = (commit: Commit): string[] => {

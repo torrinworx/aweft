@@ -12,7 +12,7 @@ import { apply, createArray, createMap, createObject, fromSnapshot, idOf, observ
 import { idFromText } from '@aweftjs/codec';
 
 import type { Driver, Found } from './driver.ts';
-import { attachedBy, record, rowsFor, rowsFrom, snapshotOf, type Rows } from './rows.ts';
+import { attachedBy, reachable, record, rowsFor, rowsFrom, snapshotOf, type Rows } from './rows.ts';
 import {
 	checkDeclaration, checkQuery, holds, projectionOf,
 	type Declaration, type Indexable, type Query,
@@ -48,6 +48,8 @@ interface State {
 	projected: boolean;
 	droppedAliases: string[];
 	live: Set<string>;
+	/** What `sweep` freed. The row it deleted was the only thing that knew. */
+	swept: Set<string>;
 	seq: number;
 	actor: string;
 	stop: () => void;
@@ -62,23 +64,6 @@ const rootOf = (id: Uint8Array | undefined, kind: ObservableKind): object => {
 	return createMap(undefined, id) as unknown as object;
 };
 
-/**
- * A place that keeps documents.
- *
- * Params:
- *   driver: where the documents go
- *   declare: the paths to index, by the name a query calls each one
- *   actor: who a local write is recorded as, in the history a resuming session reads
- *
- * Returns: a store. Every document it opens is cached by name, so opening one twice hands
- * back the same live observable and the same handle, reference counted.
- *
- * Example:
- *   const store = createStore({ driver: memoryDriver() });
- *   const board = await store.open('board:42');
- *   (board.root as Record<string, unknown>).title = 'a board';
- *   await store.settled(board);
- */
 /**
  * A place that keeps documents.
  *
@@ -273,6 +258,23 @@ export interface Store {
 	head(doc: string): Promise<number>;
 }
 
+/**
+ * A place that keeps documents.
+ *
+ * Params:
+ *   driver: where the documents go
+ *   declare: the paths to index, by the name a query calls each one
+ *   actor: who a local write is recorded as, in the history a resuming session reads
+ *
+ * Returns: a store. Every document it opens is cached by name, so opening one twice hands
+ * back the same live observable and the same handle, reference counted.
+ *
+ * Example:
+ *   const store = createStore({ driver: memoryDriver() });
+ *   const board = await store.open('board:42');
+ *   (board.root as Record<string, unknown>).title = 'a board';
+ *   await store.settled(board);
+ */
 export const createStore = (
 	{ driver, declare = {}, actor = 'local' }:
 	{ driver: Driver; declare?: Declaration; actor?: string },
@@ -329,6 +331,14 @@ export const createStore = (
 
 	/** Persist in the order the commits happened, and hold the first failure. */
 	const enqueue = (state: State, commit: Commit): void => {
+		// A local re-attach of a swept observable is the same loss as the remote one, one layer
+		// down: the commit names the observable and not its contents, so the row comes back
+		// empty. `receive` can refuse before applying; a local write has already happened, so
+		// the only honest answer is the latch every unpersistable write takes.
+		for (const id of attachedBy(commit)) {
+			if (state.swept.has(id) && state.failure === null) state.failure = sweptAway(id);
+		}
+
 		// Read the actor now, not when the write runs: writing is deferred by a turn, and by
 		// then a `receive` has already put the local actor back.
 		const actor = state.actor;
@@ -348,6 +358,16 @@ export const createStore = (
 		for (const id of attachedBy(commit)) state.live.add(id);
 		enqueue(state, commit);
 	};
+
+	const truncatedPast = (doc: string, seq: number, gone: number): Error => Object.assign(
+		new Error(`truncated: ${doc} no longer holds the commits after ${seq}, the tail starts past ${gone}; take the document instead`),
+		{ reason: 'truncated' },
+	);
+
+	const sweptAway = (id: string): Error => Object.assign(
+		new Error(`detached-elsewhere: ${id} was swept, so the row holding what it contained is gone and re-attaching it would store an empty one`),
+		{ reason: 'detached-elsewhere' },
+	);
 
 	const raise = (state: State): void => {
 		if (state.failure === null) return;
@@ -410,6 +430,7 @@ export const createStore = (
 			projected: false,
 			droppedAliases: built?.dropped ?? [],
 			live: new Set(built === null ? [stored.root] : Object.keys(built.snapshot.observables)),
+			swept: new Set<string>(),
 			seq: await driver.head(doc),
 			actor,
 			stop: () => {},
@@ -441,6 +462,7 @@ export const createStore = (
 		raise(state);
 
 		for (const id of attachedBy(commit)) {
+			if (state.swept.has(id)) throw sweptAway(id);
 			if (state.live.has(id)) continue;
 			if (!state.rows.has(id)) continue;
 			throw Object.assign(
@@ -467,6 +489,18 @@ export const createStore = (
 
 	const since = async (doc: string, seq: number): Promise<Held[]> => {
 		const entries = await driver.since(doc, seq);
+
+		// Design 051. An empty result reads exactly like "you are current", so a caller that
+		// missed everything is told it missed nothing. The partial case was already detectable
+		// and the whole case was not, which is the shape that loses the most.
+		const first = entries[0];
+		if (first === undefined) {
+			const head = await driver.head(doc);
+			if (seq < head) throw truncatedPast(doc, seq, head);
+		} else if (first.seq !== seq + 1) {
+			throw truncatedPast(doc, seq, first.seq - 1);
+		}
+
 		return entries.map((e) => ({ seq: e.seq, actor: e.actor, commit: decodeCommit(e.body) }));
 	};
 
@@ -477,8 +511,13 @@ export const createStore = (
 
 	const orphans = (handle: Handle): string[] => {
 		const state = stateOf(handle);
+		// Reachability, not parent pointers. Detaching a branch takes the edge off the top and
+		// leaves everything under it pointing at a parent that is itself unreachable, so the
+		// parent test finds one row of a dead subtree and no public call could ever free the
+		// rest.
+		const held = reachable(state.rows, state.rootId);
 		const out: string[] = [];
-		for (const [id, row] of state.rows) if (row.parent === null && id !== state.rootId) out.push(id);
+		for (const id of state.rows.keys()) if (!held.has(id)) out.push(id);
 		return out;
 	};
 
@@ -520,7 +559,10 @@ export const createStore = (
 
 		const gone = orphans(handle);
 		if (gone.length === 0) return 0;
-		for (const id of gone) state.rows.delete(id);
+		for (const id of gone) {
+			state.rows.delete(id);
+			state.swept.add(id);
+		}
 		await driver.forget(state.doc, gone);
 		return gone.length;
 	};
@@ -531,6 +573,13 @@ export const createStore = (
 		if (state === undefined) return;
 		state.refs--;
 		if (state.refs > 0) return;
+
+		// Drain with the observer still on. Stopping first loses any write made while this
+		// await runs: the handle is still open, `settled` reports success, and the change is
+		// nowhere in the driver.
+		await state.queue;
+		if (state.refs > 0) return;
+
 		state.stop();
 		await state.queue;
 		// A reopen can land inside that await and take a reference back. Deleting anyway would
@@ -549,9 +598,17 @@ export const createStore = (
 
 	/** Close every open document and release the driver. */
 	const stop = async (): Promise<void> => {
-		for (const state of [...open_.values()]) { state.stop(); await state.queue; }
+		let failed: Error | null = null;
+		for (const state of [...open_.values()]) {
+			state.stop();
+			await state.queue;
+			failed ??= state.failure;
+		}
 		open_.clear();
 		await driver.close();
+		// The last moment a caller can hear that a write failed. `close` raises it; going quiet
+		// here means the news arrives when nothing can be done about it, which is never.
+		if (failed !== null) throw failed;
 	};
 
 	return {

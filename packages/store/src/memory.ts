@@ -11,7 +11,7 @@ import type { ObservableKind } from '@aweftjs/codec';
 import type { Driver, Entry, Found, Lookup, Patch, Row, Write } from './driver.ts';
 import { compare, holds, type Indexable } from './query.ts';
 
-interface Held {
+interface Stored {
 	root: string;
 	rootKind: ObservableKind;
 	rows: Map<string, Row>;
@@ -20,15 +20,6 @@ interface Held {
 	fields: Record<string, Indexable>;
 }
 
-/**
- * A driver that keeps documents in memory.
- *
- * Returns: a `Driver`. Nothing is shared between two calls, so two stores over one of these
- * are two separate places.
- *
- * Example:
- *   const store = createStore({ driver: memoryDriver() });
- */
 /** Fold one observable's changes into the row held for it, creating the row when it is new. */
 const merge = (rows: Map<string, Row>, patch: Patch): void => {
 	const held = rows.get(patch.id);
@@ -43,8 +34,17 @@ const merge = (rows: Map<string, Row>, patch: Patch): void => {
 	rows.set(patch.id, { id: patch.id, kind: patch.kind, parent: edge.parent, slot: edge.slot, slots });
 };
 
+/**
+ * A driver that keeps documents in memory.
+ *
+ * Returns: a `Driver`. Nothing is shared between two calls, so two stores over one of these
+ * are two separate places.
+ *
+ * Example:
+ *   const store = createStore({ driver: memoryDriver() });
+ */
 export const memoryDriver = (): Driver => {
-	const docs = new Map<string, Held>();
+	const docs = new Map<string, Stored>();
 	// One index per declared field, exactly as the other drivers build one. It is a map rather
 	// than a scan so that this driver has the same complexity class as the others: a memory
 	// driver that scanned would let a consumer write a query that only it can afford.

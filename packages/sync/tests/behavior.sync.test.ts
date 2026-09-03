@@ -562,3 +562,88 @@ test('a replica that asks for the document renumbers what it still holds', async
 	same(mirror, document, 'in step');
 	session.close();
 });
+
+// Design 043 says what is sent is the pending list in sequence order, and nothing checked
+// it: deleting the sort left every test green while a client diverged for good. The list order
+// and the sequence order only come apart on the rebase path, so the case needs all of it. A
+// link that drops, commits made with nowhere to go, a rejoin that replays the whole document,
+// and a watcher on this side that answers the arriving title with a write of its own. That
+// last commit carries the newest number and lands at the front of the list.
+test('pending commits go out in sequence order, not in the order the list holds them', async () => {
+	const document = createObject<Record<string, unknown>>({ title: 't0', stamp: '', a: '', b: '' });
+	// replay 0 forces the whole document on every rejoin, which is the path that rebases.
+	const host = serve(() => ({ document, policy: 'trusted' }), { replay: 0 });
+
+	let link: { close(): void } | undefined;
+	const session = connect(() => {
+		const [there, here] = inProcess();
+		link = there;
+		host.accept(there, { id: 'a' });
+		return here;
+	}, { retry: () => false });
+
+	const mine = createObject<Record<string, unknown>>(undefined, idOf(document));
+	observer(mine).path('title').watch(() => { mine.stamp = `saw ${String(mine.title)}`; });
+
+	const faults: string[] = [];
+	const replica = session.join<Record<string, unknown>>('doc', {
+		document: mine, fault: (reason) => faults.push(reason),
+	});
+	await replica.ready;
+
+	// Two commits the host decides, so `accepted` comes back partway through the list.
+	mine.a = 'one';
+	await settle(2);
+	mine.b = 'two';
+	await settle();
+
+	// The link drops, two more commits are made with nowhere to go, and the host moves on.
+	link!.close();
+	await settle(2);
+	mine.a = 'three';
+	mine.b = 'four';
+	document.title = 't1';
+	await settle();
+
+	session.reconnect();
+	await settle(40);
+
+	assert.deepEqual(faults, [], 'the host never saw a frame out of order');
+	assert.equal(replica.state.get(), 'live');
+	assert.equal(replica.pending.get(), 0, 'nothing is stuck');
+	same(document, mine, 'and the two documents agree');
+
+	session.close();
+	host.close();
+});
+
+// Design 045 says a host lets go of a document once nothing is joined to it and no session
+// can resume it, and nothing checked that either: making `release` a no-op left every test
+// green. A `resolve` that opens a document per name is the shipped shape, so a host that never
+// lets go grows for as long as it runs and keeps watching every document it ever served.
+test('a host lets go of a document nothing is joined to and no session can resume', async () => {
+	const documents = new Map<string, Record<string, unknown>>();
+	const host = serve((name) => {
+		const held = documents.get(name) ?? createObject<Record<string, unknown>>({ name });
+		documents.set(name, held);
+		return { document: held, policy: 'trusted' };
+	}, { sessions: 0 });
+
+	const session = connect(() => {
+		const [there, here] = inProcess();
+		host.accept(there, { id: 'a' });
+		return here;
+	}, { retry: () => false });
+
+	const joined = [];
+	for (let i = 0; i < 12; i++) joined.push(session.join<Record<string, unknown>>(`doc-${i}`));
+	for (const replica of joined) await replica.ready;
+	assert.equal(host.documents, 12, 'each name is held while it is joined');
+
+	for (const replica of joined) replica.leave();
+	await settle();
+	assert.equal(host.documents, 0, 'and let go once nothing is joined and nothing can resume');
+
+	session.close();
+	host.close();
+});

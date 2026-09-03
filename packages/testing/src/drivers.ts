@@ -465,6 +465,121 @@ export const driverChecks = (): DriverCheck[] => [
 		},
 	},
 	{
+		// The one that mattered most: a driver reading an absent `edge` as "no edge" reports
+		// every row as an orphan, so a sweep frees the live document and the next open throws
+		// on a snapshot that names what it does not contain.
+		name: 'a patch with no edge leaves the edge that was stored',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.write(write('a', [row(ROOT), row('x', { v: 1 })], 1));
+				// A second write about the same row that says nothing about where it is attached.
+				await d.write({
+					doc: 'a', root: ROOT, rootKind: 'object', actor: 'a', body: body(2), dropped: [],
+					rows: [{ id: 'x', kind: 'object', set: { v: 2 }, unset: [] }],
+				});
+
+				const held = await d.read('a');
+				assert.ok(held !== null);
+				const x = (held.rows as {
+					id: string; parent: string | null; slot: string | null; slots: Record<string, unknown>;
+				}[]).find((r) => r.id === 'x');
+				assert.deepEqual(x?.slots, { v: 2 }, 'the slot it did name was written');
+				assert.deepEqual(
+					{ parent: x?.parent, slot: x?.slot }, { parent: ROOT, slot: 'x' },
+					'and an absent edge means unchanged, never detached',
+				);
+			} finally { await d.close(); }
+		},
+	},
+	{
+		// A driver that answers 'object' for everything makes every array and map document
+		// unopenable, with a `kind-conflict` from the applier and nothing naming the driver.
+		name: 'the kind of a row is the kind that comes back',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.write({
+					doc: 'a', root: ROOT, rootKind: 'array', actor: 'a', body: body(1), dropped: [],
+					rows: [
+						{ id: ROOT, kind: 'array', set: {}, unset: [] },
+						{ id: 'm', kind: 'map', set: {}, unset: [], edge: { parent: ROOT, slot: 'm' } },
+						{ id: 'o', kind: 'object', set: {}, unset: [], edge: { parent: ROOT, slot: 'o' } },
+					],
+				});
+
+				const held = await d.read('a');
+				assert.ok(held !== null);
+				assert.equal(held.rootKind, 'array');
+				const kinds = Object.fromEntries(
+					(held.rows as { id: string; kind: string }[]).map((r) => [r.id, r.kind]),
+				);
+				assert.deepEqual(kinds, { [ROOT]: 'array', m: 'map', o: 'object' });
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'the rows a query answers with are a copy, not the driver\'s own storage',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare(['weight']);
+				await d.write({ ...write('a', [row(ROOT)], 1), project: { weight: 1 } });
+
+				for (const found of await d.find({ where: { field: 'weight', op: 'eq', value: 1 } })) {
+					(found.fields as Record<string, unknown>).weight = 'stomped';
+				}
+				for (const found of await d.scan(10)) {
+					(found.fields as Record<string, unknown>).weight = 'stomped';
+				}
+
+				const again = await d.find({ where: { field: 'weight', op: 'eq', value: 1 } });
+				assert.deepEqual(again.map((f) => f.fields.weight), [1],
+					'a caller holding a result must not be able to edit the index');
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'a create that loses leaves the winner\'s document exactly as it was',
+		async run(make) {
+			const d = await make();
+			try {
+				assert.equal(await d.create('a', ROOT, 'object'), true);
+				await d.write(write('a', [row(ROOT, { title: 'the winner wrote this' })], 1));
+
+				assert.equal(await d.create('a', 'BBBBBBBBBBBBBBBB', 'object'), false,
+					'the second create loses');
+
+				const held = await d.read('a');
+				assert.ok(held !== null);
+				assert.equal(held.root, ROOT, 'and does not re-root the document');
+				assert.equal(await d.head('a'), 1, 'and does not throw its history away');
+				const rootRow = (held.rows as { id: string; slots: Record<string, unknown> }[])
+					.find((r) => r.id === ROOT);
+				assert.deepEqual(rootRow?.slots, { title: 'the winner wrote this' });
+			} finally { await d.close(); }
+		},
+	},
+	{
+		name: 'a removed document is gone from scan as well as from read',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare(['weight']);
+				await d.write({ ...write('a', [row(ROOT)], 1), project: { weight: 1 } });
+				await d.write({ ...write('b', [row(ROOT)], 1), project: { weight: 2 } });
+
+				await d.remove('a');
+
+				assert.deepEqual((await d.scan(10)).map((f) => f.doc), ['b'],
+					'scan must not list a document that read no longer holds');
+				assert.deepEqual(
+					(await d.find({ where: { field: 'weight', op: 'eq', value: 1 } })).map((f) => f.doc), [],
+				);
+			} finally { await d.close(); }
+		},
+	},
+	{
 		name: 'closing twice is not an error',
 		async run(make) {
 			const d = await make();

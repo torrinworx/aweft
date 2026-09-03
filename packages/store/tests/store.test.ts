@@ -143,7 +143,17 @@ test('truncate bounds the history and leaves the document alone', async () => {
 	assert.equal(await store.head('trunc'), 50);
 
 	await store.truncate('trunc', 10);
-	assert.equal((await store.since('trunc', 0)).length, 10);
+
+	// Design 051: the tail no longer reaches back to 0, so it says so rather than handing
+	// back the ten it kept as though they were everything since.
+	await assert.rejects(
+		() => store.since('trunc', 0),
+		(error: Error & { reason?: string }) => {
+			assert.equal(error.reason, 'truncated');
+			return true;
+		},
+	);
+	assert.equal((await store.since('trunc', 40)).length, 10, 'and asking from the floor works');
 
 	const again = await createStore({ driver }).open('trunc');
 	assert.equal((again.root as Doc).k0, 0);

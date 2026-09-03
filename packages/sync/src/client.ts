@@ -130,6 +130,8 @@ interface Sub {
 	failed: boolean;
 	/** How many times in a row this side has asked for the document without getting anywhere. */
 	resyncs: number;
+	/** When the current run of asks began. Design 052. */
+	resyncsSince: number;
 	/** The undo of the commit that most recently landed, captured while it was landing. */
 	landed: Commit | undefined;
 	readonly state: Derived<ReplicaState>;
@@ -143,6 +145,8 @@ const BACKOFF = (attempt: number): number => Math.min(100 * 2 ** attempt, 30_000
 
 /** How many fruitless requests for the document in a row before this side gives up on a topic. */
 const RESYNC_LIMIT = 5;
+/** How long a run of asks counts as one run. Design 052. */
+const RESYNC_WINDOW_MS = 1000;
 
 /**
  * Open a session to a host.
@@ -403,9 +407,16 @@ export const connect = (
 		// Asking again and again without getting anywhere is a disagreement neither side can
 		// talk its way out of, and asking forever starves the machine rather than reporting it.
 		//
-		// Only taking a commit from the host counts as getting somewhere. An accept does not:
-		// a client that is writing collects accepts whatever else is wrong, and clearing the
-		// count on one would leave a client that writes able to ask forever.
+		// A run of asks, not a tally for the life of the session. Counting between `commits`
+		// frames was wrong: on a topic this client is the only writer of none ever arrives, so
+		// the count only ever went up and a client that resynchronized six times over six hours,
+		// recovering every time, was killed for it. An accept does not clear it either, because
+		// a client that is writing collects accepts whatever else is wrong. Design 052.
+		const now = Date.now();
+		if (now - sub.resyncsSince > RESYNC_WINDOW_MS) {
+			sub.resyncs = 0;
+			sub.resyncsSince = now;
+		}
 		sub.resyncs += 1;
 		if (sub.resyncs > RESYNC_LIMIT) {
 			const message = `${sub.name} asked for the document ${sub.resyncs} times without moving`;
@@ -515,6 +526,7 @@ export const connect = (
 			const sub: Sub = {
 				topic, name, document: opts.document, tracker: undefined, pending: [], nextSeq: 1,
 				have: 0, session: undefined, joined: false, left: false, failed: false, resyncs: 0,
+				resyncsSince: 0,
 				landed: undefined,
 				state: mutable<ReplicaState>('joining'), count: mutable(0),
 				options: opts as JoinOptions<object>, settle: undefined, fail: undefined,
