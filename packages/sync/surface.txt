@@ -1,3 +1,5 @@
+type Answerer: type Answerer = (name: string, args: unknown, progress: (value: unknown) => void) => unknown;
+type AskOptions: interface AskOptions { readonly progress?: ((value: unknown) => void) | undefined; readonly timeout?: number | undefined; }
 type Channel: interface Channel { send(frame: Frame): void; receive(fn: (frame: Frame) => void): () => void; closed(fn: () => void): () => void; close(): void; }
 type Commit: interface Commit { readonly deltas: readonly Delta[]; readonly tag?: Uint8Array; } (from @aweftjs/codec)
 type CommitsFrame: interface CommitsFrame { readonly kind: 'commits'; readonly topic: number; readonly first: number; readonly commits: readonly Commit[]; }
@@ -10,10 +12,12 @@ type OpenFrame: interface OpenFrame { readonly kind: 'open'; readonly topic: num
 type PortLike: interface PortLike { postMessage(value: unknown): void; addEventListener(type: 'message' | 'messageerror', fn: (event: { data: unknown; }) => void): void; start?(): void; close(): void; }
 type Refused: interface Refused { readonly mine: boolean; readonly seq: number; readonly reasons: readonly WireReason[]; readonly commit?: Commit; readonly undo?: Commit; }
 type RefusedFrame: interface RefusedFrame { readonly kind: 'refused'; readonly topic: number; readonly seq: number; readonly reasons: readonly WireReason[]; }
+type RequestError: interface RequestError extends Error { readonly reason: string; readonly reasons?: readonly WireReason[]; }
+type Requests: interface Requests { ask(name: string, args?: unknown, options?: AskOptions): Promise<unknown>; answer(fn: Answerer): () => void; stop(): void; }
 type RootRef: interface RootRef { readonly id: Uint8Array; readonly kind: ObservableKind; }
 type ShareHandlers: interface ShareHandlers { readonly accept?: ((commit: Commit) => readonly WireReason[]) | undefined; readonly refused?: ((report: Refused) => void) | undefined; readonly fault?: ((reason: string, message: string) => void) | undefined; }
 type Shared: interface Shared<T extends object> { readonly document: T | undefined; readonly ready: Promise<T>; resync(): void; stop(): void; }
-type SocketLike: interface SocketLike { binaryType: string; readyState: number; send(data: Uint8Array): void; close(): void; addEventListener(type: 'open' | 'message' | 'close' | 'error', fn: (event: { data?: unknown; }) => void): void; }
+type SocketLike: interface SocketLike { binaryType: string; readyState: number; send(data: Uint8Array | string): void; close(): void; addEventListener(type: 'open' | 'message' | 'close' | 'error', fn: (event: { data?: unknown; }) => void): void; }
 type StateFrame: interface StateFrame { readonly kind: 'state'; readonly topic: number; readonly commit?: Commit; }
 type Tracked: interface Tracked { readonly commit: Commit; readonly undo: Commit; readonly landed: boolean; }
 type Tracker: interface Tracker { receive(commit: Commit): void; stop(): void; }
@@ -27,5 +31,6 @@ value fromWebSocket: (socket: SocketLike) => Channel
 value inProcess: () => [Channel, Channel]
 value mirror: (source: object, target?: object | undefined) => { readonly document: object; stop(): void; }
 value reconcile: (observable: unknown, target: Snapshot) => Commit | undefined
+value requests: (socket: SocketLike) => Requests
 value rootFrom: (id: Uint8Array<ArrayBufferLike>, kind: ObservableKind) => object
 value track: (document: unknown, on: (event: Tracked) => void) => Tracker

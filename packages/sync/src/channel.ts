@@ -45,14 +45,16 @@ const wiring = (): Wiring => ({ listeners: new Set(), enders: new Set(), over: f
  *
  * A channel must carry frames in order or close, so bytes that are not a frame are the one
  * thing it cannot carry on through. Throwing out of a delivery would take the process with it
- * instead of the link.
+ * instead of the link. The transport closes too: a socket left open under a dead link is one
+ * the other end goes on writing to, and nothing would ever tell it.
  */
-const take = (state: Wiring, bytes: Uint8Array, read: (b: Uint8Array) => Frame): void => {
+const take = (state: Wiring, bytes: Uint8Array, read: (b: Uint8Array) => Frame, close: () => void): void => {
 	let frame: Frame;
 	try {
 		frame = read(bytes);
 	} catch {
 		end(state);
+		close();
 		return;
 	}
 	deliver(state, frame);
@@ -155,7 +157,7 @@ export const fromMessagePort = (port: PortLike): Channel => {
 
 	port.addEventListener('message', (event) => {
 		if (!(event.data instanceof Uint8Array)) return;
-		queueMicrotask(() => take(state, event.data as Uint8Array, decodeFrame));
+		queueMicrotask(() => take(state, event.data as Uint8Array, decodeFrame, () => port.close()));
 	});
 	port.addEventListener('messageerror', () => { queueMicrotask(() => end(state)); });
 	port.start?.();
@@ -163,11 +165,16 @@ export const fromMessagePort = (port: PortLike): Channel => {
 	return surface(state, (frame) => port.postMessage(encodeFrame(frame)), () => port.close());
 };
 
-/** What this package needs from a `WebSocket`, stated structurally so no DOM types leak in. */
+/**
+ * What this package needs from a `WebSocket`, stated structurally so no DOM types leak in.
+ *
+ * A binary message is a frame and belongs to the channel; a text message is not a frame and
+ * belongs to whatever else shares the socket (`requests`), so `send` takes both.
+ */
 export interface SocketLike {
 	binaryType: string;
 	readyState: number;
-	send(data: Uint8Array): void;
+	send(data: Uint8Array | string): void;
 	close(): void;
 	addEventListener(type: 'open' | 'message' | 'close' | 'error', fn: (event: { data?: unknown }) => void): void;
 }
@@ -212,7 +219,7 @@ export const fromWebSocket = (socket: SocketLike): Channel => {
 		const bytes = data instanceof ArrayBuffer ? new Uint8Array(data)
 			: data instanceof Uint8Array ? data : undefined;
 		if (bytes === undefined) return;
-		queueMicrotask(() => take(state, bytes, decodeFrame));
+		queueMicrotask(() => take(state, bytes, decodeFrame, () => socket.close()));
 	});
 	socket.addEventListener('close', () => { queueMicrotask(() => end(state)); });
 	socket.addEventListener('error', () => { queueMicrotask(() => end(state)); });

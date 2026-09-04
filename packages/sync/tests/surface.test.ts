@@ -24,6 +24,8 @@ test('the entry file exports exactly what was decided', () => {
 		'asCommit', 'reconcile', 'rootFrom',
 		// The link. Both ends run the same one.
 		'connect', 'mirror',
+		// Requests beside the link, on the same socket, as text. Design 073.
+		'requests',
 	];
 
 	assert.deepEqual(Object.keys(sync).sort(), [...decided].sort());

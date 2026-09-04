@@ -17,6 +17,9 @@ export type { Channel, PortLike, SocketLike } from './channel.ts';
 
 export { asCommit, reconcile, rootFrom } from './document.ts';
 
+export { requests } from './requests.ts';
+export type { Answerer, AskOptions, RequestError, Requests } from './requests.ts';
+
 // The type this package's own signatures take and hand back, so a caller can type a
 // replication pipeline without importing below it.
 export type { Commit } from '@aweftjs/codec';

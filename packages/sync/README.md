@@ -162,11 +162,45 @@ watcher; every channel here queues and applies on a microtask.
 commit that moves a document to another's state, and `rootFrom(id, kind)` mints an empty root
 that a commit about that document can reach.
 
+## Requests beside the link
+
+A link carries commits and nothing else. When one end has to ask the other for something
+that is not state (a report, a search, a job started), `requests(socket)` puts JSON text on
+the same WebSocket the link's binary frames ride, and the two never meet: the socket adapter
+ignores text, `requests` ignores bytes.
+
+```ts
+import { connect, fromWebSocket, requests } from '@aweftjs/sync';
+
+const link = connect(fromWebSocket(socket));      // commits, as binary
+const asks = requests(socket);                    // requests, as text, on the same socket
+
+asks.answer((name, args, progress) => handle(name, args, progress));   // this end answers
+const result = await asks.ask('report/Daily', { day: 'mon' }, {        // and asks
+	progress: (value) => bar.set(value),
+	timeout: 5000,
+});
+```
+
+Both ends may ask and both may answer. Arguments and results are what `JSON.stringify`
+carries, with `undefined` read as `null`; a value it cannot carry is refused as `not-data`.
+An answerer that throws answers with its error's `reason` and `message`, plus its `reasons`
+when it carries a list of them, and `ask` rejects with the same three. `timeout` is yours to
+set; none ships. When the socket closes, every ask still waiting rejects with `closed`. A
+text message that is not a request frame closes the socket, the way bytes that are not a
+frame end the link and close the socket under it. `stop()` stops asking and answering and
+leaves the socket alone. One `requests` per socket: a second throws `duplicate` until the
+first has stopped.
+
+The frames are `{ id, name, args }`, `{ id, result }`, `{ id, progress }` and `{ id, error }`,
+so a client in another language writes them by hand. Design 073.
+
 ## Boundaries
 
 - Nothing about who. The link does not know who made a commit or who may write where; that
   is `accept`, and it is yours.
 - No sessions, no resume. A new channel is a new link.
 - No winner. Two ends that conflict stay in conflict until one yields.
-- No messages. A link carries commits and nothing else; an intent is state in the document.
+- No messages on the link. A link carries commits and nothing else; an intent is state in
+  the document, and a request is `requests`, beside the link and never inside it.
 - No storage. That is `@aweftjs/store`, on the same document, beside the link.

@@ -193,29 +193,33 @@ test('a WebSocket that is closing ends the channel rather than dropping a frame 
 	assert.equal(ended, true);
 });
 
-test('bytes that are not a frame end the link rather than throwing into a delivery', async () => {
+test('bytes that are not a frame end the link, and the transport with it, rather than throwing into a delivery', async () => {
 	for (const build of [
 		() => {
 			const ws = socket();
 			const channel = fromWebSocket(ws as unknown as SocketLike);
-			return { channel, feed: () => ws.fire('message', { data: new Uint8Array([0xff, 0xff]) }) };
+			return { channel, feed: () => ws.fire('message', { data: new Uint8Array([0xff, 0xff]) }), transportClosed: () => ws.readyState === 3 };
 		},
 		() => {
 			const listeners: ((event: { data: unknown }) => void)[] = [];
+			let closed = false;
 			const channel = fromMessagePort({
 				postMessage: () => {},
 				addEventListener: (type, fn) => { if (type === 'message') listeners.push(fn); },
-				close: () => {},
+				close: () => { closed = true; },
 			});
-			return { channel, feed: () => { for (const fn of listeners) fn({ data: new Uint8Array([0xff, 0xff]) }); } };
+			return { channel, feed: () => { for (const fn of listeners) fn({ data: new Uint8Array([0xff, 0xff]) }); }, transportClosed: () => closed };
 		},
 	]) {
-		const { channel, feed } = build();
+		const { channel, feed, transportClosed } = build();
 		let ended = false;
 		channel.closed(() => { ended = true; });
 		feed();
 		await tick();
 		assert.equal(ended, true, 'a frame that will not decode ends the link');
+		// And closes the socket or port under it: a transport left open under a dead link is one
+		// the other end keeps writing to, with nothing to tell it.
+		assert.equal(transportClosed(), true, 'and the transport is closed');
 	}
 });
 
