@@ -1,0 +1,29 @@
+{
+	"name": "@aweftjs/server",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"description": "Connections and requests behind a gate: a listener the application supplies, one socket carrying a sync link and a call channel, and the modules' hooks run for whoever the gate allows.",
+	"exports": {
+		".": "./src/index.ts",
+		"./node": "./src/node.ts"
+	},
+	"scripts": {
+		"test": "node --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/core": "*",
+		"@aweftjs/modules": "*",
+		"@aweftjs/sync": "*",
+		"ws": "^8.21.3"
+	},
+	"devDependencies": {
+		"@aweftjs/testing": "*",
+		"@types/ws": "^8.18.1"
+	},
+	"aweft": {
+		"tier": 6,
+		"branchCoverage": 80
+	}
+}

@@ -1,0 +1,27 @@
+type Accept: type Accept = (socket: SocketLike) => void;
+type Accepting: interface Accepting extends ShareHandlers { readonly accept: (commit: Commit) => readonly WireReason[]; }
+type Connection: interface Connection<C = unknown> { readonly link: GatedLink; readonly request: Request; readonly context: C; close(): void; }
+type Ending: type Ending = (() => unknown) | undefined | void;
+type Gate: interface Gate<C = unknown> { identify(request: Request, peer: Peer): Identified<C> | Promise<Identified<C>>; access(module: Named, context: C): readonly Refusal[] | Promise<readonly Refusal[]>; }
+type GatedLink: interface GatedLink { share<T extends object>(name: string, document: T | undefined, handlers: Accepting): Shared<T>; }
+type Identified: type Identified<C> = { readonly context: C; } | { readonly refused: readonly Refusal[]; };
+type Listener: interface Listener { start(handlers: ListenerHandlers): Promise<void>; stop(): Promise<void>; }
+type ListenerHandlers: interface ListenerHandlers { request(request: Request, peer: Peer): Promise<Response>; socket(request: Request, peer: Peer): Promise<Response | Accept>; }
+type Named: interface Named { readonly name: string; readonly instance: unknown; }
+type Peer: interface Peer { readonly address: string | undefined; }
+type Progress: interface Progress { progress(value: unknown): void; }
+type Refusal: interface Refusal { readonly code: string; readonly message: string; readonly path?: readonly string[]; } (from @aweftjs/core)
+type Route: type Route<C = unknown> = (request: Request, context: C) => Response | Promise<Response>;
+type Server: interface Server { start(): Promise<void>; stop(): Promise<void>; }
+type ServerError: interface ServerError extends Error { readonly reason: string; }
+type ServerHandlers: interface ServerHandlers { readonly failed?: ((name: string, error: unknown) => void) | undefined; }
+type ServerModule: interface ServerModule<C = unknown> { connection?(connection: Connection<C>): Ending | Promise<Ending>; call?(args: unknown, context: C, tools: Progress): unknown; readonly routes?: Readonly<Record<string, Route<C>>>; }
+type ServerOptions: interface ServerOptions { readonly loader: Loader; readonly gate: Gate; readonly listener: Listener; readonly handlers?: ServerHandlers | undefined; }
+value createServer: (options: ServerOptions) => Server
+value open: Gate<Record<string, never>> & Accepting
+./node type GivenServer: interface GivenServer extends NodeSettings { readonly server: HttpServer; readonly port?: undefined; readonly host?: undefined; }
+./node type NodeListener: interface NodeListener extends Listener { readonly port: number | undefined; }
+./node type NodeOptions: type NodeOptions = OwnServer | GivenServer;
+./node type NodeSettings: interface NodeSettings { readonly heartbeatMs?: number | undefined; readonly maxPayload?: number | undefined; readonly forwarded?: boolean | undefined; }
+./node type OwnServer: interface OwnServer extends NodeSettings { readonly port: number; readonly host?: string | undefined; readonly server?: undefined; }
+./node value node: (options: NodeOptions) => NodeListener

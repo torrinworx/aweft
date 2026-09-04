@@ -8,6 +8,8 @@
 		{ "path": "packages/store" },
 		{ "path": "packages/modules" },
 		{ "path": "packages/sandbox" },
+		{ "path": "packages/server" },
+		{ "path": "packages/auth" },
 		{ "path": "packages/testing" }
 	]
 }
