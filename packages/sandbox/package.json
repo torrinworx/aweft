@@ -1,0 +1,29 @@
+{
+	"name": "@aweftjs/sandbox",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"description": "A room for modules the host does not trust: a loader on the far end of a link, fed a module document, props and granted names, and the runners that make the room.",
+	"exports": {
+		".": "./src/index.ts",
+		"./inside": "./src/inside.ts",
+		"./node": "./src/node.ts"
+	},
+	"scripts": {
+		"test": "node --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/core": "*",
+		"@aweftjs/modules": "*",
+		"@aweftjs/sync": "*"
+	},
+	"devDependencies": {
+		"@aweftjs/testing": "*",
+		"playwright": "^1.62.1"
+	},
+	"aweft": {
+		"tier": 5,
+		"branchCoverage": 90
+	}
+}

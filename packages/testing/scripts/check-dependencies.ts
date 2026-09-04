@@ -24,6 +24,9 @@ const violations = checkManifests(manifests, [], {
 	// The boundary scanner parses source the way the compiler does, and the compiler is
 	// already the one root toolchain.
 	'@aweftjs/testing': ['typescript'],
+	// The frame runner's escape suite runs in a real browser, because no fake DOM enforces an
+	// iframe's isolation (design 070). Dev only, this package only.
+	'@aweftjs/sandbox': ['playwright'],
 });
 
 if (violations.length > 0) {

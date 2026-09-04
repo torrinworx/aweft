@@ -1,0 +1,19 @@
+type DocumentLike: interface DocumentLike { createElement(tag: 'iframe'): FrameLike; }
+type FrameLike: interface FrameLike { setAttribute(name: string, value: string): void; addEventListener(type: 'load', fn: () => void): void; remove(): void; readonly contentWindow: { postMessage(message: unknown, origin: string, transfer: unknown[]): void; } | null; }
+type FrameOptions: interface FrameOptions { readonly inside: string; readonly into: { appendChild(node: FrameLike): unknown; }; readonly importMap?: Readonly<Record<string, string>> | undefined; readonly document?: DocumentLike | undefined; readonly MessageChannel?: (new () => MessageChannelLike) | undefined; }
+type MessageChannelLike: interface MessageChannelLike { readonly port1: Parameters<typeof fromMessagePort>[0]; readonly port2: unknown; }
+type Runner: interface Runner { start(): Promise<Channel>; stop(): Promise<void>; }
+type Sandbox: interface Sandbox { load(names: readonly string[]): Promise<Readonly<Record<string, Stub>>>; unload(name: string): Promise<boolean>; loaded(): Promise<readonly string[]>; expose(name: string, instance: object): () => void; stop(): Promise<void>; }
+type SandboxError: interface SandboxError extends Error { readonly reason: string; readonly path?: string; }
+type SandboxHandlers: interface SandboxHandlers { readonly applied?: ((name: string, action: 'reloaded' | 'unloaded') => void) | undefined; readonly failed?: ((name: string, error: string) => void) | undefined; }
+type SandboxLimits: interface SandboxLimits { readonly callMs?: number | undefined; }
+type SandboxOptions: interface SandboxOptions { readonly runner: Runner; readonly modules: object; readonly grants: string[]; readonly props?: Readonly<Record<string, unknown>> | undefined; readonly bundle?: string | undefined; readonly follow?: boolean | undefined; readonly handlers?: SandboxHandlers | undefined; readonly limits?: SandboxLimits | undefined; }
+type Stub: type Stub = Readonly<Record<string, (...args: unknown[]) => Promise<unknown>>>;
+value createSandbox: (options: SandboxOptions) => Promise<Sandbox>
+value iframe: (options: FrameOptions) => Runner & { readonly element: FrameLike | undefined; }
+value inProcess: () => Runner
+./inside type Room: interface Room { stop(): Promise<void>; }
+./inside value inside: (channel: Channel) => Promise<Room>
+./inside value insidePort: (port: PortLike) => Promise<Room>
+./node type ChildOptions: interface ChildOptions { readonly limits?: { readonly memoryMB?: number | undefined; } | undefined; readonly wrap?: readonly string[] | undefined; readonly read?: readonly string[] | undefined; readonly env?: Readonly<Record<string, string>> | undefined; }
+./node value child: (options?: ChildOptions) => Runner
