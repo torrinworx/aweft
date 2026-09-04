@@ -104,7 +104,7 @@ many versions of many modules supplies a compile that does not keep them.
 |---|---|
 | `load(names)` | instantiate these and what they need; returns the named instances |
 | `unload(name)` | call `stop` if present and drop the instance; true if it was loaded |
-| `loaded()` | the loaded names, in instantiation order |
+| `loaded()` | the loaded names, in the order their factories finished, always a dependency order |
 | `get(name)` | a loaded instance, or undefined |
 | `dependencies(name)` | what a loaded module declared, or undefined |
 | `dependents(name)` | the loaded modules that depend directly on it |

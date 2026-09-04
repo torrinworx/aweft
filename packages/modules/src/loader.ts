@@ -52,7 +52,7 @@ export interface Loader {
 	 */
 	unload(name: string): Promise<boolean>;
 
-	/** The names loaded right now, in the order they were instantiated. */
+	/** The names loaded right now, in the order their factories finished, which is always a dependency order. */
 	loaded(): readonly string[];
 
 	/** The instance of a loaded module, or undefined. */
@@ -61,7 +61,7 @@ export interface Loader {
 	/** The direct dependencies a loaded module declared, or undefined when it is not loaded. */
 	dependencies(name: string): readonly string[] | undefined;
 
-	/** The loaded modules that depend directly on this one, in instantiation order. */
+	/** The loaded modules that depend directly on this one, in the order their factories finished. */
 	dependents(name: string): readonly string[];
 }
 

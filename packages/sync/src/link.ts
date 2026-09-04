@@ -25,7 +25,7 @@ export interface ShareHandlers {
 	readonly accept?: ((commit: Commit) => readonly WireReason[]) | undefined;
 	/** A commit did not apply: one this end refused (`mine` false) or one the other end refused of ours (`mine` true). */
 	readonly refused?: ((report: Refused) => void) | undefined;
-	/** The topic ended with a fault: `root-mismatch`, `no-topic`, `left` when the other end left it, or `closed` when the channel ended under the link. */
+	/** The topic ended with a fault: `root-mismatch`, `no-document` when neither end holds it, `no-topic`, `left` when the other end left it, or `closed` when the channel ended under the link. */
 	readonly fault?: ((reason: string, message: string) => void) | undefined;
 }
 

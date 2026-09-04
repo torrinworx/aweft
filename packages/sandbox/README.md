@@ -61,8 +61,8 @@ await daily.run(() => 1);      // throws: reason 'not-data', path 'args[0]'
 ```
 
 What is data is what `JSON.parse(JSON.stringify(x))` gives back unchanged. Binary is yours to
-encode. A call is one commit round trip, about a millisecond in process, so a chatty interface
-across the boundary is a design smell.
+encode. A call is one commit round trip, about a millisecond in process (measured once, and no
+script here reproduces it), so a chatty interface across the boundary is a design smell.
 
 ## Granting a name
 
@@ -85,7 +85,7 @@ a room editing its own copy of the list changes nothing.
 Modules in one room use `deps` among themselves and may trust each other, which is how a room
 of client components imports a button into a larger one. Whether each user, or each module, or
 each call gets its own room is yours: a room is a process (about 90 MB, about 120 ms to start,
-nothing when stopped), so per-call, per-user, or shared is your arithmetic, not this package's.
+nothing when stopped; measured once, no script here reproduces it), so per-call, per-user, or shared is your arithmetic, not this package's.
 
 ## Libraries and reloading
 
@@ -102,10 +102,11 @@ source changes in the document is reloaded inside the room, with `handlers.appli
 | `iframe({ inside, into })` | an opaque-origin frame | the browser | the page, its storage, cookies, the network, navigation |
 | `child(options)`, on `@aweftjs/sandbox/node` | a Node process | Node's permission model, plus your `wrap` | files, network, spawning, workers, native addons, eval, the environment |
 
-`child` takes `limits.memoryMB`, `limits.callMs` (a call the room does not answer in time
-errors with `timeout`), `read` (paths besides this package's own it may read), `env` (empty
+`child` takes `limits.memoryMB`, `read` (paths besides this package's own it may read), `env` (empty
 unless given), and `wrap` (a command in front of the Node command: a bubblewrap invocation, a
-`sudo -u`). None of the limits ship with a value. A runner is `start()` returning a channel and
+`sudo -u`). `createSandbox` takes `limits.callMs` (a call the room does not answer in time
+errors with `timeout`), because a room of any runner can hang. None of the limits ship with a
+value. A runner is `start()` returning a channel and
 `stop()`; a room on another machine is the same runner over a socket, and `examples/` shows a
 docker one whose channel is the container's stdin and stdout.
 
