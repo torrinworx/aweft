@@ -169,20 +169,23 @@ export interface SocketLike {
 	readyState: number;
 	send(data: Uint8Array): void;
 	close(): void;
-	addEventListener(type: 'message' | 'close' | 'error', fn: (event: { data?: unknown }) => void): void;
+	addEventListener(type: 'open' | 'message' | 'close' | 'error', fn: (event: { data?: unknown }) => void): void;
 }
 
-/** `WebSocket.OPEN`, spelled here because no DOM types are in scope. */
+/** `WebSocket.CONNECTING` and `WebSocket.OPEN`, spelled here because no DOM types are in scope. */
+const SOCKET_CONNECTING = 0;
 const SOCKET_OPEN = 1;
 
 /**
- * A channel over an open `WebSocket`.
+ * A channel over a `WebSocket`, open or still connecting.
  *
  * Params:
  *   socket: the socket. Its `binaryType` is set to `arraybuffer` for you
  *
- * Returns: a channel. Opening the socket stays yours, which is what makes reconnecting yours
- * too: hand `connect` a function that makes a new one.
+ * Returns: a channel. A frame handed over while the socket is still connecting is held and
+ * sent, in order, once it opens, so a link may share before the socket is up. A socket that
+ * is closing or closed ends the channel. Opening the socket stays yours, which is what makes
+ * reconnecting yours too: hand `connect` a function that makes a new one.
  *
  * A frame is one binary message. Frames are not compressed here: measured on a real commit
  * stream, gzip per frame is larger than the frames themselves, because a 54 byte frame cannot
@@ -195,6 +198,15 @@ export const fromWebSocket = (socket: SocketLike): Channel => {
 	const state = wiring();
 	socket.binaryType = 'arraybuffer';
 
+	// Frames handed over before the socket opened. A drop here would lose the `open` frame of
+	// a share made while connecting, and the topic would then wait forever.
+	let held: Uint8Array[] | undefined = socket.readyState === SOCKET_CONNECTING ? [] : undefined;
+	socket.addEventListener('open', () => {
+		const toSend = held ?? [];
+		held = undefined;
+		for (const bytes of toSend) socket.send(bytes);
+	});
+
 	socket.addEventListener('message', (event) => {
 		const data = event.data;
 		const bytes = data instanceof ArrayBuffer ? new Uint8Array(data)
@@ -206,6 +218,13 @@ export const fromWebSocket = (socket: SocketLike): Channel => {
 	socket.addEventListener('error', () => { queueMicrotask(() => end(state)); });
 
 	return surface(state, (frame) => {
-		if (socket.readyState === SOCKET_OPEN) socket.send(encodeFrame(frame));
+		if (held !== undefined) {
+			held.push(encodeFrame(frame));
+		} else if (socket.readyState === SOCKET_OPEN) {
+			socket.send(encodeFrame(frame));
+		} else {
+			// A channel carries a frame or closes; a socket that is going down cannot carry it.
+			queueMicrotask(() => end(state));
+		}
 	}, () => socket.close());
 };

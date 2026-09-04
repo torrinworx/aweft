@@ -165,11 +165,32 @@ test('a WebSocket carries frames as binary messages', async () => {
 	assert.equal(ws.readyState, 3);
 });
 
-test('a WebSocket that is not open drops what it is handed rather than throwing', () => {
+test('a WebSocket still connecting holds what it is handed and sends it, in order, once open', () => {
 	const ws = socket();
 	ws.readyState = 0;
-	fromWebSocket(ws as unknown as SocketLike).send(refused);
+	const channel = fromWebSocket(ws as unknown as SocketLike);
+	channel.send(refused);
+	channel.send({ kind: 'leave', topic: 1 });
+	assert.equal(ws.sent.length, 0, 'nothing goes down a socket that is not open yet');
+
+	ws.readyState = 1;
+	ws.fire('open', {});
+	assert.deepStrictEqual(ws.sent, [encodeFrame(refused), encodeFrame({ kind: 'leave', topic: 1 })]);
+
+	channel.send({ kind: 'leave', topic: 2 });
+	assert.equal(ws.sent.length, 3, 'and a later frame goes straight down');
+});
+
+test('a WebSocket that is closing ends the channel rather than dropping a frame in silence', async () => {
+	const ws = socket();
+	ws.readyState = 2;
+	const channel = fromWebSocket(ws as unknown as SocketLike);
+	let ended = false;
+	channel.closed(() => { ended = true; });
+	channel.send(refused);
+	await tick();
 	assert.equal(ws.sent.length, 0);
+	assert.equal(ended, true);
 });
 
 test('bytes that are not a frame end the link rather than throwing into a delivery', async () => {

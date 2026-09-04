@@ -100,6 +100,7 @@ try {
 		catch (e) { red++; console.log(`  FAIL ${c.name}\n       ${(e as Error).message.split('\n')[0]}`); }
 	}
 	check(red === 0, `a driver written outside the package meets the contract (${driverChecks().length} checks)`);
+	check(driverChecks().length === 30, 'thirty checks, the number the README states');
 
 	console.log('\nfind-or-create under concurrent open');
 	const racers = Array.from({ length: 8 }, () => createStore({ driver: fileDriver(dir) }));

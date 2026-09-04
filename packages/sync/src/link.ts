@@ -25,7 +25,7 @@ export interface ShareHandlers {
 	readonly accept?: ((commit: Commit) => readonly WireReason[]) | undefined;
 	/** A commit did not apply: one this end refused (`mine` false) or one the other end refused of ours (`mine` true). */
 	readonly refused?: ((report: Refused) => void) | undefined;
-	/** The topic ended with a fault: `root-mismatch`, `no-topic`, or the other end left. */
+	/** The topic ended with a fault: `root-mismatch`, `no-topic`, `left` when the other end left it, or `closed` when the channel ended under the link. */
 	readonly fault?: ((reason: string, message: string) => void) | undefined;
 }
 
@@ -370,15 +370,20 @@ export const connect = (channel: Channel, options: LinkOptions = {}): Link => {
 		else end(topic, 'left', `the other end left ${topic.name}`, true);
 	};
 
-	const shutdown = (): void => {
+	// `tell` is true when the channel ended under the link (the other end went away, or the
+	// transport gave up), which the application did not ask for and has to hear about. A close
+	// this end asked for tells nobody, the same as a leave it asked for.
+	const shutdown = (tell: boolean): void => {
 		if (over) return;
 		over = true;
-		for (const topic of [...mine.values()]) end(topic, 'closed', 'the link closed', false);
+		for (const topic of [...mine.values()]) {
+			end(topic, 'closed', tell ? 'the channel ended' : 'the link closed', tell);
+		}
 		waiting.clear();
 	};
 
 	channel.receive(onFrame);
-	channel.closed(shutdown);
+	channel.closed(() => shutdown(true));
 
 	return {
 		share: <T extends object>(name: string, document?: T, handlers: ShareHandlers = {}) => {
@@ -434,7 +439,7 @@ export const connect = (channel: Channel, options: LinkOptions = {}): Link => {
 				// The channel is going down either way, and close is not where a caller can act
 				// on a transport that would not take the last frame.
 			}
-			shutdown();
+			shutdown(false);
 			channel.close();
 		},
 	};

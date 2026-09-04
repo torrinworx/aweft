@@ -13,7 +13,7 @@ type RefusedFrame: interface RefusedFrame { readonly kind: 'refused'; readonly t
 type RootRef: interface RootRef { readonly id: Uint8Array; readonly kind: ObservableKind; }
 type ShareHandlers: interface ShareHandlers { readonly accept?: ((commit: Commit) => readonly WireReason[]) | undefined; readonly refused?: ((report: Refused) => void) | undefined; readonly fault?: ((reason: string, message: string) => void) | undefined; }
 type Shared: interface Shared<T extends object> { readonly document: T | undefined; readonly ready: Promise<T>; resync(): void; stop(): void; }
-type SocketLike: interface SocketLike { binaryType: string; readyState: number; send(data: Uint8Array): void; close(): void; addEventListener(type: 'message' | 'close' | 'error', fn: (event: { data?: unknown; }) => void): void; }
+type SocketLike: interface SocketLike { binaryType: string; readyState: number; send(data: Uint8Array): void; close(): void; addEventListener(type: 'open' | 'message' | 'close' | 'error', fn: (event: { data?: unknown; }) => void): void; }
 type StateFrame: interface StateFrame { readonly kind: 'state'; readonly topic: number; readonly commit?: Commit; }
 type Tracked: interface Tracked { readonly commit: Commit; readonly undo: Commit; readonly landed: boolean; }
 type Tracker: interface Tracker { receive(commit: Commit): void; stop(): void; }

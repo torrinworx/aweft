@@ -40,9 +40,9 @@ the document. Measured against writing the document whole, in the R1 research ru
 write-ahead log at a 620 KB document, against 34.98 ms and 571 KB. The rows are the source of truth, and a
 document opens by reading them.
 
-**A commit tail.** Every commit, in order, with a per-document sequence. This is what a
-session that fell behind asks for. It is derived, so losing it costs a resynchronization
-rather than a document, and `truncate` bounds it.
+**A commit tail.** Every commit, in order, with a per-document sequence: the document's
+history, which an application reads through `since`. It is derived, so losing it costs a
+resynchronization rather than a document, and `truncate` bounds it.
 
 **A projection.** One record per document, one value per declared path, written in the same
 transaction as the commit that changed it. This is what a query reads.
@@ -126,8 +126,8 @@ A sequence older than the tail reaches back to is answered with what the tail st
 compare the first sequence you get with the one you asked for and resynchronize when there is
 a gap.
 
-`truncate(doc, keep)` drops everything but the most recent `keep` commits. Keep at least the
-longest outage a session may resume from.
+`truncate(doc, keep)` drops everything but the most recent `keep` commits. How much history
+to keep is yours; nothing in the stack reads the tail on its own.
 
 ## Commits from elsewhere
 
@@ -160,8 +160,9 @@ automatic sweep is data leaving at a moment nothing announces.
 `fromSnapshot` will build. So a commit that re-attaches an observable a reopened document does
 not hold is refused with `detached-elsewhere` rather than applied against an empty observable.
 In one process, popping an item off one list and pushing it onto another in two commits works
-and stays one delta. Across a restart it is refused. Restoring it needs a core entry point
-that does not exist yet; that is the open question.
+and stays one delta. Across a restart it is refused with `detached-elsewhere`, even though the
+commit that re-attaches an observable carries everything it holds (design 084): the refusal is
+stricter than the rule requires, loses nothing, and stays until there is a reason to relax it.
 
 ## Writing a driver
 
@@ -185,7 +186,8 @@ The check that matters most runs four writers concurrently against slots that do
 and asserts every one of them survives. Two more exist for the same mistake from other angles:
 a row nothing attaches keeps its slots, and an unset slot stays unset. A driver that writes rows
 whole rather than slot by slot fails all three, which is what they are there to catch. Thirty
-checks in all, and the example driver below passes every one in the proof program.
+checks in all, a count the proof program pins, and the example driver below passes every one
+there.
 
 `examples/store/driver-file.ts` is a complete driver written outside the package, and the proof
 program runs the real thing: it writes a document, sends the writing

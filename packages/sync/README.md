@@ -64,7 +64,9 @@ If neither end holds the document, both hear `no-document` through `fault` and `
 rejects, rather than the two waiting on each other forever.
 
 `link.close()` ends everything on it. Nothing resumes: a new channel is a new link, and
-re-sharing on it is yours, the same way opening the socket was.
+re-sharing on it is yours, the same way opening the socket was. If the channel ends under
+the link instead (the other end went away, the socket dropped), every share on it hears
+`closed` through `fault`, and a `ready` still waiting rejects with it.
 
 ## Your rules go in `accept`
 
