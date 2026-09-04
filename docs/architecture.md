@@ -85,7 +85,7 @@ aweft/
     server/                connections and requests behind a gate: a listener, the link and
                            the call channel on one socket, the modules' hooks
     auth/                  the first battery: the gate, sessions, sign-in, per-user state
-    jobs/                  scheduling and queues
+    jobs/                  a scheduler over an array the application hands in
     ssg/                   static generation
     build/                 transforms, in two modes
     testing/               conformance runners and harnesses
@@ -117,7 +117,7 @@ version in lockstep.
 | `ui` | Components, theming | Storage, transport, server |
 | `server` | Accepting connections and requests through a listener; one socket as a link and a call channel; running the modules' `connection`, `call` and `routes` hooks behind the gate the application supplies | Who is on a connection, who may reach a module, who may write a commit, which modules load; users, sessions, storage; component internals |
 | `auth` | The gate that reads `public`, sessions as documents, sign-in and sign-up, the per-user state document, as server modules | Which application loads it; the client, this round |
-| `jobs` | Scheduling, queues, retries | Component internals |
+| `jobs` | When a row runs, over an observable array the application hands in: the timers, the cron arithmetic, `last` written onto the row | What a job does; who may add, edit or remove a row; storage; queues, retries, catch-up; modules; component internals |
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
 
 ---
@@ -194,6 +194,7 @@ superseded it.
 | The gate | Required and outside every module: `identify` once per connection or request answers a context or refuses, `access` runs before a module sees a connection, a call or a request; `open` is the trusted case; a module declares `public` or nothing and the auth gate reads it, `server` does not | 071 |
 | A connection | One socket behind a listener the application supplies: the link as binary messages, requests as text; hooks run in load order for the modules the gate allows; a share on it requires `accept` | 072, 073 |
 | Sessions and sign-in | Documents in the application's store, tokens from the id source, identity fixed per connection from the handshake cookie; sign-in and sign-out are HTTP routes | 074 |
+| Scheduling | One scheduler over an observable array the application hands in: a row says when (`at`, `every`, or `cron` with `tz`) and the application's `run` does the job; `last` is written onto the row and nothing else; nothing is caught up, resumed or retried | 075, 076 |
 
 ---
 
@@ -325,7 +326,7 @@ defined in `AGENTS.md`.
 7. `ui`, `icons`, `ssg`.
 8. `server`, `jobs`, the batteries. **`server` and the `auth` battery were built 2026-09-04,
    ahead of 6 and 7, after a phase-boundary re-read over the eight packages then built**
-  . `jobs` and the other batteries wait their turn here.
+  ; `jobs` followed on 2026-09-04. The other batteries wait their turn here.
 
 ---
 
