@@ -110,7 +110,7 @@ version in lockstep.
 | `sync` | Moving commits between documents over a channel, both ends equal | Who may write, what a commit means, DOM, storage internals |
 | `store` | Persisting a document as observable rows, its commit tail, the driver interface | DOM, transport |
 | `modules` | Reading module definitions from a directory, a bundle map or a document; dependency order; injection; load and unload | Whether it runs on a client or a server; storage, transport, history; who may load or run anything; which modules load or when |
-| `sandbox` | Isolated execution and the capability bridge. Not started; behind G4 | What the code it runs is for |
+| `sandbox` | The window: a loader on the far end of a link, the grants, calls as rows, and the runners that make a room | What the code it runs is for; what wall is around the room; who may load, grant or call; how many rooms and for how long |
 | `dom` | Mounting, hydration, static render, URL and history | Storage, transport, components |
 | `ui` | Components, theming | Storage, transport, server |
 | `server` | HTTP and websockets, wiring modules to sync and store | Component internals |
@@ -181,6 +181,11 @@ superseded it.
 | What `modules` does and decides | `load`, `unload`, `dependents`, `dependencies`, and `follow` as an opt-in helper; a loader is an instance; nothing decides which modules load, when, how many, or for how long | 063 |
 | What `modules` refuses to know | No history, no authority, no storage, no transport: a module document is an ordinary document and everything that works for one works for it | 064 |
 | Isolation | Later, behind G4, after `modules` is proven; `modules` claims none and says that loading a module runs its code | 065 |
+| A room | A loader on the far end of a link; three documents cross it (`modules` read-only to the room, `room` read-only to the room, `calls` written by both) and nothing else; nothing inside is ambient | 066 |
+| A capability | A granted name on an observable list the application changes; `expose` puts an instance behind a name; inside, the name is an import carrying the instance's functions; a removed name refuses from the next call; modules in one room trust each other | 067 |
+| A call | A row in the calls document, in both directions, with JSON text either side and anything that is not data refused by name; the writer deletes an answered row | 068 |
+| A runner | `start` makes the room and hands back the channel, `stop` ends it; `inProcess`, `iframe` and `child` ship, bubblewrap and docker are examples; limits are parameters with no defaults; each runner says what it stops and the wall is the operator's | 069 |
+| Proof of a runner | The escape suite in `testing`, two halves, append-only, run in every shipped runner and under a real browser for the frame | 070 |
 
 ---
 
@@ -302,7 +307,7 @@ defined in `AGENTS.md`.
 3. `schema`. The shape a document must keep, checked before a commit lands.
 4. `store` + `sync`.
 5. `modules`.
-5b. `sandbox`, after `modules` is proven and G4 is answered.
+5b. `sandbox` (design 070).
 6. `dom` + `build`, with hydration and route data designed in rather than bolted on.
 7. `ui`, `icons`, `ssg`.
 8. `server`, `jobs`, the batteries.
@@ -356,11 +361,10 @@ process, or at what rate; and who may read, write, load or run one. Those are th
 application's, above the library, and a loader is an instance so an application makes as many
 as its tenancy needs (design 063, 064).
 
-**Isolation is a separate package and a later phase.** `sandbox` is behind G4 and starts after
-`modules` is proven (design 065). Because a link has two equal ends and the `MessagePort`
-adapter already ships, a sandbox is a frame or a child process running a loader on the far end
-of a link; `modules` needs no change for it. Until then `modules` claims no isolation and says
-so: loading a module runs its code.
+**Isolation is a separate package.** `sandbox` runs a loader on the far end of a link inside a
+room a runner made, and `modules` needed no change for it (design 066 to 070). `modules`
+still claims no isolation and says so: loading a module runs its code. The room's window is
+the sandbox package's; the wall around the room is the operator's.
 
 ---
 
