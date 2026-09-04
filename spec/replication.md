@@ -124,6 +124,11 @@ A frame is a value. A transport that carries values (an in-process pair, a struc
 port) carries frames as they are; a transport that carries bytes encodes each frame with
 section 5 and `spec/format.md` section 6. Both are the one protocol.
 
+A WebSocket carries a frame as one binary message. A text message on the same socket is not
+a frame and is not this protocol's: a receiver ignores it, and whatever else shares the
+socket ignores binary messages in turn. That is how a request channel rides beside a link
+without the link carrying anything but commits (section 7).
+
 ## 7. Not specified
 
 - **Authority.** Nothing here says who may write what. An end's `accept` is the application's

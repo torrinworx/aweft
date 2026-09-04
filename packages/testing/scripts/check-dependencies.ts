@@ -27,6 +27,10 @@ const violations = checkManifests(manifests, [], {
 	// The frame runner's escape suite runs in a real browser, because no fake DOM enforces an
 	// iframe's isolation (design 070). Dev only, this package only.
 	'@aweftjs/sandbox': ['playwright'],
+	// The server side of the WebSocket protocol is hostile-input parsing this stack does not
+	// write itself (design 072). Its declaration file rides along as a dev
+	// dependency. This package only.
+	'@aweftjs/server': ['ws', '@types/ws'],
 });
 
 if (violations.length > 0) {

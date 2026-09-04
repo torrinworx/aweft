@@ -167,3 +167,10 @@ v0 had a host and a client. v1 has two equal ends and replaces v0 whole. Decisio
   state; two ends with nothing fault each other with `no-document` rather than waiting.
   Topic and sequence numbers below 1 are `bad-frame`. Added 2026-09-03 from the check-in.
 - The frame fixtures in `spec/frames/` are regenerated for v1.
+
+### Text messages beside the link, 2026-09-04
+
+Section 6 now says what a text message on a WebSocket is: not a frame, and not this
+protocol's. Nothing on the wire changed; the sentence records what the socket adapter already
+did, so that a request channel sharing the socket (decision 073) is stated rather than
+assumed.

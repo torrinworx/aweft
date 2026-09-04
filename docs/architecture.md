@@ -82,7 +82,9 @@ aweft/
                            + dom/router subpath: history and URL to state
     ui/                    components and theming
     icons/                 icon driver interface plus one driver
-    server/                http and websocket runtime, wiring modules to sync and store
+    server/                connections and requests behind a gate: a listener, the link and
+                           the call channel on one socket, the modules' hooks
+    auth/                  the first battery: the gate, sessions, sign-in, per-user state
     jobs/                  scheduling and queues
     ssg/                   static generation
     build/                 transforms, in two modes
@@ -113,7 +115,8 @@ version in lockstep.
 | `sandbox` | The window: a loader on the far end of a link, the grants, calls as rows, and the runners that make a room | What the code it runs is for; what wall is around the room; who may load, grant or call; how many rooms and for how long |
 | `dom` | Mounting, hydration, static render, URL and history | Storage, transport, components |
 | `ui` | Components, theming | Storage, transport, server |
-| `server` | HTTP and websockets, wiring modules to sync and store | Component internals |
+| `server` | Accepting connections and requests through a listener; one socket as a link and a call channel; running the modules' `connection`, `call` and `routes` hooks behind the gate the application supplies | Who is on a connection, who may reach a module, who may write a commit, which modules load; users, sessions, storage; component internals |
+| `auth` | The gate that reads `public`, sessions as documents, sign-in and sign-up, the per-user state document, as server modules | Which application loads it; the client, this round |
 | `jobs` | Scheduling, queues, retries | Component internals |
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
 
@@ -139,6 +142,8 @@ This is the list `AGENTS.md` refers to.
 8. **The sandbox boundary.** What isolated code can reach, and how a capability is granted.
 9. **The mounting model.** Mount, hydrate, and static render as modes of one path.
 10. **The boundary rule.** Tiers, planes, and their named exceptions.
+11. **The gate.** Who may reach a module, decided outside every module by two functions the
+    application supplies, and never by the module.
 
 ---
 
@@ -152,7 +157,7 @@ superseded it.
 |---|---|---|
 | The unit that crosses a boundary | The commit. Every delta is validated, then applied, then listeners hear it once. Whether a local listener sees a torn state is a matter of `atomic`, not of which subscription it used | 001 |
 | Merge rules | None. Coalescing keyed by slot is lossless, and the producer keeps a commit minimal | 003 |
-| Identity and credentials | `core` mints object identity, `server` mints credentials, in different modules with different call sites | 005 |
+| Identity and credentials | `core` mints object identity and the auth battery mints credentials, from one id source, in different modules with different call sites | 005, 074 |
 | The observable array | One implementation, addressed by ordered positions that carry randomness, and no identity option | 014, 040 |
 | Cross-tree bridging | A supported seam, not a reach-in: apply with caller-supplied refs, insert at a position, echo suppression. Not built yet | none |
 | Authority | None in the library. Who may write where is the application's rule, written into a link's `accept` or a node's own code | 053, 057; 009 superseded |
@@ -186,6 +191,9 @@ superseded it.
 | A call | A row in the calls document, in both directions, with JSON text either side and anything that is not data refused by name; the writer deletes an answered row | 068 |
 | A runner | `start` makes the room and hands back the channel, `stop` ends it; `inProcess`, `iframe` and `child` ship, bubblewrap and docker are examples; limits are parameters with no defaults; each runner says what it stops and the wall is the operator's | 069 |
 | Proof of a runner | The escape suite in `testing`, two halves, append-only, run in every shipped runner and under a real browser for the frame | 070 |
+| The gate | Required and outside every module: `identify` once per connection or request answers a context or refuses, `access` runs before a module sees a connection, a call or a request; `open` is the trusted case; a module declares `public` or nothing and the auth gate reads it, `server` does not | 071 |
+| A connection | One socket behind a listener the application supplies: the link as binary messages, requests as text; hooks run in load order for the modules the gate allows; a share on it requires `accept` | 072, 073 |
+| Sessions and sign-in | Documents in the application's store, tokens from the id source, identity fixed per connection from the handshake cookie; sign-in and sign-out are HTTP routes | 074 |
 
 ---
 
@@ -207,12 +215,16 @@ primary author. A convention will not prevent that. A dependency will.
   than by inspection. Its load-bearing check runs writers concurrently against slots that do
   not overlap and asserts every one survives, because a suite that tests two writers
   sequentially on one field encodes the lost update as the specification
+- the **module harness** (`loadModule`), so an application tests its own modules with the
+  tools the stack tests itself with
+- the **room escape suite** (`roomChecks`), so a `sandbox` runner proves the window holds
+  behind it
+- the **listener conformance suite** (`listenerChecks`), so a `server` listener written for
+  another runtime is correct by passing it
 
 It grows these as the packages that need them arrive, and this list says "today" because it
-used to name all three as though they existed:
+used to name things as though they existed:
 
-- a **module harness**, so an application tests its own modules with the tools the stack
-  tests itself with. Arrives with `modules`.
 - a **DOM mock**, so nothing pulls in a full browser emulation. Arrives with `dom`.
 
 One test runner and one assertion library everywhere. Gates are the conformance suite,
@@ -288,7 +300,8 @@ about what a proof is. This is what each one has to demonstrate.
 | dom | mount and hydrate a page with a dynamic list; edits assert exact DOM operations against the mock |
 | ui | an interactive page composed from components, driven and asserted against the mock (plus a manual browser page, outside CI) |
 | icons | a page rendering through the driver interface with the iconify driver |
-| server | a full-stack app: an authenticated connection syncs state through the application's rules to store and back |
+| server | a full-stack app: an authenticated connection syncs state through the application's rules to store and back; an anonymous one reaches only what the gate allows; `gate: open` reaches everything; a gate with no session in it works in its place |
+| auth | inside the server proof: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous |
 | jobs | a scheduled job runs, persists an effect, and survives a restart |
 | ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM |
 | build | the transforms build a real example app; assert stripping is verified in the output |
@@ -310,7 +323,9 @@ defined in `AGENTS.md`.
 5b. `sandbox` (design 070).
 6. `dom` + `build`, with hydration and route data designed in rather than bolted on.
 7. `ui`, `icons`, `ssg`.
-8. `server`, `jobs`, the batteries.
+8. `server`, `jobs`, the batteries. **`server` and the `auth` battery were built 2026-09-04,
+   ahead of 6 and 7, after a phase-boundary re-read over the eight packages then built**
+  . `jobs` and the other batteries wait their turn here.
 
 ---
 
@@ -392,7 +407,8 @@ crosses the plane boundary, so these are integrators, not members of either plan
 ```
 
 `aweft`, the meta-package, bundles the common set, so `npm i aweft` gets auth, users, email
-and files working.
+and files working. `auth`'s server half is built (design 074); its client views wait for
+the client runtime.
 
 They split per area rather than shipping as one package because an application that wants
 auth and not posts should not carry posts, and an agent reading `@aweftjs/auth` should find
