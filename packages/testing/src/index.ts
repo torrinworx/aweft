@@ -11,6 +11,9 @@ export type { LoadedModule, ModuleUnderTest } from './modules.ts';
 
 export { roomChecks } from './rooms.ts';
 export type { MakeRunner, RoomCheck } from './rooms.ts';
+
+export { listenerChecks } from './listeners.ts';
+export type { ListenerCheck, MadeListener, MakeListener } from './listeners.ts';
 export type { DriverCheck, MakeDriver, StoreDriver } from './drivers.ts';
 
 export { checkManifests } from './manifests.ts';

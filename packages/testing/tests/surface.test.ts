@@ -17,6 +17,7 @@ test('the entry file exports exactly what was decided', () => {
 		'commitToJson', 'deltaFromJson', 'deltaToJson',
 	'driverChecks',
 		'idFromText', 'idToText',
+		'listenerChecks',
 		'loadFixtures', 'loadInvalidFixtures', 'loadModule',
 		'modelApplier', 'moduleSpecifiers',
 		'randomBelow', 'randomFrom',

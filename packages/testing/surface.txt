@@ -5,8 +5,11 @@ type DocumentJson: interface DocumentJson { readonly root: string; readonly obse
 type DriverCheck: interface DriverCheck { readonly name: string; run(make: MakeDriver): Promise<void>; }
 type Fixture: interface Fixture { readonly name: string; readonly description: string; readonly initial: DocumentJson; readonly commits: readonly CommitJson[]; readonly final: DocumentJson; }
 type InvalidFixture: interface InvalidFixture { readonly name: string; readonly description: string; readonly stage: 'decode' | 'apply'; readonly reason: string; readonly bytes: string; readonly initial?: DocumentJson; }
+type ListenerCheck: interface ListenerCheck { readonly name: string; run(make: MakeListener): Promise<void>; }
 type LoadedModule: interface LoadedModule { readonly instance: unknown; stop(): Promise<void>; }
+type MadeListener: interface MadeListener { readonly listener: Listener; url(): string; }
 type MakeDriver: type MakeDriver = () => Promise<StoreDriver> | StoreDriver;
+type MakeListener: type MakeListener = () => Promise<MadeListener> | MadeListener;
 type MakeRunner: type MakeRunner = () => Runner;
 type Manifest: interface Manifest { readonly name: string; readonly dependencies?: Readonly<Record<string, string>> | undefined; readonly devDependencies?: Readonly<Record<string, string>> | undefined; }
 type ModuleUnderTest: interface ModuleUnderTest { readonly exports: ModuleExports; readonly imports?: Readonly<Record<string, unknown>>; readonly config?: Readonly<Record<string, unknown>>; readonly props?: Readonly<Record<string, unknown>>; }
@@ -33,6 +36,7 @@ value deltaToJson: (d: Delta) => DeltaJson
 value driverChecks: () => DriverCheck[]
 value idFromText: (text: string) => Uint8Array<ArrayBufferLike> (from @aweftjs/codec)
 value idToText: (id: Uint8Array<ArrayBufferLike>) => string (from @aweftjs/codec)
+value listenerChecks: () => ListenerCheck[]
 value loadFixtures: (dir: string | URL) => Fixture[]
 value loadInvalidFixtures: (dir: string | URL) => InvalidFixture[]
 value loadModule: (test: ModuleUnderTest) => Promise<LoadedModule>
