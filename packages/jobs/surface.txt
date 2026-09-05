@@ -1,0 +1,9 @@
+type Clock: interface Clock { now(): number; setTimeout(fn: () => void, ms: number): unknown; clearTimeout(handle: unknown): void; }
+type Job: interface Job { at?: number; every?: number; cron?: string; tz?: string; last?: Last; [key: string]: unknown; }
+type JobsError: interface JobsError extends Error { readonly reason: string; }
+type Last: interface Last { started: number; ended?: number; status: 'running' | 'ok' | 'failed'; error?: { message: string; reason?: string; }; }
+type Run: type Run = (job: Job, context: { readonly due: number; }) => unknown;
+type Scheduler: interface Scheduler { stop(): Promise<void>; }
+type SchedulerHandlers: interface SchedulerHandlers { readonly failed?: ((job: Job, error: unknown) => void) | undefined; }
+type SchedulerOptions: interface SchedulerOptions { readonly jobs: readonly Job[]; readonly run: Run; readonly handlers?: SchedulerHandlers | undefined; readonly clock?: Clock | undefined; }
+value createScheduler: (options: SchedulerOptions) => Scheduler

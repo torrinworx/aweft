@@ -1,0 +1,24 @@
+{
+	"name": "@aweftjs/jobs",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"description": "A scheduler over an array of rows the application hands in: each row says when, the application says what runs.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "node --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/core": "*"
+	},
+	"devDependencies": {
+		"@aweftjs/testing": "*"
+	},
+	"aweft": {
+		"tier": 7,
+		"branchCoverage": 80
+	}
+}
