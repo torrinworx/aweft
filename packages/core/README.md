@@ -2,11 +2,12 @@
 
 Observables, the deltas they produce, commits, scopes and identity.
 
-State lives in observables of three kinds: `createObject` (string slots), `createArray`
-(ordered, addressed by positions that survive edits elsewhere) and `createMap` (keyed by
-id). Assignment is the mutation. Every property of an observable belongs to you; everything
-the library does is a free function that takes the observable, so no field name is
-reserved.
+State lives in observables of three kinds: `createObject({ ... })` (string slots),
+`createArray([ ... ])` (ordered, addressed by positions that survive edits elsewhere) and
+`createMap([[key, value], ...])` (keyed by id), each taking its initial contents. Assignment
+is the mutation, and an array's `push`, `splice` and index assignment are edits like any
+other. Every property of an observable belongs to you; everything the library does is a
+free function that takes the observable, so no field name is reserved.
 
 One assignment is one commit. An `atomic` block is one commit no matter how much it writes,
 and a block that throws rolls back and emits nothing. A commit applies whole or not at all,
@@ -208,6 +209,10 @@ const label = open.bool('hide', 'show');
 timer(1000).map(() => new Date().toLocaleTimeString()).effect(show);
 fromEvent(window, 'resize').wait(100).effect(relayout);
 ```
+
+`mutableArray(items)` is a list cell: an array edited in place (`push`, `splice`, index
+assignment) whose `watch` delivers each edit as a list of changes, with no delta and no place
+in a document. A list on the page that is not part of the document, such as open toasts.
 
 Writing a cell into a document slot is refused (`cell-in-document`), so whether state
 replicates stays answerable from the type being written. `immutable(x)` wraps anything as

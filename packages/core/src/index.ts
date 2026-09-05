@@ -17,6 +17,8 @@ export { all } from './derived.ts';
 export type { Derived } from './derived.ts';
 export { fromEvent, immutable, mutable, timer } from './cell.ts';
 export type { EventEmitting } from './cell.ts';
+export { isMutableArray, mutableArray } from './mutable-array.ts';
+export type { ArrayChange, MutableArray } from './mutable-array.ts';
 
 export { apply } from './apply.ts';
 

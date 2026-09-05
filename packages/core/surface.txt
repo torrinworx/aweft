@@ -1,3 +1,4 @@
+type ArrayChange: type ArrayChange<T> = { readonly type: 'add'; readonly at: number; readonly value: T; } | { readonly type: 'replace'; readonly at: number; readonly value: T; } | { readonly type: 'remove'; readonly at: number; };
 type Change: interface Change extends Commit { readonly deltas: readonly Delta[]; inverse(): Commit; }
 type Commit: interface Commit { readonly deltas: readonly Delta[]; readonly tag?: Uint8Array; } (from @aweftjs/codec)
 type Delta: interface Delta { readonly type: DeltaType; readonly id: Uint8Array; readonly ref: Ref; readonly value?: Value; } (from @aweftjs/codec)
@@ -5,6 +6,7 @@ type Derived: interface Derived<T> { get(): T; set(value: T): void; isImmutable(
 type EdgeKind: type EdgeKind = 'attach' | 'alias'; (from @aweftjs/codec)
 type EventEmitting: interface EventEmitting<E> { addEventListener(type: string, listener: (event: E) => void): void; removeEventListener(type: string, listener: (event: E) => void): void; }
 type Interceptor: type Interceptor = (commit: Commit) => readonly Refusal[];
+type MutableArray: interface MutableArray<T> extends Array<T> { watch(fn: (changes: readonly ArrayChange<T>[]) => void): () => void; }
 type ObservableKind: type ObservableKind = 'object' | 'array' | 'map'; (from @aweftjs/codec)
 type ObservableMap: interface ObservableMap<T> { get(key: unknown): T | undefined; has(key: unknown): boolean; set(key: unknown, value: T): void; add(observable: T & object): void; delete(key: unknown): boolean; readonly size: number; keys(): string[]; values(): T[]; entries(): Generator<[ string, T ]>; [Symbol.iterator](): Generator<[ string, T ]>; }
 type Observer: interface Observer extends Omit<Derived<unknown>, 'get' | 'set' | 'watch' | 'effect'> { get(): unknown; set(value: unknown): void; path(...keys: ScopeKey[]): Observer; ignore(...keys: ScopeKey[]): Observer; shallow(): Observer; skip(count?: number): Observer; tree(key: ScopeKey): Observer; watch(fn: (change: Change) => void): () => void; effect(fn: (value: unknown) => void): () => void; }
@@ -30,10 +32,12 @@ value idOf: (observable: unknown) => Uint8Array<ArrayBufferLike>
 value immutable: { <T>(value: Derived<T>): Derived<T>; <T>(value: T): Derived<T>; }
 value insertAt: (list: object, position: Uint8Array<ArrayBufferLike>, value: unknown) => void
 value intercept: (document: unknown, fn: Interceptor) => () => void
+value isMutableArray: (value: unknown) => boolean
 value isObservable: (value: unknown) => boolean
 value isReachable: (observable: unknown) => boolean
 value kindOf: (observable: unknown) => ObservableKind
 value mutable: <T>(initial: T) => Derived<T>
+value mutableArray: <T = unknown>(items?: Iterable<T> | undefined) => MutableArray<T>
 value observer: (observable: unknown) => Observer
 value parentOf: (observable: unknown) => object | undefined
 value pathOf: (observable: unknown) => readonly string[] | undefined

@@ -82,14 +82,15 @@ test('inserting between the same pair over and over keeps working', () => {
 	assert.equal(list[0], 0);
 	assert.equal(list[501], 1);
 
-	// A position is four-byte levels: a digit and three random bytes. Inserting at one spot
-	// halves the digit's room, so it costs a level every eight inserts and then steps a digit
-	// at a time down the next one. Measured: 500 inserts between one pair reach 20 bytes,
-	// against 64 for the byte-per-level chooser this replaced. This bound is here so a change
-	// to the chooser has to say what it did to that rate.
+	// A position is an integer part (five bytes for a one-digit integer) and four-byte
+	// fractional levels: a digit and three random bytes. Inserting at one spot halves the
+	// digit's room, so it costs a level every eight inserts and then steps a digit at a time
+	// down the next one. Measured: 500 inserts between one pair reach 21 bytes, against 64
+	// for the byte-per-level chooser before design 040. This bound is here so a change to
+	// the chooser has to say what it did to that rate.
 	const longest = Math.max(...positions.map((p) => p.length));
 	assert.ok(longest <= 24, `a position grew to ${longest} bytes over 500 inserts at one place`);
-	assert.ok(longest >= 16, `a position reached ${longest} bytes, so the chooser changed`);
+	assert.ok(longest >= 17, `a position reached ${longest} bytes, so the chooser changed`);
 });
 
 const valid = (list: number[], what: string): void => {
@@ -165,7 +166,10 @@ test('two replicas inserting at the same place choose two different slots', () =
 			chosen.add(added[0]!);
 		}
 
-		assert.equal(chosen.size, 200, `${what}: 200 replicas of one array chose 200 slots`);
+		// Three random bytes per choice: 200 draws share a value about once in 800 runs, which
+		// is how this read red on a green tree. A chooser that is a function of the neighbours
+		// alone names one slot, so the bound that matters is far from 1, not exactly 200.
+		assert.ok(chosen.size >= 198, `${what}: 200 replicas of one array chose ${chosen.size} slots`);
 	}
 });
 
@@ -214,4 +218,55 @@ test('a position keeps finding room at either end and in the middle', () => {
 			assert.notEqual(position[position.length - 1], 0, `${what}: never ends in a zero byte`);
 		}
 	}
+});
+
+// Design 082: the integer part. Appending counts up, so a key does not grow with the list.
+test('ten thousand appends keep every key at six bytes', () => {
+	const list = createArray<number>();
+	for (let i = 0; i < 10000; i++) list.push(i);
+
+	const positions = positionsOf(list);
+	const longest = Math.max(...positions.map((p) => p.length));
+	assert.equal(longest, 6, `the longest key after 10,000 appends is ${longest} bytes`);
+	assert.equal(positions[0]!.length, 5, 'the first key is a one-digit integer');
+	for (let i = 1; i < positions.length; i++) {
+		assert.equal(compareBytes(positions[i - 1]!, positions[i]!), -1);
+	}
+});
+
+test('the integer part is a count byte and base 254 digits, starting at 128', () => {
+	const list = createArray<number>();
+	for (let i = 0; i < 300; i++) list.push(i);
+	const positions = positionsOf(list);
+
+	// Value 128 is digit byte 129 under a count of one.
+	assert.deepEqual([...positions[0]!.slice(0, 2)], [1, 129]);
+	// The 127th append is value 254, the first two-digit integer: count 2, digits [1, 0].
+	assert.deepEqual([...positions[126]!.slice(0, 3)], [2, 2, 1]);
+	assert.deepEqual([...positions[125]!.slice(0, 2)], [1, 254]);
+	assert.notEqual(positions[299]![positions[299]!.length - 1], 0);
+});
+
+test('prepending counts down to zero and then goes under it, still ordered', () => {
+	const list = createArray<number>([0]);
+	for (let i = 0; i < 300; i++) list.unshift(i);
+
+	const positions = positionsOf(list);
+	assert.deepEqual([...positions[positions.length - 1]!.slice(0, 2)], [1, 129], 'the original first element');
+	assert.deepEqual([...positions[172]!.slice(0, 2)], [1, 1], 'the 128th prepend reached zero');
+	assert.ok(positions[0]!.length > 5, 'past zero the key grows a fractional level');
+	for (let i = 1; i < positions.length; i++) {
+		assert.equal(compareBytes(positions[i - 1]!, positions[i]!), -1);
+	}
+});
+
+test('an insert between two adjacent integers goes under the lower one', () => {
+	const list = createArray<number>([0, 1]);
+	list.splice(1, 0, 5);
+
+	const [a, mid, b] = positionsOf(list);
+	assert.equal(mid!.length, a!.length + 4, 'one fractional level under the lower neighbour');
+	assert.deepEqual([...mid!.slice(0, a!.length)], [...a!]);
+	assert.equal(compareBytes(a!, mid!), -1);
+	assert.equal(compareBytes(mid!, b!), -1);
 });
