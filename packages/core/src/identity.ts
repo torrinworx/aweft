@@ -99,8 +99,10 @@ export const isReachable = (observable: unknown): boolean => reachable(need(obse
  *   id: the twelve bytes a delta carries, or the same id in text form
  *
  * Returns: the observable, or undefined when the document holds nothing by that id. An
- * observable nothing attaches is still found, because the document keeps it; `isReachable`
- * says whether anything reaches it.
+ * observable that lost its attach edge is not found: the commit that detached it took it out
+ * of the document as it closed, and attaching it again re-sends its contents (design 084).
+ * Hold the observable itself if you need it after a detach, and ask `isReachable` whether it
+ * is still in the document.
  *
  * Example:
  *   const task = byId(board, delta.id);

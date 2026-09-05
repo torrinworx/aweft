@@ -3,8 +3,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import type { Delta } from '@aweftjs/codec';
+
 import {
-	RefusedError, apply, atomic, createObject, idOf, intercept, observer, snapshot,
+	RefusedError, apply, atomic, createArray, createObject, idOf, intercept, observer, snapshot,
 } from '../src/index.ts';
 import type { Change, Commit, Refusal } from '../src/index.ts';
 
@@ -285,4 +287,24 @@ test('a rule may register or remove rules while it runs, and the commit is judge
 	ran.length = 0;
 	doc.title = 'three';
 	assert.deepEqual(ran, []);
+});
+
+test('a rule reads every delta of a commit, however shallow the only watcher is', () => {
+	const doc = createObject<Doc>();
+	const rows = createArray<Record<string, unknown>>();
+	doc['rows'] = rows;
+
+	// A shallow scope on the array wants the attach delta and nothing under it, so a commit
+	// closing with only this listener builds nothing about the row itself (design 085). A
+	// rule is handed the commit rather than a scope, so it still gets all of it.
+	observer(rows).shallow().watch(() => undefined);
+
+	const seen: Delta[][] = [];
+	const stop = intercept(doc, (commit) => { seen.push([...commit.deltas]); return []; });
+
+	rows.push(createObject({ label: 'a', done: false }));
+	assert.equal(seen.length, 1);
+	assert.equal(seen[0]!.length, 3, 'the attach edge and both of the row\'s own slots');
+
+	stop();
 });

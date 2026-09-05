@@ -8,11 +8,56 @@
 import { codecError } from '@aweftjs/codec';
 
 import { createNode, plantCell, userValue } from './node.ts';
+import type { Node } from './types.ts';
 import { write } from './transaction.ts';
 import { register, toCell } from './value.ts';
 
 const reject = (key: symbol): never => {
 	throw codecError('invalid-key', `a slot is named by a string, and ${String(key)} is a symbol`);
+};
+
+// The node rides on the proxy's own target, so every object in a document shares one handler
+// instead of allocating seven closures of its own. The target is otherwise unused: a trap
+// never falls through to it.
+const NODE = Symbol('aweft.node');
+
+interface Target { readonly [NODE]: Node }
+
+const handler: ProxyHandler<Target> = {
+	get: (target, key) => (typeof key === 'symbol' ? undefined : userValue(target[NODE].slots.get(key))),
+
+	set: (target, key, value) => {
+		if (typeof key === 'symbol') reject(key);
+		write(target[NODE], key as string, toCell(value));
+		return true;
+	},
+
+	deleteProperty: (target, key) => {
+		if (typeof key === 'symbol') reject(key);
+		write(target[NODE], key as string, undefined);
+		return true;
+	},
+
+	has: (target, key) => typeof key !== 'symbol' && target[NODE].slots.has(key),
+
+	ownKeys: (target) => [...target[NODE].slots.keys()],
+
+	getOwnPropertyDescriptor: (target, key) => {
+		if (typeof key === 'symbol' || !target[NODE].slots.has(key)) return undefined;
+		return {
+			value: userValue(target[NODE].slots.get(key)),
+			writable: true,
+			enumerable: true,
+			configurable: true,
+		};
+	},
+
+	defineProperty: (_target, key) => {
+		throw codecError(
+			'invalid-write',
+			`assign ${String(key)} rather than defining it, so the change becomes a delta`,
+		);
+	},
 };
 
 /**
@@ -34,7 +79,9 @@ const reject = (key: symbol): never => {
  *
  * Once it is attached, taking it back out leaves it readable but no longer writable: a write
  * to a detached observable throws `unreachable`, because a receiver refuses the same delta.
- * `isReachable` asks before writing, rather than finding out from the throw.
+ * `isReachable` asks before writing, rather than finding out from the throw. It also leaves
+ * the document, so `byId` stops answering for it; attaching it somewhere again re-sends
+ * everything it holds (design 084).
  *
  * Example:
  *   const doc = createObject({ title: 'notes', blocks: createArray([]) });
@@ -45,49 +92,13 @@ export const createObject = <T extends object = Record<string, unknown>>(
 	id?: Uint8Array,
 ): T => {
 	const node = createNode('object', id);
-
-	const proxy = new Proxy({} as T, {
-		get: (_target, key) => (typeof key === 'symbol' ? undefined : userValue(node.slots.get(key))),
-
-		set: (_target, key, value) => {
-			if (typeof key === 'symbol') reject(key);
-			write(node, key as string, toCell(value));
-			return true;
-		},
-
-		deleteProperty: (_target, key) => {
-			if (typeof key === 'symbol') reject(key);
-			write(node, key as string, undefined);
-			return true;
-		},
-
-		has: (_target, key) => typeof key !== 'symbol' && node.slots.has(key),
-
-		ownKeys: () => [...node.slots.keys()],
-
-		getOwnPropertyDescriptor: (_target, key) => {
-			if (typeof key === 'symbol' || !node.slots.has(key)) return undefined;
-			return {
-				value: userValue(node.slots.get(key)),
-				writable: true,
-				enumerable: true,
-				configurable: true,
-			};
-		},
-
-		defineProperty: (_target, key) => {
-			throw codecError(
-				'invalid-write',
-				`assign ${String(key)} rather than defining it, so the change becomes a delta`,
-			);
-		},
-	});
+	const proxy = new Proxy({ [NODE]: node }, handler) as unknown as T;
 
 	register(proxy, node);
 
 	if (init !== undefined) {
-		const slots = Object.entries(init as Readonly<Record<string, unknown>>);
-		for (const [key, value] of slots) plantCell(node, key, toCell(value));
+		const slots = init as Readonly<Record<string, unknown>>;
+		for (const key of Object.keys(slots)) plantCell(node, key, toCell(slots[key]));
 	}
 
 	return proxy;

@@ -6,8 +6,8 @@ import assert from 'node:assert/strict';
 import { bytesToHex, idToText, slotKeyOf } from '@aweftjs/codec';
 import type { Delta } from '@aweftjs/codec';
 import {
-	byId, createArray, createMap, createObject, idOf, isReachable, observer, pathOf, positionsOf,
-	textIdOf,
+	atomic, byId, createArray, createMap, createObject, idOf, isReachable, observer, pathOf,
+	positionsOf, textIdOf,
 } from '@aweftjs/core';
 
 const build = () => {
@@ -28,11 +28,54 @@ test('byId answers the root and anything below it, by bytes or by text', () => {
 	assert.equal(byId(doc, idOf(createObject())), undefined, 'an id the document never held');
 });
 
-test('byId still finds what nothing attaches', () => {
+test('byId stops finding a row the list cleared, and everything under it', () => {
 	const { doc, task } = build();
 	(doc.tasks as unknown[]).splice(0, 1);
 	assert.equal(isReachable(task), false);
-	assert.equal(byId(doc, idOf(task)), task);
+	assert.equal(byId(doc, idOf(task)), undefined, 'the commit that detached it took it out (084)');
+
+	// The whole subtree goes, not only the observable whose edge went.
+	const inner = createObject({ deep: true });
+	const held = createArray<object>([inner]);
+	doc.held = held;
+	assert.equal(byId(doc, idOf(inner)), inner);
+	delete (doc as Record<string, unknown>)['held'];
+	assert.equal(byId(doc, idOf(held)), undefined);
+	assert.equal(byId(doc, idOf(inner)), undefined, 'the subtree under the detached top');
+});
+
+test('re-attaching what was dropped puts it and its subtree back in the document', () => {
+	const { doc, task } = build();
+	(doc.tasks as unknown[]).splice(0, 1);
+
+	const done = createArray<object>();
+	doc.done = done;
+	done.push(task);
+	assert.equal(byId(doc, idOf(task)), task, 'attaching it again re-indexes it');
+	assert.equal(isReachable(task), true);
+});
+
+test('an observable moved inside one block stays in the document', () => {
+	const doc = createObject<Record<string, unknown>>();
+	const from = createArray<Record<string, unknown>>();
+	const to = createArray<Record<string, unknown>>();
+	doc['from'] = from;
+	doc['to'] = to;
+	const task = createObject<Record<string, unknown>>({ label: 'a' });
+	from.push(task);
+
+	atomic(() => { from.splice(0, 1); to.push(task); });
+	assert.equal(byId(doc, idOf(task)), task, 'a move is not a drop');
+	assert.equal(isReachable(task), true);
+
+	// And moving it again says nothing about the row itself, because the document never lost it.
+	const seen: Delta[][] = [];
+	const stop = observer(doc).watch((change) => seen.push([...change.deltas]));
+	const third = createArray<Record<string, unknown>>();
+	doc['third'] = third;
+	atomic(() => { to.splice(0, 1); third.push(task); });
+	stop();
+	assert.equal(seen.at(-1)!.length, 2, 'the two edges, and nothing about the row');
 });
 
 test('pathOf spells each step the way a delta spells its slot', () => {

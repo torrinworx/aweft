@@ -168,7 +168,7 @@ const build = (
 
 		tree: (key) => build(base, [...keys, { deep: key }], ignored, shallow),
 
-		watch: (fn) => subscribe((deltas, inverses) => fn(changeOf(deltas, inverses))),
+		watch: (fn) => subscribe((deltas, inverse) => fn(changeOf(deltas, inverse))),
 
 		effect: (fn) => {
 			const stop = subscribe(() => fn(get()));

@@ -214,6 +214,21 @@ fromEvent(window, 'resize').wait(100).effect(relayout);
 assignment) whose `watch` delivers each edit as a list of changes, with no delta and no place
 in a document. A list on the page that is not part of the document, such as open toasts.
 
+Inside `atomic`, the calls in the block deliver once at its close, as one list in the order
+they were made, so a swap written as two index assignments arrives as one change list and a
+binding over the list moves both rows:
+
+```ts
+atomic(() => { const t = rows[1]; rows[1] = rows[998]; rows[998] = t; });
+```
+
+A block that throws still delivers them, because nothing rolls the list back. A watcher hears
+exactly the changes made after it subscribed and before it unsubscribed, so one that subscribes
+part way through a block is told the rest of it and one that unsubscribes inside a block is
+told nothing. A plain cell is different: `mutable(x).set(v)` notifies inside the block, since
+holding it would make a derived value that is being watched read the value the block just
+overwrote.
+
 Writing a cell into a document slot is refused (`cell-in-document`), so whether state
 replicates stays answerable from the type being written. `immutable(x)` wraps anything as
 a read-only view or a constant.
@@ -249,7 +264,7 @@ aliases, and it accepts commits addressed to the original's ids from then on. It
 what the document says, not the detached observables the original still indexes, so
 replaying a history that resurrects one is the commit log's job, not a snapshot's.
 
-## Removing something does not delete it
+## Removing something takes it out of the document
 
 Taking an observable out of the document leaves it readable and no longer writable. A write
 to it throws `unreachable`, which is what a receiver does with the same delta.
@@ -259,7 +274,13 @@ const task = tasks[0];
 tasks.splice(0, 1);
 isReachable(task);  // false
 task.done = true;   // throws unreachable
+byId(board, id);    // undefined: the document no longer holds it
 ```
+
+The commit that detached it takes it and everything under it out of the document as it
+closes, so nothing that has been removed keeps the document alive. Hold the observable
+yourself if you still want it; attaching it somewhere again is a commit that carries
+everything it holds, so a replica gets it back in full (design 084).
 
 Ask `isReachable` rather than catching the throw. `parentOf` cannot answer it: it returns
 undefined for a document root, which is reachable, and for something detached, which is not.
@@ -275,7 +296,7 @@ commit can afford them.
 const task = byId(board, delta.id);
 pathOf(task);        // ['tasks', '80a1c2e3']
 pathOf(board);       // []
-pathOf(orphan);      // undefined: nothing attaches it, though byId still finds it
+pathOf(orphan);      // undefined: nothing attaches it, and byId no longer finds it
 ```
 
 ## Boundaries

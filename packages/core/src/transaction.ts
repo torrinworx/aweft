@@ -15,8 +15,8 @@ import type { Cell, Change, Listener, Node } from './types.ts';
 import { stamp } from './clock.ts';
 import { RefusedError, hasInterceptors, hasRulesFor, refusalsFor } from './refusal.ts';
 import {
-	anchorOf, attachNode, cellValue, detachNode, isAncestor, reroot, resolveKey, sameCell,
-	setCell, slotRef,
+	anchorOf, attachNode, cellValue, detachNode, indexOf, isAncestor, reroot, resolveKey,
+	sameCell, setCell, slotRef, walk,
 } from './node.ts';
 
 interface Touch {
@@ -37,7 +37,7 @@ interface Move {
 let depth = 0;
 /** Set while an interceptor is deciding a commit, which is the one moment nothing may write. */
 let sealed = false;
-let touched = new Map<string, Touch>();
+let touched = new Map<Node, Map<string, Touch>>();
 let undos: Array<() => void> = [];
 let moves: Move[] = [];
 /** Observables that joined a document inside this block, and ones that lost their edge. */
@@ -46,6 +46,14 @@ let left = new Map<Node, Move>();
 
 let draining = false;
 const queue: Array<() => void> = [];
+
+/**
+ * Deliveries a list cell made inside an open block, waiting for it to close (design 087).
+ *
+ * They are not part of the commit and are not rolled back with it: the list itself was
+ * mutated and nothing undoes that, so its watchers hear what it did either way.
+ */
+let held: Array<() => void> = [];
 
 const reset = (): void => {
 	touched = new Map();
@@ -59,12 +67,14 @@ const rollback = (): void => {
 	for (let i = undos.length - 1; i >= 0; i--) undos[i]!();
 };
 
-const touchKey = (node: Node, slot: string): string => `${node.key} ${slot}`;
-
+// Keyed by node and then by slot, rather than by a string joining the two. Building that
+// string was an allocation and a hash per touched slot, and closing wants the slots of one
+// observable together anyway.
 const record = (node: Node, slot: string, fresh: boolean): void => {
-	const key = touchKey(node, slot);
-	const seen = touched.get(key);
+	let bySlot = touched.get(node);
+	if (bySlot === undefined) touched.set(node, bySlot = new Map());
 
+	const seen = bySlot.get(slot);
 	if (seen !== undefined) {
 		// The first touch holds the prior value, so a slot written twice still inverts to what
 		// it held before the block. Joining a document later still makes the slot an add.
@@ -72,7 +82,7 @@ const record = (node: Node, slot: string, fresh: boolean): void => {
 		return;
 	}
 
-	touched.set(key, { node, slot, prior: node.slots.get(slot), fresh });
+	bySlot.set(slot, { node, slot, prior: node.slots.get(slot), fresh });
 };
 
 /** Every slot of a subtree arriving in a document is new to it, however old the subtree is. */
@@ -97,7 +107,7 @@ const claim = (child: Node, parent: Node, slot: string): void => {
 	}
 
 	const root = parent.root;
-	const known = root.index?.get(child.key) === child;
+	const known = indexOf(root).get(child.key) === child;
 	const from = child.parent;
 	const fromSlot = child.slot;
 	const wasRoot = child.root;
@@ -201,8 +211,9 @@ export const mutate = (run: () => void): void => {
  *
  * Returns: whatever `run` returned.
  *
- * Throws: whatever `run` threw, after rolling every mutation it made back out of the tree.
- * Nothing is emitted and no watcher is called.
+ * Throws: whatever `run` threw, after rolling every mutation it made back out of the tree. No
+ * commit is emitted and no document watcher hears one, but a list cell the block edited is not
+ * rolled back and tells its watchers after the rollback (the README says why, beside `atomic`).
  *
  * Example:
  *   atomic(() => { doc.width = 3; doc.height = 4; });
@@ -218,6 +229,7 @@ export const atomic = <T>(run: () => T): T => {
 		if (depth === 0) {
 			rollback();
 			reset();
+			releaseAfterThrow();
 		}
 		throw error;
 	}
@@ -230,6 +242,7 @@ export const atomic = <T>(run: () => T): T => {
 		if (depth === 0) {
 			rollback();
 			reset();
+			releaseAfterThrow();
 		}
 		throw codecError('async-atomic', 'an atomic block is synchronous and cannot return a promise');
 	}
@@ -245,6 +258,10 @@ interface Entry {
 	readonly inverse: Delta;
 	readonly node: Node;
 	readonly slot: string;
+	/** What the slot held before this commit, or undefined when it held nothing. */
+	readonly prior: Cell | undefined;
+	/** The top of a subtree this delta took out of the document, for the inverse to put back. */
+	readonly dropped: Node | null;
 }
 
 const entryFor = (touch: Touch): Entry | null => {
@@ -258,7 +275,16 @@ const entryFor = (touch: Touch): Entry | null => {
 
 	const ref = slotRef(node, touch.slot);
 	const id = node.id;
-	const shared = { node, slot: touch.slot };
+	const was = existed ? touch.prior : undefined;
+
+	// A slot that let go of the observable living in it, where nothing re-homed it, is what
+	// takes a subtree out of the document (design 084). The inverse has to describe it.
+	const dropped = was !== undefined && was.kind === 'ref' && was.edge === 'attach'
+		&& was.node.parent === null && left.has(was.node)
+		? was.node
+		: null;
+
+	const shared = { node, slot: touch.slot, prior: was, dropped };
 
 	const before = (): Value => cellValue(touch.prior!);
 	const now = (): Value => cellValue(current!);
@@ -432,16 +458,41 @@ const collect = (entry: Entry, out: Map<Listener, Entry[]>): void => {
 	}
 
 	for (let i = 0; i < chain.length; i++) {
-		const base = chain[i]!;
-		if (base.listeners.size === 0) continue;
+		const listeners = chain[i]!.listeners;
+		if (listeners === null || listeners.size === 0) continue;
 
-		for (const listener of base.listeners) {
+		for (const listener of listeners) {
 			if (!inScope(listener, chain, slots, i, entry.slot)) continue;
 			const list = out.get(listener);
 			if (list === undefined) out.set(listener, [entry]);
 			else list.push(entry);
 		}
 	}
+};
+
+/**
+ * Could any listener on this document be given a delta about this observable?
+ *
+ * The root's reach says how far below a listener's own observable a delta may sit, so walking
+ * that many steps up the attach path and finding nothing that listens means every listener
+ * would have discarded it. A subtree this commit detached is walked through the edge it had,
+ * exactly as `collect` does. This decides only whether an entry is built, never what a
+ * listener is handed (design 085).
+ */
+const wanted = (node: Node, reach: number): boolean => {
+	let at: Node | null = node;
+
+	for (let i = 0; at !== null && i <= reach; i++) {
+		if (at.listeners !== null && at.listeners.size > 0) return true;
+
+		if (at.parent !== null) {
+			at = at.parent;
+			continue;
+		}
+		const gone: Move | undefined = left.get(at);
+		at = gone === undefined ? null : gone.from;
+	}
+	return false;
 };
 
 /**
@@ -453,19 +504,25 @@ const collect = (entry: Entry, out: Map<Listener, Entry[]>): void => {
 const grouped = (unwatched: boolean): Map<Node, Entry[]> => {
 	const byRoot = new Map<Node, Entry[]>();
 
-	for (const touch of touched.values()) {
-		if (admits(touch.node) === 'drop') continue;
+	for (const [node, bySlot] of touched) {
+		if (admits(node) === 'drop') continue;
 
-		const root = touch.node.root;
+		const root = node.root;
 		// A document nobody watches is built only when a rule on it has to read the commit.
-		if (root.watchers === 0 && !(unwatched && hasRulesFor(root))) continue;
+		const ruled = hasRulesFor(root);
+		if (root.watchers === 0 && !(unwatched && ruled)) continue;
 
-		const entry = entryFor(touch);
-		if (entry === null) continue;
+		// A rule is handed the whole commit, so nothing is pruned on a document that has one.
+		if (!ruled && !wanted(node, root.reach)) continue;
 
-		const list = byRoot.get(root);
-		if (list === undefined) byRoot.set(root, [entry]);
-		else list.push(entry);
+		let list = byRoot.get(root);
+		for (const touch of bySlot.values()) {
+			const entry = entryFor(touch);
+			if (entry === null) continue;
+
+			if (list === undefined) byRoot.set(root, list = [entry]);
+			else list.push(entry);
+		}
 	}
 
 	// One mutation is one commit, so most commits carry one delta and there is nothing to
@@ -496,7 +553,74 @@ const screen = (byRoot: Map<Node, Entry[]>): void => {
 	}
 };
 
-const deliveries = (byRoot: Map<Node, Entry[]>): Array<() => void> => {
+/** Every node of one dropped subtree, with the slots it held as the commit closed. */
+type Kept = ReadonlyArray<readonly [Node, Map<string, Cell>]>;
+
+/**
+ * Stands in for the capture on a commit that dropped nothing, which is nearly all of them, so
+ * the common close allocates no map. `forget` only writes when `left` has something in it, and
+ * a commit with something in `left` gets a fresh map.
+ */
+const droppedNothing = new Map<Node, Kept>();
+
+/**
+ * The commit that undoes what one listener was handed, built when something asks for it.
+ *
+ * A subtree this commit took out of the document is described in full, as adds, because the
+ * document has forgotten it and every commit that attaches it again says what it holds
+ * (design 084). The slots it names are the ones it held before this commit: what the entries
+ * inside it captured where the commit touched them, and what `forget` copied off the subtree as
+ * the commit closed where it did not. Nothing here reads the live subtree, because a later
+ * commit is free to attach it again and edit it (design 016).
+ */
+const inverseOf = (matched: readonly Entry[], kept: ReadonlyMap<Node, Kept>): Delta[] => {
+	const out: Delta[] = [];
+
+	// A set, not a list: clearing a long array drops one subtree per row, and asking whether
+	// each entry sits under one of them must not cost the number of them.
+	const tops = new Set<Node>();
+	for (const entry of matched) if (entry.dropped !== null) tops.add(entry.dropped);
+	if (tops.size === 0) {
+		for (const entry of matched) out.push(entry.inverse);
+		return out;
+	}
+
+	const gone = new Map<Node, Map<string, Cell>>();
+	for (const top of tops) {
+		const nodes = kept.get(top);
+		if (nodes === undefined) continue;
+		for (const [node, slots] of nodes) gone.set(node, slots);
+	}
+
+	const before = new Map<Node, Map<string, Cell | undefined>>();
+	const mark = (node: Node, slot: string, cell: Cell | undefined): void => {
+		let slots = before.get(node);
+		if (slots === undefined) before.set(node, slots = new Map());
+		// The first mark wins: an entry says what the slot held before the commit, and the walk
+		// below only fills in the slots no entry spoke for.
+		if (!slots.has(slot)) slots.set(slot, cell);
+	};
+
+	for (const entry of matched) {
+		if (gone.has(entry.node)) mark(entry.node, entry.slot, entry.prior);
+		else out.push(entry.inverse);
+	}
+
+	for (const [node, slots] of gone) {
+		for (const [slot, cell] of slots) mark(node, slot, cell);
+	}
+
+	for (const [node, slots] of before) {
+		for (const [slot, cell] of slots) {
+			if (cell === undefined) continue;
+			out.push({ type: 'add', id: node.id, ref: slotRef(node, slot), value: cellValue(cell) });
+		}
+	}
+
+	return out;
+};
+
+const deliveries = (byRoot: Map<Node, Entry[]>, kept: ReadonlyMap<Node, Kept>): Array<() => void> => {
 	const jobs: Array<() => void> = [];
 
 	for (const [root, entries] of byRoot) {
@@ -507,12 +631,60 @@ const deliveries = (byRoot: Map<Node, Entry[]>): Array<() => void> => {
 
 		for (const [listener, matched] of perListener) {
 			const deltas = matched.map((e) => e.delta);
-			const inverses = matched.map((e) => e.inverse);
-			jobs.push(() => listener.deliver(deltas, inverses));
+			jobs.push(() => listener.deliver(deltas, () => inverseOf(matched, kept)));
 		}
 	}
 
 	return jobs;
+};
+
+/**
+ * Take what this commit detached out of the document index, keeping what it held (design 084).
+ *
+ * After the deliveries are built, because a watcher on a detached subtree still hears the
+ * commit that detached it, and before the block is reset, because `left` is what says which
+ * subtrees went. A node re-homed later in the same block kept its edge and stays.
+ *
+ * The one walk does both jobs. The slots are copied here rather than read when an inverse is
+ * asked for, because a later commit may attach the subtree again and edit it, and this commit's
+ * inverse has to put back what this commit removed (design 016).
+ */
+const forget = (kept: Map<Node, Kept>): void => {
+	for (const move of left.values()) {
+		const top = move.node;
+		if (top.parent !== null) continue;
+
+		const index = top.root.index;
+		const nodes: Array<readonly [Node, Map<string, Cell>]> = [];
+		walk(top, (node) => {
+			nodes.push([node, new Map(node.slots)]);
+			if (index !== null && index.get(node.key) === node) index.delete(node.key);
+		});
+		kept.set(top, nodes);
+	}
+};
+
+/** Hand over the list-cell deliveries a closing block was holding, behind the commit's own. */
+const releaseHeld = (extra: readonly (() => void)[]): void => {
+	const jobs = held.length === 0 ? extra : [...extra, ...held];
+	held = [];
+	dispatch(jobs);
+};
+
+/**
+ * Tell the list cells in a failed block what they did.
+ *
+ * A list cell is not rolled back, so its watchers hear its changes whether the block finished
+ * or not (design 087). The error the block threw is what the caller asked about, so a
+ * watcher that throws while being told here loses to it.
+ */
+const releaseAfterThrow = (): void => {
+	if (held.length === 0) return;
+	try {
+		releaseHeld([]);
+	} catch {
+		// The block's own error is already on its way to the caller.
+	}
 };
 
 const close = (): void => {
@@ -523,10 +695,16 @@ const close = (): void => {
 		const screened = hasInterceptors();
 		const byRoot = grouped(screened);
 		if (screened) screen(byRoot);
-		jobs = deliveries(byRoot);
+
+		// The deliveries hold this map before `forget` fills it. Nothing asks an inverse for its
+		// deltas until long after the close, so filling it after they are built is in time.
+		const kept = left.size === 0 ? droppedNothing : new Map<Node, Kept>();
+		jobs = deliveries(byRoot, kept);
+		forget(kept);
 	} catch (error) {
 		rollback();
 		reset();
+		releaseAfterThrow();
 		throw error;
 	}
 
@@ -534,7 +712,23 @@ const close = (): void => {
 	// to mutate, and its mutations are a commit of their own.
 	reset();
 	stamp();
-	dispatch(jobs);
+	releaseHeld(jobs);
+};
+
+
+/**
+ * Hold a list cell's delivery until the open block closes, or say there is none (design 087).
+ *
+ * Params:
+ *   job: what tells the list's watchers. Called once, at the close, in the order the calls
+ *        that made the changes ran
+ *
+ * Returns: false when no block is open, so the caller delivers now.
+ */
+export const holdDelivery = (job: () => void): boolean => {
+	if (depth === 0) return false;
+	held.push(job);
+	return true;
 };
 
 /**
@@ -573,7 +767,7 @@ export const dispatch = (jobs: readonly (() => void)[]): void => {
 };
 
 /** The change a listener is handed. The inverse waits until something asks for it. */
-export const changeOf = (deltas: readonly Delta[], inverses: readonly Delta[]): Change => ({
+export const changeOf = (deltas: readonly Delta[], inverse: () => readonly Delta[]): Change => ({
 	deltas,
-	inverse: () => ({ deltas: inverses }),
+	inverse: () => ({ deltas: inverse() }),
 });

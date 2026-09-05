@@ -12,7 +12,7 @@ import {
 } from '@aweftjs/codec';
 
 import type { Cell, Node } from './types.ts';
-import { anchorOf } from './node.ts';
+import { anchorOf, indexOf } from './node.ts';
 import { nodeFor } from './create.ts';
 import { atomic, write } from './transaction.ts';
 import { nodeOf } from './value.ts';
@@ -217,7 +217,7 @@ export const apply = (observable: unknown, commit: Commit): void => {
 	if (from === undefined) throw codecError('not-observable', 'apply takes an observable');
 
 	const root = from.root;
-	const index = root.index!;
+	const index = indexOf(root);
 
 	if (commit.deltas.length === 0) {
 		throw codecError('empty-commit', 'a commit carries at least one delta');

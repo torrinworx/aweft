@@ -9,7 +9,7 @@ import { codecError } from '@aweftjs/codec';
 
 import { stamp } from './clock.ts';
 import { SOURCE, type Source } from './derived.ts';
-import { dispatch } from './transaction.ts';
+import { dispatch, holdDelivery } from './transaction.ts';
 
 /**
  * One step of a change, applied in order to the list as it was: `add` inserts before index
@@ -26,9 +26,10 @@ export type ArrayChange<T> =
 /** An array whose every edit can be heard. Reads and mutators are the array's own. */
 export interface MutableArray<T> extends Array<T> {
 	/**
-	 * Hear the changes of every mutating call, as one list per call. Returns the unsubscribe.
-	 * Delivery is deferred to the same safe point as everything else in core: a watcher that
-	 * edits the list has its changes delivered after the current ones, never nested.
+	 * Hear the changes of every mutating call, as one list per call, or one list per `atomic`
+	 * block for the calls inside it (design 087). Returns the unsubscribe. Delivery is
+	 * deferred to the same safe point as everything else in core: a watcher that edits the
+	 * list has its changes delivered after the current ones, never nested.
 	 */
 	watch(fn: (changes: readonly ArrayChange<T>[]) => void): () => void;
 }
@@ -70,6 +71,10 @@ const unsupported = (name: string, instead: string): never => {
  * `sort`, `reverse`, `fill` and `copyWithin` throw `unsupported`, as on a document array.
  * Writing one into a document slot is refused with `cell-in-document`: it does not replicate.
  *
+ * Inside `atomic`, the calls in the block deliver once at its close, as one list in call order,
+ * so a swap written as two index assignments is one change list (design 087). A block that
+ * throws still delivers them: the list was mutated and nothing rolls it back.
+ *
  * Example:
  *   const layers = mutableArray<Layer>();
  *   layers.watch((changes) => { for (const c of changes) reconcile(c); });
@@ -80,13 +85,57 @@ export const mutableArray = <T = unknown>(items?: Iterable<T>): MutableArray<T> 
 	const watchers = new Set<(changes: readonly ArrayChange<T>[]) => void>();
 	const marks = new Set<() => void>();
 
+	// Derived values over the list are marked in one job, as a cell marks its subscribers.
+	const markAll = (): void => { for (const mark of [...marks]) mark(); };
+
+	type Watcher = (changes: readonly ArrayChange<T>[]) => void;
+
+	/** The changes made so far inside the open block, or null when no block is holding them. */
+	let batch: ArrayChange<T>[] | null = null;
+	/** Per watcher, where in the open block's changes it started hearing. */
+	let since = new Map<Watcher, number>();
+
+	/**
+	 * Tell each watcher what the block did while it was subscribed: everything from the index
+	 * it joined at, and nothing at all if it unsubscribed before the close. Subscribing and
+	 * unsubscribing therefore mean the same thing inside a block as outside one.
+	 */
+	const handBatch = (changes: readonly ArrayChange<T>[]): void => {
+		const jobs: (() => void)[] = [];
+		for (const [fn, from] of since) {
+			if (!watchers.has(fn)) continue;
+			const part = from === 0 ? changes : changes.slice(from);
+			if (part.length > 0) jobs.push(() => fn(part));
+		}
+		since = new Map();
+		dispatch(jobs);
+	};
+
 	const deliver = (changes: readonly ArrayChange<T>[]): void => {
 		if (changes.length === 0) return;
 		stamp();
+
+		if (batch !== null) {
+			for (const change of changes) batch.push(change);
+			// A derived value is marked at once even inside a block: holding the mark would let
+			// one that is being watched read the list as it was before the write.
+			if (marks.size > 0) dispatch([markAll]);
+			return;
+		}
+
+		if (watchers.size > 0) {
+			const open: ArrayChange<T>[] = [...changes];
+			if (holdDelivery(() => { batch = null; handBatch(open); })) {
+				batch = open;
+				for (const fn of watchers) since.set(fn, 0);
+				if (marks.size > 0) dispatch([markAll]);
+				return;
+			}
+		}
+
 		const jobs: (() => void)[] = [];
 		for (const fn of watchers) jobs.push(() => fn(changes));
-		// Derived values over the list are marked in one job, as a cell marks its subscribers.
-		if (marks.size > 0) jobs.push(() => { for (const mark of [...marks]) mark(); });
+		if (marks.size > 0) jobs.push(markAll);
 		dispatch(jobs);
 	};
 
@@ -124,6 +173,9 @@ export const mutableArray = <T = unknown>(items?: Iterable<T>): MutableArray<T> 
 			return splice(from, take, items);
 		},
 		watch: (fn: (changes: readonly ArrayChange<T>[]) => void): (() => void) => {
+			// The changes already collected happened before this call, so this watcher starts
+			// after them. Re-registering one that never left keeps the index it already has.
+			if (batch !== null && !watchers.has(fn)) since.set(fn, batch.length);
 			watchers.add(fn);
 			let on = true;
 			return () => {

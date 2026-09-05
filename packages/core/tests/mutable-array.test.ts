@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { randomBelow, randomFrom } from '@aweftjs/testing';
 
 import {
-	type ArrayChange, createArray, createObject, immutable, isMutableArray, mutableArray,
+	type ArrayChange, atomic, createArray, createObject, immutable, isMutableArray, mutable,
+	mutableArray, observer,
 } from '../src/index.ts';
 
 const reason = (name: string) => (e: Error & { reason?: string }): boolean => e.reason === name;
@@ -175,4 +176,176 @@ test('isMutableArray tells it apart from a document array and a plain array', ()
 	assert.equal(isMutableArray([]), false);
 	assert.equal(isMutableArray(null), false);
 	assert.equal(isMutableArray('list'), false);
+});
+
+// --- atomic holds the deliveries (design 087) ---------------------------------------------
+
+test('a block delivers once, with every call in it, in call order', () => {
+	const rows = mutableArray(['a', 'b', 'c']);
+	const heard: ArrayChange<string>[][] = [];
+	rows.watch((changes) => heard.push([...changes]));
+
+	atomic(() => {
+		const t = rows[0]!;
+		rows[0] = rows[2]!;
+		rows[2] = t;
+	});
+
+	assert.equal(heard.length, 1, 'one delivery, not one per assignment');
+	assert.deepEqual(heard[0], [
+		{ type: 'replace', at: 0, value: 'c' },
+		{ type: 'replace', at: 2, value: 'a' },
+	]);
+	assert.deepEqual([...rows], ['c', 'b', 'a']);
+
+	// Outside a block nothing changed: one call is one delivery.
+	heard.length = 0;
+	rows.push('d');
+	rows.push('e');
+	assert.equal(heard.length, 2);
+});
+
+test('a nested block closes with the outer one, and the mirror still tracks', () => {
+	const rows = mutableArray(['a', 'b']);
+	const mirror = ['a', 'b'];
+	const heard: ArrayChange<string>[][] = [];
+	rows.watch((changes) => { heard.push([...changes]); applyAll(mirror, changes); });
+
+	atomic(() => {
+		rows.push('c');
+		atomic(() => { rows.unshift('z'); });
+		rows.splice(1, 1);
+	});
+
+	assert.equal(heard.length, 1);
+	assert.deepEqual(mirror, [...rows], 'the changes replay in the order the calls were made');
+	assert.deepEqual([...rows], ['z', 'b', 'c']);
+});
+
+test('a block that throws still tells the list what it did', () => {
+	const rows = mutableArray<string>([]);
+	const heard: ArrayChange<string>[][] = [];
+	rows.watch((changes) => heard.push([...changes]));
+
+	assert.throws(() => atomic(() => {
+		rows.push('a');
+		throw new Error('give up');
+	}), /give up/);
+
+	// Nothing rolls the list back, so a watcher that heard nothing would describe a list that
+	// does not exist.
+	assert.deepEqual([...rows], ['a']);
+	assert.equal(heard.length, 1);
+	assert.deepEqual(heard[0], [{ type: 'add', at: 0, value: 'a' }]);
+});
+
+test('a watcher that throws while a failed block tells it does not replace the block error', () => {
+	const rows = mutableArray<string>([]);
+	rows.watch(() => { throw new Error('watcher'); });
+
+	assert.throws(() => atomic(() => {
+		rows.push('a');
+		throw new Error('give up');
+	}), /give up/);
+});
+
+test('a document commit in the same block is delivered before the list changes', () => {
+	const doc = createObject<Record<string, unknown>>({ title: 'a' });
+	const rows = mutableArray<string>([]);
+	const order: string[] = [];
+
+	observer(doc).watch(() => order.push('commit'));
+	rows.watch(() => order.push('list'));
+
+	atomic(() => {
+		rows.push('x');
+		doc['title'] = 'b';
+	});
+
+	assert.deepEqual(order, ['commit', 'list']);
+});
+
+test('a plain cell notifies inside the block, so a live derived reads its own write', () => {
+	const count = mutable(1);
+	const doubled = count.map((v) => v * 2);
+	const seen: number[] = [];
+	doubled.effect((v) => seen.push(v));
+
+	atomic(() => {
+		count.set(2);
+		// A cell has no delivery beside its mark, so holding the mark would make this read the
+		// value the block just overwrote (design 087, and design 015's own rule).
+		assert.equal(doubled.get(), 4);
+	});
+
+	assert.deepEqual(seen, [2, 4]);
+});
+
+test('two lists edited in one block are told in the order the calls were made', () => {
+	const first = mutableArray<string>([]);
+	const second = mutableArray<string>([]);
+	const order: string[] = [];
+	first.watch(() => order.push('first'));
+	second.watch(() => order.push('second'));
+
+	atomic(() => {
+		second.push('1');
+		first.push('2');
+	});
+
+	assert.deepEqual(order, ['second', 'first']);
+});
+
+test('a watcher that unsubscribes inside a block is not told what the block did', () => {
+	const rows = mutableArray<string>([]);
+	const heard: ArrayChange<string>[][] = [];
+	const off = rows.watch((changes) => heard.push([...changes]));
+
+	atomic(() => {
+		rows.push('a');
+		off();
+		rows.push('b');
+	});
+
+	assert.deepEqual(heard, [], 'unsubscribing works inside a block as it does outside one');
+});
+
+test('a watcher that subscribes inside a block hears only what came after it', () => {
+	const rows = mutableArray<string>([]);
+	const heard: ArrayChange<string>[][] = [];
+	// Someone is already listening, so the block starts collecting at its first change.
+	rows.watch(() => {});
+
+	atomic(() => {
+		rows.push('a');
+		rows.push('b');
+		rows.watch((changes) => heard.push([...changes]));
+		rows.push('c');
+		rows.push('d');
+	});
+
+	assert.equal(heard.length, 1);
+	assert.deepEqual(heard[0], [
+		{ type: 'add', at: 2, value: 'c' },
+		{ type: 'add', at: 3, value: 'd' },
+	]);
+});
+
+test('a mirror built from a mid-block subscription matches the list at the close', () => {
+	const rows = mutableArray<string>(['seed']);
+	let mirror: string[] = [];
+	rows.watch(() => {});
+
+	atomic(() => {
+		rows.push('a');
+		// A consumer reads the list when it subscribes, so its mirror starts there and the
+		// changes it is told have to carry it the rest of the way.
+		mirror = [...rows];
+		rows.watch((changes) => applyAll(mirror, changes));
+		rows.push('b');
+		rows.push('c');
+	});
+
+	assert.deepEqual(mirror, [...rows]);
+	assert.deepEqual(mirror, ['seed', 'a', 'b', 'c']);
 });

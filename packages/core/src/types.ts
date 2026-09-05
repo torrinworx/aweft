@@ -29,10 +29,12 @@ export interface Node {
 	readonly key: string;
 	readonly kind: ObservableKind;
 	readonly slots: Map<string, Cell>;
-	/** Arrays only: slot keys in position order, and the values behind the proxy. */
+	/** Arrays only: slot keys in position order, and the values behind the proxy. Every other
+	 * kind shares one empty pair, so making an object allocates two arrays fewer. */
 	readonly order: string[];
 	readonly values: unknown[];
-	readonly listeners: Set<Listener>;
+	/** Null until something registers here. Most observables are never watched directly. */
+	listeners: Set<Listener> | null;
 
 	/** The proxy handed to the user. Assigned once, by the factory that made this node. */
 	proxy: object;
@@ -47,6 +49,12 @@ export interface Node {
 	index: Map<string, Node> | null;
 	/** Listeners anywhere in this document. Held by the root, so a close can skip the work. */
 	watchers: number;
+	/**
+	 * How far below a listener's own observable a delta can sit and still fall in its scope,
+	 * over every listener this document has ever had. Held by the root, only ever raised, and
+	 * what lets a close skip a slot no listener could reach (design 085).
+	 */
+	reach: number;
 }
 
 /** A wildcard scope step: any one key, or any depth ending at a key (design 025). */
@@ -63,7 +71,8 @@ export interface Listener {
 	readonly shallow: boolean;
 	/** Any wildcard in the keys, so delivery knows to take the matcher instead of the walk. */
 	readonly wild: boolean;
-	readonly deliver: (deltas: Delta[], inverses: Delta[]) => void;
+	/** The inverse is a thunk: most changes are never undone, so it is built when asked. */
+	readonly deliver: (deltas: Delta[], inverse: () => Delta[]) => void;
 }
 
 /**
@@ -72,7 +81,8 @@ export interface Listener {
  *
  * `deltas` is exactly what crosses a boundary, so a watcher on the document root can hand it
  * to an encoder unchanged. `inverse` is built from the values the slots held before, captured
- * while the change was applied, and is never transmitted (design 016).
+ * while the change was applied and, for a subtree the commit took out of the document, as the
+ * commit closed. It is never transmitted (design 016).
  */
 export interface Change extends Commit {
 	readonly deltas: readonly Delta[];

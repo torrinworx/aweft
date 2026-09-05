@@ -6,8 +6,10 @@ import assert from 'node:assert/strict';
 import { encodeCommit, idToText } from '@aweftjs/codec';
 import type { Delta } from '@aweftjs/codec';
 
-import { atomic, createArray, createObject, observer, parentOf, textIdOf } from '../src/index.ts';
-import type { Change } from '../src/index.ts';
+import {
+	apply, atomic, createArray, createObject, idOf, observer, parentOf, snapshot, textIdOf,
+} from '../src/index.ts';
+import type { Change, Commit } from '../src/index.ts';
 
 interface Block {
 	text: string;
@@ -249,6 +251,122 @@ test('detaching and reattaching in one block writes into the subtree on the way'
 	assert.equal(seen.length, 1);
 	assert.equal(seen[0]!.deltas.length, 3);
 	assert.equal(doc.moved!.text, 'later');
+});
+
+test('re-attaching a dropped observable re-sends what it holds, and a replica applies it', () => {
+	const doc = createObject<Record<string, unknown>>();
+	const mirror = createObject<Record<string, unknown>>(undefined, idOf(doc));
+
+	// Collected rather than applied inside the watcher, because a userspace call from inside a
+	// delivery is deferred and would land after this one returned.
+	const commits: Commit[] = [];
+	observer(doc).watch((change) => commits.push({ deltas: [...change.deltas] }));
+
+	const shelf = createArray<object>();
+	const other = createArray<object>();
+	doc.shelf = shelf;
+	doc.other = other;
+
+	const row = createObject<Record<string, unknown>>({ label: 'a', done: false });
+	shelf.push(row);
+	shelf.splice(0, 1);
+	assert.equal(parentOf(row), undefined, 'nothing attaches it now');
+
+	other.push(row);
+	const last = commits.at(-1)!;
+	assert.equal(last.deltas.length, 3,
+		'the attach edge and the two slots the row holds, because the document had forgotten it');
+	assert.equal(last.deltas.filter((d) => idToText(d.id) === textIdOf(row)).length, 2);
+
+	for (const commit of commits) apply(mirror, commit);
+	assert.deepEqual(snapshot(mirror), snapshot(doc), 'a replica that dropped it too gets it back');
+	assert.equal((((mirror as Record<string, unknown>)['other'] as Record<string, unknown>[])[0])!['label'], 'a');
+});
+
+// The inverse of a commit that dropped a subtree has to describe it, because the document has
+// forgotten it and a commit that attaches it again says what it holds (design 084).
+
+const undoOf = (doc: object, edit: () => void): Commit => {
+	let taken: Commit | undefined;
+	const stop = observer(doc).watch((change) => { taken = change.inverse(); });
+	edit();
+	stop();
+	return taken!;
+};
+
+test('undoing a removal puts the observable back with everything it held', () => {
+	const doc = createObject<Record<string, unknown>>();
+	const rows = createArray<Record<string, unknown>>();
+	doc['rows'] = rows;
+	const row = createObject<Record<string, unknown>>({ label: 'a', done: false });
+	const inner = createObject({ note: 'n' });
+	row['inner'] = inner;
+	rows.push(row);
+
+	const undo = undoOf(doc, () => { rows.splice(0, 1); });
+	assert.equal(idOf(row).length, 12);
+
+	apply(doc, undo);
+	const back = (doc['rows'] as Record<string, unknown>[])[0]!;
+	assert.equal(textIdOf(back), textIdOf(row), 'the same id came back');
+	assert.equal(back['label'], 'a');
+	assert.equal(back['done'], false);
+	assert.equal((back['inner'] as Record<string, unknown>)['note'], 'n', 'and the subtree under it');
+});
+
+test('the inverse of an edit and a removal in one block restores what was there before it', () => {
+	const doc = createObject<Record<string, unknown>>();
+	const rows = createArray<Record<string, unknown>>();
+	doc['rows'] = rows;
+	const row = createObject<Record<string, unknown>>({ label: 'a', done: false });
+	rows.push(row);
+
+	const undo = undoOf(doc, () => {
+		atomic(() => {
+			row['label'] = 'edited';
+			delete row['done'];
+			row['fresh'] = 1;
+			rows.splice(0, 1);
+		});
+	});
+
+	apply(doc, undo);
+	const back = (doc['rows'] as Record<string, unknown>[])[0]!;
+	assert.equal(back['label'], 'a', 'the value from before the block, not the one it wrote');
+	assert.equal(back['done'], false, 'a slot the block deleted comes back');
+	assert.equal(back['fresh'], undefined, 'a slot the block added does not');
+});
+
+test('the inverse of a dropped subtree names what it held then, not what it holds now', () => {
+	const doc = createObject<Record<string, unknown>>();
+	const mirror = createObject<Record<string, unknown>>(undefined, idOf(doc));
+
+	const commits: Commit[] = [];
+	const changes: Change[] = [];
+	observer(doc).watch((change) => {
+		commits.push({ deltas: [...change.deltas] });
+		changes.push(change);
+	});
+
+	const rows = createArray<Record<string, unknown>>();
+	doc['rows'] = rows;
+	const row = createObject<Record<string, unknown>>({ label: 'a' });
+	rows.push(row);
+
+	const at = commits.length;
+	rows.splice(0, 1);
+	const dropped = changes[at]!;
+
+	// The replica has seen everything up to and including the commit that dropped the row.
+	for (const commit of commits) apply(mirror, commit);
+
+	// Two later commits put the row back and edit it. Neither is in the commit being undone.
+	rows.push(row);
+	row['label'] = 'edited';
+
+	apply(mirror, dropped.inverse());
+	const back = (mirror['rows'] as Record<string, unknown>[])[0]!;
+	assert.equal(back['label'], 'a', 'the value from before the commit, not the one written after it');
 });
 
 test('an observable that came and went inside one block is not in the commit', () => {

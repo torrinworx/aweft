@@ -3,7 +3,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { alias, atomic, createArray, createObject, observer } from '../src/index.ts';
+import { idToText, randomBelow, randomFrom, slotKeyOf } from '@aweftjs/testing';
+import type { Delta } from '@aweftjs/codec';
+
+import { alias, atomic, createArray, createObject, observer, textIdOf } from '../src/index.ts';
 import type { Change } from '../src/index.ts';
 
 interface Block {
@@ -254,4 +257,143 @@ test('a scope rooted at a nested observable hears nothing about its siblings', (
 
 	settings.theme = 'light';
 	assert.equal(heard, 1);
+});
+
+// --- the pruning invariant -----------------------------------------------------------------
+//
+// A closing commit builds a delta only where some listener can reach it (design 085), so the
+// one thing that could go wrong is a listener's delivery changing because of who else is
+// listening. This drives random edits past a random set of scopes twice, once alone and once
+// with a deep listener beside them, and compares what each scope was handed.
+
+interface Row extends Record<string, unknown> { label?: string; done?: boolean }
+
+/**
+ * The same script every time for a seed, so two runs differ only in who is listening.
+ *
+ * Ids and array positions are minted fresh in each run, so a delivery is written down by the
+ * name each observable was given when it was made, which is the same in both runs, and never
+ * by its bytes. An array slot is written as `#`: which position a row landed at is randomness,
+ * and the reference in the delta says which row it is.
+ */
+const drive = (seed: number, deep: boolean): Map<string, string[]> => {
+	const random = randomFrom(seed);
+
+	const names = new Map<string, string>();
+	const named = <T extends object>(name: string, made: T): T => {
+		names.set(textIdOf(made), name);
+		return made;
+	};
+	const name = (id: Uint8Array): string => names.get(idToText(id)) ?? '?';
+
+	const show = (value: unknown): string => {
+		if (value === undefined) return '';
+		if (value !== null && typeof value === 'object' && 'edge' in (value as object)) {
+			const ref = value as { edge: string; id: Uint8Array };
+			return ` =${ref.edge}:${name(ref.id)}`;
+		}
+		return ` =${JSON.stringify(value)}`;
+	};
+	const write = (deltas: readonly Delta[]): string => deltas
+		.map((d) => `${d.type} ${name(d.id)} ${d.ref.kind === 'object' ? slotKeyOf(d.ref) : '#'}${show(d.value)}`)
+		.sort()
+		.join(' | ');
+
+	const doc = named('doc', createObject<Record<string, unknown>>());
+	const rows = named('rows', createArray<Row>());
+	const inner = named('inner', createObject<Record<string, unknown>>({ a: 1 }));
+	const parked = named('parked', createArray<Row>());
+	doc['rows'] = rows;
+	doc['inner'] = inner;
+	doc['parked'] = parked;
+
+	const scopes: Array<[string, { watch(fn: (change: Change) => void): () => void }]> = [
+		['root shallow', observer(doc).shallow()],
+		['rows shallow', observer(doc).path('rows').shallow()],
+		['rows own shallow', observer(rows).shallow()],
+		['inner shallow', observer(doc).path('inner').shallow()],
+		['rows.0 shallow', observer(doc).path('rows', 0).shallow()],
+		['inner shallow ignore a', observer(doc).path('inner').shallow().ignore('a')],
+		['parked shallow', observer(doc).path('parked').shallow()],
+	];
+
+	const logs = new Map<string, string[]>();
+	for (const [label, scope] of scopes) {
+		// A random subset, so the reach the root settles on varies from run to run.
+		if (randomBelow(random, 3) === 0) continue;
+		const lines: string[] = [];
+		logs.set(label, lines);
+		scope.watch((change) => lines.push(write(change.deltas)));
+	}
+
+	// The listener under test in run B. It is registered last, so everything above is
+	// registered identically in both runs.
+	if (deep) observer(doc).watch(() => undefined);
+
+	let minted = 0;
+	const fresh = (init: Row): Row => named(`row${minted++}`, createObject<Row>(init));
+
+	for (let step = 0; step < 60; step++) {
+		const move = randomBelow(random, 8);
+		if (move === 0) {
+			rows.push(fresh({ label: `r${step}`, done: false }));
+		} else if (move === 1) {
+			if (rows.length > 0) rows[randomBelow(random, rows.length)]!.label = `l${step}`;
+		} else if (move === 2) {
+			if (rows.length > 0) rows.splice(randomBelow(random, rows.length), 1);
+		} else if (move === 3) {
+			if (rows.length > 0) {
+				const row = rows[randomBelow(random, rows.length)]!;
+				if (row['nested'] === undefined) {
+					row['nested'] = named(`nested${step}`, createObject({ deep: step }));
+				}
+			}
+		} else if (move === 4) {
+			inner['a'] = step;
+		} else if (move === 5) {
+			if (inner['b'] === undefined) inner['b'] = 'x';
+			else delete inner['b'];
+		} else if (move === 6) {
+			atomic(() => {
+				rows.push(fresh({ label: `a${step}` }));
+				rows.push(fresh({ label: `b${step}` }));
+			});
+		} else if (rows.length > 0) {
+			// Out of the document and back into it, which is the shape design 084 changed.
+			const at = randomBelow(random, rows.length);
+			const row = rows[at]!;
+			rows.splice(at, 1);
+			parked.push(row);
+		}
+	}
+
+	return logs;
+};
+
+test('a listener hears the same thing whether or not a deep listener exists', () => {
+	for (const seed of [20260905, 7, 991, 44113, 20260101]) {
+		const alone = drive(seed, false);
+		const beside = drive(seed, true);
+
+		assert.deepEqual([...beside.keys()], [...alone.keys()], `seed ${seed}: different scope sets`);
+		for (const [label, lines] of alone) {
+			assert.deepEqual(beside.get(label), lines, `seed ${seed}, scope "${label}"`);
+		}
+		assert.ok([...alone.values()].some((lines) => lines.length > 0), `seed ${seed}: nothing was delivered`);
+	}
+});
+
+test('a listener that leaves does not narrow what the others hear', () => {
+	const doc = createObject<Record<string, unknown>>();
+	const rows = createArray<Record<string, unknown>>();
+	doc['rows'] = rows;
+
+	const stop = observer(doc).shallow().watch(() => undefined);
+	const seen: Delta[][] = [];
+	observer(doc).watch((change) => seen.push([...change.deltas]));
+	stop();
+
+	rows.push(createObject({ label: 'a' }));
+	assert.equal(seen.length, 1, 'the deep scope still hears the commit');
+	assert.equal(seen[0]!.length, 2, 'the attach edge and the slot under it');
 });

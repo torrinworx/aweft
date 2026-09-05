@@ -11,27 +11,45 @@ import {
 
 import type { Cell, Listener, Node } from './types.ts';
 
+// Only an array uses these. Every other kind shares them rather than allocating a pair per
+// observable, and nothing writes to them because `setCell` returns early for the other kinds.
+const NO_ORDER: string[] = [];
+const NO_VALUES: unknown[] = [];
+
 export const createNode = (kind: ObservableKind, id: Uint8Array = createId()): Node => {
+	const array = kind === 'array';
 	const node: Node = {
 		id,
 		key: idToText(id),
 		kind,
 		slots: new Map(),
-		order: [],
-		values: [],
-		listeners: new Set(),
+		order: array ? [] : NO_ORDER,
+		values: array ? [] : NO_VALUES,
+		listeners: null,
 		proxy: undefined as unknown as object,
 		parent: null,
 		slot: null,
 		root: undefined as unknown as Node,
 		index: null,
 		watchers: 0,
+		reach: 0,
 	};
 
-	// A new observable is a document of one until something attaches it.
+	// A new observable is a document of one until something attaches it. Its index waits until
+	// something asks for it, because the common case is being attached before anyone does.
 	node.root = node;
-	node.index = new Map([[node.key, node]]);
 	return node;
+};
+
+/** The document index of a root, built the first time something needs it. */
+export const indexOf = (root: Node): Map<string, Node> => {
+	let index = root.index;
+	if (index === null) {
+		index = new Map();
+		root.index = index;
+		walk(root, (node) => { index!.set(node.key, node); });
+	}
+	return index;
 };
 
 /** The reverse: the ref a delta carries for one of this observable's slots. */
@@ -196,10 +214,13 @@ export const isAncestor = (maybe: Node, node: Node): boolean => {
  */
 export const reroot = (child: Node, root: Node): void => {
 	const old = child.root;
-	if (old === root) return;
+	const index = indexOf(root);
 
-	if (root === child && child.index === null) child.index = new Map();
-	const index = root.index!;
+	// The same document is not always nothing to do: an observable that lost its attach edge
+	// left the index and still points at the document it was in (design 084), so attaching
+	// it here again has to put its subtree back.
+	if (old === root && index.get(child.key) === child) return;
+
 	let moved = 0;
 
 	walk(child, (node) => {
@@ -212,11 +233,13 @@ export const reroot = (child: Node, root: Node): void => {
 		index.set(node.key, node);
 		if (node !== root) node.index = null;
 		node.root = root;
-		moved += node.listeners.size;
+		moved += node.listeners === null ? 0 : node.listeners.size;
 	});
 
 	old.watchers -= moved;
 	root.watchers += moved;
+	// A listener arriving with the subtree can want a delta as deep as its old document allowed.
+	if (moved > 0 && old.reach > root.reach) root.reach = old.reach;
 };
 
 /**
@@ -234,9 +257,10 @@ export const attachNode = (child: Node, parent: Node, slot: string): void => {
 /**
  * Take away a node's attach edge.
  *
- * The node stays in the document and stays indexed. Nothing reaches it, and a delta naming it
- * is refused as unreachable, which is exactly what a receiver does with the same commit. What
- * becomes of it after that is open in `spec/format.md` 8.
+ * Nothing reaches it now, and a delta naming it is refused as unreachable, which is exactly
+ * what a receiver does with the same commit. It keeps pointing at the document so that refusal
+ * still knows where it was; the commit that detached it takes its index entries away as it
+ * closes (`forget` in `transaction.ts`, design 084).
  */
 export const detachNode = (child: Node): void => {
 	child.parent = null;
@@ -244,14 +268,21 @@ export const detachNode = (child: Node): void => {
 };
 
 export const addListener = (node: Node, listener: Listener): void => {
-	node.listeners.add(listener);
-	node.root.watchers += 1;
+	(node.listeners ??= new Set()).add(listener);
+
+	const root = node.root;
+	root.watchers += 1;
+
+	// Only a shallow scope with no wildcard bounds how deep a delta it will take. Anything
+	// else can match at any depth below the observable it was built from (design 085).
+	const reach = listener.shallow && !listener.wild ? listener.keys.length : Infinity;
+	if (reach > root.reach) root.reach = reach;
 };
 
 export const removeListener = (node: Node, listener: Listener): void => {
-	if (!node.listeners.delete(listener)) return;
+	if (node.listeners === null || !node.listeners.delete(listener)) return;
 	node.root.watchers -= 1;
 };
 
 /** Find an observable of this document by id. */
-export const lookup = (root: Node, key: string): Node | undefined => root.index?.get(key);
+export const lookup = (root: Node, key: string): Node | undefined => indexOf(root).get(key);
