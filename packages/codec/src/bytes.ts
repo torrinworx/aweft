@@ -43,6 +43,16 @@ export const equalBytes = (a: Uint8Array, b: Uint8Array): boolean => compareByte
 
 const HEX = '0123456789abcdef';
 
+// Hex the other way, by character code. Slicing two characters and parsing them is an
+// allocation and a parse per byte, and array positions convert on every delta and every
+// binding lookup. Upper case is accepted because nothing here writes it and a hand-written
+// key is not worth a second error.
+const NIBBLE = new Int8Array(128).fill(-1);
+for (let i = 0; i < 16; i++) {
+	NIBBLE[HEX.charCodeAt(i)] = i;
+	NIBBLE['0123456789ABCDEF'.charCodeAt(i)] = i;
+}
+
 /**
  * A byte string as lower case hex.
  *
@@ -80,9 +90,10 @@ export const bytesFromHex = (hex: string): Uint8Array => {
 
 	const out = new Uint8Array(hex.length / 2);
 	for (let i = 0; i < out.length; i++) {
-		const v = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-		if (Number.isNaN(v)) throw codecError('invalid-hex', `"${hex.slice(i * 2, i * 2 + 2)}" is not a hex byte`);
-		out[i] = v;
+		const hi = NIBBLE[hex.charCodeAt(i * 2)] ?? -1;
+		const lo = NIBBLE[hex.charCodeAt(i * 2 + 1)] ?? -1;
+		if (hi < 0 || lo < 0) throw codecError('invalid-hex', `"${hex.slice(i * 2, i * 2 + 2)}" is not a hex byte`);
+		out[i] = (hi << 4) | lo;
 	}
 	return out;
 };

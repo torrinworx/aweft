@@ -26,4 +26,9 @@ test('hex round trips, and malformed hex is refused', () => {
 
 	assert.throws(() => bytesFromHex('abc'), /odd length/);
 	assert.throws(() => bytesFromHex('zz'), /not a hex byte/);
+	// Each half of a byte is read separately, so each half has to be checked.
+	assert.throws(() => bytesFromHex('0z'), /not a hex byte/);
+	assert.throws(() => bytesFromHex('z0'), /not a hex byte/);
+	assert.throws(() => bytesFromHex('0\u00e9'), /not a hex byte/, 'outside the ASCII table');
+	assert.deepEqual(bytesFromHex('0A1B'), Uint8Array.of(0x0a, 0x1b), 'upper case reads the same');
 });
