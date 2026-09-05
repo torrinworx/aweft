@@ -1,0 +1,105 @@
+# Benchmarks
+
+Nothing here is part of any package and nothing here is gated. These scripts exist so a
+performance claim can be re-run instead of believed: every claim in a README or a design
+note cites one of them and the
+numbers it printed.
+
+## The loop for proving a change
+
+Follow it in order. A step skipped is how a change that did nothing gets kept.
+
+1. **Baseline.** Run the committed script, unchanged, on the machine you are about to measure
+   on. Numbers from another machine, another day or another script are not a baseline.
+2. **A hypothesis with a number.** Say what you think is slow, why, and how much you expect to
+   get back. "This should help" is not a hypothesis; "one system call per id is most of the
+   cost of making ten thousand objects, so pooling should take the create path from 61 ms to
+   about 35" is.
+3. **The change on a copy.** Make it outside the repo, on a copy of the sources the script
+   reads. A change measured in place is a change you have already decided to keep.
+4. **The same script again.** Same script, same shapes, same machine, back to back with the
+   baseline. Alternate the two if the machine is busy.
+5. **Keep it only if it moved.** The move has to be larger than the noise band below, nothing
+   else in the script may regress, and the root gate has to be green with it. A change that
+   wins one line and loses another has not been measured yet, it has been chosen.
+6. **Write both numbers down.** Before and after, naming the script. An experiment that showed
+   a change was unnecessary is a good result and gets written down too: the plan loses a change
+   it did not need.
+
+## The scripts
+
+| Script | What it answers | Run |
+|---|---|---|
+| `derived.ts` | What derived value propagation costs, on four graph shapes | `node bench/derived.ts` |
+| `write.ts` | What a write costs before anything derived from it runs | `node bench/write.ts` |
+| `replicate.ts` | What replication costs: position bytes, commit bytes, distinctness | `node bench/replicate.ts` |
+| `guard.ts` | What a guard costs per commit as the document grows | `node bench/guard.ts` |
+| `compile.ts` | What loading a module costs per distinct source | `node --expose-gc bench/compile.ts` |
+| `dom-grain.ts` | Which grain the DOM binding consumes, against a linked fake tree | `node bench/dom-grain.ts` |
+| `dom-rows.ts` | The row table in Chromium: create, update, swap, remove, clear | `node bench/dom-rows.ts` |
+| `dom-heap.ts` | Ten create-and-clear cycles in Chromium, heap after each, both idioms | `node bench/dom-heap.ts` |
+
+`npm run bench` runs all of them in order. The two browser scripts, `dom-rows.ts` and
+`dom-heap.ts`, need the Chromium the root gate installs (`npm run browser`); they emit the
+packages to plain JS with `tsc` first, so they measure the sources as they stand, not a stale
+build.
+
+`derived.ts` compares against other libraries only when they are installed, which is deliberate:
+`npm i --no-save alien-signals @preact/signals-core @vue/reactivity` before running it, and
+nothing in the repo depends on them.
+
+## The noise band
+
+Measured on this machine by running `dom-rows.ts` five times back to back with nothing else
+running. Each invocation already takes the best of five inner repetitions, and these are the
+spreads *between* those five invocations, as a share of the median:
+
+| Line | Spread across five invocations |
+|---|---|
+| create 1,000 rows | 15% |
+| replace all 1,000 rows | 16% |
+| create 10,000 rows | 9% |
+| clear 10,000 rows | 25% |
+| append 1,000 rows to 1,000 | 74% |
+| the sub-millisecond lines (update, select, swap, remove) | the timer's own resolution |
+
+The band is wide, and it is wider than it looks from one invocation. So:
+
+- **Run each script five times and compare the best of the five**, never one run against one
+  run. The best is the run with the least interference in it; the mean measures the machine.
+- **Treat a move under 15% of the best as unproven** on the millisecond lines, and do not read
+  the sub-millisecond lines at all except to see that they have not become millisecond lines.
+- `append 1,000 rows to 1,000` and `clear 10,000 rows` swing far enough that only a large move
+  means anything on them.
+
+`dom-grain.ts`'s clear line swings about 40% the same way. This is why the gate does not check
+speed: a guard at this spread is either flaky or toothless.
+
+## The numbers to beat
+
+The comparison target is **the reference page**: a page built with another library, doing the
+same job, measured on the same machine in the same run. It is not in this repo and nothing here
+depends on it; these are the numbers it produced.
+
+On `bench/dom-rows.ts`'s shapes, in Chromium:
+
+| Shape | The reference page |
+|---|---|
+| create 1,000 rows | 5.7 ms |
+| create 10,000 rows | 64 ms |
+
+On the framework row table, the CPU geometric mean across benchmarks 01 to 09 with the
+reference page as 1.00:
+
+| | Target |
+|---|---|
+| Prebuilt row elements in a list cell, the reference page's own idiom | at or under **1.00** |
+| A document array with a component per row | as close as the pass gets, with the remaining gap named and its cause taken from a profile |
+
+Both row idioms are supported and both are documented. Which one an application uses is the
+application's choice, not a recommendation this file makes: the first is faster and the second
+replicates.
+
+On `bench/dom-heap.ts`, the target is a **flat** series for both idioms: the heap after the
+tenth create-and-clear cycle is the heap after the first, give or take the collector's own
+slack. A rising series is a leak, and it is invisible to every other script here.
