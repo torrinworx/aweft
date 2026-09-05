@@ -14,6 +14,23 @@ test('an id is 96 bits of randomness', () => {
 	assert.equal(seen.size, 5000, 'ids repeated within one run');
 });
 
+test('the pool refills without repeating, shortening or sharing bytes', () => {
+	// More than one pool's worth (341 ids), so the boundary is crossed several times and an
+	// off-by-one in the refill shows up as a short id or a repeat rather than as nothing.
+	const seen = new Set<string>();
+	for (let i = 0; i < 1100; i++) {
+		const id = createId();
+		assert.equal(id.length, ID_BYTES, `id ${i} is not ${ID_BYTES} bytes`);
+		seen.add(idToText(id));
+	}
+	assert.equal(seen.size, 1100);
+
+	const a = createId();
+	const b = createId();
+	a.fill(0);
+	assert.notDeepEqual(b, a, 'each id owns its bytes; two must not be views on one buffer');
+});
+
 test('the textual form is sixteen characters and round trips', () => {
 	for (let i = 0; i < 200; i++) {
 		const id = createId();

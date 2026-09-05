@@ -7,6 +7,13 @@ export const ID_BYTES = 12;
 /** How many characters the text form of an id is. Sixteen base64url characters, no padding. */
 export const ID_TEXT_LENGTH = 16;
 
+// Drawn from a pool filled in one call, as array position jitter is: the call itself was 59%
+// of the cost of making ten thousand observables, and the bytes are the same bytes either way
+// (design 086). 341 ids, so the buffer divides evenly and stays under a page.
+const POOL = ID_BYTES * 341;
+let pool = new Uint8Array(0);
+let drawn = 0;
+
 /**
  * Mint an id.
  *
@@ -17,7 +24,16 @@ export const ID_TEXT_LENGTH = 16;
  * observe randomness production never sees, so no test can catch a weak source. Code that
  * needs deterministic ids takes them as input instead.
  */
-export const createId = (): Uint8Array => crypto.getRandomValues(new Uint8Array(ID_BYTES));
+export const createId = (): Uint8Array => {
+	if (drawn + ID_BYTES > pool.length) {
+		pool = crypto.getRandomValues(new Uint8Array(POOL));
+		drawn = 0;
+	}
+	// A copy, not a view: an id outlives the draw and two ids must never share a buffer.
+	const id = pool.slice(drawn, drawn + ID_BYTES);
+	drawn += ID_BYTES;
+	return id;
+};
 
 /**
  * Check that this is an id, and hand it back.
