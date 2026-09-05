@@ -73,6 +73,25 @@ the observable rather than an opinion of whoever wrote the delta. Without this r
 can describe an id as an array in one delta and a map in another, and both readings are
 defensible, so two implementations diverge without either being wrong.
 
+### 1.3 A detached observable leaves the document
+
+When a commit removes an observable's last attach edge, and no delta in that same commit gives
+it another one, that observable and everything attached below it are no longer part of the
+document. An implementation **MUST NOT** answer for it afterwards: it is not in the document's
+contents, a delta naming it is refused as unreachable by the rule in 1.1, and it is not carried
+in any description of the document's state.
+
+A later commit **MAY** attach it again, by id. That commit describes the observable exactly as
+it would describe one the document has never held: the attach edge, and a delta for every slot
+it is to hold. A receiver that has no observable by that id materializes a new one and applies
+those deltas to it.
+
+*Rationale:* both ends of a link apply the same commits and hold no other channel, so a rule
+that lets one end remember what the other has forgotten is a rule they cannot both follow.
+Forgetting at the moment the edge goes, and describing the contents again on the way back in,
+is one rule with one reading. The alternative, remembering every observable a document ever
+held, makes a list that is filled and cleared grow without bound. See `docs/design/084`.
+
 ---
 
 ## 2. Deltas
@@ -447,6 +466,3 @@ Not yet specified, and deliberately not guessed:
   negotiates it. The encoding does not depend on the answer, because a tag is opaque bytes.
 - **Large and exact numbers.** There is no big integer and no decimal type. An application
   needing one carries it as text or as a byte string, and knows it is doing so.
-- **What becomes of an observable after its attach edge is removed.** It is still in the
-  document and nothing reaches it. Whether it is collected, kept so the detach can be undone,
-  or simply left is not decided here.

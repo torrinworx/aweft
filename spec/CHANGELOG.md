@@ -174,3 +174,17 @@ Section 6 now says what a text message on a WebSocket is: not a frame, and not t
 protocol's. Nothing on the wire changed; the sentence records what the socket adapter already
 did, so that a request channel sharing the socket (decision 073) is stated rather than
 assumed.
+
+### A detached observable leaves the document, 2026-09-05
+
+Section 1.3 is new and section 8 loses its last open item. Nothing on the wire changes; what
+changes is the rule both ends follow.
+
+- An observable whose last attach edge a commit removes, with no delta in that commit giving
+  it another, is no longer part of the document. An implementation must not answer for it.
+- A later commit may attach it again by id, and describes its contents in full, exactly as it
+  would for an observable the document has never held. A receiver with no observable by that
+  id materializes one and applies those deltas.
+- No fixture changes: the rule is about what an implementation holds between commits, not about
+  bytes. Decision 084.
+
