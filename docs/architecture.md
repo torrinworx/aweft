@@ -158,7 +158,7 @@ superseded it.
 | The unit that crosses a boundary | The commit. Every delta is validated, then applied, then listeners hear it once. Whether a local listener sees a torn state is a matter of `atomic`, not of which subscription it used | 001 |
 | Merge rules | None. Coalescing keyed by slot is lossless, and the producer keeps a commit minimal | 003 |
 | Identity and credentials | `core` mints object identity and the auth battery mints credentials, from one id source, in different modules with different call sites | 005, 074 |
-| The observable array | One implementation, addressed by ordered positions that carry randomness, and no identity option | 014, 040 |
+| The observable array | One implementation, addressed by ordered positions that carry randomness and begin with an integer part, so appended keys stay short; no identity option | 014, 040, 082 |
 | Cross-tree bridging | A supported seam, not a reach-in: apply with caller-supplied refs, insert at a position, echo suppression. Not built yet | none |
 | Authority | None in the library. Who may write where is the application's rule, written into a link's `accept` or a node's own code | 053, 057; 009 superseded |
 | Attach edges and aliases | One attach edge decides where an observable lives; every other reference is an alias that grants and revokes nothing. On the wire as the edge kind | 010 |
@@ -170,7 +170,7 @@ superseded it.
 | The inverse | Captured where the prior value is free, in core, in both directions. Nothing on the wire | 016 |
 | Scopes | A scope is a prefix of the path a delta names; a step can be a wildcard; an effect follows the depth of its scope | 017, 018, 025 |
 | Scopes and values | Two surfaces of one chain: a scope's `watch` delivers commits, a derived value's delivers the value; memoized while observed, two-phase settling | 023 |
-| Cells | State outside the document: `mutable`, `immutable`, `timer`, `fromEvent`. Not attachable; rate limiting exists only here | 024, 026 |
+| Cells | State outside the document: `mutable`, `immutable`, `timer`, `fromEvent`, and `mutableArray`, a list whose slots hold anything and whose edits are heard one by one. Not attachable; rate limiting exists only here | 024, 026, 081 |
 | Writing through a derived value | Declared, never inferred: `map` is read-only, `setter` declares the write half, one caching layer at the transform | 027, 028 |
 | A snapshot | `fromSnapshot` inverts `snapshot`, holding what the document says and not what it still indexes | 029 |
 | What is public | The delivery plumbing is not; the stack ships one view binding | 030, 031 |
@@ -194,6 +194,9 @@ superseded it.
 | The gate | Required and outside every module: `identify` once per connection or request answers a context or refuses, `access` runs before a module sees a connection, a call or a request; `open` is the trusted case; a module declares `public` or nothing and the auth gate reads it, `server` does not | 071 |
 | A connection | One socket behind a listener the application supplies: the link as binary messages, requests as text; hooks run in load order for the modules the gate allows; a share on it requires `accept` | 072, 073 |
 | Sessions and sign-in | Documents in the application's store, tokens from the id source, identity fixed per connection from the handshake cookie; sign-in and sign-out are HTTP routes | 074 |
+| The mounting model | One mounter with a host seam: `mount` creates through the page, `render` through the light tree with markers around every dynamic part, `hydrate` claims the server's nodes in place at insert time; user code runs from a queue per root | 077, 078 |
+| A component's hooks | `(props, cleanup, mounted, pending)`; `pending` is what `render` waits for; the context is one opaque value threaded through `mount` and never read by the binding | 079, 080 |
+| The binding's corpus | Every requirement lands but the cases only a compile step can meet and the build-only internals, which have nothing here to apply to | 083 |
 
 ---
 
@@ -221,11 +224,11 @@ primary author. A convention will not prevent that. A dependency will.
   behind it
 - the **listener conformance suite** (`listenerChecks`), so a `server` listener written for
   another runtime is correct by passing it
+- the **recording host** (`recordingDocument`), a light document from `dom` that writes down
+  every node operation, so a test asserts what a mount did and not only what the tree looks
+  like after. It is the DOM mock: nothing pulls in a browser emulation
 
-It grows these as the packages that need them arrive, and this list says "today" because it
-used to name things as though they existed:
-
-- a **DOM mock**, so nothing pulls in a full browser emulation. Arrives with `dom`.
+It grows these as the packages that need them arrive.
 
 One test runner and one assertion library everywhere. Gates are the conformance suite,
 per-package branch coverage, and a rule that a package publishes only if a harness exercises
@@ -343,7 +346,7 @@ is wrong or missing.
 |---|---|
 | `scope` | What it does is narrow which parts of a tree a listener sees. `.path()`, `.ignore()` and `.shallow()` read as scope builders. The nearest neighbours in other libraries are selector and lens |
 | `add` / `replace` / `remove` | The same three words as JSON Patch. The format is specified for cross-language use, so an implementer reading `replace` already knows the semantics |
-| `watch` delivers commits | The safe thing is the default. A subscription that hands out mid-transaction state should have to be asked for by name |
+| `watch` delivers commits | The safe thing is the default. A subscription that hands out mid-transaction state should have to be asked for by name. `dom`'s `watch(value, fn)` keeps the rule: it is `effect` over a value that may or may not be reactive, and a cell's `watch` delivers that cell's changes |
 | `replica` | Replication topology and delta replay are one concern with one name |
 
 **Two underscore conventions, and they are never conflated.** A leading underscore is a
