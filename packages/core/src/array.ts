@@ -152,8 +152,11 @@ export const createArray = <T = unknown>(items?: Iterable<T>, id?: Uint8Array): 
 				const from = start < 0 ? Math.max(length + start, 0) : Math.min(start, length);
 				const take = count === undefined ? length - from : Math.min(Math.max(count, 0), length - from);
 
-				const removed: unknown[] = [];
-				for (let i = 0; i < take; i++) removed.push(removeAt(node, from));
+				// Back to front, so each removal shifts only the slots past the run: clearing a
+				// list shifts nothing, where front to back shifted the whole remainder once per
+				// row. Deltas in a commit are order-independent, so nothing else can tell.
+				const removed: unknown[] = new Array<unknown>(take);
+				for (let i = take - 1; i >= 0; i--) removed[i] = removeAt(node, from + i);
 
 				insertRun(node, from, values);
 				return removed;

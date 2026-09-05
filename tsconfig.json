@@ -11,6 +11,7 @@
 		{ "path": "packages/server" },
 		{ "path": "packages/auth" },
 		{ "path": "packages/jobs" },
+		{ "path": "packages/dom" },
 		{ "path": "packages/testing" }
 	]
 }

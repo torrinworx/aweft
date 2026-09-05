@@ -4,44 +4,48 @@
 // byte. It deliberately does not say how a position between two others is chosen, because a
 // receiver orders by comparing and never by regenerating. This is core's choice.
 //
-// A position is a run of fixed-width levels, each a digit and a few random bytes. Read as a
-// fraction, the digits are the digits and the random bytes break a tie between two replicas
-// that chose the same one. Fixed width is what makes a plain byte comparison mean the same
-// thing as comparing level by level: a byte can only ever line up against a byte playing the
-// same part.
+// A position is an integer part followed by fractional levels. The integer part is one count
+// byte, that many digits in base 254 with no leading zero, and three random bytes; a longer
+// integer sorts after every shorter one because the count is compared first, so appending is
+// counting up and the key for the ten thousandth row is six bytes (design 082). A fractional
+// level is one digit and three random bytes, fixed width, so a byte only ever lines up against
+// a byte playing the same part (design 040).
 //
 // The random bytes are the whole point. Without them the choice is a pure function of the two
 // neighbours, so two replicas inserting at the same place name the same slot and one of the
 // two inserts is refused: two people adding to a list at the same moment lose one of them.
-// Design 040. Design 014 claimed the keys already differed, nothing checked it, and they
-// did not. `bench/replicate.ts` measures what the levels cost and counts the distinctness.
+// `bench/replicate.ts` measures what the levels cost and counts the distinctness.
 
 import { codecError, compareBytes } from '@aweftjs/codec';
 
 /**
- * A level is one digit and three random bytes.
+ * Three random bytes follow the integer part and every fractional digit.
  *
  * Three bytes puts two replicas that chose the same digit at one chance in 16.7 million of
  * naming the same slot, and even then the loser's commit is refused rather than lost quietly.
- * It costs four bytes where a bare digit costs one.
  */
 const JITTER = 3;
 const LEVEL = 1 + JITTER;
 
-// A chosen digit stays strictly inside the byte range, so there is always room to place one
-// below the lowest and above the highest without adding a level.
+// A fractional digit stays strictly inside the byte range, so there is always room to place
+// one below the lowest and above the highest without adding a level.
 const FLOOR = 1;
 const CEILING = 254;
-/** Where the first element of an array goes, so there is room on both sides of it. */
+/** The first fractional digit under a level, so there is room on both sides of it. */
 const START = 128;
 
+// An integer digit is its value plus one, so a digit byte is never zero and a key with no
+// fractional part still ends in its random bytes. The first element of an array gets this
+// integer, so a prepend has as much room as an append before the integer runs out.
+const BASE = 254n;
+const FIRST = 128n;
+
 /**
- * The digit to choose between two bounds, or undefined when none fits.
+ * The fractional digit to choose between two bounds, or undefined when none fits.
  *
  * A step of one at each end and the midpoint in the middle. Stepping matters: jumping to the
- * midpoint of an open end burns half the range on every append, which is 250 levels over two
- * thousand appends against eight. Two replicas choosing the same digit is fine and expected;
- * the randomness after it is what tells them apart.
+ * midpoint of an open end burns half the range on every insert. Two replicas choosing the
+ * same digit is fine and expected; the randomness after it is what tells them apart.
  */
 const digitFor = (da: number | undefined, db: number | undefined): number | undefined => {
 	if (da === undefined && db === undefined) return START;
@@ -50,39 +54,103 @@ const digitFor = (da: number | undefined, db: number | undefined): number | unde
 	return db - da >= 2 ? da + ((db - da) >> 1) : undefined;
 };
 
+/** The integer to choose between two bounds, or undefined when none fits. */
+const integerFor = (va: bigint | undefined, vb: bigint | undefined): bigint | undefined => {
+	if (va === undefined && vb === undefined) return FIRST;
+	if (vb === undefined) return va! + 1n;
+	if (va === undefined) return vb > 0n ? vb - 1n : undefined;
+	return vb - va >= 2n ? va + (vb - va) / 2n : undefined;
+};
+
+// Drawn from a pool filled in one call, because one system call per key is most of the cost
+// of choosing ten thousand positions in one commit.
+const POOL = 4096;
+let pool = new Uint8Array(0);
+let drawn = 0;
+const draw = (): Uint8Array => {
+	if (drawn + JITTER > pool.length) {
+		pool = crypto.getRandomValues(new Uint8Array(POOL));
+		drawn = 0;
+	}
+	const bytes = pool.subarray(drawn, drawn + JITTER);
+	drawn += JITTER;
+	return bytes;
+};
+
 const jitter = (): number[] => {
-	const bytes = crypto.getRandomValues(new Uint8Array(JITTER));
+	const bytes = draw();
 	// A position may not end in a zero byte, and any level may turn out to be the last one.
 	if (bytes[JITTER - 1] === 0) bytes[JITTER - 1] = 1;
 	return [...bytes];
 };
 
-/** The digit of level `i`, or undefined when the key has no level there. */
+/** The count byte and digits of an integer, without its random bytes. */
+const integerBytes = (value: bigint): number[] => {
+	const digits: number[] = [];
+	let rest = value;
+	do {
+		digits.unshift(Number(rest % BASE) + 1);
+		rest /= BASE;
+	} while (rest > 0n);
+	return [digits.length, ...digits];
+};
+
+/** How many bytes the integer part of `key` takes, random bytes included. */
+const integerWidth = (key: Uint8Array): number => 1 + (key[0] ?? 0) + JITTER;
+
+/** The integer a key starts with. A key cut short by hand reads as the digits it has. */
+const integerOf = (key: Uint8Array | null): bigint | undefined => {
+	if (key === null) return undefined;
+	const count = key[0] ?? 0;
+	let value = 0n;
+	for (let i = 1; i <= count && i < key.length; i++) value = value * BASE + BigInt(key[i]! - 1);
+	return value;
+};
+
+/** Where level `i` of `key` starts. Level 0 is the integer part; the rest are fixed width. */
+const levelStart = (key: Uint8Array, i: number): number =>
+	(i === 0 ? 0 : integerWidth(key) + (i - 1) * LEVEL);
+
+const levelWidth = (key: Uint8Array, i: number): number => (i === 0 ? integerWidth(key) : LEVEL);
+
+/** The fractional digit of level `i`, or undefined when the key has no level there. */
 const digitAt = (key: Uint8Array | null, i: number): number | undefined =>
-	(key === null || key.length <= i * LEVEL ? undefined : key[i * LEVEL]);
+	(key === null || key.length <= levelStart(key, i) ? undefined : key[levelStart(key, i)]);
 
 /** Do both keys carry the same bytes at level `i`? */
 const sameLevel = (a: Uint8Array, b: Uint8Array, i: number): boolean => {
-	const at = i * LEVEL;
-	for (let j = 0; j < LEVEL; j++) {
-		if (a[at + j] !== b[at + j]) return false;
+	const width = levelWidth(a, i);
+	if (width !== levelWidth(b, i)) return false;
+	const at = levelStart(a, i);
+	const bt = levelStart(b, i);
+	for (let j = 0; j < width; j++) {
+		if (a[at + j] !== b[bt + j]) return false;
 	}
 	return true;
 };
 
-/** Is level `i` of `key` the lowest one that digit has, with no randomness after it? */
+/** Is level `i` of `key` the lowest one its digit has, with no randomness after it? */
 const zeroJitter = (key: Uint8Array, i: number): boolean => {
-	const at = i * LEVEL;
-	for (let j = 1; j < LEVEL; j++) {
-		if ((key[at + j] ?? 0) !== 0) return false;
+	const end = levelStart(key, i) + levelWidth(key, i);
+	for (let j = end - JITTER; j < end; j++) {
+		if ((key[j] ?? 0) !== 0) return false;
 	}
 	return true;
 };
 
 /** Copy level `i` of `key` onto the answer. */
 const copyLevel = (out: number[], key: Uint8Array, i: number): void => {
-	const at = i * LEVEL;
-	for (let j = 0; j < LEVEL; j++) out.push(key[at + j] ?? 0);
+	const at = levelStart(key, i);
+	const width = levelWidth(key, i);
+	for (let j = 0; j < width; j++) out.push(key[at + j] ?? 0);
+};
+
+/** Copy level `i` of `key` with its randomness zeroed: under everything that shares it. */
+const copyLevelUnder = (out: number[], key: Uint8Array, i: number): void => {
+	const at = levelStart(key, i);
+	const width = levelWidth(key, i);
+	for (let j = 0; j < width - JITTER; j++) out.push(key[at + j] ?? 0);
+	for (let j = 0; j < JITTER; j++) out.push(0);
 };
 
 /**
@@ -95,14 +163,15 @@ const copyLevel = (out: number[], key: Uint8Array, i: number): void => {
  * Returns: a valid position, non-empty and not ending in a zero byte. Two calls with the same
  * neighbours give two different positions, both between them, in an order both sides agree on.
  *
- * Throws `invalid-position` when `a` is not below `b`.
+ * Throws `invalid-position` when `a` is not below `b`, or when the two leave no room that
+ * this chooser can find, which only a position written by hand can arrange.
  *
  * `a` and `b` are positions this produced, or ones a replica of the same array produced. A
  * position written by hand is a valid slot key and is not a fraction this can subdivide, so
  * hand one to `insertAt` rather than expecting a neighbour to be chosen beside it.
  *
  * Example:
- *   between(null, null)  // one level: a digit near the middle, then three random bytes
+ *   between(null, null)  // a count of one, one digit, then three random bytes
  */
 export const between = (a: Uint8Array | null, b: Uint8Array | null): Uint8Array => {
 	// Checked here rather than discovered further down: every branch below assumes the two
@@ -114,7 +183,39 @@ export const between = (a: Uint8Array | null, b: Uint8Array | null): Uint8Array 
 	const out: number[] = [];
 	let above: Uint8Array | null = b;
 
-	for (let i = 0; ; i++) {
+	const finish = (): Uint8Array => {
+		const key = Uint8Array.from(out);
+		if ((a !== null && compareBytes(a, key) >= 0) || (b !== null && compareBytes(key, b) >= 0)) {
+			throw codecError('invalid-position', 'no position fits between these two');
+		}
+		return key;
+	};
+
+	// The integer part first. It is one level with its own arithmetic; the rules for where to
+	// go when nothing fits are the same as for a fractional level.
+	if (a !== null && above !== null && sameLevel(a, above, 0)) {
+		copyLevel(out, a, 0);
+	} else {
+		const value = integerFor(integerOf(a), integerOf(above));
+		if (value !== undefined) {
+			out.push(...integerBytes(value), ...jitter());
+			return finish();
+		}
+
+		if (a !== null) {
+			// Adjacent integers, or equal with different randomness: go under `a`.
+			copyLevel(out, a, 0);
+			above = null;
+		} else if (zeroJitter(above!, 0)) {
+			copyLevel(out, above!, 0);
+		} else {
+			// `b` is the integer zero: nothing counts below it, so sit under it.
+			copyLevelUnder(out, above!, 0);
+			above = null;
+		}
+	}
+
+	for (let i = 1; ; i++) {
 		const da = digitAt(a, i);
 		const db = digitAt(above, i);
 
@@ -128,7 +229,7 @@ export const between = (a: Uint8Array | null, b: Uint8Array | null): Uint8Array 
 		const digit = digitFor(da, db);
 		if (digit !== undefined) {
 			out.push(digit, ...jitter());
-			return Uint8Array.from(out);
+			return finish();
 		}
 
 		if (da !== undefined) {
@@ -140,7 +241,7 @@ export const between = (a: Uint8Array | null, b: Uint8Array | null): Uint8Array 
 			continue;
 		}
 
-		// `a` has run out and `b` sits on the floor, so no digit fits below it. Take `b`'s digit
+		// `a` has run out and `b` sits on the floor, so no digit fits below it. Take `b`'s level
 		// with no randomness at all, which is under every level that shares that digit, and
 		// place the answer below that.
 		//
@@ -151,9 +252,7 @@ export const between = (a: Uint8Array | null, b: Uint8Array | null): Uint8Array 
 			copyLevel(out, above!, i);
 			continue;
 		}
-		// `db` is defined here: `a` has run out, so `digitFor` only answers undefined when `b`
-		// has a level too, and the entry check has already refused a pair that is not a gap.
-		out.push(db!, ...new Uint8Array(JITTER));
+		copyLevelUnder(out, above!, i);
 		above = null;
 	}
 };

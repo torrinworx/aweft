@@ -41,3 +41,6 @@ export type {
 // while a Commit carries bytes, so the function across the gap rides along, the same way
 // core re-exports the codec types its own signatures hand out.
 export { idFromText, idToText, slotKeyOf } from '@aweftjs/codec';
+
+export { recordingDocument } from './dom.ts';
+export type { Recording } from './dom.ts';

@@ -16,8 +16,8 @@ test('the entry file exports exactly what was decided', () => {
 		'alias', 'all', 'apply', 'atomic', 'byId',
 		'createArray', 'createMap', 'createObject',
 		'fromEvent', 'fromSnapshot',
-		'idOf', 'immutable', 'insertAt', 'intercept', 'isObservable', 'isReachable',
-		'kindOf', 'mutable', 'observer', 'parentOf', 'pathOf', 'positionsOf',
+		'idOf', 'immutable', 'insertAt', 'intercept', 'isMutableArray', 'isObservable', 'isReachable',
+		'kindOf', 'mutable', 'mutableArray', 'observer', 'parentOf', 'pathOf', 'positionsOf',
 		'snapshot', 'textIdOf', 'timer',
 	];
 

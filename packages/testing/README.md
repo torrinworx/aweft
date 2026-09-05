@@ -95,6 +95,24 @@ commit that breaks a rule leaves the document exactly as it was. Compare documen
 `canonicalJson` rather than directly, or the order keys happened to be inserted in becomes
 part of the answer.
 
+## The recording host
+
+`recordingDocument()` is a light document from `@aweftjs/dom` that writes down every node
+operation, so a test asserts what a mount did to the tree and not only what the tree looks
+like after.
+
+```ts
+import { recordingDocument } from '@aweftjs/testing';
+
+const { document, ops } = recordingDocument();
+mount(document.body, h('p', {}, 'hi'));
+ops;            // ['insert <p> into <body> before end']
+ops.length = 0; // clear between the steps of a test
+```
+
+One line per insert, remove, replace, text write, attribute write and clear, in order. A node
+made elsewhere joins the recording when it is inserted.
+
 ## The tier rule
 
 Packages are numbered, and a package may import downward only. `boundaries.json` is the

@@ -20,7 +20,7 @@ test('the entry file exports exactly what was decided', () => {
 		'listenerChecks',
 		'loadFixtures', 'loadInvalidFixtures', 'loadModule',
 		'modelApplier', 'moduleSpecifiers',
-		'randomBelow', 'randomFrom',
+		'randomBelow', 'randomFrom', 'recordingDocument',
 		'refFromJson', 'refToJson', 'roomChecks',
 		'seedFrom', 'shuffle', 'slotKeyOf',
 		'surfaceOf', 'surfaceProgram',

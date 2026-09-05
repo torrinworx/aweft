@@ -96,7 +96,7 @@ report('commit bytes alone', bodies);
 for (const size of [1, 4, 16, 64]) {
 	const frames: Frame[] = [];
 	for (let i = 0; i < commits.length; i += size) {
-		frames.push({ kind: 'commits', topic: 0, first: i + 1, commits: commits.slice(i, i + size) });
+		frames.push({ kind: 'commits', topic: 1, first: i + 1, commits: commits.slice(i, i + size) });
 	}
 	report(`${String(size).padStart(2)} commit(s) per frame`, frames.map(encodeFrame));
 }
@@ -108,7 +108,7 @@ report('topic named on every frame', commits.map((commit, i) =>
 
 console.log('\ncarrying one commit across a link');
 const one = commits[Math.floor(commits.length / 2)]!;
-const frame: Frame = { kind: 'commits', topic: 0, first: 1, commits: [one] };
+const frame: Frame = { kind: 'commits', topic: 1, first: 1, commits: [one] };
 time('handed over as a frame (in process)', 20000, () => { const f = frame; if (f.kind !== 'commits') throw 0; });
 time('encoded and decoded as bytes', 20000, () => { decodeFrame(encodeFrame(frame)); });
 time('structured-cloned as a commit', 20000, () => { structuredClone(one); });
