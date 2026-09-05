@@ -10,6 +10,7 @@
 		{ "path": "packages/sandbox" },
 		{ "path": "packages/server" },
 		{ "path": "packages/auth" },
+		{ "path": "packages/dom" },
 		{ "path": "packages/testing" }
 	]
 }
