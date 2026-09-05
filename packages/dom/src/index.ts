@@ -15,7 +15,10 @@ import { htm } from './htm.ts';
 /**
  * Markup in a template literal, bound to `h`.
  *
+ * Annotated pure so a bundler drops the binding, and the parser behind it, out of a page that
+ * never writes `html`. Nothing else in the package reaches `htm`.
+ *
  * Example:
  *   mount(document.body, html`<button $onclick=${add}>clicked ${count} times</button>`);
  */
-export const html = htm(h);
+export const html = /* @__PURE__ */ htm(h);

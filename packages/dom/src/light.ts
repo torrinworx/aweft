@@ -7,6 +7,7 @@
 // enforces HTML's tree-construction rules; markup round-trips only if it was written so the
 // browser's parser produces the same tree, and design 078 says what that asks of a page.
 
+import { setFallbackDocument } from './ambient.ts';
 import type { CommentLike, DocumentLike, ElementLike, NodeLike, ParentLike, TextLike } from './types.ts';
 import { COMMENT, ELEMENT, TEXT } from './types.ts';
 
@@ -607,3 +608,13 @@ export const parseHtml = (markup: string, document: LightDocument = createDocume
 };
 
 export type { ParentLike };
+
+// `h` outside any mount, on a machine with no page, makes its nodes here. The registration
+// lives at this end rather than in `ambient.ts` so that a page which mounts into a browser
+// document never reaches this file, and marked pure so that a bundler may drop this file
+// entirely: without the annotation one call here keeps the whole tree in every page.
+//
+// A bundle that does keep this file loses the registration with it, and `h` outside a mount
+// then says so rather than guessing. Both other modes already know their document: `mount`
+// takes the target's, and `render` makes one.
+/* @__PURE__ */ setFallbackDocument(createDocument);

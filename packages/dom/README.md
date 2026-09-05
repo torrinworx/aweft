@@ -167,6 +167,17 @@ that are kept and dispatched only by `dispatchEvent`. `toHtml(node)` serializes;
 (markup)` reads markup back into light nodes, so a page can be rendered, parsed and hydrated
 in a test with no browser. It applies no auto-closing or implied elements.
 
+It is also where `h` makes a node when nobody has said where: inside a mount the mount says,
+outside one the page's `document` does, and where there is no page the light tree registers
+itself as the answer. Nothing imports the light tree to arrange that: it registers the
+no-page fallback from its own file, and `html` is built with a pure annotation, so a bundler
+that follows both can leave the tree and the template parser out of a page that writes neither.
+
+A bundle without the light tree has no fallback, so a program with no page document mounts,
+renders, or makes a document with `createDocument()` before it calls `h` at module scope. `h`
+with no mount, no page and no registration asserts `no document to make nodes in: mount or
+render into one` rather than guessing.
+
 ## Mount targets and mounters
 
 The target of `mount` is any element, or anything with `insertBefore`, `removeChild` and
