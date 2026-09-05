@@ -51,11 +51,25 @@ or `false` attribute value removes the attribute; `true` sets it empty. An eleme
 reactive parts is returned as itself, so `const box = h('div', { class: 'box' })` is a node
 you can hand to the browser.
 
-`html` is a tag for template literals. A tag or attribute value may be an expression:
-`<${Component} title=${t}>`, `$onclick=${fn}`, `=${props}` spreads an object, `</>` closes
-the innermost element. A quoted attribute may mix text and expressions (`class="row ${tone}"`)
-and follows any cell inside it. Whitespace works as in JSX: lines are trimmed, blank lines
-go, and a line break inside text is one space. Close void elements yourself (`<br/>`).
+`html` is a tag for template literals. A tag may be an expression (`<${Component}>`), `</>`
+closes the innermost open element, `<!-- ... -->` is a comment and goes, and `${value}` between
+tags is a child. Whitespace works as in JSX: lines are trimmed, blank lines go, and a line break
+inside text is one space. Close void elements yourself (`<br/>`).
+
+Inside a tag, these are all the forms there are:
+
+| written | means |
+| --- | --- |
+| `hidden` | the attribute set to `true` |
+| `id=plain` | the unquoted text up to the next space or `>` |
+| `class="row ${tone}"` | the quoted parts as one value, derived when a cell is among them |
+| `title=${t}`, `$onclick=${fn}` | the expression itself, followed if it is a cell |
+| `=${props}` or `${props}` | a spread: every key of the object becomes a prop |
+
+A spread is the one form with two spellings. `=${props}` is the explicit one; a hole on its own,
+with no name in front of it, means the same thing. Either way it must be an object, and a page
+that hands it anything else gets `a spread in a tag must be an object` in development.
+
 `htm(h, { join })` binds the parser to another `h`; `join` says how a quoted attribute of
 several parts becomes one value, by default the parts concatenated, and derived when a cell
 is among them.

@@ -31,6 +31,11 @@ const violations = checkManifests(manifests, [], {
 	// write itself (design 072). Its declaration file rides along as a dev
 	// dependency. This package only.
 	'@aweftjs/server': ['ws', '@types/ws'],
+	// One transform has to run in a bundler and in a browser, so it needs a parser that reads
+	// TypeScript and JSX and still fits a page: 89 KB gzipped against `typescript`'s 1,595 KB,
+	// and `acorn` cannot read TypeScript at all. `magic-string` edits the source in place so an
+	// untouched line comes out byte for byte (design 088). This package only.
+	'@aweftjs/build': ['@babel/parser', 'magic-string'],
 });
 
 if (violations.length > 0) {

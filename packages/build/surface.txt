@@ -1,0 +1,9 @@
+type Mangle: interface Mangle { readonly pattern: RegExp; readonly terser: { readonly mangle: { readonly properties: { readonly regex: RegExp; }; }; }; readonly esbuild: { readonly mangleProps: RegExp; }; }
+type Plugin: interface Plugin { readonly name: string; readonly enforce: 'pre'; transform(code: string, id: string): { code: string; map: string; } | null; }
+type SourceMap: interface SourceMap { readonly version: number; readonly sources: readonly string[]; readonly names: readonly string[]; readonly mappings: string; toString(): string; toUrl(): string; }
+value TransformError: typeof TransformError
+type TransformOptions: interface TransformOptions { readonly filename?: string; readonly release?: boolean; }
+type TransformResult: interface TransformResult { readonly code: string; readonly map: SourceMap; }
+value aweft: (options?: Omit<TransformOptions, "filename">) => Plugin
+value mangle: Mangle
+value transform: (source: string, options?: TransformOptions) => TransformResult

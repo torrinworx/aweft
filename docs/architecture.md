@@ -113,11 +113,12 @@ version in lockstep.
 | `store` | Persisting a document as observable rows, its commit tail, the driver interface | DOM, transport |
 | `modules` | Reading module definitions from a directory, a bundle map or a document; dependency order; injection; load and unload | Whether it runs on a client or a server; storage, transport, history; who may load or run anything; which modules load or when |
 | `sandbox` | The window: a loader on the far end of a link, the grants, calls as rows, and the runners that make a room | What the code it runs is for; what wall is around the room; who may load, grant or call; how many rooms and for how long |
-| `dom` | Mounting, hydration, static render, URL and history | Storage, transport, components |
+| `dom` | Mounting, hydration, static render, URL and history, and the prototype a hoisted template is instanced from | Storage, transport, components |
 | `ui` | Components, theming | Storage, transport, server |
 | `server` | Accepting connections and requests through a listener; one socket as a link and a call channel; running the modules' `connection`, `call` and `routes` hooks behind the gate the application supplies | Who is on a connection, who may reach a module, who may write a commit, which modules load; users, sessions, storage; component internals |
 | `auth` | The gate that reads `public`, sessions as documents, sign-in and sign-up, the per-user state document, as server modules | Which application loads it; the client, this round |
 | `jobs` | When a row runs, over an observable array the application hands in: the timers, the cron arithmetic, `last` written onto the row | What a job does; who may add, edit or remove a row; storage; queues, retries, catch-up; modules; component internals |
+| `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom |
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
 
 ---
@@ -493,12 +494,23 @@ and the two fixes overlap.
 
 `@aweftjs/build` exposes one transform implementation with two entry points:
 
-- **build mode**, a bundler plugin, the normal path for application code
-- **runtime mode**, callable in a browser, for compiling source that did not exist at build
-  time
+- **build mode**, `aweft()`, a bundler plugin, the normal path for application code
+- **runtime mode**, `transform()`, callable in a browser, for compiling source that did not
+  exist at build time
 
 One implementation, shared conformance tests proving both modes produce identical output for
-identical input. That equality is testable and is a fixture suite, not an assumption.
+identical input. That equality is testable and is a fixture suite, not an assumption:
+`packages/build/tests/modes.test.ts` runs every equivalence fixture through both and compares
+the code and the map byte for byte.
+
+Four passes, in the order a node reaches them: markup in a template literal becomes `h` calls,
+JSX becomes `h` calls resolved by ordinary scope, a static subtree becomes a template `dom`
+instances per document (design 089, 093, 094), and a release build loses its assert calls
+(design 097). Hoisting happens only where `h` is provably `dom`'s in that file (design 092).
+
+The transform's own risk is changing what a program means, so the package's suite is an
+equivalence suite: each fixture runs as written and transformed, mounted, rendered and
+hydrated, over a document whose nodes clone and one whose nodes do not.
 
 **Why it is not optional.** If the transform that *validates* stored module source differs
 from the transform that *executes* it, then a module validates, is stored, and breaks at

@@ -634,6 +634,9 @@ export type { Handle };
 export const pendingOf = (root: Root): Set<Promise<unknown>> => root.pending;
 export const drainRoot = drain;
 export const hydrationOf = (root: Root): Hydration | null => root.hydration;
+/** Whether the mount running right now is claiming server nodes. A hoisted template asks,
+ * because a claimed node has to be one the binding made rather than a clone. */
+export const hydrating = (): boolean => current !== null && current.root.hydration !== null;
 export const endHydration = (root: Root): void => {
 	root.hydration?.finish();
 	root.hydration = null;

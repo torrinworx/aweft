@@ -15,6 +15,11 @@ type NodeLike: interface NodeLike { readonly nodeType: number; readonly nodeName
 type ParentLike: interface ParentLike { insertBefore(node: NodeLike, before: NodeLike | null): unknown; removeChild(node: NodeLike): unknown; replaceChild(node: NodeLike, old: NodeLike): unknown; readonly firstChild?: NodeLike | null; textContent?: string | null; readonly ownerDocument?: DocumentLike | null; }
 type Pending: type Pending = (promise: Promise<unknown>) => void;
 type Remove: type Remove = (arg?: typeof getFirst) => NodeLike | null | undefined;
+type Template: type Template = (values: readonly unknown[]) => unknown;
+type TemplateAttributes: type TemplateAttributes = Readonly<Record<string, string | number | boolean>>;
+type TemplateChild: type TemplateChild = string | TemplateElement;
+type TemplateEdit: type TemplateEdit = readonly [ 'props', path: readonly number[] ] | readonly [ 'child', path: readonly number[], before: number ];
+type TemplateElement: type TemplateElement = readonly [ tag: string, attributes: TemplateAttributes | null, ...children: TemplateChild[] ];
 type TextLike: interface TextLike extends NodeLike { data: string; splitText(offset: number): TextLike; }
 value createDocument: () => LightDocument
 value createElement: (tag: string, namespace?: string | undefined) => ElementLike
@@ -24,9 +29,11 @@ value h: (tag: unknown, props?: Record<string, unknown> | null, ...children: unk
 value htm: (h: H, options?: { join?: ((parts: unknown[]) => unknown) | undefined; }) => (strings: TemplateStringsArray, ...values: unknown[]) => unknown
 value html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown
 value hydrate: (target: ParentLike, item: unknown, context?: unknown) => Remove
+value joined: (parts: unknown[]) => unknown
 value mount: (elem: ParentLike, item: unknown, before?: Remove | undefined, context?: unknown) => Remove
 value parseHtml: (markup: string, document?: LightDocument) => LightNode[]
 value render: (item: unknown, options?: { context?: unknown; }) => Promise<string>
 value setAttribute: (element: ElementLike, name: string, value: unknown) => void
+value template: (spec: TemplateElement, edits: readonly TemplateEdit[]) => Template
 value toHtml: (node: NodeLike | readonly NodeLike[]) => string
 value watch: (value: unknown, callback: (value: unknown) => void) => () => void

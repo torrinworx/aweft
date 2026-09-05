@@ -101,6 +101,20 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
 		}
 	}
 
+	bindProps(element, given, signals);
+
+	if (signals.length === 0) return element;
+	const bound: Bound = { [BOUND]: true, node: element, signals };
+	return bound;
+};
+
+/**
+ * Write one element's properties and attributes, collecting a signal for each reactive one.
+ *
+ * Not exported from the package: a hoisted template applies the properties of the elements
+ * inside it, and it has to apply them exactly as `h` does, so it runs this rather than a copy.
+ */
+export const bindProps = (element: ElementLike, given: Record<string, unknown>, signals: Signal[]): void => {
 	for (const key of Object.keys(given)) {
 		if (key === 'children') continue;
 		const value = given[key];
@@ -131,10 +145,6 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
 			attributeSet(element, key, value);
 		}
 	}
-
-	if (signals.length === 0) return element;
-	const bound: Bound = { [BOUND]: true, node: element, signals };
-	return bound;
 };
 
 export type { Mounter };

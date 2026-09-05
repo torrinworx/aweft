@@ -1,8 +1,10 @@
 export { mount, getFirst } from './mount.ts';
 export type { Cleanup, Component, Mounted, Mounter, Pending, Remove } from './mount.ts';
 export { h } from './h.ts';
-export { htm } from './htm.ts';
+export { htm, joined } from './htm.ts';
 export type { H } from './htm.ts';
+export { template } from './template.ts';
+export type { Template, TemplateAttributes, TemplateChild, TemplateEdit, TemplateElement } from './template.ts';
 export { hydrate, render } from './render.ts';
 export { createDocument, parseHtml, toHtml } from './light.ts';
 export type { LightComment, LightDocument, LightElement, LightNode, LightText } from './light.ts';

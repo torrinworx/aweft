@@ -57,6 +57,25 @@ const skipSpace = (r: Reader): void => {
 };
 
 /**
+ * One attribute value out of several parts.
+ *
+ * A quoted attribute in markup may mix text and expressions, and this is what the pieces become.
+ * `build` emits a call to it for a compiled template, so markup that was parsed and markup that
+ * was compiled make the same value out of the same pieces.
+ *
+ * Params:
+ *   parts: the pieces in order, each a plain value or a scope, cell or derived value
+ *
+ * Returns: the pieces joined as text when all of them are plain, and otherwise a derived value
+ * that joins them again whenever one of them changes.
+ *
+ * Example:
+ *   setAttribute(el, 'class', joined(['note ', tone]));
+ */
+export const joined = (parts: unknown[]): unknown =>
+	(parts.some(isSource) ? all(parts).map((values) => values.join('')) : parts.join(''));
+
+/**
  * Bind the template parser to an `h`.
  *
  * Params:
@@ -72,8 +91,7 @@ const skipSpace = (r: Reader): void => {
  *   html`<p class="note ${tone}">${text}</p>`
  */
 export const htm = (h: H, options: { join?: (parts: unknown[]) => unknown } = {}) => {
-	const join = options.join ?? ((parts: unknown[]): unknown =>
-		(parts.some(isSource) ? all(parts).map((values) => values.join('')) : parts.join('')));
+	const join = options.join ?? joined;
 
 	const readAttributes = (r: Reader, frame: Frame): boolean => {
 		for (;;) {
