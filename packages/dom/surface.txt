@@ -1,0 +1,32 @@
+type Cleanup: type Cleanup = (...fns: (() => void)[]) => void;
+type CommentLike: interface CommentLike extends NodeLike { data: string; }
+type Component: type Component<P = Record<string, unknown>> = (props: P & { children: unknown[]; each?: unknown; }, cleanup: Cleanup, mounted: Mounted, pending: Pending) => unknown;
+type DocumentLike: interface DocumentLike { createElement(tag: string): ElementLike; createElementNS(namespace: string, tag: string): ElementLike; createTextNode(data: string): TextLike; createComment(data: string): CommentLike; }
+type ElementLike: interface ElementLike extends NodeLike, ParentLike { readonly localName: string; readonly namespaceURI: string | null; setAttribute(name: string, value: string): void; getAttribute(name: string): string | null; hasAttribute(name: string): boolean; removeAttribute(name: string): void; getAttributeNames(): string[]; readonly firstChild: NodeLike | null; textContent: string | null; [property: string]: unknown; }
+type H: type H = (tag: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => unknown;
+type LightComment: class LightComment
+type LightDocument: class LightDocument
+type LightElement: class LightElement
+type LightNode: class LightNode
+type LightText: class LightText
+type Mounted: type Mounted = (...fns: (() => void)[]) => void;
+type Mounter: type Mounter = (elem: ParentLike, item: unknown, before: Remove, context: unknown) => Remove;
+type NodeLike: interface NodeLike { readonly nodeType: number; readonly nodeName: string; parentNode: ParentLike | null; readonly nextSibling: NodeLike | null; readonly previousSibling: NodeLike | null; readonly firstChild: NodeLike | null; readonly lastChild: NodeLike | null; readonly ownerDocument?: DocumentLike | null; textContent: string | null; }
+type ParentLike: interface ParentLike { insertBefore(node: NodeLike, before: NodeLike | null): unknown; removeChild(node: NodeLike): unknown; replaceChild(node: NodeLike, old: NodeLike): unknown; readonly firstChild?: NodeLike | null; textContent?: string | null; readonly ownerDocument?: DocumentLike | null; }
+type Pending: type Pending = (promise: Promise<unknown>) => void;
+type Remove: type Remove = (arg?: typeof getFirst) => NodeLike | null | undefined;
+type TextLike: interface TextLike extends NodeLike { data: string; splitText(offset: number): TextLike; }
+value createDocument: () => LightDocument
+value createElement: (tag: string, namespace?: string | undefined) => ElementLike
+value createTextNode: (text: string) => TextLike
+value getFirst: typeof getFirst
+value h: (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown
+value htm: (h: H, options?: { join?: ((parts: unknown[]) => unknown) | undefined; }) => (strings: TemplateStringsArray, ...values: unknown[]) => unknown
+value html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown
+value hydrate: (target: ParentLike, item: unknown, context?: unknown) => Remove
+value mount: (elem: ParentLike, item: unknown, before?: Remove | undefined, context?: unknown) => Remove
+value parseHtml: (markup: string, document?: LightDocument) => LightNode[]
+value render: (item: unknown, options?: { context?: unknown; }) => Promise<string>
+value setAttribute: (element: ElementLike, name: string, value: unknown) => void
+value toHtml: (node: NodeLike | readonly NodeLike[]) => string
+value watch: (value: unknown, callback: (value: unknown) => void) => () => void
