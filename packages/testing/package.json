@@ -16,7 +16,8 @@
 		"@aweftjs/modules": "*",
 		"@aweftjs/sandbox": "*",
 		"@aweftjs/server": "*",
-		"typescript": "^5.9.2"
+		"typescript": "^5.9.2",
+		"@aweftjs/dom": "*"
 	},
 	"aweft": {
 		"tier": "integrator",

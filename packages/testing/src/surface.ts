@@ -99,10 +99,17 @@ export const surfaceOf = (indexPath: string, program = surfaceProgram([indexPath
 
 		const shape = declaration !== undefined
 			&& (ts.isInterfaceDeclaration(declaration) || ts.isTypeAliasDeclaration(declaration));
+		// A class handed out with `export type` names instances only; no constructor is exported.
+		const alias = exported.declarations?.[0];
+		const typeOnly = alias !== undefined && ts.isExportSpecifier(alias)
+			&& (alias.isTypeOnly || alias.parent.parent.isTypeOnly)
+			&& declaration !== undefined && ts.isClassDeclaration(declaration);
 
 		const body = shape
 			? `type ${exported.name}: ${shapeOf(declaration)}`
-			: `value ${exported.name}: ${checker.typeToString(
+			: typeOnly
+				? `type ${exported.name}: class ${exported.name}`
+				: `value ${exported.name}: ${checker.typeToString(
 				checker.getTypeOfSymbolAtLocation(target, file),
 				undefined,
 				ts.TypeFormatFlags.NoTruncation,
