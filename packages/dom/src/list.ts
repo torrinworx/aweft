@@ -2,8 +2,10 @@
 //
 // Records form an intrusive doubly linked chain for anchoring (a record's anchor is the next
 // record's first node) and sit in an array for index access. An edit is a run of steps; a
-// value removed and added again in the same run keeps its mount and moves its nodes, so a
-// swap moves two rows rather than rebuilding them and an input inside keeps its focus.
+// value the run takes out and puts back keeps its mount and moves its nodes, so a swap moves
+// two rows rather than rebuilding them and an input inside keeps its focus. Which order the
+// steps name the two does not matter: mounting waits until every step has run, so the pool of
+// detached records is complete before anything decides to build a row again.
 
 import type { NodeLike, ParentLike } from './types.ts';
 
@@ -136,18 +138,35 @@ export const createList = (spec: ListSpec): List => {
 		return rec;
 	};
 
-	const place = (rec: Record, at: number): void => {
-		link(rec, at);
-		if (rec.nodes !== null) {
-			const anchor = anchorOf(rec)();
-			for (const node of rec.nodes) spec.elem.insertBefore(node, anchor);
-			rec.nodes = null;
-		}
+	/** Put a record's captured nodes back in the tree, where it now sits in the chain. */
+	const lay = (rec: Record): void => {
+		if (rec.nodes === null) return;
+		const anchor = anchorOf(rec)();
+		for (const node of rec.nodes) spec.elem.insertBefore(node, anchor);
+		rec.nodes = null;
 	};
 
-	/** New records linked in order, mounted in order, sharing one answer for their anchors. */
-	const mountRun = (run: readonly Record[]): void => {
-		const shared: Run = { after: run[run.length - 1]!.next, epoch, maxAsked: -1 };
+	const place = (rec: Record, at: number): void => {
+		link(rec, at);
+		lay(rec);
+	};
+
+	/** A record that has not mounted yet takes over a detached one's mount, and its nodes. */
+	const adopt = (rec: Record, from: Record): void => {
+		rec.handle = from.handle;
+		rec.nodes = from.nodes;
+		lay(rec);
+	};
+
+	/**
+	 * New records linked in order, mounted in order, sharing one answer for their anchors.
+	 *
+	 * `at` is the epoch the run was closed at, not the one now: anything that relinked the
+	 * chain since then may have put a record between two members, and the shared answer is
+	 * only right while they are still next to each other.
+	 */
+	const mountRun = (run: readonly Record[], at: number): void => {
+		const shared: Run = { after: run[run.length - 1]!.next, epoch: at, maxAsked: -1 };
 		run.forEach((rec, i) => { rec.run = shared; rec.runIndex = i; });
 		for (const rec of run) rec.handle = spec.mountItem(rec.value, anchorOf(rec));
 	};
@@ -202,36 +221,68 @@ export const createList = (spec: ListSpec): List => {
 		}
 
 		const detached = new Map<unknown, Record[]>();
+		const runs: Array<{ readonly records: Record[]; readonly epoch: number }> = [];
 		let run: Record[] = [];
 		let runEnd = -1;
-		const flush = (): void => {
+		const close = (): void => {
 			if (run.length === 0) return;
-			mountRun(run);
+			runs.push({ records: run, epoch });
 			run = [];
 		};
+
 		for (const step of steps) {
 			if (step.type === 'remove') {
-				flush();
+				close();
 				detachInto(detached, step.at);
 				continue;
 			}
 			if (step.type === 'replace') {
-				flush();
+				close();
 				detachInto(detached, step.at);
 			}
 			const reused = takeDetached(detached, step.value);
 			if (reused !== undefined) {
-				flush();
+				close();
 				place(reused, step.at);
 				continue;
 			}
-			if (run.length > 0 && step.at !== runEnd + 1) flush();
+			if (run.length > 0 && step.at !== runEnd + 1) close();
 			const rec: Record = { value: step.value, handle: null, prev: null, next: null, nodes: null, run: null, runIndex: 0 };
 			link(rec, step.at);
 			run.push(rec);
 			runEnd = step.at;
 		}
-		flush();
+		close();
+
+		// Every step has run, so the pool now holds everything this edit took out. A record
+		// still waiting to mount whose value is in the pool was moved, not replaced, whichever
+		// order the steps named the two: that is what makes a swap written as two replaces move
+		// both rows instead of rebuilding one of them.
+		for (const group of runs) {
+			for (const rec of group.records) {
+				const reused = takeDetached(detached, rec.value);
+				if (reused !== undefined) adopt(rec, reused);
+			}
+		}
+
+		// Mounting waits for the chain to settle, so every anchor is read from where the
+		// records finally sit. A run splits at each record that adopted one, because the run's
+		// shared anchor is only right for records that have put nothing in the tree yet.
+		for (const group of runs) {
+			let waiting: Record[] = [];
+			for (const rec of group.records) {
+				if (rec.handle === null) {
+					waiting.push(rec);
+					continue;
+				}
+				if (waiting.length > 0) {
+					mountRun(waiting, group.epoch);
+					waiting = [];
+				}
+			}
+			if (waiting.length > 0) mountRun(waiting, group.epoch);
+		}
+
 		dropDetached(detached);
 	};
 

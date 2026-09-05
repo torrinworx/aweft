@@ -154,3 +154,67 @@ test('a commit that emptied and refilled the list in one block reads as one clea
 	assert.equal(toHtml(document.body), '<body><ul>c</ul></body>');
 	assert.ok(!ops.includes('clear <ul>'), 'a block that adds is not a clear');
 });
+
+test('a swap of two prebuilt rows in one block moves both and rebuilds neither', () => {
+	const { document, ops } = recordingDocument();
+	const rows = mutableArray<unknown>([h('i', {}, 'a'), h('i', {}, 'b'), h('i', {}, 'c'), h('i', {}, 'd')]);
+	mount(document.body, rows);
+	const body = document.body as LightElement;
+	const [a, , , d] = body.children;
+
+	ops.length = 0;
+	atomic(() => {
+		const t = rows[0];
+		rows[0] = rows[3];
+		rows[3] = t;
+	});
+
+	// One change list of two replaces (design 087), so the pool holds both rows by the time
+	// either is put back and each keeps its mount.
+	assert.equal(toHtml(document.body), '<body><i>d</i><i>b</i><i>c</i><i>a</i></body>');
+	assert.equal(body.children[0], d, 'the d row is the same node');
+	assert.equal(body.children[3], a, 'the a row is the same node');
+	assert.equal(ops.filter((op) => op.startsWith('insert <i> into <body>')).length, 2, ops.join(' | '));
+	assert.ok(!ops.some((op) => op.includes('into <i>')), `a row was built again: ${ops.join(' | ')}`);
+});
+
+test('a component list swapped in one block moves both rows too', () => {
+	const { document, ops } = recordingDocument();
+	const rows = mutableArray<Row>([row('a'), row('b'), row('c')]);
+	mount(document.body, h('ul', {}, h(Item, { each: rows })));
+	const ul = (document.body as LightElement).children[0]!;
+	const [first, , third] = ul.children;
+
+	ops.length = 0;
+	atomic(() => {
+		const t = rows[0]!;
+		rows[0] = rows[2]!;
+		rows[2] = t;
+	});
+
+	assert.equal(toHtml(document.body), '<body><ul><li>c</li><li>b</li><li>a</li></ul></body>');
+	assert.equal(ul.children[0], third);
+	assert.equal(ul.children[2], first);
+	assert.ok(ops.every((op) => op.startsWith('insert <li>') || op.startsWith('remove <li>')),
+		`rows move whole: ${ops.join(' | ')}`);
+});
+
+test('a row placed between two rows added in the same block lands in order', () => {
+	const doc = createDocument();
+	const rows = mutableArray<unknown>(['a', 'b', 'c', 'd', 'e', 'f'].map((text) => h('i', {}, text)));
+	mount(doc.body, rows);
+
+	const x = h('b', {}, 'x');
+	const y = h('b', {}, 'y');
+	atomic(() => {
+		rows.splice(0, 0, x, y);
+		const moved = rows[5];
+		rows.splice(5, 1);
+		rows.splice(1, 0, moved);
+	});
+
+	// The two adds are a run and the move lands between them, so the run's shared anchor is no
+	// longer the right answer for the row before it.
+	assert.equal(toHtml(doc.body),
+		'<body><b>x</b><i>d</i><b>y</b><i>a</i><i>b</i><i>c</i><i>e</i><i>f</i></body>');
+});
