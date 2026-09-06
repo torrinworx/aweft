@@ -118,7 +118,9 @@ export const writeHead = (w: Writer, major: number, arg: number): void => {
 	}
 };
 
-const textEncoder = new TextEncoder();
+// Made on first use, not at module load. A bundler cannot drop a module whose top level
+// constructs something, so a page that never encodes was carrying both of these.
+let textEncoder: InstanceType<typeof TextEncoder> | null = null;
 
 /**
  * Refuse a string the format cannot carry.
@@ -156,7 +158,7 @@ export const assertText = (s: string): void => {
 export const writeText = (w: Writer, s: string): void => {
 	assertText(s);
 
-	const bytes = textEncoder.encode(s);
+	const bytes = (textEncoder ??= new TextEncoder()).encode(s);
 	writeHead(w, 3, bytes.length);
 	raw(w, bytes);
 };
@@ -321,7 +323,7 @@ export const readArg = (r: Reader, info: number): number => {
 	throw codecError('malformed-head', `additional information ${info} is reserved`);
 };
 
-const textDecoder = new TextDecoder('utf-8', { fatal: true });
+let textDecoder: InstanceType<typeof TextDecoder> | null = null;
 
 export const readValue = (r: Reader, depth = 0): WireValue => {
 	if (depth >= MAX_DEPTH) throw codecError('nesting-too-deep', `past ${MAX_DEPTH} levels`);
@@ -352,7 +354,7 @@ export const readValue = (r: Reader, depth = 0): WireValue => {
 		if (major === 2) return slice.slice();
 
 		try {
-			return textDecoder.decode(slice);
+			return (textDecoder ??= new TextDecoder('utf-8', { fatal: true })).decode(slice);
 		} catch {
 			throw codecError('invalid-utf8', `${n} bytes do not decode`);
 		}
