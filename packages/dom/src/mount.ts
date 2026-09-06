@@ -16,6 +16,7 @@ import { type Before, type Handle, type List, type Step, createList, hex, seek }
 import type { DocumentLike, ElementLike, NodeLike, ParentLike, TextLike } from './types.ts';
 import { ELEMENT, isNodeLike, isSource } from './types.ts';
 import { markMade, setRecording } from './props.ts';
+import { RERUN, abortRow, beginRow, endRow } from './row-template.ts';
 
 /**
  * Ask a remove function for the first live node of its mount instead of removing it.
@@ -566,11 +567,29 @@ export const componentHandle = (ctx: Ctx, component: Component, props: Record<st
 				return;
 			}
 			if (eachValue !== undefined) props['each'] = eachValue;
+			// A row of a list: record the first one's shape, then clone it for the rest
+			// (design 099). The props object is the call site, so it is the cache key.
+			const mode = eachValue === undefined ? 0 : beginRow(props, ctx.root.hydration !== null);
+			const callbacks = rec.mountedCbs.length;
+			const cleanups = rec.cleanups.length;
 			let result: unknown;
 			try {
-				result = withRoot(ctx.root, scope, rec, () =>
+				const body = (): unknown => withRoot(ctx.root, scope, rec, () =>
 					component(props as Parameters<Component>[0], cleanup, mounted, pending));
+				result = body();
+				if (mode !== 0) {
+					result = endRow(props, mode, result);
+					if (result === RERUN) {
+						// This row built a different shape from the recorded one, so it built no
+						// nodes at all and has to run again. What the abandoned attempt asked for
+						// through `mounted` and `cleanup` is dropped, so neither fires twice.
+						rec.mountedCbs.length = callbacks;
+						rec.cleanups.length = cleanups;
+						result = body();
+					}
+				}
 			} catch (error) {
+				if (mode !== 0) abortRow(props, mode);
 				rec.bodyDone = true;
 				rec.mountedCbs.length = 0;
 				complete(rec);

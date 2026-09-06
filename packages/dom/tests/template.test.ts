@@ -9,42 +9,21 @@ import assert from 'node:assert/strict';
 import { mutable } from '@aweftjs/core';
 
 import { createDocument, h, hydrate, joined, mount, parseHtml, render, template, toHtml } from '../src/index.ts';
-import type { LightDocument, LightElement, LightNode, LightText } from '../src/index.ts';
+import type { LightDocument, LightElement } from '../src/index.ts';
 
 /**
- * The light tree with nodes that clone, which is what a browser has and the light tree does not.
- * Written here from what cloning means, so the template's browser path has something to run on.
- *
- * `made` counts only what the document was asked for through `createElement`. Cloning goes around
- * it, as it does in a browser, so the count says how many elements were built rather than copied.
+ * The light tree, counting what it was asked to make through `createElement`. Cloning goes around
+ * the factory, as it does in a browser, so the count says how many elements were built rather
+ * than copied. The light tree clones on its own since design 099, so nothing here writes a second
+ * `cloneNode` for the template's clone path to run on.
  */
-const cloningDocument = (made: { count: number } = { count: 0 }): LightDocument => {
+const countingDocument = (made: { count: number } = { count: 0 }): LightDocument => {
 	const document = createDocument();
 	const element = document.createElement.bind(document);
-	const text = document.createTextNode.bind(document);
-
-	const withText = (node: LightText): LightText => {
-		(node as { cloneNode?: unknown }).cloneNode = () => withText(text(node.data));
-		return node;
-	};
-	const withClone = (node: LightElement): LightElement => {
-		(node as { cloneNode?: unknown }).cloneNode = (deep: boolean) => clone(node, deep);
-		return node;
-	};
-	const clone = (node: LightNode, deep: boolean): LightNode => {
-		if (node.nodeType !== 1) return withText(text((node as LightText).data));
-		const source = node as LightElement;
-		const copy = withClone(element(source.localName));
-		for (const name of source.getAttributeNames()) copy.setAttribute(name, source.getAttribute(name) ?? '');
-		if (deep) for (let n = source.firstChild; n !== null; n = n.nextSibling) copy.appendChild(clone(n, true));
-		return copy;
-	};
-
 	document.createElement = (tag: string): LightElement => {
 		made.count += 1;
-		return withClone(element(tag));
+		return element(tag);
 	};
-	document.createTextNode = (data: string): LightText => withText(text(data));
 	return document;
 };
 
@@ -60,7 +39,7 @@ const row = template(
 );
 
 test('an instance is the same tree the equivalent h calls make', () => {
-	for (const make of [createDocument, cloningDocument]) {
+	for (const make of [createDocument, countingDocument]) {
 		const built = markupOf(row(['one', { title: 'here' }]), make);
 		const written = markupOf(
 			h('tr', { class: 'row' },
@@ -81,8 +60,8 @@ test('an instance with nothing reactive in it is the element itself, as h answer
 });
 
 test('the prototype belongs to the document, not to the module', () => {
-	const first = cloningDocument();
-	const second = cloningDocument();
+	const first = countingDocument();
+	const second = countingDocument();
 	const App = () => row(['x', null]);
 	mount(first.body, h(App));
 	mount(second.body, h(App));
@@ -129,7 +108,7 @@ test('the prototype is built once per document and cloned after that', () => {
 	// A page that made the prototype again per row would pay `h`'s cost per row, which is the whole
 	// saving. Counting what the document was asked to make is how that is visible from outside.
 	const made = { count: 0 };
-	const document = cloningDocument(made);
+	const document = countingDocument(made);
 
 	const three = template(['ul', null, ['li', null, 'a'], ['li', null, 'b']], [['props', []]]);
 	const App = () => [three([{ title: 'one' }]), three([{ title: 'two' }]), three([{ title: 'three' }])];
@@ -140,7 +119,9 @@ test('the prototype is built once per document and cloned after that', () => {
 	assert.equal(document.body.children[2]!.getAttribute('title'), 'three');
 });
 
-test('rendering with no browser builds rather than clones, and the markup is the same', async () => {
+// The light tree gained `cloneNode` with design 099, so a render clones like a browser does.
+// What matters either way is that the markup is what the `h` calls this template replaced make.
+test('rendering with no browser makes the markup the h calls it replaced make', async () => {
 	const label = mutable('server');
 	assert.equal(
 		await render(row([label, { title: 'x' }])),
@@ -187,7 +168,7 @@ test('a path is resolved against the untouched instance, before anything is put 
 	// index 1. Resolve the second step's path when that step runs and it finds the new child
 	// instead, and the `li` comes out empty.
 	const both = template(['ul', { class: 'u' }, ['li', { class: 'x' }]], [['child', [], 0], ['child', [0], -1]]);
-	for (const make of [createDocument, cloningDocument]) {
+	for (const make of [createDocument, countingDocument]) {
 		assert.equal(markupOf(both(['P', 'B']), make), '<body><ul class="u">P<li class="x">B</li></ul></body>');
 	}
 });
@@ -218,7 +199,7 @@ test('hydration adopts the server nodes whether the instance was cloned or built
 
 	for (const [where, server, client] of ways) {
 		const markup = await render(server());
-		const document = cloningDocument();
+		const document = countingDocument();
 		const item = client(document);
 		for (const node of parseHtml(markup, document)) document.body.appendChild(node as LightElement);
 		const sent = document.body.children[0]!;

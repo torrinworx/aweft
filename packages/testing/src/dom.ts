@@ -37,6 +37,15 @@ const observe = (node: NodeLike, ops: Ops): void => {
 		ops.push(`insert ${label(child)} into ${label(this)} before ${label(before)}`);
 		return proto['insertBefore']!.call(this, child, before);
 	};
+	// A clone is a node the binding made without going through a factory. Left unobserved, every
+	// operation on a cloned row goes unrecorded and an ops assertion quietly shrinks.
+	if (typeof target['cloneNode'] === 'function') {
+		target['cloneNode'] = function (this: NodeLike, deep?: boolean) {
+			const copy = proto['cloneNode']!.call(this, deep) as NodeLike;
+			observe(copy, ops);
+			return copy;
+		};
+	}
 	target['removeChild'] = function (this: NodeLike, child: NodeLike) {
 		ops.push(`remove ${label(child)} from ${label(this)}`);
 		return proto['removeChild']!.call(this, child);
@@ -92,8 +101,8 @@ const observe = (node: NodeLike, ops: Ops): void => {
  *
  * Returns: the document and its `ops`, one line per operation: `insert <li> into <ul> before
  * end`, `remove <li> from <ul>`, `text "a" -> "b"`, `attr class="x" on <div>`, `unattr class
- * on <div>`, `clear <ul>`. Nodes made through the document's factories are recorded; nodes
- * from elsewhere are not.
+ * on <div>`, `clear <ul>`. Nodes made through the document's factories are recorded, and so is
+ * anything cloned from one; nodes from elsewhere are not.
  *
  * Example:
  *   const { document, ops } = recordingDocument();

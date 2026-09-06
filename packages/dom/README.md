@@ -114,6 +114,37 @@ const Todo = ({ each: todo }) => h('li', { class: observer(todo).path('done').bo
 h('ul', {}, h(Todo, { each: state.todos }));
 ```
 
+**A component under `each` renders the same node shape on every call.** The first row is
+built and remembered; every row after it is a clone of that one with this row's values
+written in, which is what makes a long list cheap. So the tags, their order, the prop keys
+and which children are present have to be the same for every item. What changes per row is
+values: text, attribute and property values, and what a scope or cell drives.
+
+Most of this is unchecked, and breaking it is quiet. A tag that varies keeps the first row's
+tag, and a prop key or a child that only some rows have is dropped. Branch on the item inside a
+value, not around the markup:
+
+```ts
+// Good: one shape, a value that varies.
+({ each: todo }) => h('li', { class: observer(todo).path('done').bool('done', '') }, todo.title);
+
+// Wrong: two shapes from one component. Every row takes the first row's tag, silently.
+({ each: todo }) => (todo.done ? h('s', {}, todo.title) : h('li', {}, todo.title));
+```
+
+The prop keys have to match too, including the keys inside a `$style` object: a row that names
+fewer of them than the first row did keeps the first row's, because a clone carries the style
+it was cloned from. And what `h` returns inside such a body is only good for handing to another
+`h` or returning; a body that keeps it, reads a property off it or mounts into it is not using
+`h` to build the row, and the list quietly stops cloning when it can tell.
+
+Two shapes means two components, each with its own `each`, or one component whose body mounts
+the varying part as a child. Two breaks are caught. A row whose body returned something other
+than the element `h` built for it, such as text or a pair, runs its body a second time, and the
+list stops cloning from then on: its rows are correct and slower. A row that called `h` a
+different number of times than the first row asserts, naming both counts, because its values no
+longer line up with anything.
+
 ## Lists
 
 A document array or a mutable array delivers every edit as the edit: a push inserts one

@@ -12,6 +12,7 @@ import { type Bound, BOUND, type ChildSignal, type Signal, attributeSet, isBound
 import { setProperty } from './hydration.ts';
 import { type Component, type Mounter, componentMounter } from './mount.ts';
 import { markMade, recordProperty, recordReactiveAttribute } from './props.ts';
+import { isRowRecording, isRowReplaying, replayCall, traceChild, traceClose, traceNode, traceProp, traceText } from './row-template.ts';
 import type { ElementLike, NodeLike } from './types.ts';
 import { isNodeLike, isSource } from './types.ts';
 
@@ -52,9 +53,15 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
 		return componentMounter(tag as Component, own, 'each' in own);
 	}
 
+	// A row being cloned files its values away; the clone already holds this element.
+	if (isRowReplaying()) return replayCall(given, children);
+	const tracing = isRowRecording();
+
 	let element: ElementLike;
 	if (isNodeLike(tag)) {
 		element = tag as ElementLike;
+		// A node from outside this row: nothing a clone could carry.
+		if (tracing) traceNode(element);
 	} else {
 		assert(typeof tag === 'string', `unsupported tag: ${typeof tag}`);
 		element = markMade(activeDocument().createElement(String(tag)));
@@ -70,29 +77,39 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
 		pendingAnchor.length = 0;
 	};
 
-	for (const child of children) {
+	for (let at = 0; at < children.length; at += 1) {
+		const child = children[at];
 		assert(child !== undefined, 'cannot mount undefined; hide something with null');
 		if (child === null || child === undefined) continue;
 		if (isBound(child)) {
+			if (tracing) traceNode(child);
 			signals.push(...child.signals);
 			placed(child.node);
 		} else if (isNodeLike(child)) {
+			if (tracing) traceNode(child);
 			placed(child);
 		} else if (typeof child !== 'object' && typeof child !== 'function') {
-			placed(markMade(activeDocument().createTextNode(String(child))));
+			const text = markMade(activeDocument().createTextNode(String(child)));
+			if (tracing) traceText(text, at, child);
+			placed(text);
 		} else {
 			const signal: ChildSignal = { kind: 'child', parent: element, item: child, staticNext: null, next: null, handle: null };
 			if (lastChild !== null) lastChild.next = signal;
 			lastChild = signal;
 			pendingAnchor.push(signal);
 			signals.push(signal);
+			if (tracing) traceChild(signal, at);
 		}
 	}
 
-	bindProps(element, given, signals);
+	bindProps(element, given, signals, tracing);
 
-	if (signals.length === 0) return element;
+	if (signals.length === 0) {
+		if (tracing) traceClose(element, element);
+		return element;
+	}
 	const bound: Bound = { [BOUND]: true, node: element, signals };
+	if (tracing) traceClose(element, bound);
 	return bound;
 };
 
@@ -101,11 +118,20 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
  *
  * Not exported from the package: a hoisted template applies the properties of the elements
  * inside it, and it has to apply them exactly as `h` does, so it runs this rather than a copy.
+ *
+ * `tracing` is only ever true from `h`. A hoisted template is the compiled path and a row
+ * recorder never templates one, so it passes false and files no holes.
  */
-export const bindProps = (element: ElementLike, given: Record<string, unknown>, signals: Signal[]): void => {
+export const bindProps = (
+	element: ElementLike,
+	given: Record<string, unknown>,
+	signals: Signal[],
+	tracing = false,
+): void => {
 	for (const key of Object.keys(given)) {
 		if (key === 'children') continue;
 		const value = given[key];
+		if (tracing) traceProp(element, key, value);
 		if (key[0] === '$') {
 			const name = key.slice(1);
 			if (isSource(value)) {

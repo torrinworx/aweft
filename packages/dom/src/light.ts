@@ -99,6 +99,21 @@ export class LightNode implements NodeLike {
 		this.parentNode?.removeChild(this);
 	}
 
+	/** A copy of this node alone. Every kind that carries anything overrides it. */
+	protected cloneSelf(): LightNode {
+		return new LightNode(this.nodeType, this.nodeName, this.ownerDocument);
+	}
+
+	/**
+	 * A copy of this node, with its subtree when `deep`. As in a browser, only what the markup
+	 * carries comes along: attributes do, properties and listeners do not.
+	 */
+	cloneNode(deep = false): LightNode {
+		const copy = this.cloneSelf();
+		if (deep) for (let n = this.firstChild; n !== null; n = n.nextSibling) copy.appendChild(n.cloneNode(true));
+		return copy;
+	}
+
 	contains(node: LightNode | null): boolean {
 		for (let n = node; n !== null; n = n.parentNode) if (n === this) return true;
 		return false;
@@ -144,6 +159,10 @@ export class LightText extends LightNode implements TextLike {
 		return this.data.length;
 	}
 
+	protected override cloneSelf(): LightText {
+		return new LightText(this.data, this.ownerDocument);
+	}
+
 	splitText(offset: number): LightText {
 		const rest = new LightText(this.data.slice(offset), this.ownerDocument);
 		this.data = this.data.slice(0, offset);
@@ -158,6 +177,10 @@ export class LightComment extends LightNode implements CommentLike {
 	constructor(data: string, ownerDocument: LightDocument) {
 		super(COMMENT, '#comment', ownerDocument);
 		this.data = data;
+	}
+
+	protected override cloneSelf(): LightComment {
+		return new LightComment(this.data, this.ownerDocument);
 	}
 
 	override get textContent(): string {
@@ -298,6 +321,13 @@ export class LightElement extends LightNode implements ElementLike {
 		this.tagName = this.nodeName;
 		this.namespaceURI = namespaceURI;
 		this.classList = new LightClassList(this);
+	}
+
+	protected override cloneSelf(): LightElement {
+		const copy = new LightElement(this.localName, this.namespaceURI, this.ownerDocument);
+		for (const [name, value] of this.attributes) copy.attributes.set(name, value);
+		copy.style.cssText = this.style.cssText;
+		return copy;
 	}
 
 	setAttribute(name: string, value: string): void {
