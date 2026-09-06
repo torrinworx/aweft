@@ -38,10 +38,11 @@ Follow it in order. A step skipped is how a change that did nothing gets kept.
 | `dom-grain.ts` | Which grain the DOM binding consumes, against a linked fake tree | `node bench/dom-grain.ts` |
 | `dom-rows.ts` | The row table in Chromium: create, update, swap, remove, clear | `node bench/dom-rows.ts` |
 | `dom-heap.ts` | Ten create-and-clear cycles in Chromium, heap after each, both idioms | `node bench/dom-heap.ts` |
+| `hoist.ts` | What static hoisting is worth in Chromium: the benchmark row built through `h` calls against one `template` instance, inside a mount and outside one | `node bench/hoist.ts` |
 | `perf-lab.ts` | The row path in Chromium at a finer grain: small operations repeated inside the timed block, the cell-of-array idiom that is the only caller of `setItems`, the same row as a hoisted template on the `compiled:` lines, and the DOM calls per row for both | `node bench/perf-lab.ts [label]` |
 
-`npm run bench` runs all of them in order. The three browser scripts, `dom-rows.ts`,
-`dom-heap.ts` and `perf-lab.ts`, need the Chromium the root gate installs (`npm run browser`); they emit the
+`npm run bench` runs all of them in order. The four browser scripts, `dom-rows.ts`,
+`dom-heap.ts`, `perf-lab.ts` and `hoist.ts`, need the Chromium the root gate installs (`npm run browser`); they emit the
 packages to plain JS with `tsc` first, so they measure the sources as they stand, not a stale
 build.
 
