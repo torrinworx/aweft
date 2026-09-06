@@ -1,0 +1,2 @@
+not-a-child: Call removeChild on the node's own parent, which parentNode names.
+not-a-child: Pass one of this node's children as the reference, or null to append.

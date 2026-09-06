@@ -1,0 +1,4 @@
+invalid-config: Set sessionMs to a positive number of milliseconds, or leave it out.
+malformed: Call it as { email: "someone@example.com" }.
+no-store: Build it as createLoader({ sources, props: { store } }).
+not-gated: Put auth/Gate in front of the server, or make the module public.

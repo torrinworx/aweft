@@ -1,0 +1,11 @@
+<whatever the far end refused for>: Handle this reason where the ask was made, or fix the answerer that raised it.
+<whatever the far end refused for>: Share the document again on a new link; a topic that ended does not resume.
+answering: Stop the answerer already registered before adding another.
+bad-frame: Send frames encodeFrame wrote; a link reads nothing else.
+closed: Open a new socket and make a fresh requests() on it.
+closed: Wait until the socket opens, then ask again.
+duplicate: Reuse the requests() this socket already has, or stop it first.
+kind-conflict: Pass object, array or map as the kind.
+not-data: Send arguments JSON.stringify can carry.
+root-mismatch: Reconcile against a snapshot of this same document, or build a new one with rootFrom.
+timeout: Raise the timeout, or check that the other end answers this name.

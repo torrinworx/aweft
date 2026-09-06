@@ -1,0 +1,15 @@
+invalid: Add tz to the row, such as America/Toronto.
+invalid: Give the row one of at, every or cron, and tz beside cron.
+invalid: Put the lower value first in the range.
+invalid: Set at to a number, as Date.now() gives one.
+invalid: Set every to a positive number of milliseconds.
+invalid: Use an IANA time zone name, such as America/Toronto.
+invalid: Write a cron expression whose day and month can fall together.
+invalid: Write a range as two values with one hyphen between them, such as 1-5.
+invalid: Write a value inside the range the message names.
+invalid: Write a whole number, or a name such as JAN or MON.
+invalid: Write five fields: minute, hour, day, month and weekday.
+invalid: Write the field as a value, a range, or a range and one step.
+invalid: Write the step after the slash as 1 or more.
+missing: Pass both: createScheduler({ jobs, run }).
+not-a-list: Build the array with createArray from @aweftjs/core.

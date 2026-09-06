@@ -20,6 +20,7 @@ type Recording: interface Recording { readonly document: DocumentLike & { readon
 type RefJson: interface RefJson { readonly kind: ObservableKind; readonly key: string; }
 type RoomCheck: interface RoomCheck { readonly name: string; run(make: MakeRunner): Promise<void>; }
 type StoreDriver: interface StoreDriver { write(write: { doc: string; root: string; rootKind: string; rows: readonly { id: string; kind: string; edge?: { parent: string; slot: string; } | null; set: Record<string, unknown>; unset: readonly string[]; }[]; dropped: readonly string[]; body: Uint8Array; project?: Record<string, unknown>; }): Promise<number>; declare(fields: readonly string[]): Promise<void>; find(lookup: { where: { field: string; op: string; value: unknown; }; sort?: { field: string; direction: 'asc' | 'desc'; }; limit?: number; after?: string; }): Promise<{ doc: string; fields: Record<string, unknown>; cursor: string; }[]>; scan(limit: number, after?: string): Promise<{ doc: string; fields: Record<string, unknown>; cursor: string; }[]>; create(doc: string, root: string, rootKind: string): Promise<boolean>; read(doc: string): Promise<{ root: string; rootKind: string; rows: unknown[]; } | null>; since(doc: string, seq: number): Promise<{ seq: number; body: Uint8Array; }[]>; head(doc: string): Promise<number>; truncate(doc: string, seq: number): Promise<void>; forget(doc: string, ids: readonly string[]): Promise<void>; remove(doc: string): Promise<void>; close(): Promise<void>; }
+type ThrownRefusal: interface ThrownRefusal { readonly reason: string; readonly fix: string; }
 type ValueJson: type ValueJson = null | boolean | number | string | { readonly bytes: string; } | { readonly ref: string; readonly kind: ObservableKind; readonly edge: EdgeKind; };
 type Violation: interface Violation { readonly from: string; readonly to: string; readonly rule: 'upward-tier' | 'cross-plane' | 'unknown-package' | 'not-allowed'; readonly detail: string; }
 value applyCommit: (doc: DocumentJson, commit: Commit) => DocumentJson
@@ -35,8 +36,10 @@ value commitToJson: (commit: Commit, bytes: Uint8Array<ArrayBufferLike>) => Comm
 value deltaFromJson: (d: DeltaJson) => Delta
 value deltaToJson: (d: Delta) => DeltaJson
 value driverChecks: () => DriverCheck[]
-value idFromText: (text: string) => Uint8Array<ArrayBufferLike> (from @aweftjs/codec)
-value idToText: (id: Uint8Array<ArrayBufferLike>) => string (from @aweftjs/codec)
+value errorLines: (refusals: readonly ThrownRefusal[]) => string[]
+value errorsOf: (files: readonly string[], program: Program) => ThrownRefusal[]
+value idFromText: (text: string) => Id (from @aweftjs/codec)
+value idToText: (id: Id) => string (from @aweftjs/codec)
 value listenerChecks: () => ListenerCheck[]
 value loadFixtures: (dir: string | URL) => Fixture[]
 value loadInvalidFixtures: (dir: string | URL) => InvalidFixture[]

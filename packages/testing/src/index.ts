@@ -44,3 +44,5 @@ export { idFromText, idToText, slotKeyOf } from '@aweftjs/codec';
 
 export { recordingDocument } from './dom.ts';
 export type { Recording } from './dom.ts';
+export { errorLines, errorsOf } from './errors.ts';
+export type { ThrownRefusal } from './errors.ts';

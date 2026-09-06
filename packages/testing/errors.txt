@@ -1,0 +1,19 @@
+dependency-not-stubbed: Add an entry under imports for every name the module lists in deps.
+fix-missing: Give the refusal a third argument saying what to do about it.
+fix-not-literal: Write the fix as a plain string; move anything variable into the detail.
+fixture-accepted: Refuse this input, with the reason the fixture names.
+fixture-mismatch: Make the implementation agree with the fixture, or regenerate with npm run fixtures.
+fixture-refused: Accept this case: the fixture is part of the format, so refusing it is the bug.
+invalid-bound: Check the collection is not empty before asking for an index into it.
+kind-conflict: State one kind for this id in every delta of the commit.
+missing-initial: Give the fixture an initial document, or set its stage to decode.
+multiple-attach: Remove the other attach edge in the same commit, or point at it with a reference.
+no-status-line: Answer every upgrade request with an HTTP status line, refusals included.
+not-in-program: Add the file to the program before reading it.
+not-in-program: Pass this path to surfaceProgram too, or let surfaceOf build its own program.
+reason-not-literal: Write the reason as a plain string; a token built at runtime cannot be branched on.
+room-check-failed: Fix the runner so it meets this obligation, then run the checks again.
+slot-exists: Send a replace delta to overwrite the slot, or add under a free key.
+slot-missing: Send an add delta first, so the slot exists before it is replaced or removed.
+unreachable: Attach it under the root in the same commit that writes into it.
+wrong-reason: Throw the reason the fixture names, so every implementation agrees on why.

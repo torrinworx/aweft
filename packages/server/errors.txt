@@ -1,0 +1,9 @@
+closed: Open a new connection and ask again.
+missing: Load the module, and give it a call function.
+missing: Pass all three: createServer({ loader, gate, listener }).
+no-accept: Pass accept in the share handlers, or open for the trusted case.
+not-a-response: Return a Response from the route.
+over-bound: Send a smaller body, or raise maxPayload on the listener.
+refused: Sign in, or ask for something the gate allows.
+route-conflict: Rename one of the two routes, or unload one of the modules.
+started: Call stop before starting it again.

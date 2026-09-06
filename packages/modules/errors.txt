@@ -1,0 +1,10 @@
+ambiguous-import: Rename one of the two modules so their last segments differ.
+cycle: Drop one of the deps, or move what the two share into a third module.
+duplicate: Keep one file per module name in a source.
+failed: Fix what the factory threw; the error carries it as its cause.
+invalid-name: Give the file a name before its extension.
+missing: Add the module to one of the loader sources, or fix the name.
+missing: Do not unload a module from a factory while a load is running.
+missing: Leave the entry in the document until the load is over.
+missing: Load the dependency first, or list it in the module deps.
+no-implementation: Give one of the files for this name a default export, the factory.

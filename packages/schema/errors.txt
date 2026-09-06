@@ -1,0 +1,1 @@
+async-validator: Give the slot a validator that answers now, and do the slow check before the write.

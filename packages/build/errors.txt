@@ -1,0 +1,16 @@
+attribute-needs-value: Give the attribute a value, or drop the = to make it true.
+bad-attribute-name: Start the attribute with a name, or close the tag.
+empty-expression: Put an expression in the braces, or drop them to make the attribute true.
+invalid-escape: Use an escape the template accepts, or write the character itself.
+mismatched-closing-tag: Name the element being closed, or write </> for the innermost one.
+namespaced-attribute: Write the attribute name without a colon in it.
+namespaced-tag: Write the tag as a plain name or a member expression.
+nothing-to-close: Remove the closing tag, or open the element it closes.
+spread-needs-hole: Put the object in a hole, written as =${object}.
+tag-needs-name: Put a tag name after the <, or write the tag as a hole.
+unclosed-element: Close the element, or write it as <tag /> if it has no children.
+unsupported-child: Write the child as text, an element, or an expression in braces.
+unterminated-attribute: Close the value with the same quote it opened with.
+unterminated-closing-tag: End the closing tag with >.
+unterminated-comment: Close the comment with --> before the next hole.
+unterminated-tag: Close the opening tag with > or />.

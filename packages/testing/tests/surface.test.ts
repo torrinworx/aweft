@@ -16,6 +16,7 @@ test('the entry file exports exactly what was decided', () => {
 		'checkEdge', 'checkFixture', 'checkGraph', 'checkInvalidFixture', 'checkManifests',
 		'commitToJson', 'deltaFromJson', 'deltaToJson',
 	'driverChecks',
+		'errorLines', 'errorsOf',
 		'idFromText', 'idToText',
 		'listenerChecks',
 		'loadFixtures', 'loadInvalidFixtures', 'loadModule',

@@ -1,0 +1,23 @@
+<whatever the far end refused for>: Handle this reason where the call was made, or fix the function it names.
+closed: Make a new sandbox; a room that has stopped does not start again.
+malformed: Build the grants with createArray from @aweftjs/core.
+malformed: Build the module document with createObject from @aweftjs/core.
+malformed: Check that the host and the room run the same version of this package.
+malformed: Check that the host runs the same version of this package as the room.
+malformed: Check that the room runs the same version of this package as the host.
+malformed: Pass props to createSandbox as a plain object.
+missing: Call a function the exposed instance has.
+missing: Call a function the loaded module has.
+missing: Call one of the three the room answers: load, unload and loaded.
+missing: Call one of the two the host answers: applied and failed.
+missing: Expose the name on the host with sandbox.expose first.
+missing: Load the module in the room before calling it.
+no-page: Pass document and MessageChannel to iframe when there is no page.
+not-data: Break the cycle before sending the value.
+not-data: Pass plain JSON data as the arguments.
+not-data: Send a finite number, or null.
+not-data: Send a plain copy of the value, not the observable.
+not-data: Send plain JSON data: null, booleans, finite numbers, strings, arrays and plain objects.
+not-data: Write null instead of undefined inside an array.
+refused: Add the name to the sandbox grants, or call it from the host instead.
+timeout: Raise limits.callMs, or make the call inside the room answer sooner.

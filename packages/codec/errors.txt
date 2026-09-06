@@ -1,0 +1,59 @@
+deltas-out-of-order: Re-encode with encodeCommit, which sorts the deltas into that order for you.
+duplicate-slot: Merge the two deltas into one, or send them in separate commits.
+empty-commit: Drop the commit instead of sending it, or add the delta it was meant to carry.
+empty-commit: Send a commit with at least one delta, or send nothing at all.
+indefinite-length: Re-encode the value with a definite length; this format has no streaming form.
+inline-container: Give the nested structure its own observable and store a reference to it.
+integer-out-of-range: Write a whole number this wide as a float64; encodeValue does that for you.
+invalid-commit: Decode bytes that encodeCommit wrote, not a bare value.
+invalid-commit: Re-encode with encodeCommit, which writes the deltas and at most a tag.
+invalid-commit: Re-encode with encodeCommit, which writes the deltas as an array.
+invalid-delta: Re-encode with encodeCommit, which writes every delta as an array.
+invalid-delta: Re-encode with encodeCommit, which writes three items for a remove and four otherwise.
+invalid-hex: Use the characters 0 to 9 and a to f, as bytesToHex writes them.
+invalid-hex: Write two hex characters per byte, as bytesToHex does.
+invalid-id: Mint ids with createId, which always returns bytes of the right width.
+invalid-id: Pass text that idToText wrote, not a shortened or padded copy of it.
+invalid-id: Pass text that idToText wrote, using A to Z, a to z, 0 to 9, - and _.
+invalid-id: Re-encode with encodeCommit, which writes a delta id as a byte string.
+invalid-number: Store null in place of a missing number, and screen values with Number.isFinite.
+invalid-position: Drop the trailing zero bytes from the key, and never pass an empty one.
+invalid-ref: Give an object slot a string key, and an array or map slot bytes.
+invalid-ref: Key an array slot by its position bytes and a map slot by an id.
+invalid-ref: Re-encode with encodeCommit, which writes a ref as a kind and a key.
+invalid-ref: Re-encode with encodeCommit, which writes an object slot key as a string.
+invalid-ref: Re-encode with encodeCommit, which writes these slot keys as byte strings.
+invalid-reference: Re-encode with encodeCommit, which writes a reference as those three items.
+invalid-reference: Re-encode with encodeCommit, which writes a reference id as a byte string.
+invalid-tag: Pass a byte string of that width as the tag, or leave the tag off.
+invalid-tag: Re-encode with encodeCommit, which refuses a tag outside that width.
+invalid-tag: Re-encode with encodeCommit, which writes the tag as a byte string.
+invalid-utf8: Encode text with encodeValue, which writes well formed UTF-8.
+invalid-value: Store null, a boolean, a number, a string, bytes, or a reference.
+lone-surrogate: Pair the surrogate with its high half, or drop it before encoding.
+lone-surrogate: Pair the surrogate with its low half, or drop it before encoding.
+malformed-head: Re-encode with encodeValue; this format never writes a reserved head.
+missing-value: Give the delta a value, or make it a remove.
+missing-value: Re-encode with encodeCommit, which writes a value on every add and replace.
+missing-value: Re-encode with encodeCommit; only a remove leaves the value out.
+nesting-too-deep: Flatten the value, or split it across several commits.
+non-canonical-float: Re-encode with encodeValue, which writes a whole number this size as an integer.
+non-canonical-integer: Encode with encodeValue, which always picks the shortest form.
+non-finite-float: Re-encode with encodeValue, which refuses infinity and NaN.
+non-finite-float: Send null in place of a missing number, and screen values with Number.isFinite.
+trailing-bytes: Decode one value per buffer; slice the buffer if it holds several.
+truncated: Pass the whole message; the array claims more items than the bytes hold.
+truncated: Pass the whole message; these bytes were cut short in transit or on disk.
+unexpected-value: Leave value off the remove, or make the delta a replace instead.
+unexpected-value: Re-encode with encodeCommit, which writes no value on a remove.
+unknown-delta-type: Re-encode with encodeCommit; the type index is 0 for add, 1 for replace, 2 for remove.
+unknown-delta-type: Set the delta type to add, replace or remove.
+unknown-edge-kind: Re-encode with encodeCommit; the edge index is 0 for attach and 1 for alias.
+unknown-edge-kind: Set the edge to attach where the observable lives, and alias everywhere else.
+unknown-ref-kind: Re-encode with encodeCommit; the kind index is 0 for object, 1 for array, 2 for map.
+unknown-ref-kind: Set ref.kind to object, array or map.
+unknown-ref-kind: Set the reference kind to object, array or map.
+unsupported-major: Drop the tag and write the value on its own.
+unsupported-major: Use an observable map, which encodes as an observable rather than a map value.
+unsupported-simple: Write only null, true and false as simple values.
+unsupported-value: Pass null, a boolean, a number, a string, bytes, or an array of those.

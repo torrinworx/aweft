@@ -1,0 +1,14 @@
+array-in-path: Declare a path that stops above the array, and filter the rest in the caller.
+create-not-held: Fix the driver so create refuses only a name it already holds.
+cursor: Page with the cursor the previous page of this same query handed back.
+detached-elsewhere: Attach a new observable here instead of one this store already swept.
+detached-elsewhere: Attach a new observable here, or apply the commit to the document that still holds it.
+driver-closed: Open a new store; a closed driver cannot be reused.
+empty-path: Give the field the steps from the root to the value it indexes.
+empty-query: Put a condition in where, or call scan to read without an index.
+invalid-limit: Pass a whole number of at least 1 as the limit.
+not-open: Open the document again and use the handle that call hands back.
+root-conflict: Write to a name nothing holds, or remove the stored document first.
+truncated: Open the document and take it whole, rather than asking for the commits it missed.
+undeclared: Declare the path in createStore, or call scan to read without an index.
+wildcard-path: Declare one literal path per field, and one field per path.

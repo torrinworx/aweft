@@ -1,0 +1,48 @@
+async-atomic: Await outside the block, then pass the settled values to atomic.
+cell-in-document: Write its get() into the slot, and keep the cell in the interface.
+duplicate-id: Let createObject mint the id rather than reusing one this document holds.
+empty-commit: Drop the commit instead of applying it, or add the delta it was meant to carry.
+inline-container: Build it with createObject, createArray or createMap, then assign that.
+invalid-key: Assign a whole number index of zero or more.
+invalid-key: Index the array with a number, and keep symbol-keyed data elsewhere.
+invalid-key: Index the list with a number, and keep symbol-keyed data elsewhere.
+invalid-key: Key an array slot with the hex of a position from positionsOf, not an index.
+invalid-key: Pass an id, the same id in text form, or the observable it names.
+invalid-key: Use a string key, and keep symbol-keyed data outside the document.
+invalid-position: Name the slot yourself with insertAt rather than asking for one between these.
+invalid-position: Pass the lower position as a and the higher as b, or null for an open end.
+invalid-value: Store a string, number, boolean, null, Uint8Array, or an observable.
+invalid-value: Use delete on the slot, or assign null when the slot should stay.
+invalid-write: Assign the property instead of calling Object.defineProperty.
+invalid-write: Call push or splice to grow it; assign a smaller length to shorten it.
+invalid-write: Call splice to take the element out and close the gap.
+invalid-write: Push the value on the end, or splice it in where you want it.
+kind-conflict: Give the ref the kind the observable it names declares.
+kind-conflict: Keep one kind per id; make a new observable rather than reusing the id.
+kind-conflict: Set kind to 'object', 'array' or 'map'.
+multi-target: Narrow the scope with path until it names one slot, then set that.
+multiple-attach: Keep one attach edge and make the others 'alias'.
+multiple-attach: Keep one attach edge in the commit and send the rest as 'alias'.
+multiple-attach: Leave one slot holding it, and make the other an alias.
+multiple-attach: Wrap it in alias here, or clear the slot holding it first.
+not-observable: Pass an observable, or call set to file a value under an id you choose.
+not-observable: Pass the document createObject, createArray or createMap returned.
+not-observable: Pass what createArray returned.
+not-observable: Pass what createObject, createArray or createMap returned.
+read-only: Build the chain over a writable source rather than an immutable one.
+read-only: Give the chain a write path with setter before calling set.
+sealed: Return a Refusal from the rule instead of writing to the document.
+slot-exists: Pick a position no element holds, or assign over the element already there.
+slot-exists: Replace the slot instead of adding it, or remove what is there first.
+slot-missing: Add the slot before replacing or removing it.
+slot-missing: Create the observables along the path first, or check get() before setting.
+unreachable: Add the observable it names to observables, or drop the slot naming it.
+unreachable: Add the root to observables, or name a root that is already there.
+unreachable: Apply the commit that attaches it first, or replicate from the source root id.
+unreachable: Attach it somewhere outside its own subtree.
+unreachable: Attach it under the root, or take it out of the snapshot.
+unreachable: Attach the observable to the document before writing to it.
+unsupported: Assign the order you want, or hold the sort outside the list.
+unsupported: Assign the order you want, or hold the sort outside the state.
+unsupported: Assign the order you want.
+unsupported: Assign the slots you mean.
