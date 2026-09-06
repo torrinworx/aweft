@@ -8,13 +8,13 @@
 
 import { assert } from './assert.ts';
 import { activeDocument } from './ambient.ts';
-import { type Bound, BOUND, type ChildSignal, type Signal, attributeSet, isBound, isPlainObject, propertySet } from './bound.ts';
-import { setProperty } from './hydration.ts';
+import { bindAttribute, bindProperty } from './bind.ts';
+import { type Bound, BOUND, type ChildSignal, type Signal, isBound } from './bound.ts';
 import { type Component, type Mounter, componentMounter } from './mount.ts';
-import { markMade, recordProperty, recordReactiveAttribute } from './props.ts';
+import { markMade } from './props.ts';
 import { isRowRecording, isRowReplaying, replayCall, traceChild, traceClose, traceNode, traceProp, traceText } from './row-template.ts';
 import type { ElementLike, NodeLike } from './types.ts';
-import { isNodeLike, isSource } from './types.ts';
+import { isNodeLike } from './types.ts';
 
 /**
  * Make an element, or a component's mounter.
@@ -118,6 +118,8 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
  *
  * Not exported from the package: a hoisted template applies the properties of the elements
  * inside it, and it has to apply them exactly as `h` does, so it runs this rather than a copy.
+ * The two branches are in `bind.ts` because the row template writes one hole at a time and has
+ * no object to loop over.
  *
  * `tracing` is only ever true from `h`. A hoisted template is the compiled path and a row
  * recorder never templates one, so it passes false and files no holes.
@@ -132,32 +134,8 @@ export const bindProps = (
 		if (key === 'children') continue;
 		const value = given[key];
 		if (tracing) traceProp(element, key, value);
-		if (key[0] === '$') {
-			const name = key.slice(1);
-			if (isSource(value)) {
-				signals.push({ kind: 'prop', element, via: null, name, source: value, set: propertySet });
-			} else if (isPlainObject(value)) {
-				// A nested object writes its keys onto the property's value, `style` above all.
-				const inner = (element as Record<string, unknown>)[name];
-				const statics: Record<string, unknown> = {};
-				for (const [k, v] of Object.entries(value)) {
-					if (isSource(v)) signals.push({ kind: 'prop', element, via: name, name: k, source: v, set: propertySet });
-					else statics[k] = v;
-				}
-				if (inner !== null && typeof inner === 'object') setProperty(element, name, statics);
-				else propertySet(element, name, value);
-				recordProperty(element, name, statics);
-			} else {
-				propertySet(element, name, value);
-				recordProperty(element, name, value);
-			}
-		} else if (isSource(value)) {
-			recordReactiveAttribute(element, key);
-			signals.push({ kind: 'prop', element, via: null, name: key, source: value, set: attributeSet });
-		} else {
-			assert(!isPlainObject(value), `attribute ${key} cannot take an object; use $${key} for a property`);
-			attributeSet(element, key, value);
-		}
+		if (key[0] === '$') bindProperty(element, key.slice(1), value, signals);
+		else bindAttribute(element, key, value, signals);
 	}
 };
 
