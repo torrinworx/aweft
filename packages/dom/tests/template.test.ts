@@ -139,11 +139,31 @@ test('an edit naming a node the template does not have asserts', () => {
 	assert.throws(() => bad([{ title: 'x' }]), /names a node the template does not have/);
 });
 
-test('one element\'s child edits have to be listed together', () => {
-	assert.throws(
-		() => template(['p', null, ['i', null]], [['child', [], 0], ['child', [0], -1], ['child', [], -1]]),
-		/child edits in two places/,
+test('one element\'s child edits are one run wherever the list puts them', () => {
+	// The values arrive in the order the source evaluates them, so a nested element's own edits sit
+	// between two of its parent's child edits. Both of the parent's are still one run, which is
+	// what works out each varying child's anchor.
+	const split = template(['p', null, ['i', null], 'tail'], [
+		['child', [], 0], ['child', [0], -1], ['child', [], 1],
+	]);
+	assert.equal(
+		markupOf(split(['head', 'inner', 'middle'])),
+		markupOf(h('p', {}, 'head', h('i', {}, 'inner'), 'middle', 'tail')),
 	);
+});
+
+test('an element\'s properties run after its children and after everything below it', () => {
+	// `$textContent` rewrites what the children put there, so the order the values arrive in is not
+	// the order they are applied in: the root's properties come first in the list and last onto the
+	// tree (design 093).
+	const wipe = template(['div', null, ['span', null]], [
+		['props', []], ['props', [0]], ['child', [], -1],
+	]);
+	assert.equal(
+		markupOf(wipe([{ $textContent: 'written' }, { class: 'gone' }, 'overwritten'])),
+		markupOf(h('div', { $textContent: 'written' }, h('span', { class: 'gone' }), 'overwritten')),
+	);
+	assert.equal(markupOf(wipe([{ $textContent: 'written' }, { class: 'gone' }, 'overwritten'])), '<body><div>written</div></body>');
 });
 
 test('a properties edit takes an object', () => {

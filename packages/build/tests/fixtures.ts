@@ -57,13 +57,15 @@ export const scratch = (): { dir: string; done(): void } => {
 };
 
 /**
- * The light tree with nodes that clone, which is what a browser document has and the light tree
- * does not. A hoisted template clones where it can and builds where it cannot, so without this
- * the branch that runs in every browser never runs in the gate.
+ * The light tree with cloning written a second time, per node rather than on the class.
+ *
+ * The light tree clones on its own since design 099, so this is no longer the only document in the
+ * suite whose nodes clone. It stays because it is a second implementation, written here from what
+ * cloning means rather than from what the template does with it, so a template that came to depend
+ * on something only the light tree's own `cloneNode` does would show up.
  *
  * It is a wrapper, not a second tree: every node is a light node and every operation is the light
- * tree's. Only `cloneNode` is added, and it is written here from what cloning means rather than
- * from what the template does with it.
+ * tree's.
  */
 export const cloningDocument = (): LightDocument => {
 	const document = createDocument();
@@ -93,6 +95,28 @@ export const cloningDocument = (): LightDocument => {
 };
 
 /**
+ * The light tree with nodes that do not clone, which is what a host the application wrote itself
+ * may be: `ElementLike` asks for no `cloneNode` and `DocumentLike` is satisfied by four factory
+ * functions. A hoisted template clones where it can and builds each instance where it cannot, so
+ * without this the build branch never runs in the gate.
+ *
+ * It is a wrapper, not a second tree: every node is a light node with one own property shadowing
+ * the class's `cloneNode`.
+ */
+export const plainDocument = (): LightDocument => {
+	const document = createDocument();
+	const element = document.createElement.bind(document);
+	const text = document.createTextNode.bind(document);
+	const withoutCloning = <T extends object>(node: T): T => {
+		Object.defineProperty(node, 'cloneNode', { value: undefined, configurable: true });
+		return node;
+	};
+	document.createElement = (tag: string): LightElement => withoutCloning(element(tag));
+	document.createTextNode = (data: string): LightText => withoutCloning(text(data));
+	return document;
+};
+
+/**
  * Run `fn` with `document` as the page's document, which is where `h` and a hoisted template
  * make nodes outside any mount.
  *
@@ -100,7 +124,7 @@ export const cloningDocument = (): LightDocument => {
  * that is active then is the page's, not the one the mount later runs in. Without this a fixture
  * is built in the no-page fallback, whose nodes never clone, and the clone path is never reached.
  */
-const asThePage = <T>(document: LightDocument, fn: () => T): T => {
+export const asThePage = <T>(document: LightDocument, fn: () => T): T => {
 	const global = globalThis as { document?: unknown };
 	const had = 'document' in global;
 	const before = global.document;
@@ -386,6 +410,29 @@ export const create = () => {
 		jsx: `export const create = () => {
 	const child = 'overwritten';
 	return { item: <div class="w" $textContent="written">{child}</div> };
+};`,
+	},
+	{
+		// JavaScript evaluates a call's arguments left to right, so a source reads its properties
+		// before its children and an outer element's properties before anything inside it. The
+		// compiled form has to run the same expressions in the same order: `order` is rendered into
+		// the page, so a different order is a different page.
+		name: 'expressions a side effect can see, in source order',
+		source: `${dom}
+export const create = () => {
+	const order = [];
+	const mark = (label, value) => { order.push(label); return value; };
+	const card = h('section', { id: mark('a', 'card') },
+		mark('b', 'one'),
+		h('p', { title: mark('c', 'p') }, mark('d', 'two'), h('em', { class: mark('e', 'em') }, mark('f', 'three'))),
+		mark('g', 'four'));
+	return { item: h('div', {}, card, h('code', {}, order.join(''))) };
+};`,
+		jsx: `export const create = () => {
+	const order = [];
+	const mark = (label, value) => { order.push(label); return value; };
+	const card = <section id={mark('a', 'card')}>{mark('b', 'one')}<p title={mark('c', 'p')}>{mark('d', 'two')}<em class={mark('e', 'em')}>{mark('f', 'three')}</em></p>{mark('g', 'four')}</section>;
+	return { item: <div>{card}<code>{order.join('')}</code></div> };
 };`,
 	},
 	{
