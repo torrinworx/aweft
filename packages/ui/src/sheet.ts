@@ -13,6 +13,7 @@
 import { type Derived, mutable } from '@aweftjs/core';
 
 import { assert } from './assert.ts';
+import { warnOnContrast } from './contrast.ts';
 import { type Lookup, type ThemeFunction, cssName, declarationValue, parseValue, resolve } from './values.ts';
 
 /** One theme entry: CSS declarations, `$var` definitions, `extends`, and `_directive_` blocks. */
@@ -357,6 +358,17 @@ export const compileChain = (
 			}
 		}
 	}
+
+	// Dev-only bookkeeping: the whole statement leaves a release build (designs 097, 120), so a
+	// shipped page pays nothing for the walk or the measurement.
+	assert(
+		warnOnContrast(
+			chain.map((name) => definitions[name]).filter((entry) => entry !== undefined),
+			lookup,
+			chain[chain.length - 1] ?? '*',
+		),
+		'the contrast warning never refuses a theme',
+	);
 
 	return { rules, atRules, imports, lookup, variables };
 };
