@@ -15,7 +15,7 @@ import { Hydration, type Region, type Scope } from './hydration.ts';
 import { type Before, type Handle, type List, type Step, createList, hex, seek } from './list.ts';
 import type { DocumentLike, ElementLike, NodeLike, ParentLike, TextLike } from './types.ts';
 import { ELEMENT, isNodeLike, isSource } from './types.ts';
-import { markMade } from './props.ts';
+import { markMade, setRecording } from './props.ts';
 
 /**
  * Ask a remove function for the first live node of its mount instead of removing it.
@@ -118,10 +118,14 @@ const withRoot = <T>(root: Root, scope: Scope | null, owner: ComponentRecord | n
 	const outer = current;
 	current = { root, scope, owner };
 	setActiveDocument(root.document);
+	// The one choke point every mount and every delivery passes through, so it is where the
+	// hydration bookkeeping learns whether anything will ever read it (design 098).
+	const recorded = setRecording(root.hydration !== null);
 	try {
 		return fn();
 	} finally {
 		current = outer;
+		setRecording(recorded);
 		setActiveDocument(outer === null ? null : outer.root.document);
 		if (outer === null || outer.root !== root) drain(root);
 	}
