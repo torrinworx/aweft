@@ -17,6 +17,12 @@ export const setRecording = (on: boolean): boolean => {
 	return was;
 };
 
+/**
+ * Whether anything below will be read. A caller that would walk a tree only to call `markMade`
+ * on every node asks first and skips the walk, rather than walking to call a no-op.
+ */
+export const isRecording = (): boolean => recording;
+
 /** Nodes the binding made are the ones hydration may claim; a node the application made is
  * inserted as it is (design 078). */
 export const markMade = <N extends object>(node: N): N => {

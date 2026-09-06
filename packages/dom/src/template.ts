@@ -14,7 +14,7 @@ import { activeDocument } from './ambient.ts';
 import { bindProps } from './h.ts';
 import { type Bound, BOUND, type ChildSignal, type Signal, isBound } from './bound.ts';
 import { hydrating } from './mount.ts';
-import { markMade } from './props.ts';
+import { isRecording, markMade } from './props.ts';
 import { setAttribute } from './host.ts';
 import type { DocumentLike, ElementLike, NodeLike } from './types.ts';
 import { ELEMENT, isNodeLike } from './types.ts';
@@ -68,6 +68,10 @@ const nodeAt = (root: ElementLike, path: readonly number[]): ElementLike => {
  * carries none of that: the copies are new objects the marking never reached. A page builds its
  * top-level item before it hands it to `hydrate`, so an instance cannot know whether it is about
  * to be hydrated, and marks either way, as `h` does.
+ *
+ * The caller asks `isRecording` first (design 098). Inside a mount that is not hydrating nothing
+ * ever reads the marks, and walking every node of every clone to call a no-op is the whole cost
+ * of the walk for none of its value.
  */
 const markTree = (node: NodeLike): void => {
 	markMade(node);
@@ -156,7 +160,7 @@ export const template = (spec: TemplateElement, edits: readonly TemplateEdit[]):
 			const clone = (prototype as { cloneNode?: (deep: boolean) => ElementLike }).cloneNode;
 			if (typeof clone === 'function') {
 				root = clone.call(prototype, true);
-				markTree(root);
+				if (isRecording()) markTree(root);
 			} else {
 				root = build(spec, document, true);
 			}
