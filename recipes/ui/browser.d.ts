@@ -1,0 +1,32 @@
+// The browser globals this recipe names, declared loosely.
+//
+// `main.ts` runs in Node and its `page.evaluate` callbacks run in Chromium, so the file has to
+// typecheck without the DOM library while the browser supplies the real objects. `entry.tsx` runs
+// in the browser outright. Narrow shapes, so a typo is still caught.
+
+interface RecipeElement {
+	readonly parentElement: RecipeElement | null;
+	readonly outerHTML: string;
+	getAttribute(name: string): string | null;
+	getBoundingClientRect(): { left: number; top: number; right: number; bottom: number; width: number; height: number };
+	querySelectorAll(selector: string): ArrayLike<RecipeElement>;
+	matches(selector: string): boolean;
+	contains(node: unknown): boolean;
+	blur(): void;
+	focus(): void;
+	scrollIntoView(options?: { block?: string }): void;
+	readonly value: string;
+	readonly textContent: string | null;
+}
+
+declare const document: {
+	readonly head: RecipeElement & { querySelector(selector: string): RecipeElement | null };
+	readonly body: RecipeElement;
+	querySelector(selector: string): RecipeElement | null;
+	querySelectorAll(selector: string): ArrayLike<RecipeElement>;
+	elementFromPoint(x: number, y: number): RecipeElement | null;
+};
+
+declare const window: { scrollTo(x: number, y: number): void };
+
+declare function getComputedStyle(element: RecipeElement): Record<string, string>;

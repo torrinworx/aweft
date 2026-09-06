@@ -14,7 +14,7 @@
 		"deps": "depcruise packages --config .dependency-cruiser.cjs",
 		"fixtures": "node packages/testing/scripts/generate-fixtures.ts",
 		"frames": "node packages/sync/scripts/generate-frames.ts",
-		"recipes": "node recipes/codec/main.ts && node recipes/core/main.ts && node recipes/schema/main.ts && node recipes/sync/main.ts && node recipes/store/main.ts && node recipes/modules/main.ts && node recipes/sandbox/main.ts && node recipes/server/main.ts && node recipes/jobs/main.ts && node recipes/dom/main.ts && node recipes/build/main.ts && node recipes/debug/main.ts && node recipes/todo-list/main.ts && node recipes/two-clients/main.ts && node recipes/optimistic-write/main.ts",
+		"recipes": "node recipes/codec/main.ts && node recipes/core/main.ts && node recipes/schema/main.ts && node recipes/sync/main.ts && node recipes/store/main.ts && node recipes/modules/main.ts && node recipes/sandbox/main.ts && node recipes/server/main.ts && node recipes/jobs/main.ts && node recipes/dom/main.ts && node recipes/build/main.ts && node recipes/debug/main.ts && node --import @aweftjs/build/loader recipes/ui/main.ts && node recipes/todo-list/main.ts && node recipes/two-clients/main.ts && node recipes/optimistic-write/main.ts",
 		"bench": "node bench/derived.ts && node bench/write.ts && node bench/replicate.ts && node bench/guard.ts && node --expose-gc bench/compile.ts && node bench/dom-grain.ts && node bench/dom-rows.ts && node bench/dom-heap.ts && node bench/perf-lab.ts && node bench/hoist.ts",
 		"test": "npm run typecheck && npm run deps && npm run boundaries && npm run dependencies && npm run decisions && npm run surface:check && npm run errors:check && npm run browser && node packages/testing/scripts/run-tests.ts && npm run recipes",
 		"browser": "playwright install chromium",
@@ -30,6 +30,7 @@
 	"devDependencies": {
 		"@types/node": "^24.13.3",
 		"dependency-cruiser": "^16.10.0",
-		"typescript": "^5.9.2"
+		"typescript": "^5.9.2",
+		"vite": "^8.2.2"
 	}
 }

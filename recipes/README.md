@@ -22,6 +22,7 @@ Start here if you know what you are trying to build.
 | `two-clients/` | Two people editing one document at once, including what happens when they write the same slot and who yields | core, sync |
 | `optimistic-write/` | A write that applies locally before the server sees it, is refused, and is rolled back | core, sync, debug |
 | `debug/` | Finding a bug in a document you did not write | core, debug |
+| `ui/` | A page with themes, contexts, control flow, a popup and a suspend, built by vite and driven in a real browser | core, dom, ui, build |
 
 ## By package
 
@@ -29,7 +30,7 @@ Start here if you know which package you need and want to see it do its hardest 
 each of these has to demonstrate is the table in `docs/architecture.md`.
 
 `codec/`, `core/`, `schema/`, `sync/`, `store/`, `modules/`, `sandbox/`, `server/`, `jobs/`,
-`dom/`, `build/`, `debug/`.
+`dom/`, `ui/`, `build/`, `debug/`.
 
 ## What a recipe is
 
