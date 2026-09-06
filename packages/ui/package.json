@@ -1,0 +1,26 @@
+{
+	"name": "@aweftjs/ui",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"description": "Components and theming: a wrapping h, the theme engine, contexts, popups, suspend and marks.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/core": "*",
+		"@aweftjs/dom": "*"
+	},
+	"devDependencies": {
+		"@aweftjs/build": "*",
+		"@aweftjs/testing": "*"
+	},
+	"aweft": {
+		"tier": 7,
+		"branchCoverage": 80
+	}
+}

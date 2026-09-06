@@ -12,6 +12,7 @@
 		{ "path": "packages/auth" },
 		{ "path": "packages/jobs" },
 		{ "path": "packages/dom" },
+		{ "path": "packages/ui" },
 		{ "path": "packages/build" },
 		{ "path": "packages/testing" },
 		{ "path": "packages/debug" }
