@@ -10,8 +10,8 @@ import { type Child, type Element, type Property, childCode, collapseText, emitC
 import { TransformError } from './error.ts';
 
 export interface JsxReader {
-	/** The name to call for an element. */
-	readonly h: string;
+	/** The name to call for an element, asked for only when one is printed as a call. */
+	h(): string;
 	/** The code for an expression inside the JSX, with anything nested already transformed. */
 	code(node: Node): string;
 	/** The source text, for a tag written as a member expression. */
@@ -120,7 +120,7 @@ export const readElement = (node: Node, reader: JsxReader): Element => {
 		tag: tag.tag,
 		properties,
 		children: childrenOf((node['children'] ?? []) as Node[], reader),
-		fallback: () => emitCall(reader.h, tag.code, element, reader.emit),
+		fallback: () => emitCall(reader.h(), tag.code, element, reader.emit),
 	};
 	return element;
 };

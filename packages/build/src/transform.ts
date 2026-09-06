@@ -22,6 +22,15 @@ import { stripAsserts } from './asserts.ts';
 
 const DOM = '@aweftjs/dom';
 
+/**
+ * What a caller may say about the source it hands `transform`.
+ *
+ * Both are optional and both default to off: with no `filename` the source is read as JSX and
+ * the map names no source, and with no `release` the asserts stay in.
+ *
+ * Example:
+ *   transform(source, { filename: 'page.tsx', release: true });
+ */
 export interface TransformOptions {
 	/** The file the source came from. Its extension picks the dialect, and it names the map. */
 	readonly filename?: string;
@@ -39,6 +48,16 @@ export interface SourceMap {
 	toUrl(): string;
 }
 
+/**
+ * What `transform` answers: the compiled source and the map from it back to the original.
+ *
+ * `code` is the whole file. What the transform did not touch comes out byte for byte as it went
+ * in, so a diff of the two shows only the elements that compiled.
+ *
+ * Example:
+ *   const { code, map } = transform(source, { filename: 'page.ts' });
+ *   write(code + `\n//# sourceMappingURL=` + map.toUrl());
+ */
 export interface TransformResult {
 	readonly code: string;
 	readonly map: SourceMap;
@@ -135,14 +154,8 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 	};
 
 	const code = (node: Node): string => {
-		if (isJsx(node)) {
-			usedJsxH = true;
-			return readJsx(node, jsxReader);
-		}
-		if (isMarkup(node)) {
-			usedMarkupH = true;
-			return readMarkup(node, markupReader);
-		}
+		if (isJsx(node)) return readJsx(node, jsxReader);
+		if (isMarkup(node)) return readMarkup(node, markupReader);
 		if (isDomHCall(node)) {
 			const element = readCall(node, callReader);
 			return element === null ? inner(node) : hoister.emit(element);
@@ -152,9 +165,22 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 
 	const emit = (element: Element): string => hoister.emit(element);
 
-	const jsxReader: JsxReader = { h: jsxH, code, source, emit };
+	// The two `h` names are asked for when an element is printed as a call, never when it hoists,
+	// so the import below is emitted for calls that are actually in the output.
+	const jsxReader: JsxReader = {
+		h: () => {
+			usedJsxH = true;
+			return jsxH;
+		},
+		code,
+		source,
+		emit,
+	};
 	const markupReader: MarkupReader = {
-		h: markupH,
+		h: () => {
+			usedMarkupH = true;
+			return markupH;
+		},
 		joined: (pieces) => {
 			usedJoined = true;
 			return `${joinedName}([${pieces.join(', ')}])`;

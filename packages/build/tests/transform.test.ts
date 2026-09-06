@@ -17,11 +17,16 @@ test('JSX compiles to the h the file already has, and hoists nothing when that h
 	assert.doesNotMatch(out, /@aweftjs\/dom/);
 });
 
-test('JSX imports dom\'s h when the file has none, and then hoists', () => {
-	const out = code('export const a = <div class="x">text</div>;');
-	assert.match(out, /^import \{ h, template as _template \} from '@aweftjs\/dom';/);
-	assert.match(out, /const _t0 = _template\(\["div",\{"class":"x"\},"text"\], \[\]\);/);
-	assert.match(out, /export const a = _t0\(\[\]\);/);
+test('JSX imports dom\'s h when the file has none and an element needs one', () => {
+	const hoisted = code('export const a = <div class="x">text</div>;');
+	assert.match(hoisted, /^import \{ template as _template \} from '@aweftjs\/dom';/);
+	assert.match(hoisted, /const _t0 = _template\(\["div",\{"class":"x"\},"text"\], \[\]\);/);
+	assert.match(hoisted, /export const a = _t0\(\[\]\);/);
+
+	// A component tag is not an element, so it stays a call and the import comes with it.
+	const called = code('const Thing = () => null;\nexport const a = <Thing/>;');
+	assert.match(called, /^import \{ h \} from '@aweftjs\/dom';/);
+	assert.match(called, /export const a = h\(Thing, null\);/);
 });
 
 test('a component and a member tag stay expressions, resolved by scope', () => {
@@ -140,4 +145,30 @@ test('dom\'s h under another name is still provably dom\'s, so the file hoists',
 	assert.match(out, /const _t0 = _template\(\["p",\{"class":"q"\},"hi"\], \[\]\);/);
 	assert.match(out, /export const a = _t0\(\[\]\);/);
 	assert.match(out, /const _t1 = _template\(\["i",null,"x"\], \[\]\);/);
+});
+
+test('a file where every element hoisted imports no h', () => {
+	// The import is emitted for the calls the transform writes, and a file whose elements all
+	// became templates has none. An unused import is a module the page loads and a name a linter
+	// reports, for a call that is not there.
+	const markup = code("import { html } from '@aweftjs/dom';\nexport const item = html`<div title=${f()}>${g()}</div>`;", 'a.ts');
+	assert.match(markup, /_template\(/);
+	assert.doesNotMatch(markup, /\bh\b(?!tml)[^;]*from '@aweftjs\/dom'/);
+	assert.match(markup, /^import \{ template as _template \} from '@aweftjs\/dom';\n/);
+
+	const jsx = code('export const item = <div title={f()}>{g()}</div>;');
+	assert.match(jsx, /^import \{ template as _template \} from '@aweftjs\/dom';\n/);
+
+	// The same file with one element the transform declines to hoist still imports `h` for it.
+	const both = code("import { html } from '@aweftjs/dom';\nexport const item = html`<div title=${f()}>${g()}</div>`;\nexport const other = html`<${Comp} />`;", 'b.ts');
+	assert.match(both, /^import \{ h, template as _template \} from '@aweftjs\/dom';\n/);
+	assert.match(both, /h\(Comp, null\)/);
+});
+
+test('a file whose own h shadows dom\'s still imports dom\'s h for markup that needs it', () => {
+	// Nothing hoists here, so every element in the markup is printed as a call to dom's `h` under
+	// a name of its own, and that name has to be imported.
+	const out = code("import { html } from '@aweftjs/dom';\nconst h = 1;\nexport const a = html`<p>x</p>`;", 'c.ts');
+	assert.match(out, /^import \{ h as _h \} from '@aweftjs\/dom';\n/);
+	assert.match(out, /_h\("p", null, "x"\)/);
 });

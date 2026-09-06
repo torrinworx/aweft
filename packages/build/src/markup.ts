@@ -14,8 +14,10 @@ import { type Child, type Element, type Property, childCode, collapseText, emitC
 import { TransformError } from './error.ts';
 
 export interface MarkupReader {
-	/** The name to call for an element: always `dom`'s `h`, whatever else the file calls `h`. */
-	readonly h: string;
+	/** The name to call for an element: always `dom`'s `h`, whatever else the file calls `h`.
+	 * Asked for only when an element is printed as a call, so a file that hoisted every one of
+	 * its elements does not import a name nothing uses. */
+	h(): string;
 	/** One value out of the pieces of a quoted attribute, as code. */
 	joined(pieces: readonly string[]): string;
 	/** The code for an expression in a hole, with anything nested already transformed. */
@@ -201,7 +203,7 @@ export const readMarkup = (node: Node, reader: MarkupReader): string => {
 			tag: frame.tag,
 			properties: frame.properties,
 			children: frame.children,
-			fallback: () => emitCall(reader.h, frame.code, element, reader.emit),
+			fallback: () => emitCall(reader.h(), frame.code, element, reader.emit),
 		};
 		top().children.push({ kind: 'element', element });
 	};
