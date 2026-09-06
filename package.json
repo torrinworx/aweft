@@ -16,7 +16,7 @@
 		"frames": "node packages/sync/scripts/generate-frames.ts",
 		"recipes": "node recipes/codec/main.ts && node recipes/core/main.ts && node recipes/schema/main.ts && node recipes/sync/main.ts && node recipes/store/main.ts && node recipes/modules/main.ts && node recipes/sandbox/main.ts && node recipes/server/main.ts && node recipes/jobs/main.ts && node recipes/dom/main.ts && node recipes/build/main.ts && node recipes/debug/main.ts && node --import @aweftjs/build/loader recipes/ui/main.ts && node recipes/todo-list/main.ts && node recipes/two-clients/main.ts && node recipes/optimistic-write/main.ts",
 		"bench": "node bench/derived.ts && node bench/write.ts && node bench/replicate.ts && node bench/guard.ts && node --expose-gc bench/compile.ts && node bench/dom-grain.ts && node bench/dom-rows.ts && node bench/dom-heap.ts && node bench/perf-lab.ts && node bench/hoist.ts && node --import @aweftjs/build/loader bench/ui-hoist.ts",
-		"test": "npm run typecheck && npm run deps && npm run boundaries && npm run dependencies && npm run decisions && npm run surface:check && npm run errors:check && npm run browser && node packages/testing/scripts/run-tests.ts && npm run recipes",
+		"test": "npm run typecheck && npm run deps && npm run boundaries && npm run dependencies && npm run decisions && npm run surface:check && npm run errors:check && npm run theme:check && npm run browser && node packages/testing/scripts/run-tests.ts && npm run recipes",
 		"browser": "playwright install chromium",
 		"gate": "npm test",
 		"boundaries": "node packages/testing/scripts/check-boundaries.ts",
@@ -25,7 +25,9 @@
 		"surface": "node packages/testing/scripts/check-surface.ts --write",
 		"surface:check": "node packages/testing/scripts/check-surface.ts",
 		"errors": "node packages/testing/scripts/check-errors.ts --write",
-		"errors:check": "node packages/testing/scripts/check-errors.ts"
+		"errors:check": "node packages/testing/scripts/check-errors.ts",
+		"theme": "node packages/testing/scripts/check-theme.ts --write",
+		"theme:check": "node packages/testing/scripts/check-theme.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^24.13.3",

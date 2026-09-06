@@ -25,8 +25,9 @@ test('the entry file exports exactly what was decided', () => {
 		'refFromJson', 'refToJson', 'roomChecks',
 		'seedFrom', 'shuffle', 'slotKeyOf',
 		'surfaceOf', 'surfaceProgram',
+		'checkTheme', 'themeTokens',
 		'valueFromJson', 'valueToJson',
 	];
 
-	assert.deepEqual(Object.keys(testing).sort(), decided);
+	assert.deepEqual(Object.keys(testing).sort(), [...decided].sort());
 });
