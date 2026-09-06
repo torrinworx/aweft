@@ -25,10 +25,8 @@
 // because there is nothing sane to do with values that no longer line up with the holes.
 
 import { assert } from './assert.ts';
-import { BOUND, type Bound, type ChildSignal, type Signal, attributeSet, isBound, isPlainObject, propertySet } from './bound.ts';
-import { setAttribute } from './host.ts';
-import { setProperty } from './hydration.ts';
-import { recordProperty, recordReactiveAttribute } from './props.ts';
+import { BOUND, type Bound, type ChildSignal, type Signal, isBound } from './bound.ts';
+import { bindAttribute, bindProperty } from './bind.ts';
 import type { ElementLike, NodeLike, TextLike } from './types.ts';
 import { isSource } from './types.ts';
 
@@ -167,6 +165,11 @@ export const traceClose = (element: ElementLike, result: unknown): void => {
 };
 
 export const replayCall = (given: Record<string, unknown>, children: unknown[]): symbol => {
+	// `h`'s own per-child guard sits below the replay, so it never runs on a row after the first.
+	// The refusal is repeated here, in the same words, because a footgun that goes quiet under
+	// `each` is worse than one that is loud everywhere: without it a value that went missing on
+	// the second row renders an empty gap and says nothing.
+	for (const child of children) assert(child !== undefined, 'cannot mount undefined; hide something with null');
 	replaying!.values.push({ given, children });
 	return CLONED;
 };
@@ -312,17 +315,15 @@ const stamp = (template: RowTemplate, values: readonly Values[]): unknown => {
 				lastChild = signal;
 				signals.push(signal);
 			} else if (hole.kind === ATTR) {
+				// A value equal to the one the recorded row wrote is already on the clone, which is
+				// where most of the saving is. `was` is undefined for a source, so a reactive value
+				// never matches and always binds.
 				const value = given[hole.name];
-				if (isSource(value)) {
-					recordReactiveAttribute(target, hole.name);
-					signals.push({ kind: 'prop', element: target as ElementLike, via: null, name: hole.name, source: value, set: attributeSet });
-				} else if (value !== hole.was) {
-					setAttribute(target as ElementLike, hole.name, value);
-				}
+				if (value !== hole.was) bindAttribute(target as ElementLike, hole.name, value, signals);
 			} else {
 				// A property is never on the clone: `cloneNode` copies attributes, not what
 				// JavaScript wrote. Every row writes its own, the first one included.
-				stampProperty(target as ElementLike, hole.name.slice(1), given[hole.name], signals);
+				bindProperty(target as ElementLike, hole.name.slice(1), given[hole.name], signals);
 			}
 		}
 	}
@@ -330,26 +331,4 @@ const stamp = (template: RowTemplate, values: readonly Values[]): unknown => {
 	if (signals.length === 0) return row;
 	const bound: Bound = { [BOUND]: true, node: row as ElementLike, signals };
 	return bound;
-};
-
-/** The `$name` branch of `h`, on a cloned element. */
-const stampProperty = (element: ElementLike, name: string, value: unknown, signals: Signal[]): void => {
-	if (isSource(value)) {
-		signals.push({ kind: 'prop', element, via: null, name, source: value, set: propertySet });
-		return;
-	}
-	if (isPlainObject(value)) {
-		const inner = (element as Record<string, unknown>)[name];
-		const statics: Record<string, unknown> = {};
-		for (const [k, v] of Object.entries(value)) {
-			if (isSource(v)) signals.push({ kind: 'prop', element, via: name, name: k, source: v, set: propertySet });
-			else statics[k] = v;
-		}
-		if (inner !== null && typeof inner === 'object') setProperty(element, name, statics);
-		else propertySet(element, name, value);
-		recordProperty(element, name, statics);
-		return;
-	}
-	propertySet(element, name, value);
-	recordProperty(element, name, value);
 };

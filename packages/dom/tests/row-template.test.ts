@@ -246,3 +246,31 @@ test('the template holds no source from the row it was recorded on', async () =>
 	collect();
 	assert.equal(first!.deref(), undefined, "the first row's source outlived the list");
 });
+
+test('a child that is undefined is refused on a cloned row, as it is everywhere else', () => {
+	// `h` refuses `undefined` so a value that went missing is loud rather than an empty gap. A row
+	// after the first goes through the replay, which returns before `h` reaches that guard, so
+	// without one of its own the same mistake renders an empty row and says nothing.
+	const document = createDocument();
+	const rows = createArray<Row>([row('first'), row('second'), row('third')]);
+	const Item = ({ each }: { each: Row }) => h('li', {}, each['label'] === 'first' ? 'first' : undefined);
+	assert.throws(
+		() => mount(document.body, h('ul', {}, h(Item, { each: rows }))),
+		/cannot mount undefined/,
+		'a row after the first refuses undefined the way the first one does',
+	);
+});
+
+test('an attribute given an object is refused on a cloned row, as it is everywhere else', () => {
+	// The clone path used to write its own attribute branch rather than run `h`'s, and the copy
+	// left this refusal out: the first row asserted and every row after it wrote
+	// `[object Object]` into the page.
+	const document = createDocument();
+	const rows = createArray<Row>([row('first'), row('second')]);
+	const Item = ({ each }: { each: Row }) =>
+		h('li', { title: each['label'] === 'first' ? 'ok' : ({ bad: 1 } as unknown as string) });
+	assert.throws(
+		() => mount(document.body, h('ul', {}, h(Item, { each: rows }))),
+		/attribute title cannot take an object/,
+	);
+});
