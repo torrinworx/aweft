@@ -36,9 +36,11 @@ type Transform: type Transform<T> = (raw: unknown, parent: T, children: MutableA
 value categories: (children: readonly unknown[], names: readonly string[], fallback?: string | undefined) => Category[]
 value context: () => Render
 value createContext: <T>(def: T, transform?: Transform<T>) => Context<T>
+value dark: Readonly<Record<string, Readonly<Record<string, unknown>>>>
 value h: (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown
 value html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown
 value hydrate: (target: ParentLike, item: unknown, render?: Render | undefined) => Remove
+value light: Readonly<Record<string, Readonly<Record<string, unknown>>>>
 value mark: Mark
 value mount: (target: ParentLike, item: unknown, before?: Remove | undefined, render?: Render | undefined) => Remove
 value render: (item: unknown, options?: { context?: Render | undefined; }) => Promise<string>

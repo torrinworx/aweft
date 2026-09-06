@@ -10,8 +10,10 @@ import type { DocumentLike, LightDocument } from '@aweftjs/dom';
 import { recordingDocument } from '@aweftjs/testing';
 import { Theme, context, h, hydrate, mount, render, use } from '@aweftjs/ui';
 
+// Entries of this file's own. Defining a property the default theme already sets, with another
+// value, is a refusal (design 111), so a test theme picks names the library does not use.
 Theme.define({
-	card: { padding: 8 },
+	slab: { padding: 8 },
 	badge: { color: 'red' },
 });
 
@@ -32,7 +34,7 @@ const counting = (document: LightDocument): { document: DocumentLike; made: Reco
 test('a ui system reached with no ui context asserts, and names the fix', () => {
 	const document = createDocument();
 	assert.throws(
-		() => domMount(document.body, h('p', { theme: 'card' }, 'x')),
+		() => domMount(document.body, h('p', { theme: 'slab' }, 'x')),
 		/mount with ui's mount, render or hydrate/,
 	);
 });
@@ -63,7 +65,7 @@ test('a component reaches the render it is mounted in', () => {
 
 test('mount puts the stylesheet in the head and takes it back out', () => {
 	const document = createDocument();
-	const stop = mount(document.body, h('p', { theme: 'card' }, 'x'));
+	const stop = mount(document.body, h('p', { theme: 'slab' }, 'x'));
 	assert.match(toHtml(document.head.childNodes), /<style data-aweft>@layer aweft \{\n/);
 	assert.match(toHtml(document.head.childNodes), /\.aw0 \{ padding: 8px; \}/);
 	stop();
@@ -72,7 +74,7 @@ test('mount puts the stylesheet in the head and takes it back out', () => {
 
 test('two default mounts into one page get different classes and share one stylesheet', () => {
 	const document = createDocument();
-	const one = mount(document.body, h('p', { theme: 'card' }, 'one'));
+	const one = mount(document.body, h('p', { theme: 'slab' }, 'one'));
 	const two = mount(document.body, h('p', { theme: 'badge' }, 'two'));
 
 	assert.equal(toHtml(document.body.childNodes), '<p class="aw0">one</p><p class="aw1">two</p>');
@@ -91,8 +93,8 @@ test('two default mounts into one page get different classes and share one style
 test('a mount given its own context is not adopted into the document\'s', () => {
 	const document = createDocument();
 	const own = context();
-	const shared = mount(document.body, h('p', { theme: 'card' }, 'one'));
-	const apart = mount(document.body, h('p', { theme: 'card' }, 'two'), undefined, own);
+	const shared = mount(document.body, h('p', { theme: 'slab' }, 'one'));
+	const apart = mount(document.body, h('p', { theme: 'slab' }, 'two'), undefined, own);
 
 	// Naming a context is asking for a render of your own, so it keeps its own sheet.
 	assert.equal(document.head.childNodes.length, 2);
@@ -115,7 +117,7 @@ test('mounting a themed element built outside the mount inserts it and nothing e
 	const { document, ops } = recordingDocument();
 	// Built before the mount, so its nodes came from the ambient document rather than this one:
 	// what this document sees is the one insert.
-	const stop = mount(document.body, h('p', { theme: 'card' }, 'x'));
+	const stop = mount(document.body, h('p', { theme: 'slab' }, 'x'));
 
 	// The style element is the render's, not the page's, so it is asserted on its own above.
 	const page = ops.filter((line) => !line.includes('<style>'));
@@ -136,7 +138,7 @@ test('a theme change on a cell is exactly one class write', () => {
 
 test('a page renders to markup, and the CSS comes off the render', async () => {
 	const own = context();
-	const markup = await render(h('main', { theme: 'card' }, h('span', { theme: 'badge' }, 'hi')), { context: own });
+	const markup = await render(h('main', { theme: 'slab' }, h('span', { theme: 'badge' }, 'hi')), { context: own });
 	// A themed element is a component, so a static render brackets it and a hydration reads the
 	// brackets to know where the dynamic mount sits (design 107).
 	assert.equal(markup, '<!--[--><main class="aw0"><span class="aw1">hi</span></main><!--]-->');
@@ -145,7 +147,7 @@ test('a page renders to markup, and the CSS comes off the render', async () => {
 });
 
 test('hydration of a rendered page makes no element and adopts every one', async () => {
-	const item = (): unknown => h('main', { theme: 'card' },
+	const item = (): unknown => h('main', { theme: 'slab' },
 		h('span', { theme: 'badge' }, 'hi'),
 		h('p', {}, mutable('live')),
 	);
@@ -197,7 +199,7 @@ test('hydration of a rendered page makes no element and adopts every one', async
 test('two renders at once share no ids and no classes', async () => {
 	const a = context();
 	const b = context();
-	const page = (): unknown => h('p', { theme: 'card' }, 'x');
+	const page = (): unknown => h('p', { theme: 'slab' }, 'x');
 	const [one, two] = await Promise.all([render(page(), { context: a }), render(page(), { context: b })]);
 	assert.equal(one, two);
 	assert.equal(a.ids.next(), 'aw-0');

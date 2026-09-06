@@ -132,9 +132,11 @@ test('two mounts into one page compute the colour each of them asked for', async
 test('hydrating server markup in a real browser keeps the server\'s nodes', async () => {
 	const site = await page('hydration', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { Theme, context, h, hydrate, render } from '@aweftjs/ui';
-		Theme.define({ card: { padding: '8px' } });
+		// An entry of this page's own. Defining a property the default theme already sets, with a
+		// different value, is a refusal (design 111), so a test theme picks its own name.
+		Theme.define({ slab: { padding: '8px' } });
 
-		const App = () => <main theme="card" id="app"><p id="text">hello</p></main>;
+		const App = () => <main theme="slab" id="app"><p id="text">hello</p></main>;
 
 		const server = context();
 		const markup = await render(<App />, { context: server });
@@ -264,6 +266,35 @@ test('a real mousedown outside a popup closes it, and one inside does not', asyn
 		await view.mouse.up();
 		assert.equal(await view.evaluate(() => (window as unknown as { where: { get(): unknown } }).where.get()), null,
 			'a click outside it closes it');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
+
+test('light and dark nested on one page each compute their own roles', async () => {
+	const site = await page('modes', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { Theme, dark, h, light, mount } from '@aweftjs/ui';
+		mount(document.body, <div>
+			<Theme value={light}><div id="pale" theme="card">light</div></Theme>
+			<Theme value={dark}><div id="deep" theme="card">dark</div></Theme>
+		</div>);
+	`);
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForSelector('#deep');
+		const seen = await view.evaluate(() => ({
+			pale: getComputedStyle(document.querySelector('#pale')!).backgroundColor,
+			deep: getComputedStyle(document.querySelector('#deep')!).backgroundColor,
+			paleInk: getComputedStyle(document.querySelector('#pale')!).color,
+			deepInk: getComputedStyle(document.querySelector('#deep')!).color,
+		}));
+		// One entry, two modes, and the browser is what says the roles actually moved.
+		assert.notEqual(seen['pale'], seen['deep'], 'the two surfaces differ');
+		assert.notEqual(seen['paleInk'], seen['deepInk'], 'and so does the text on them');
 	} finally {
 		await browser.close();
 		await site.close();

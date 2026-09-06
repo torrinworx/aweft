@@ -9,6 +9,7 @@ export { context, hydrate, mount, render, use } from './render.ts';
 export type { Render } from './render.ts';
 export type { Ids, Registry } from './registry.ts';
 
+export { dark, light } from './modes.ts';
 export { Theme } from './theme-api.ts';
 export type { ThemeApi } from './theme-api.ts';
 export { ThemeContext } from './themed.tsx';

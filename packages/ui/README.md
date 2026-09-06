@@ -9,13 +9,8 @@ the other's classes.
 ## Quickstart
 
 ```tsx
-import { Theme, h, mount } from '@aweftjs/ui';
+import { h, mount } from '@aweftjs/ui';
 import { mutable } from '@aweftjs/core';
-
-Theme.define({
-	button: { padding: '8px 14px', borderRadius: 6, background: '$primary', color: '$contrast_text($primary)' },
-	button_hovered: { background: '$shiftBrightness($primary, -0.1)' },
-});
 
 const Counter = () => {
 	const clicks = mutable(0);
@@ -81,10 +76,9 @@ A theme is a flat object whose keys are `_`-joined selector paths.
 
 ```ts
 Theme.define({
-	'*': { $primary: '#1b6ef3', $radius: '6' },
-	card: { padding: 16, borderRadius: '$radius$px', background: 'white' },
-	card_hovered: { background: '$shiftBrightness(white, -0.04)' },
-	card_flat: { boxShadow: 'none' },
+	'*': { $brand: '#1b6ef3' },
+	tile: { padding: '$space4', borderRadius: '$radius', background: '$brand' },
+	tile_flat: { boxShadow: 'none' },
 });
 ```
 
@@ -96,6 +90,9 @@ entry, and later in that order wins.
 
 **Values.** `$name` is a variable, `$fn(a, b)` is a call, `$$` is a literal `$`, and `$size$px`
 is the variable followed by the text `px`. A bare number in one of `sizeProperties` gets `px`.
+What a variable holds is text, and that text is not read again: `$a: '$b'` writes the four
+characters `$b` into the CSS rather than following them. Point a declaration at the variable you
+mean.
 
 **Variables and functions are the same namespace.** A `$name` whose value is a function is a
 function; anything else is a variable. Both are found by walking the matched chain from the most
@@ -266,8 +263,9 @@ real nodes appear in and a mounter to render where they belong.
 
 **`Detached` needs a real browser to open.** It places its popup from the anchor's measured
 rectangle and asks for the next animation frame, and the light tree has neither layout nor frames.
-So in Node, and in a static render, a `Detached` renders its anchor and a popup that stays closed.
-That is the right server output, and it is also why the interaction tests for it are in
+So in Node, and in a static render, a `Detached` renders its anchor, and its popup's children are
+in the markup inside a `display: none` container rather than left out of it. That is the right
+server output, and it is also why the interaction tests for it are in
 `browser.test.ts` rather than in the light tree. `Popup` on its own has no such need: give it a
 placement and it renders where you put it, anywhere.
 
@@ -278,12 +276,117 @@ the generic `on` and then `on<Type>`, with the application's `meta` merged in la
 runs `fn` with a fresh `AbortSignal` and hands back the abort. `sizeProperties` is the set of
 property names a bare number is given `px` for.
 
+## The look
+
+A default theme ships in light and dark. It is what makes `theme="button"` a button, and it is the
+contract a component of this package is allowed to use. Designs 115 to 120 are the whole of it.
+
+**Three colour scales**, `neutral`, `accent` and `danger`, twelve steps each, `$neutral1` to
+`$neutral12` and so on. The steps follow one job list: 1 and 2 are backgrounds, 3 to 5 component
+fills by state, 6 to 8 lines, 9 and 10 solids, 11 and 12 text.
+
+**Seventeen roles**, each set from one step. A component uses a role, never a step:
+
+| role | pairs with | what it is for |
+|---|---|---|
+| `$background` | `$foreground` | the page |
+| `$surface` | `$surfaceForeground` | a raised block |
+| `$muted` | `$mutedForeground` | a quiet fill, and quiet text on any background |
+| `$accent` | `$accentForeground` | a filled control |
+| `$accentSubtle` | `$accentSubtleForeground` | a tinted control |
+| `$danger` | `$dangerForeground` | a destructive control |
+| `$dangerSubtle` | `$dangerSubtleForeground` | a warning block |
+| `$border` | | the line around a block |
+| `$input` | | the edge of a control |
+| `$ring` | | the focus ring |
+
+Every pair meets WCAG 2 AA in both modes, 4.5:1 for text and 3:1 for a line, asserted in
+`packages/ui/tests/contrast.test.ts` with a ratio the test computes itself.
+
+**Type** is `$textXs`, `$textSm`, `$textMd`, `$textLg`, `$textXl` and `$text2xl`, in `rem`, each
+with `$textXsLine` and so on beside it. `$font` and `$fontMono` are the families.
+
+**Sizes** are `$space` (4px) and its six multiples, `$space2`, `$space3`, `$space4`, `$space6`,
+`$space8` and `$space12`, with no step between them; `$radius` and `$radiusLg`; `$target` (24px,
+the smallest a pointer target may be); and `$borderWidth`, `$ringWidth` and `$ringOffset`.
+
+**Motion** is `$fast`, `$slow`, `$ease` and `$easeOut`. Nothing in this package sets a transition
+of its own: the root sets one, inside `@media (prefers-reduced-motion: no-preference)`, so a
+person who asked for less motion gets none and no component has to remember the query.
+
+**States are one rule.** `hovered` and `pressed` lay a translucent tint of the element's own
+foreground over whatever background it has, at two fixed strengths. No component names a hover
+colour, and there is no ripple. `disabled` clears the tint.
+
+**Focus is one rule.** The root gives every themed element `outline: $ringWidth solid $ring` on
+`:focus-visible`. Nothing here writes `outline: none`.
+
+**The entries it ships.** These are the theme names a component of this package, or of yours, can
+ask for. Everything else is yours to define.
+
+| entry | what it is for |
+|---|---|
+| `button` | a filled control: the accent fill, its foreground, a 24px minimum height |
+| `button_quiet` | the same control with no fill: a border and accent-subtle text |
+| `button_danger` | the same control in the danger colours |
+| `input` | a text field: the surface fill, the `$input` edge, a placeholder in `$mutedForeground` |
+| `input_invalid` | that field with a danger edge |
+| `select` | `input` again, with room on the right for the arrow the host draws |
+| `card` | a raised block: the surface fill, a border, the larger radius, `$space4` of padding |
+| `popup` | the same block at popup size: the smaller radius, tighter padding |
+| `text` | body copy at `$textMd`, with no margin |
+| `text_xs`, `text_sm`, `text_lg`, `text_xl`, `text_2xl` | that copy, one size step at a time |
+| `text_mono` | that copy in `$fontMono` |
+| `muted` | text in `$mutedForeground`, readable on any of the three backgrounds |
+
+`hovered`, `pressed` and `disabled` are three more entries, and you put them in a class list
+yourself: `theme={['button', hovered.bool('hovered', null)]}`. They match anywhere, so they apply
+to any entry above. They are meant for the controls, `button` and its two variants, `input` and its
+variant, and `select`; `card`, `popup`, the `text` sizes and `muted` have no state to show.
+
+**Dark is a theme.** `dark` and `light` are partial themes handed to the provider:
+
+```tsx
+mount(document.body, <Theme value={dark}><App /></Theme>);
+```
+
+Either may nest inside the other, and each subtree resolves its own roles, because a provider's
+subtree generates its own classes. Following the operating system is your call, in your own theme,
+with the `_media_` directive the engine already has.
+
+**No unnamed value.** A component of this package writes `$name`, never a colour, a size or a
+duration. `node packages/testing/scripts/check-theme.ts` refuses one that does, over
+`packages/ui/src` and `recipes/`, and `packages/ui/tokens.txt` is the committed list of every name
+there is. A value with no name yet gets one in the entry that needs it:
+
+```ts
+Theme.define({ splash: { $splashHeight: '320px', minHeight: '$splashHeight' } });
+```
+
+Point the check at your own source to adopt the same rule; nothing makes you. A path is resolved
+against the repository root, so an absolute one is taken as it is, and a path with no `.ts` or
+`.tsx` file under it fails instead of passing over nothing.
+
+```
+node packages/testing/scripts/check-theme.ts /home/me/app/src
+```
+
+**Overriding it.** `Theme.define` adds to the theme; it refuses one property of one entry given two
+different values, so it is not how you replace what the default already says. A `<Theme value={...}>`
+provider is, and it is also what scopes an override to part of a page. Entry names the default
+theme does not use are yours to define outright.
+
+**A dev-mode warning.** When a chain resolves both `color` and `background` from named values and
+the pair is below 4.5:1, this package says so in the console, with the ratio, the target and the
+role to use. Theme-derived pairs only, and the call is not in a release build.
+
 ## What it never decides
 
 Storage, transport, and anything server-side. Data fetching: `suspend` takes a promise and does
 not make one. Upload transport. Auth. Where analytics go: `InputContext` fires and the application
-listens. The theme values beyond a small default, so a bare `theme="button"` renders as something.
-Routing and head tags, which are step 18.
+listens. What your application looks like: a default theme ships so a bare `theme="button"` renders
+as something readable, and every value in it is yours to replace. What your own components name
+their own values, and whether you run the theme check. Routing and head tags, which are step 18.
 
 ## Boundaries
 
