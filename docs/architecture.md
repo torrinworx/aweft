@@ -89,8 +89,9 @@ aweft/
     ssg/                   static generation
     build/                 transforms, in two modes
     testing/               conformance runners and harnesses
+    debug/                 a document or commit read back as text; the stack never imports it
 
-  examples/                one proof program per package, plus the integration app
+  recipes/                 one per package, plus one per task
   docs/
 ```
 
@@ -120,6 +121,7 @@ version in lockstep.
 | `jobs` | When a row runs, over an observable array the application hands in: the timers, the cron arithmetic, `last` written onto the row | What a job does; who may add, edit or remove a row; storage; queues, retries, catch-up; modules; component internals |
 | `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom |
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
+| `debug` | Reading a running document or commit back as text | Nothing. It may know everything; no runtime package may know it |
 
 ---
 
@@ -288,12 +290,13 @@ the application's rule, checked where the application chooses.
 
 ---
 
-## Proof programs
+## Recipes
 
-Every package ships a proof program in `examples/<package>/`, and `AGENTS.md` holds the rule
-about what a proof is. This is what each one has to demonstrate.
+Everything that works lives in `recipes/`, and `AGENTS.md` holds the rule about what a recipe
+is. Every package owes one, and this is what each has to demonstrate. Task recipes, which are
+indexed by the job rather than the package, are not in this table.
 
-| Package | The proof must demonstrate |
+| Package | The recipe must demonstrate |
 |---|---|
 | codec | a stored commit log validates: every frame re-encodes to the bytes it was read from, and every single byte of damage to it is either refused or accepted as the one spelling of what it decoded to |
 | core | a headless app model with cross-field invariants: mutation bursts, commit atomicity observed through watch, undo and redo by commit inversion |
@@ -306,11 +309,12 @@ about what a proof is. This is what each one has to demonstrate.
 | ui | an interactive page composed from components, driven and asserted against the mock (plus a manual browser page, outside CI) |
 | icons | a page rendering through the driver interface with the iconify driver |
 | server | a full-stack app: an authenticated connection syncs state through the application's rules to store and back; an anonymous one reaches only what the gate allows; `gate: open` reaches everything; a gate with no session in it works in its place |
-| auth | inside the server proof: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous |
+| auth | inside the server recipe: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous |
 | jobs | a scheduled job runs, persists an effect, and survives a restart |
 | ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM |
-| build | the transforms build a real example app; assert stripping is verified in the output |
-| testing | consumed by every other package's suite; its proof is everyone else's |
+| build | the transforms build a real page; assert stripping is verified in the output |
+| testing | consumed by every other package's suite; its recipe is everyone else's |
+| debug | a bug found in a document the reader did not write, using only what the package prints |
 
 ---
 
@@ -526,16 +530,15 @@ page actually compiles code.
 
 Three tiers, because each catches failures the others structurally cannot.
 
-**Tier 1, per-package proof programs.** A small real program per package, public exports only,
-running in the root gate and asserting its own outcome. Catches a broken API. The table of what each must
-demonstrate is in `AGENTS.md`.
+**Tier 1, one recipe per package.** A small real program per package, public exports only,
+running in the root gate and asserting its own outcome. Catches a broken API. The table of
+what each must demonstrate is above.
 
-**Tier 2, one integration app: the documentation site and playground.** Catches two packages
-disagreeing, and catches a design being unpleasant to use, neither of which a per-package test
-can see. It is chosen because it is genuinely needed, so it gets used rather than built
-lazily, and because it exercises the hardest surfaces: static generation, routing, head
-output, components, persistence for saved snippets, and sandboxed execution of visitor-written
-code.
+**Tier 2, integration recipes.** Task recipes that deliberately span packages. They catch two
+packages disagreeing, and catch a design being unpleasant to use, neither of which a
+per-package program can see. Several small ones rather than one large application, so each
+names the seam it covers and a failure says which seam broke. The documentation site lives in
+its own repository and proves nothing here.
 
 **Tier 3, real applications**, ordered by what each exercises rather than by size, so a
 failure lands somewhere recoverable.
