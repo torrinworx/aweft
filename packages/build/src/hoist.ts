@@ -3,8 +3,13 @@
 //
 // What goes in the template is what the source fixed: element names, attributes whose value is a
 // literal, and text. Everything else becomes an edit, and an edit's value is a piece of the
-// original expression, emitted in the order the `h` calls this replaces would have run in: for
-// each element its own varying children, then its nested elements, then its own properties.
+// original expression.
+//
+// The values are emitted in the order the source evaluates them, which is left to right through a
+// call's arguments: an element's properties, then its children, and a nested element's whole
+// subtree where that child sits. A side effect in one of those expressions therefore runs where
+// the source ran it. The order the edits are then applied to the tree in is a different order and
+// is `template`'s to choose (design 093).
 
 import { type Child, type Element, type Property, propertiesCode } from './element.ts';
 
@@ -74,7 +79,9 @@ export const createHoister = (enabled: boolean, template: string, prefix: string
 		}
 
 		const spec: unknown[] = [element.tag, Object.keys(attributes).length === 0 ? null : attributes];
-		const nested: { readonly element: Element; readonly at: number }[] = [];
+		// The children in source order, each already read: a nested element to descend into, or a
+		// varying child with the code for its value and the static child it goes in front of.
+		const order: ({ readonly element: Element; readonly at: number } | { before: number; readonly code: string })[] = [];
 		const varyingChildren: { before: number; readonly code: string }[] = [];
 		let statics = 0;
 
@@ -83,26 +90,30 @@ export const createHoister = (enabled: boolean, template: string, prefix: string
 				spec.push(child.text);
 				statics += 1;
 			} else if (child.kind === 'element' && fixed(child.element)) {
-				nested.push({ element: child.element, at: statics });
+				order.push({ element: child.element, at: statics });
 				spec.push(null);
 				statics += 1;
 			} else {
-				varyingChildren.push({ before: statics, code: childValue(child) });
+				const entry = { before: statics, code: childValue(child) };
+				varyingChildren.push(entry);
+				order.push(entry);
 			}
 		}
 		// A varying child with no static child after it goes at the end of the element.
 		for (const entry of varyingChildren) if (entry.before === statics) entry.before = -1;
 
-		for (const entry of varyingChildren) {
-			edits.push(['child', path, entry.before]);
-			values.push(entry.code);
-		}
-		for (const entry of nested) {
-			spec[2 + entry.at] = visit(entry.element, [...path, entry.at], edits, values);
-		}
+		// Source order: the properties are the call's second argument and run before every child.
 		if (varying.length > 0) {
 			edits.push(['props', path]);
 			values.push(propertiesCode(varying));
+		}
+		for (const entry of order) {
+			if ('code' in entry) {
+				edits.push(['child', path, entry.before]);
+				values.push(entry.code);
+			} else {
+				spec[2 + entry.at] = visit(entry.element, [...path, entry.at], edits, values);
+			}
 		}
 		return spec;
 	};

@@ -45,9 +45,10 @@ export type TemplateEdit =
 /** One instance of a template: what `h` would have returned for the same subtree. */
 export type Template = (values: readonly unknown[]) => unknown;
 
-/** An edit run: one element's child edits together, or one element's properties. */
+/** An edit run: one element's child edits together, or one element's properties. `at` is where
+ * each of the run's values sits in the values array. */
 type Step =
-	| { readonly kind: 'children'; readonly path: readonly number[]; readonly before: readonly number[]; readonly from: number }
+	| { readonly kind: 'children'; readonly path: readonly number[]; readonly before: number[]; readonly at: number[] }
 	| { readonly kind: 'props'; readonly path: readonly number[]; readonly at: number };
 
 const nodeAt = (root: ElementLike, path: readonly number[]): ElementLike => {
@@ -98,31 +99,41 @@ const build = (spec: TemplateElement, document: DocumentLike, mark: boolean): El
 	return element;
 };
 
-/** Group the flat edit list into runs once, at module load, so an instance does no grouping. */
+/**
+ * Group the flat edit list into runs once, at module load, so an instance does no grouping.
+ *
+ * The edits arrive in the order the source evaluates their values, which is not the order they
+ * are applied in. Applying comes out of this: every element's children first, then every
+ * element's properties, deepest element first. A property that rewrites its element's content,
+ * `$textContent` above all, therefore runs after the children are in place, and an ancestor's
+ * runs after a descendant's, which is what nested `h` calls do (design 093).
+ *
+ * One element's child edits are one run wherever they sit in the list, because a nested element's
+ * whole subtree comes between two of them in source order, and the run is what works out each
+ * varying child's anchor.
+ */
 const plan = (edits: readonly TemplateEdit[]): Step[] => {
-	const steps: Step[] = [];
-	const done = new Set<string>();
-	for (let i = 0; i < edits.length;) {
+	const children: Step[] = [];
+	const properties: { readonly step: Step; readonly depth: number }[] = [];
+	const runs = new Map<string, { readonly before: number[]; readonly at: number[] }>();
+	for (let i = 0; i < edits.length; i++) {
 		const edit = edits[i]!;
 		if (edit[0] === 'props') {
-			steps.push({ kind: 'props', path: edit[1], at: i });
-			i += 1;
+			properties.push({ step: { kind: 'props', path: edit[1], at: i }, depth: edit[1].length });
 			continue;
 		}
 		const key = edit[1].join(',');
-		assert(!done.has(key), 'a template lists one element\'s child edits in two places');
-		done.add(key);
-		const before: number[] = [];
-		const from = i;
-		while (i < edits.length) {
-			const next = edits[i]!;
-			if (next[0] !== 'child' || next[1].join(',') !== key) break;
-			before.push(next[2]);
-			i += 1;
+		let run = runs.get(key);
+		if (run === undefined) {
+			run = { before: [], at: [] };
+			runs.set(key, run);
+			children.push({ kind: 'children', path: edit[1], before: run.before, at: run.at });
 		}
-		steps.push({ kind: 'children', path: edit[1], before, from });
+		run.before.push(edit[2]);
+		run.at.push(i);
 	}
-	return steps;
+	properties.sort((a, b) => b.depth - a.depth);
+	return [...children, ...properties.map((entry) => entry.step)];
 };
 
 /**
@@ -130,11 +141,14 @@ const plan = (edits: readonly TemplateEdit[]): Step[] => {
  *
  * Params:
  *   spec: the element, its literal attributes and its static children, nested
- *   edits: where something varies, in the order the `h` calls this replaces would have run:
- *          for each element, its children first and then its own properties
+ *   edits: where something varies, in the order a source evaluates the values: for each element
+ *          its properties first, then its children, and a nested element's whole subtree where
+ *          that child sits
  *
  * Returns: a function taking one value per edit, in the same order, and returning what `h`
- * would have returned. Hand that straight to `mount`.
+ * would have returned. Hand that straight to `mount`. The values are applied in a different
+ * order from the one they are given in: every element's children before its own properties,
+ * so a property that rewrites the element's content still wins.
  *
  * Example:
  *   const row = template(['li', { class: 'row' }, ['span', null]], [['child', [0], -1]]);
@@ -201,7 +215,7 @@ export const template = (spec: TemplateElement, edits: readonly TemplateEdit[]):
  */
 const applyChildren = (
 	element: ElementLike,
-	step: { readonly before: readonly number[]; readonly from: number },
+	step: { readonly before: readonly number[]; readonly at: readonly number[] },
 	values: readonly unknown[],
 	document: DocumentLike,
 	signals: Signal[],
@@ -223,7 +237,7 @@ const applyChildren = (
 		while (staticAt < target) anchored(statics[staticAt++]!);
 		const anchor = target < statics.length ? statics[target]! : null;
 
-		const value = values[step.from + i];
+		const value = values[step.at[i]!];
 		assert(value !== undefined, 'cannot mount undefined; hide something with null');
 		if (value === null || value === undefined) continue;
 
