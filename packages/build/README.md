@@ -97,14 +97,15 @@ const Row = (label, click) => h('tr', { class: 'row' },
 	h('td', { class: 'b' }, h('a', { $onclick: click }, 'go')));
 ```
 
-becomes one `template(...)` at the top of the file and one call to it per row. Measured in
-Chromium at 10,000 rows of that shape, best of seven: 94.4 ms built through `h` calls against
-20.1 ms for a hand-written clone of the same skeleton, which is the size of the opportunity the
-pass is after (`.scratch/hoist/h-vs-clone.ts`). What `template` itself delivers on the same
-shape, measured separately, is 51.0 ms through `h` calls against 34.4 ms instanced, of which
-8.8 ms is the walk that marks each instance as the binding's own so hydration can adopt the
-server's markup (`.scratch/fixer/mark-cost.ts`). The two runs are not comparable with each other:
-they build different rows. The loop for re-running either is `bench/README.md`.
+becomes one `template(...)` at the top of the file and one call to it per row. Measured by
+`bench/hoist.ts` in Chromium, 10,000 rows of that shape, best of five invocations of best of
+seven: inside a mount, which is where a list builds its rows, 28.5 ms through the eight `h`
+calls against 13.4 ms as one template instance. Outside any mount, which is where a page builds
+the item it then hands to `mount` or `hydrate`, the same two are 43.1 ms and 29.8 ms, because
+every node made there is marked as the binding's own so `hydrate` can adopt the server's markup.
+For a clone that marking is a walk, and it is about 16 ms per 10,000 instances. A row built
+during a mount that is not hydrating pays none of it. The loop for re-running the script is
+`bench/README.md`.
 
 **Hoisting only happens where `h` is provably `@aweftjs/dom`'s in that file.** JSX still
 compiles to any `h`; only this substitution is restricted, because it assumes `dom`'s `h`'s
