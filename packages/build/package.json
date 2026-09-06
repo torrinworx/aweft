@@ -6,10 +6,11 @@
 	"license": "MIT",
 	"description": "One transform, two modes: markup and JSX to h calls, static subtrees to templates, asserts out of a release build.",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./loader": "./src/loader.ts"
 	},
 	"scripts": {
-		"test": "node --test tests/*.test.ts"
+		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
 	},
 	"dependencies": {
 		"@aweftjs/codec": "*",
@@ -19,6 +20,7 @@
 	"devDependencies": {
 		"@aweftjs/dom": "*",
 		"@aweftjs/core": "*",
+		"@aweftjs/ui": "*",
 		"@aweftjs/testing": "*"
 	},
 	"aweft": {

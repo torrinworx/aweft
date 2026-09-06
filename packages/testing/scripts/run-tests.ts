@@ -51,6 +51,9 @@ for (const name of readdirSync(packagesDir).sort()) {
 	}
 
 	const args = [
+		// `ui`'s source is .tsx, which Node cannot load on its own. The loader is this stack's own
+		// transform, so every gate run compiles the repo with its own compiler (design 110).
+		'--import', '@aweftjs/build/loader',
 		'--test',
 		// A test that waits forever is a red test, not a stuck gate: without this cap a link
 		// test that never gets its answer hangs the suite instead of failing it.

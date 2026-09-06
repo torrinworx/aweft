@@ -29,7 +29,7 @@ const sourcesOf = (name: string): string[] => {
 	const walk = (at: string): string[] => readdirSync(at, { withFileTypes: true }).flatMap((entry) => {
 		const path = join(at, entry.name);
 		if (entry.isDirectory()) return walk(path);
-		return entry.name.endsWith('.ts') ? [path] : [];
+		return entry.name.endsWith('.ts') || entry.name.endsWith('.tsx') ? [path] : [];
 	});
 	return walk(dir).sort();
 };

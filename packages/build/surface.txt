@@ -7,3 +7,4 @@ type TransformResult: interface TransformResult { readonly code: string; readonl
 value aweft: (options?: Omit<TransformOptions, "filename">) => Plugin
 value mangle: Mangle
 value transform: (source: string, options?: TransformOptions) => TransformResult
+./loader value load: (url: string, context: unknown, nextLoad: NextLoad) => Promise<LoadResult>

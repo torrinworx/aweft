@@ -30,7 +30,7 @@ const sources = (dir: string): string[] => {
 		const path = join(dir, entry);
 
 		if (statSync(path).isDirectory()) found = found.concat(sources(path));
-		else if (entry.endsWith('.ts')) found.push(path);
+		else if (entry.endsWith('.ts') || entry.endsWith('.tsx')) found.push(path);
 	}
 	return found;
 };

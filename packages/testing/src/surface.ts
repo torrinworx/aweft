@@ -24,6 +24,8 @@ const OPTIONS: ts.CompilerOptions = {
 	module: ts.ModuleKind.NodeNext,
 	moduleResolution: ts.ModuleResolutionKind.NodeNext,
 	allowImportingTsExtensions: true,
+	// Some of `ui`'s source is .tsx (design 110), and a program with no jsx option cannot parse it.
+	jsx: ts.JsxEmit.Preserve,
 	strict: true,
 	skipLibCheck: true,
 	noEmit: true,
