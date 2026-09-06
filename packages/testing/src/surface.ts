@@ -13,6 +13,8 @@
 
 import ts from 'typescript';
 
+import { codecError } from '@aweftjs/codec';
+
 import { aweftPackageOf } from './imports.ts';
 
 // The root toolchain's options, minus everything that only matters for emit. No `paths`: the
@@ -76,13 +78,18 @@ const shapeOf = (declaration: ts.Declaration): string =>
  * interface or type alias reads `type name: declaration`, and an export re-exported from
  * another package in the stack ends with ` (from @aweftjs/<name>)`.
  *
+ * Throws: `not-in-program` when the program handed in does not contain that file.
+ *
  * Example:
  *   surfaceOf('/repo/packages/sync/src/index.ts');
  *   // 'value track: (document: unknown, on: (event: Tracked) => void) => Tracker'
  */
 export const surfaceOf = (indexPath: string, program = surfaceProgram([indexPath])): string[] => {
 	const file = program.getSourceFile(indexPath);
-	if (file === undefined) throw new Error(`${indexPath} is not part of the program`);
+	if (file === undefined) {
+		throw codecError('not-in-program', `${indexPath} is not part of the program`,
+			'Pass this path to surfaceProgram too, or let surfaceOf build its own program.');
+	}
 
 	const checker = program.getTypeChecker();
 	const entry = checker.getSymbolAtLocation(file);

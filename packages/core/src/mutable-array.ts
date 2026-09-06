@@ -56,8 +56,8 @@ const asIndex = (key: string): number => {
 	return Number.isInteger(at) && at >= 0 && String(at) === key ? at : -1;
 };
 
-const unsupported = (name: string, instead: string): never => {
-	throw codecError('unsupported', `${name} would rewrite every slot it passes over; ${instead}`);
+const unsupported = (name: string, fix: string): never => {
+	throw codecError('unsupported', `${name} would rewrite every slot it passes over`, fix);
 };
 
 /**
@@ -184,10 +184,10 @@ export const mutableArray = <T = unknown>(items?: Iterable<T>): MutableArray<T> 
 				watchers.delete(fn);
 			};
 		},
-		sort: () => unsupported('sort', 'assign the order you want, or hold the sort outside the list'),
-		reverse: () => unsupported('reverse', 'assign the order you want'),
-		fill: () => unsupported('fill', 'assign the slots you mean'),
-		copyWithin: () => unsupported('copyWithin', 'assign the slots you mean'),
+		sort: () => unsupported('sort', 'Assign the order you want, or hold the sort outside the list.'),
+		reverse: () => unsupported('reverse', 'Assign the order you want.'),
+		fill: () => unsupported('fill', 'Assign the slots you mean.'),
+		copyWithin: () => unsupported('copyWithin', 'Assign the slots you mean.'),
 	};
 
 	const source: Source = {
@@ -208,22 +208,28 @@ export const mutableArray = <T = unknown>(items?: Iterable<T>): MutableArray<T> 
 
 		set: (_target, key, value) => {
 			if (typeof key === 'symbol') {
-				throw codecError('invalid-key', `${String(key)} is not an array slot`);
+				throw codecError('invalid-key', `${String(key)} is not an array slot`,
+					'Index the list with a number, and keep symbol-keyed data elsewhere.');
 			}
 
 			if (key === 'length') {
 				const length = Number(value);
 				if (!Number.isInteger(length) || length < 0 || length > values.length) {
-					throw codecError('invalid-write', 'an array grows by inserting, not by its length');
+					throw codecError('invalid-write', 'an array grows by inserting, not by its length',
+						'Call push or splice to grow it; assign a smaller length to shorten it.');
 				}
 				splice(length, values.length - length, []);
 				return true;
 			}
 
 			const at = asIndex(key);
-			if (at < 0) throw codecError('invalid-key', `${key} is not an array index`);
+			if (at < 0) {
+				throw codecError('invalid-key', `${key} is not an array index`,
+					'Assign a whole number index of zero or more.');
+			}
 			if (at > values.length) {
-				throw codecError('invalid-write', 'an array has no gaps; push or splice instead');
+				throw codecError('invalid-write', 'an array has no gaps; push or splice instead',
+					'Push the value on the end, or splice it in where you want it.');
 			}
 			splice(at, at === values.length ? 0 : 1, [value as T]);
 			return true;
@@ -233,6 +239,7 @@ export const mutableArray = <T = unknown>(items?: Iterable<T>): MutableArray<T> 
 			throw codecError(
 				'invalid-write',
 				`deleting ${String(key)} would leave a hole; splice it out instead`,
+				'Call splice to take the element out and close the gap.',
 			);
 		},
 	}) as MutableArray<T>;

@@ -130,11 +130,13 @@ const build = (
 
 	const set = (value: unknown): void => {
 		if (wild) {
-			throw codecError('multi-target', 'a wildcard scope names many places and cannot be written as one');
+			throw codecError('multi-target', 'a wildcard scope names many places and cannot be written as one',
+				'Narrow the scope with path until it names one slot, then set that.');
 		}
 		const { holder, slot } = locate(base, keys);
 		if (holder === undefined || slot === undefined) {
-			throw codecError('slot-missing', 'nothing holds the slot this path names');
+			throw codecError('slot-missing', 'nothing holds the slot this path names',
+				'Create the observables along the path first, or check get() before setting.');
 		}
 		write(holder, slot, toCell(value));
 	};
@@ -207,6 +209,8 @@ const build = (
  * Returns: an observer. Every narrowing returns a new one, so an observer can be kept and
  * narrowed differently in two places without either affecting the other.
  *
+ * Throws: `not-observable` when `observable` is not an observable.
+ *
  * Example:
  *   const stop = observer(doc).path('settings').ignore('draft').watch((change) => {
  *     send(change.deltas);
@@ -214,6 +218,9 @@ const build = (
  */
 export const observer = (observable: unknown): Observer => {
 	const node = nodeOf(observable);
-	if (node === undefined) throw codecError('not-observable', 'observer takes an observable');
+	if (node === undefined) {
+		throw codecError('not-observable', 'observer takes an observable',
+			'Pass what createObject, createArray or createMap returned.');
+	}
 	return build(node, [], [], false);
 };

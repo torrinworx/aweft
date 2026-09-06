@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import { connect as connectTcp } from 'node:net';
 
+import { codecError } from '@aweftjs/codec';
 import type { Listener, ListenerHandlers } from '@aweftjs/server';
 
 /** What a check needs: a listener nobody else is using, and the URL to reach it at once it has started. */
@@ -69,7 +70,12 @@ const upgradeStatus = (url: string): Promise<number> =>
 			if (line) { socket.destroy(); done(Number(line[1])); }
 		});
 		socket.on('error', fail);
-		socket.on('close', () => { if (!/^HTTP/.test(text)) fail(new Error('the upgrade was closed with no status line')); });
+		socket.on('close', () => {
+			if (!/^HTTP/.test(text)) {
+				fail(codecError('no-status-line', 'the upgrade was closed before any status line arrived',
+					'Answer every upgrade request with an HTTP status line, refusals included.'));
+			}
+		});
 	});
 
 const checks: ListenerCheck[] = [
@@ -226,6 +232,9 @@ const checks: ListenerCheck[] = [
  *
  * Returns: the checks, each named, each taking a function that makes a fresh listener and
  * says where to reach it.
+ *
+ * Throws: each check's `run` throws an assertion when the listener misses that obligation,
+ * and `no-status-line` when a raw upgrade request is closed with nothing written back.
  *
  * Example:
  *   for (const c of listenerChecks()) test(c.name, () => c.run(() => {

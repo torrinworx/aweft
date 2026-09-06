@@ -47,7 +47,7 @@ Registering a watcher returns the function that stops it, always.
 
 A watcher cannot tell a commit landed with `apply` from a local mutation. An undo stack
 that stays subscribed while it undoes will record its own undo; hold a flag for the
-duration of the call, the way `examples/core` does.
+duration of the call, the way `recipes/core` does.
 
 That flag works while `apply` is called from ordinary code. It does not work when `apply`
 is called from **inside** a watcher, which is the shape a replication seam reaches for
@@ -310,4 +310,4 @@ and `copyWithin` on an array throw, because they cannot be expressed as changes 
 slots they appear to touch.
 
 The wire format lives in `spec/`, the reasoning in `docs/design/`, and a complete
-program using all of the above in `examples/core/`.
+program using all of the above in `recipes/core/`.

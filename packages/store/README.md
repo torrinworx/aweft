@@ -189,7 +189,7 @@ whole rather than slot by slot fails all three, which is what they are there to 
 checks in all, a count the proof program pins, and the example driver below passes every one
 there.
 
-`examples/store/driver-file.ts` is a complete driver written outside the package, and the proof
+`recipes/store/driver-file.ts` is a complete driver written outside the package, and the proof
 program runs the real thing: it writes a document, sends the writing
 process a `SIGKILL`, and reopens what survived.
 

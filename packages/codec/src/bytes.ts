@@ -86,13 +86,19 @@ export const bytesToHex = (b: Uint8Array): string => {
  *   const position = bytesFromHex(slot);
  */
 export const bytesFromHex = (hex: string): Uint8Array => {
-	if (hex.length % 2 !== 0) throw codecError('invalid-hex', `hex string has an odd length: ${hex.length}`);
+	if (hex.length % 2 !== 0) {
+		throw codecError('invalid-hex', `hex string has an odd length: ${hex.length}`,
+			'Write two hex characters per byte, as bytesToHex does.');
+	}
 
 	const out = new Uint8Array(hex.length / 2);
 	for (let i = 0; i < out.length; i++) {
 		const hi = NIBBLE[hex.charCodeAt(i * 2)] ?? -1;
 		const lo = NIBBLE[hex.charCodeAt(i * 2 + 1)] ?? -1;
-		if (hi < 0 || lo < 0) throw codecError('invalid-hex', `"${hex.slice(i * 2, i * 2 + 2)}" is not a hex byte`);
+		if (hi < 0 || lo < 0) {
+			throw codecError('invalid-hex', `"${hex.slice(i * 2, i * 2 + 2)}" is not a hex byte`,
+				'Use the characters 0 to 9 and a to f, as bytesToHex writes them.');
+		}
 		out[i] = (hi << 4) | lo;
 	}
 	return out;

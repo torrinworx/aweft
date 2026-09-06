@@ -103,7 +103,8 @@ const materialize = (child: Node): void => {
 /** Give an observable its attach edge here, moving it if it had one somewhere else. */
 const claim = (child: Node, parent: Node, slot: string): void => {
 	if (isAncestor(child, parent)) {
-		throw codecError('unreachable', `${child.key} cannot be attached inside itself`);
+		throw codecError('unreachable', `${child.key} cannot be attached inside itself`,
+			'Attach it somewhere outside its own subtree.');
 	}
 
 	const root = parent.root;
@@ -152,7 +153,8 @@ export const write = (node: Node, slot: string, next: Cell | undefined): void =>
 	// An interceptor answers a commit; changing the tree from inside one would change the
 	// commit it has already been asked about, and the answer would be about something else.
 	if (sealed) {
-		throw codecError('sealed', 'an interceptor decides a commit and cannot change one');
+		throw codecError('sealed', 'an interceptor decides a commit and cannot change one',
+			'Return a Refusal from the rule instead of writing to the document.');
 	}
 
 	mutate(() => {
@@ -244,7 +246,8 @@ export const atomic = <T>(run: () => T): T => {
 			reset();
 			releaseAfterThrow();
 		}
-		throw codecError('async-atomic', 'an atomic block is synchronous and cannot return a promise');
+		throw codecError('async-atomic', 'an atomic block is synchronous and cannot return a promise',
+			'Await outside the block, then pass the settled values to atomic.');
 	}
 
 	if (depth === 0) close();
@@ -323,7 +326,8 @@ const admits = (node: Node): 'keep' | 'drop' => {
 	if (entered.has(anchor)) return 'drop';
 	if (left.has(anchor)) return 'keep';
 
-	throw codecError('unreachable', `${node.key} has no attach path from the root`);
+	throw codecError('unreachable', `${node.key} has no attach path from the root`,
+		'Attach the observable to the document before writing to it.');
 };
 
 const checkMoves = (): void => {
@@ -334,6 +338,7 @@ const checkMoves = (): void => {
 			throw codecError(
 				'multiple-attach',
 				`${move.node.key} would have two attach edges, and an observable lives in one place`,
+				'Leave one slot holding it, and make the other an alias.',
 			);
 		}
 	}

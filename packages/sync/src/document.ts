@@ -6,8 +6,8 @@
 // specify, validate and version.
 
 import {
-	type Commit, type Delta, type ObservableKind, type Ref, type Value,
-	bytesFromHex, codecError, equalBytes, idFromText,
+	type Commit, type Delta, type Id, type ObservableKind, type Ref, type Value,
+	assertPosition, bytesFromHex, codecError, equalBytes, idFromText,
 } from '@aweftjs/codec';
 import {
 	type Snapshot, type SnapshotRef, type SnapshotValue,
@@ -17,7 +17,7 @@ import {
 /** The ref a delta carries for one slot of an observable of the given kind. */
 const refFor = (kind: Snapshot['observables'][string]['kind'], slot: string): Ref => {
 	if (kind === 'object') return { kind: 'object', key: slot };
-	if (kind === 'array') return { kind: 'array', key: bytesFromHex(slot) };
+	if (kind === 'array') return { kind: 'array', key: assertPosition(bytesFromHex(slot)) };
 	return { kind: 'map', key: idFromText(slot) };
 };
 
@@ -58,6 +58,8 @@ const same = (a: SnapshotValue, b: SnapshotValue): boolean => {
  * This is what an end with nothing is sent when it asks for the state, and it is also how a
  * document built by mutation is handed to anything that wants it as one commit.
  *
+ * Throws: `not-observable` when the value is not part of a document.
+ *
  * Example:
  *   const whole = asCommit(doc);
  *   if (whole !== undefined) apply(replica, whole);
@@ -93,6 +95,9 @@ export const asCommit = (observable: unknown): Commit | undefined => {
  * The two documents must share a root id: a document is only ever moved to another state of
  * itself.
  *
+ * Throws: `not-observable` when the value is not part of a document, and `root-mismatch`
+ * when the two do not share a root id.
+ *
  * Example:
  *   const fix = reconcile(mine, snapshot(theirs));
  *   if (fix !== undefined) apply(mine, fix);
@@ -103,6 +108,7 @@ export const reconcile = (observable: unknown, target: Snapshot): Commit | undef
 		throw codecError(
 			'root-mismatch',
 			`${from.root} cannot be moved to ${target.root}: a document is only moved to itself`,
+			'Reconcile against a snapshot of this same document, or build a new one with rootFrom.',
 		);
 	}
 
@@ -145,12 +151,15 @@ export const reconcile = (observable: unknown, target: Snapshot): Commit | undef
  *
  * Returns: the root observable, holding nothing. Apply `asCommit` of the source to fill it.
  *
+ * Throws: `kind-conflict` for a kind that is not object, array or map.
+ *
  * Example:
  *   const doc = rootFrom(frame.root.id, frame.root.kind);
  */
-export const rootFrom = (id: Uint8Array, kind: ObservableKind): object => {
+export const rootFrom = (id: Id, kind: ObservableKind): object => {
 	if (kind === 'object') return createObject(undefined, id);
 	if (kind === 'array') return createArray(undefined, id) as unknown as object;
 	if (kind === 'map') return createMap(undefined, id) as unknown as object;
-	throw codecError('kind-conflict', `${String(kind)} is not an observable kind`);
+	throw codecError('kind-conflict', `${String(kind)} is not an observable kind`,
+		'Pass object, array or map as the kind.');
 };

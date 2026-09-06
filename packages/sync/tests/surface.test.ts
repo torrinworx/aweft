@@ -10,6 +10,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { assertId } from '@aweftjs/codec';
+
 import * as sync from '../src/index.ts';
 
 test('the entry file exports exactly what was decided', () => {
@@ -53,7 +55,7 @@ test('a link is two functions, and a share is four', () => {
 	const link = sync.connect(a);
 	assert.deepEqual(Object.keys(link).sort(), ['close', 'share']);
 
-	const shared = link.share('board', sync.rootFrom(new Uint8Array(12), 'object'));
+	const shared = link.share('board', sync.rootFrom(assertId(new Uint8Array(12)), 'object'));
 	assert.deepEqual(Object.keys(shared).sort(), ['document', 'ready', 'resync', 'stop']);
 	link.close();
 });

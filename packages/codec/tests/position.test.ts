@@ -7,18 +7,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { bytesFromHex } from '../src/index.ts';
-import { type CodecError } from '../src/index.ts';
+import { type CodecError, type Position } from '../src/index.ts';
 import { assertPosition, comparePositions, isValidPosition } from '../src/index.ts';
 
-const pos = (hex: string): Uint8Array => bytesFromHex(hex);
+// Two spellings, because the two functions want different things. `isValidPosition` and
+// `assertPosition` judge raw bytes, so the keys they are handed cannot have been checked
+// first; `comparePositions` orders keys that have.
+const raw = (hex: string): Uint8Array => bytesFromHex(hex);
+const pos = (hex: string): Position => assertPosition(bytesFromHex(hex));
 
 test('a position is non-empty and does not end in a zero byte', () => {
 	assert.equal(isValidPosition(pos('80')), true);
 	assert.equal(isValidPosition(pos('8000000001')), true, 'a zero inside is fine');
 
 	assert.equal(isValidPosition(new Uint8Array(0)), false, 'empty');
-	assert.equal(isValidPosition(pos('8000')), false, 'ends in a zero byte');
-	assert.equal(isValidPosition(pos('00')), false, 'a single zero is both');
+	assert.equal(isValidPosition(raw('8000')), false, 'ends in a zero byte');
+	assert.equal(isValidPosition(raw('00')), false, 'a single zero is both');
 });
 
 test('asserting a position names the rule it broke', () => {
@@ -35,7 +39,7 @@ test('asserting a position names the rule it broke', () => {
 	};
 
 	assert.equal(thrown(new Uint8Array(0)), 'invalid-position');
-	assert.equal(thrown(pos('8000')), 'invalid-position');
+	assert.equal(thrown(raw('8000')), 'invalid-position');
 });
 
 test('positions order as unsigned byte strings, and a prefix sorts first', () => {
@@ -62,11 +66,12 @@ test('there is always room between two positions, which is what the two rules bu
 	const high = pos('81');
 
 	for (let i = 0; i < 64; i++) {
-		const next = new Uint8Array(low.length + 1);
-		next.set(low);
-		next[low.length] = 0x80;
+		const bytes = new Uint8Array(low.length + 1);
+		bytes.set(low);
+		bytes[low.length] = 0x80;
 
-		assert.ok(isValidPosition(next), 'the key produced is itself a legal position');
+		assert.ok(isValidPosition(bytes), 'the key produced is itself a legal position');
+		const next = assertPosition(bytes);
 		assert.ok(comparePositions(low, next) < 0, 'above the one below it');
 		assert.ok(comparePositions(next, high) < 0, 'below the one above it');
 		low = next;

@@ -5,7 +5,7 @@
 // framework taking that name would break it (design 013). Everything core offers is a free
 // function that takes the observable.
 
-import { codecError } from '@aweftjs/codec';
+import { type Id, codecError } from '@aweftjs/codec';
 
 import { createNode, plantCell, userValue } from './node.ts';
 import type { Node } from './types.ts';
@@ -13,7 +13,8 @@ import { write } from './transaction.ts';
 import { register, toCell } from './value.ts';
 
 const reject = (key: symbol): never => {
-	throw codecError('invalid-key', `a slot is named by a string, and ${String(key)} is a symbol`);
+	throw codecError('invalid-key', `a slot is named by a string, and ${String(key)} is a symbol`,
+		'Use a string key, and keep symbol-keyed data outside the document.');
 };
 
 // The node rides on the proxy's own target, so every object in a document shares one handler
@@ -56,6 +57,7 @@ const handler: ProxyHandler<Target> = {
 		throw codecError(
 			'invalid-write',
 			`assign ${String(key)} rather than defining it, so the change becomes a delta`,
+			'Assign the property instead of calling Object.defineProperty.',
 		);
 	},
 };
@@ -71,6 +73,10 @@ const handler: ProxyHandler<Target> = {
  *
  * Returns: a proxy whose properties are its slots. Assigning one is a commit; so is deleting
  * one. Reading gives the primitive, or the observable the slot names.
+ *
+ * Throws: `invalid-value`, `cell-in-document` or `inline-container` for an init value a slot
+ * cannot hold, `multiple-attach`, `unreachable` or `duplicate-id` for an observable that
+ * already has a home or an id, and `invalid-id` for an id that is not twelve bytes.
  *
  * Construction is not a commit: the slots in `init` exist before anything can watch, so a
  * replica wired afterwards never hears about them. A document that will replicate starts
@@ -89,7 +95,7 @@ const handler: ProxyHandler<Target> = {
  */
 export const createObject = <T extends object = Record<string, unknown>>(
 	init?: Readonly<Partial<T>>,
-	id?: Uint8Array,
+	id?: Id,
 ): T => {
 	const node = createNode('object', id);
 	const proxy = new Proxy({ [NODE]: node }, handler) as unknown as T;

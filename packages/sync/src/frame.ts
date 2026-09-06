@@ -10,13 +10,13 @@
 // every frame costs 29.5% over the commit bytes it carries (`bench/replicate.ts`).
 
 import {
-	type Commit, type ObservableKind, type WireValue,
+	type Commit, type Id, type ObservableKind, type WireValue,
 	codecError, decodeCommit, decodeValue, encodeCommit, encodeValue,
 } from '@aweftjs/codec';
 
 /** Where a document starts: the id of its root observable, and which kind that root is. */
 export interface RootRef {
-	readonly id: Uint8Array;
+	readonly id: Id;
 	readonly kind: ObservableKind;
 }
 
@@ -113,7 +113,7 @@ const kindNumber = (kind: Frame['kind']): number => KINDS.indexOf(kind);
 // Annotated rather than inferred: a `never` return only narrows control flow when the
 // binding says so, and every check below leans on that.
 const bad: (detail: string) => never = (detail) => {
-	throw codecError('bad-frame', detail);
+	throw codecError('bad-frame', detail, 'Send frames encodeFrame wrote; a link reads nothing else.');
 };
 
 const asArray = (value: WireValue, arity: number, what: string): readonly WireValue[] => {
@@ -211,6 +211,10 @@ export const messageOf = (error: unknown): string =>
  * Returns: the bytes. The same frame always writes the same bytes, because every value in it
  * goes through the one canonical encoding this stack has.
  *
+ * Throws: whatever the encoding refuses, naming the rule broken: `empty-commit`,
+ * `invalid-value`, `lone-surrogate` and the rest. A frame built from a document this end
+ * holds breaks none of them.
+ *
  * Example:
  *   socket.send(encodeFrame({ kind: 'leave', topic: 3 }));
  */
@@ -290,7 +294,9 @@ export const decodeFrame = (bytes: Uint8Array): Frame => {
 		if (!nothing) {
 			const kindOfRoot = ROOT_KINDS[asNumber(rootKind!, 'a root kind')];
 			if (kindOfRoot === undefined) bad(`${String(rootKind)} is not an observable kind`);
-			root = { id: asBytes(rootId!, 'a root id'), kind: kindOfRoot! };
+			// Not assertId: the width of a root id is not this layer's rule, and refusing it here
+			// would end the link where the applier refuses the commit instead.
+			root = { id: asBytes(rootId!, 'a root id') as Id, kind: kindOfRoot! };
 		}
 		return {
 			kind, topic: asTopic(topic!, false), name: asText(name!, 'a topic name'), root, want: want as boolean,

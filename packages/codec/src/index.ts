@@ -4,13 +4,15 @@ export type { WireValue, CodecError } from './wire.ts';
 export { bytesFromHex, bytesToHex, compareBytes, equalBytes } from './bytes.ts';
 
 export { assertId, createId, ID_BYTES, ID_TEXT_LENGTH, idFromText, idToText } from './id.ts';
+export type { Id } from './id.ts';
 
 export { assertPosition, comparePositions, isValidPosition } from './position.ts';
+export type { Position } from './position.ts';
 
 export {
 	assertValue, compareDeltas, decodeCommit, encodeCommit, isReference, MAX_TAG_BYTES,
 	MIN_TAG_BYTES, slotKeyOf,
 } from './commit.ts';
 export type {
-	Commit, Delta, DeltaType, EdgeKind, ObservableKind, Ref, Reference, Value,
+	Commit, Delta, DeltaType, EdgeKind, ObservableKind, Ref, Reference, Tag, Value,
 } from './commit.ts';

@@ -7,6 +7,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { assertPosition } from '@aweftjs/codec';
+
 import { between } from '../src/position.ts';
 
 const reason = (name: string) => (e: Error & { reason?: string }): boolean => e.reason === name;
@@ -18,7 +20,7 @@ test('two positions that are not a gap are refused', () => {
 	assert.throws(() => between(high, low), reason('invalid-position'), 'the wrong way round');
 	assert.throws(() => between(low, low), reason('invalid-position'), 'the same position twice');
 	assert.throws(
-		() => between(Uint8Array.from(low), low), reason('invalid-position'),
+		() => between(assertPosition(Uint8Array.from(low)), low), reason('invalid-position'),
 		'equal by value, not only by identity',
 	);
 });

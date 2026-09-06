@@ -4,6 +4,7 @@
 // carrying the test's configuration. Then it loads through `createLoader`, so a module tested
 // here is instantiated exactly the way an application instantiates it.
 
+import { codecError } from '@aweftjs/codec';
 import { createLoader, fromBundle } from '@aweftjs/modules';
 import type { ModuleExports } from '@aweftjs/modules';
 
@@ -39,8 +40,8 @@ const NAME = 'module-under-test';
  *
  * Returns: the instance and a `stop` that unloads it.
  *
- * Throws when a dependency has no entry in `imports`, naming the dependency: a test that forgot
- * one should not get an undefined import.
+ * Throws: `dependency-not-stubbed`, naming the dependency, when one has no entry in `imports`:
+ * a test that forgot one should not get an undefined import.
  *
  * Example:
  *   const { instance, stop } = await loadModule({
@@ -53,7 +54,11 @@ export const loadModule = async (test: ModuleUnderTest): Promise<LoadedModule> =
 	const stubs: Record<string, ModuleExports> = {};
 	for (const dep of test.exports.deps ?? []) {
 		if (test.imports === undefined || !(dep in test.imports)) {
-			throw new Error(`testing: ${dep} is a dependency of the module under test and has no entry in imports`);
+			throw codecError(
+				'dependency-not-stubbed',
+				`${dep} is a dependency of the module under test and has no entry in imports`,
+				'Add an entry under imports for every name the module lists in deps.',
+			);
 		}
 		const instance = test.imports[dep];
 		stubs[dep] = { default: () => instance };

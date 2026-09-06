@@ -7,7 +7,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { bytesFromHex, type Commit, type Delta, type Ref, type Value } from '@aweftjs/codec';
+import {
+	assertId, assertPosition, bytesFromHex,
+	type Commit, type Delta, type Ref, type Tag, type Value,
+} from '@aweftjs/codec';
 
 import {
 	type DocumentJson,
@@ -15,12 +18,12 @@ import {
 	refFromJson, refToJson, slotKeyOf, valueFromJson, valueToJson,
 } from '../src/index.ts';
 
-const A = bytesFromHex('000000000000000000000001');
-const B = bytesFromHex('000000000000000000000002');
+const A = assertId(bytesFromHex('000000000000000000000001'));
+const B = assertId(bytesFromHex('000000000000000000000002'));
 
 test('a slot key is the same string the three kinds file under', () => {
 	assert.equal(slotKeyOf({ kind: 'object', key: 'title' }), 'title');
-	assert.equal(slotKeyOf({ kind: 'array', key: Uint8Array.of(0x80) }), '80');
+	assert.equal(slotKeyOf({ kind: 'array', key: assertPosition(Uint8Array.of(0x80)) }), '80');
 	assert.equal(slotKeyOf({ kind: 'map', key: A }), 'AAAAAAAAAAAAAAAB');
 });
 
@@ -41,7 +44,7 @@ test('every kind of value survives the trip to JSON and back', () => {
 test('every kind of ref survives the trip to JSON and back', () => {
 	const refs: Ref[] = [
 		{ kind: 'object', key: 'title' },
-		{ kind: 'array', key: Uint8Array.of(0x80, 0x01) },
+		{ kind: 'array', key: assertPosition(Uint8Array.of(0x80, 0x01)) },
 		{ kind: 'map', key: A },
 	];
 
@@ -51,7 +54,7 @@ test('every kind of ref survives the trip to JSON and back', () => {
 test('a delta survives the trip to JSON and back, with and without a value', () => {
 	const deltas: Delta[] = [
 		{ type: 'add', id: A, ref: { kind: 'object', key: 'a' }, value: 1 },
-		{ type: 'replace', id: A, ref: { kind: 'array', key: Uint8Array.of(0x80) }, value: 'x' },
+		{ type: 'replace', id: A, ref: { kind: 'array', key: assertPosition(Uint8Array.of(0x80)) }, value: 'x' },
 		{ type: 'remove', id: A, ref: { kind: 'map', key: B } },
 	];
 
@@ -63,7 +66,7 @@ test('a commit in JSON states its bytes, its deltas, and its tag only when it ha
 	const plain: Commit = { deltas: [{ type: 'remove', id: A, ref: { kind: 'object', key: 'a' } }] };
 
 	assert.equal('tag' in commitToJson(plain, bytes), false);
-	assert.equal(commitToJson({ ...plain, tag: bytes }, bytes).tag, '010203');
+	assert.equal(commitToJson({ ...plain, tag: bytes as Tag }, bytes).tag, '010203');
 });
 
 test('canonical JSON does not depend on the order keys were written in', () => {

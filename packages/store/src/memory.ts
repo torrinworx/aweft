@@ -6,7 +6,7 @@
 // because a memory driver that is loose about them lets a consumer depend on behaviour the
 // real ones do not have.
 
-import type { ObservableKind } from '@aweftjs/codec';
+import { codecError, type ObservableKind } from '@aweftjs/codec';
 
 import type { Driver, Entry, Found, Lookup, Patch, Row, Write } from './driver.ts';
 import { compare, holds, type Indexable } from './query.ts';
@@ -40,6 +40,10 @@ const merge = (rows: Map<string, Row>, patch: Patch): void => {
  * Returns: a `Driver`. Nothing is shared between two calls, so two stores over one of these
  * are two separate places.
  *
+ * The driver throws `driver-closed` after `close`, `undeclared` when a lookup names a field
+ * nothing indexed, `cursor` when a page is asked for with a cursor from another sort, and
+ * `root-conflict` when a write names a root the stored document does not have.
+ *
  * Example:
  *   const store = createStore({ driver: memoryDriver() });
  */
@@ -58,7 +62,10 @@ export const memoryDriver = (): Driver => {
 	};
 
 	const open = (): void => {
-		if (closed) throw new Error('store: the driver is closed');
+		if (closed) {
+			throw codecError('driver-closed', 'this driver was closed',
+				'Open a new store; a closed driver cannot be reused.');
+		}
 	};
 
 	const found = (doc: string, cursor: string): Found =>
@@ -69,8 +76,9 @@ export const memoryDriver = (): Driver => {
 	// (design 060). Plain JSON, because opaque means "do not parse it", not "unreadable".
 	const mint = (field: string | null, value: Indexable, doc: string): string =>
 		JSON.stringify([field, value, doc]);
-	const refuse = (message: string): never => {
-		throw Object.assign(new Error(`store: ${message}`), { reason: 'cursor' });
+	const refuse = (detail: string): never => {
+		throw codecError('cursor', detail,
+			'Page with the cursor the previous page of this same query handed back.');
 	};
 	const parseCursor = (cursor: string, field: string | null): { value: Indexable; doc: string } => {
 		let parsed: unknown;
@@ -93,7 +101,10 @@ export const memoryDriver = (): Driver => {
 		async find(lookup: Lookup): Promise<Found[]> {
 			open();
 			const from = indexes.get(lookup.where.field);
-			if (from === undefined) throw new Error(`store: ${lookup.where.field} was not declared`);
+			if (from === undefined) {
+				throw codecError('undeclared', `${lookup.where.field} has no index here`,
+					'Declare the path in createStore, or call scan to read without an index.');
+			}
 
 			let hits = [...from.entries()]
 				.filter(([, value]) => holds(lookup.where, value))
@@ -139,7 +150,8 @@ export const memoryDriver = (): Driver => {
 				held = { root: write.root, rootKind: write.rootKind, rows: new Map(), tail: [], head: 0, fields: {} };
 				docs.set(write.doc, held);
 			} else if (held.root !== write.root) {
-				throw new Error(`store: ${write.doc} has root ${held.root}, not ${write.root}`);
+				throw codecError('root-conflict', `${write.doc} has root ${held.root}, not ${write.root}`,
+					'Write to a name nothing holds, or remove the stored document first.');
 			}
 
 			// One place, so the transaction is that nothing above yields. Build first, commit

@@ -94,5 +94,5 @@ test('a path the program does not contain is a mistake worth a throw', () => {
 test('the generator builds its own program when handed only a path', () => {
 	const index = join(import.meta.dirname, '..', '..', 'codec', 'src', 'index.ts');
 
-	assert.ok(surfaceOf(index).includes('value idToText: (id: Uint8Array<ArrayBufferLike>) => string'));
+	assert.ok(surfaceOf(index).includes('value idToText: (id: Id) => string'));
 });

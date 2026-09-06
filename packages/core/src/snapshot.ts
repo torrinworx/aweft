@@ -49,12 +49,17 @@ export interface Snapshot {
  * An observable that has lost its attach edge is not here. Nothing reaches it, and a delta
  * naming it is refused, so it is not part of what the document says.
  *
+ * Throws: `not-observable` when `observable` is not an observable.
+ *
  * Example:
  *   assert.deepStrictEqual(snapshot(mirror), snapshot(doc));
  */
 export const snapshot = (observable: unknown): Snapshot => {
 	const from = nodeOf(observable);
-	if (from === undefined) throw codecError('not-observable', 'snapshot takes an observable');
+	if (from === undefined) {
+		throw codecError('not-observable', 'snapshot takes an observable',
+			'Pass what createObject, createArray or createMap returned.');
+	}
 
 	const root = from.root;
 	const observables: Record<string, SnapshotObservable> = {};
@@ -115,7 +120,8 @@ export const fromSnapshot = (snap: Snapshot): object => {
 	// constructed, and the reason named is the structural one rather than whichever plant
 	// happened to run first.
 	if (snap.observables[snap.root] === undefined) {
-		throw codecError('unreachable', `${snap.root} is named as the root but is not in the snapshot`);
+		throw codecError('unreachable', `${snap.root} is named as the root but is not in the snapshot`,
+			'Add the root to observables, or name a root that is already there.');
 	}
 
 	const attached = new Set<string>();
@@ -123,22 +129,26 @@ export const fromSnapshot = (snap: Snapshot): object => {
 	for (const [key, entry] of Object.entries(snap.observables)) {
 		idFromText(key);
 		if (entry.kind !== 'object' && entry.kind !== 'array' && entry.kind !== 'map') {
-			throw codecError('kind-conflict', `${key} claims to be ${String(entry.kind)}, which is not a kind`);
+			throw codecError('kind-conflict', `${key} claims to be ${String(entry.kind)}, which is not a kind`,
+				`Set kind to 'object', 'array' or 'map'.`);
 		}
 
 		for (const [slot, value] of Object.entries(entry.slots)) {
 			if (entry.kind === 'array' && (!HEX.test(slot) || !isValidPosition(bytesFromHex(slot)))) {
-				throw codecError('invalid-key', `${slot} is not a position key`);
+				throw codecError('invalid-key', `${slot} is not a position key`,
+					'Key an array slot with the hex of a position from positionsOf, not an index.');
 			}
 			if (entry.kind === 'map') idFromText(slot);
 			if (!isRef(value)) continue;
 
 			const target = snap.observables[value.ref];
 			if (target === undefined) {
-				throw codecError('unreachable', `${value.ref} is named but not in the snapshot`);
+				throw codecError('unreachable', `${value.ref} is named but not in the snapshot`,
+					'Add the observable it names to observables, or drop the slot naming it.');
 			}
 			if (target.kind !== value.kind) {
-				throw codecError('kind-conflict', `${value.ref} is ${target.kind} but a slot calls it ${value.kind}`);
+				throw codecError('kind-conflict', `${value.ref} is ${target.kind} but a slot calls it ${value.kind}`,
+					'Give the ref the kind the observable it names declares.');
 			}
 			if (value.edge !== 'attach') continue;
 
@@ -146,6 +156,7 @@ export const fromSnapshot = (snap: Snapshot): object => {
 				throw codecError(
 					'multiple-attach',
 					`${value.ref} would have two attach edges, and an observable lives in one place`,
+					`Keep one attach edge and make the others 'alias'.`,
 				);
 			}
 			attached.add(value.ref);
@@ -154,7 +165,8 @@ export const fromSnapshot = (snap: Snapshot): object => {
 
 	for (const key of Object.keys(snap.observables)) {
 		if (key !== snap.root && !attached.has(key)) {
-			throw codecError('unreachable', `${key} has no attach path from the root`);
+			throw codecError('unreachable', `${key} has no attach path from the root`,
+				'Attach it under the root, or take it out of the snapshot.');
 		}
 	}
 

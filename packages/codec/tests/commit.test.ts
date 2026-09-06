@@ -1,14 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { bytesFromHex, bytesToHex } from '../src/index.ts';
+import { assertId, assertPosition, bytesFromHex, bytesToHex } from '../src/index.ts';
 import { type WireValue, type CodecError, encodeValue } from '../src/index.ts';
 import {
-	type Commit, type Delta, type Value,
+	type Commit, type Delta, type Id, type Position, type Tag, type Value,
 	decodeCommit, encodeCommit, isReference, MAX_TAG_BYTES, MIN_TAG_BYTES,
 } from '../src/index.ts';
 
-const id = (n: number): Uint8Array => bytesFromHex(n.toString(16).padStart(24, '0'));
+const id = (n: number): Id => assertId(bytesFromHex(n.toString(16).padStart(24, '0')));
+
+// The tests below hand the encoder keys and tags it must refuse. Nothing mints a value the
+// format rejects, so a refusal test states the brand instead of earning it.
+const badPosition = (bytes: Uint8Array): Position => bytes as Position;
+const badId = (bytes: Uint8Array): Id => bytes as Id;
+const tagOf = (bytes: Uint8Array): Tag => bytes as Tag;
 
 const A = id(1);
 const B = id(2);
@@ -28,7 +34,7 @@ test('all three slot kinds survive a round trip', () => {
 	const commit: Commit = {
 		deltas: [
 			{ type: 'add', id: A, ref: { kind: 'object', key: 'title' }, value: 'a page' },
-			{ type: 'replace', id: B, ref: { kind: 'array', key: Uint8Array.of(0x40) }, value: 7 },
+			{ type: 'replace', id: B, ref: { kind: 'array', key: assertPosition(Uint8Array.of(0x40)) }, value: 7 },
 			{ type: 'remove', id: C, ref: { kind: 'map', key: A } },
 		],
 	};
@@ -67,11 +73,11 @@ test('the order deltas are handed over does not change the bytes', () => {
 
 test('an integrity tag rides along, within its stated width', () => {
 	const deltas: Delta[] = [{ type: 'add', id: A, ref: { kind: 'object', key: 'a' }, value: 1 }];
-	const tag = Uint8Array.of(1, 2, 3, 4);
+	const tag = tagOf(Uint8Array.of(1, 2, 3, 4));
 
 	assert.deepEqual(roundTrip({ deltas, tag }).tag, tag);
-	reason(() => encodeCommit({ deltas, tag: Uint8Array.of(1) }), 'invalid-tag');
-	reason(() => encodeCommit({ deltas, tag: new Uint8Array(33) }), 'invalid-tag');
+	reason(() => encodeCommit({ deltas, tag: tagOf(Uint8Array.of(1)) }), 'invalid-tag');
+	reason(() => encodeCommit({ deltas, tag: tagOf(new Uint8Array(33)) }), 'invalid-tag');
 });
 
 test('a commit that says nothing is not a commit', () => {
@@ -110,15 +116,15 @@ test('a value is a primitive or a reference, never a structure', () => {
 
 test('a malformed slot name is refused', () => {
 	reason(
-		() => encodeCommit({ deltas: [{ type: 'add', id: A, ref: { kind: 'array', key: Uint8Array.of(1, 0) }, value: 1 }] }),
+		() => encodeCommit({ deltas: [{ type: 'add', id: A, ref: { kind: 'array', key: badPosition(Uint8Array.of(1, 0)) }, value: 1 }] }),
 		'invalid-position',
 	);
 	reason(
-		() => encodeCommit({ deltas: [{ type: 'add', id: A, ref: { kind: 'array', key: new Uint8Array(0) }, value: 1 }] }),
+		() => encodeCommit({ deltas: [{ type: 'add', id: A, ref: { kind: 'array', key: badPosition(new Uint8Array(0)) }, value: 1 }] }),
 		'invalid-position',
 	);
 	reason(
-		() => encodeCommit({ deltas: [{ type: 'add', id: A, ref: { kind: 'map', key: Uint8Array.of(1) }, value: 1 }] }),
+		() => encodeCommit({ deltas: [{ type: 'add', id: A, ref: { kind: 'map', key: badId(Uint8Array.of(1)) }, value: 1 }] }),
 		'invalid-id',
 	);
 });
@@ -202,9 +208,9 @@ test('a commit with a tag, a reference and a position matches bytes spelled out 
 	const commit: Commit = {
 		deltas: [
 			{ type: 'add', id: A, ref: { kind: 'object', key: 'a' }, value: { edge: 'attach', kind: 'object', id: B } },
-			{ type: 'remove', id: A, ref: { kind: 'array', key: Uint8Array.of(0x80) } },
+			{ type: 'remove', id: A, ref: { kind: 'array', key: assertPosition(Uint8Array.of(0x80)) } },
 		],
-		tag: bytesFromHex('deadbeef'),
+		tag: tagOf(bytesFromHex('deadbeef')),
 	};
 
 	assert.equal(bytesToHex(encodeCommit(commit)), spelled);
@@ -214,7 +220,7 @@ test('a commit with a tag, a reference and a position matches bytes spelled out 
 test('the tag bounds are the ones the package publishes, and both edges hold', () => {
 	const withTag = (n: number): Commit => ({
 		deltas: [{ type: 'add', id: A, ref: { kind: 'object', key: 'a' }, value: 1 }],
-		tag: new Uint8Array(n).fill(7),
+		tag: tagOf(new Uint8Array(n).fill(7)),
 	});
 
 	assert.equal(MIN_TAG_BYTES, 4);

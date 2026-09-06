@@ -16,7 +16,7 @@
 // two inserts is refused: two people adding to a list at the same moment lose one of them.
 // `bench/replicate.ts` measures what the levels cost and counts the distinctness.
 
-import { codecError, compareBytes } from '@aweftjs/codec';
+import { type Position, assertPosition, codecError, compareBytes } from '@aweftjs/codec';
 
 /**
  * Three random bytes follow the integer part and every fractional digit.
@@ -173,22 +173,26 @@ const copyLevelUnder = (out: number[], key: Uint8Array, i: number): void => {
  * Example:
  *   between(null, null)  // a count of one, one digit, then three random bytes
  */
-export const between = (a: Uint8Array | null, b: Uint8Array | null): Uint8Array => {
+export const between = (a: Position | null, b: Position | null): Position => {
 	// Checked here rather than discovered further down: every branch below assumes the two
 	// bound a gap, and handed a pair that does not it would answer with a key outside it.
 	if (a !== null && b !== null && compareBytes(a, b) >= 0) {
-		throw codecError('invalid-position', 'a position must sit between two ordered positions');
+		throw codecError('invalid-position', 'a position must sit between two ordered positions',
+			'Pass the lower position as a and the higher as b, or null for an open end.');
 	}
 
 	const out: number[] = [];
 	let above: Uint8Array | null = b;
 
-	const finish = (): Uint8Array => {
+	const finish = (): Position => {
 		const key = Uint8Array.from(out);
 		if ((a !== null && compareBytes(a, key) >= 0) || (b !== null && compareBytes(key, b) >= 0)) {
-			throw codecError('invalid-position', 'no position fits between these two');
+			throw codecError('invalid-position', 'no position fits between these two',
+				'Name the slot yourself with insertAt rather than asking for one between these.');
 		}
-		return key;
+		// The two rules this restates are what every level above was built to hold to, so the
+		// mint is the check: the key leaves here as a position or it does not leave at all.
+		return assertPosition(key);
 	};
 
 	// The integer part first. It is one level with its own arithmetic; the rules for where to

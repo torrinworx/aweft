@@ -7,8 +7,9 @@
 // applying the commits reaches the stated document whatever order the deltas go in.
 
 import {
-	type Commit, type Delta, type DeltaType, type ObservableKind, type Ref,
-	bytesFromHex, bytesToHex, decodeCommit, encodeCommit, idFromText, idToText, slotKeyOf,
+	type Commit, type Delta, type DeltaType, type ObservableKind, type Ref, type Tag,
+	assertPosition, bytesFromHex, bytesToHex, codecError, decodeCommit, encodeCommit, idFromText,
+	idToText, slotKeyOf,
 } from '@aweftjs/codec';
 
 import { randomBelow, randomFrom } from './random.ts';
@@ -87,7 +88,7 @@ export const refToJson = (ref: Ref): RefJson => ({ kind: ref.kind, key: slotKeyO
 /** The ref a JSON one names. The inverse of refToJson, and the fixtures rely on it round tripping. */
 export const refFromJson = (r: RefJson): Ref => {
 	if (r.kind === 'object') return { kind: 'object', key: r.key };
-	if (r.kind === 'array') return { kind: 'array', key: bytesFromHex(r.key) };
+	if (r.kind === 'array') return { kind: 'array', key: assertPosition(bytesFromHex(r.key)) };
 	return { kind: 'map', key: idFromText(r.key) };
 };
 
@@ -115,7 +116,9 @@ export const commitToJson = (commit: Commit, bytes: Uint8Array): CommitJson => {
 	return commit.tag === undefined ? base : { ...base, tag: bytesToHex(commit.tag) };
 };
 
-const withTag = (deltas: readonly Delta[], tag: Uint8Array | undefined): Commit =>
+// A fixture states its tag as hex, and nothing in the stack mints one: the algorithm that
+// fills a tag is still open, so the width the encoder enforces is the whole of the check.
+const withTag = (deltas: readonly Delta[], tag: Tag | undefined): Commit =>
 	tag === undefined ? { deltas } : { deltas, tag };
 
 /**
@@ -172,8 +175,10 @@ export const shuffle = <T>(items: readonly T[], seed: number): T[] => {
 };
 
 const fail = (name: string, check: string, actual: unknown, expected: unknown): never => {
-	throw new Error(
+	throw codecError(
+		'fixture-mismatch',
 		`${name}: ${check}\n  actual   ${canonicalJson(actual)}\n  expected ${canonicalJson(expected)}`,
+		'Make the implementation agree with the fixture, or regenerate with npm run fixtures.',
 	);
 };
 
@@ -190,9 +195,13 @@ const during = <T>(name: string, check: string, run: () => T): T => {
 		return run();
 	} catch (error) {
 		const reason = (error as { reason?: string }).reason;
-		throw new Error(
-			`${name}: ${check}, and this fixture is valid\n`
-			+ `  threw    ${reason === undefined ? '(no reason)' : reason}: ${(error as Error).message}`,
+		throw Object.assign(
+			codecError(
+				'fixture-refused',
+				`${name}: ${check}, and this fixture is valid\n`
+				+ `  threw    ${reason === undefined ? '(no reason)' : reason}: ${(error as Error).message}`,
+				'Accept this case: the fixture is part of the format, so refusing it is the bug.',
+			),
 			{ cause: error },
 		);
 	}
@@ -243,7 +252,7 @@ export const checkFixture = (f: Fixture, applier: Applier = modelApplier): void 
 		// output at generation time; what ties the encoder to the prose of `spec/format.md` is
 		// the pair of commits spelled out by hand in codec's own tests, and this check is what
 		// makes every other implementation agree with that encoder on every fixture.
-		const fromStated = withTag(c.deltas.map(deltaFromJson), c.tag === undefined ? undefined : bytesFromHex(c.tag));
+		const fromStated = withTag(c.deltas.map(deltaFromJson), c.tag === undefined ? undefined : bytesFromHex(c.tag) as Tag);
 		const encoded = bytesToHex(encodeCommit(fromStated));
 		if (encoded !== c.bytes) {
 			fail(f.name, 'the stated deltas do not encode to the stated bytes', encoded, c.bytes);
@@ -286,7 +295,8 @@ export const checkInvalidFixture = (f: InvalidFixture, applier: Applier = modelA
 		const commit = decodeCommit(bytesFromHex(f.bytes));
 		if (f.stage === 'decode') return;
 		if (f.initial === undefined) {
-			throw new Error(`${f.name}: an apply-stage fixture must state an initial document`);
+			throw codecError('missing-initial', `${f.name}: an apply-stage fixture must state an initial document`,
+				'Give the fixture an initial document, or set its stage to decode.');
 		}
 		applier(f.initial, [commit]);
 	};
@@ -299,11 +309,14 @@ export const checkInvalidFixture = (f: InvalidFixture, applier: Applier = modelA
 	}
 
 	if (error === undefined) {
-		throw new Error(`${f.name}: accepted, but must be refused as ${f.reason}`);
+		throw codecError('fixture-accepted', `${f.name}: accepted, but must be refused as ${f.reason}`,
+			'Refuse this input, with the reason the fixture names.');
 	}
 	if (error.reason !== f.reason) {
-		throw new Error(
+		throw codecError(
+			'wrong-reason',
 			`${f.name}: refused as ${String(error.reason)}, expected ${f.reason}\n  ${String(error.message)}`,
+			'Throw the reason the fixture names, so every implementation agrees on why.',
 		);
 	}
 };

@@ -47,6 +47,8 @@ export interface Tracker {
  * applied there reaches its watchers after the outer one returned, and the ordering this
  * rests on is gone. Queue it and apply on a microtask, which is what every channel here does.
  *
+ * Throws: `not-observable` when the value is not part of a document.
+ *
  * Example:
  *   const tracker = track(doc, ({ commit, landed }) => {
  *     if (!landed) channel.send({ kind: 'commits', topic, first: next++, commits: [commit] });

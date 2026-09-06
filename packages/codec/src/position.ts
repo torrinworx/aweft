@@ -15,6 +15,24 @@ import { codecError } from './wire.ts';
 
 import { compareBytes } from './bytes.ts';
 
+// Ambient, so it erases with the types and adds no runtime declaration. See id.ts.
+declare const positionBrand: unique symbol;
+
+/**
+ * Bytes that have been checked to be a position key.
+ *
+ * The same bytes a `Uint8Array` holds, and the same bytes on the wire. The brand is a property
+ * that exists only while the compiler is looking, so an id or an integrity tag cannot stand in
+ * for a position in a signature that asks for one (design 104).
+ *
+ * `assertPosition` is the only thing that produces one, because this package judges positions
+ * and never mints one.
+ *
+ * Example:
+ *   const ref = { kind: 'array', key: assertPosition(bytes) };
+ */
+export type Position = Uint8Array & { readonly [positionBrand]: true };
+
 /**
  * Order two position keys.
  *
@@ -27,7 +45,7 @@ import { compareBytes } from './bytes.ts';
  * Example:
  *   positions.sort(comparePositions);
  */
-export const comparePositions = (a: Uint8Array, b: Uint8Array): number => compareBytes(a, b);
+export const comparePositions = (a: Position, b: Position): number => compareBytes(a, b);
 
 /**
  * Is this a well formed position key?
@@ -52,7 +70,8 @@ export const isValidPosition = (p: Uint8Array): boolean =>
  * Params:
  *   p: the position key
  *
- * Returns: the same bytes, so it can wrap a value on its way into a ref.
+ * Returns: the same bytes as a Position, so it can wrap a value on its way into a ref. This is
+ * where raw bytes become a position: the check and the type say the same thing here.
  *
  * Throws: when it is empty or ends in a zero byte. Both are refused here rather than at the
  * far end, because a key that breaks either rule leaves an array with a place it can never
@@ -61,9 +80,10 @@ export const isValidPosition = (p: Uint8Array): boolean =>
  * Example:
  *   const ref = { kind: 'array', key: assertPosition(position) };
  */
-export const assertPosition = (p: Uint8Array): Uint8Array => {
+export const assertPosition = (p: Uint8Array): Position => {
 	if (!isValidPosition(p)) {
-		throw codecError('invalid-position', 'a position is non-empty and does not end in a zero byte');
+		throw codecError('invalid-position', 'a position is non-empty and does not end in a zero byte',
+			'Drop the trailing zero bytes from the key, and never pass an empty one.');
 	}
-	return p;
+	return p as Position;
 };

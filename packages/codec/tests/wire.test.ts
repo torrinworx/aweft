@@ -140,11 +140,12 @@ test('a refusal carries a reason a caller can branch on, not just a message', ()
 	// Every consumer of this package tells one refusal from another by `reason`, and the
 	// conformance fixtures name the reason each invalid input must be refused for. A thrown
 	// Error without it would still read fine in a log and be useless to a caller.
-	const error = codecError('invalid-position', 'a position is non-empty');
+	const error = codecError('invalid-position', 'a position is non-empty', 'Drop the empty key.');
 
 	assert.ok(error instanceof Error);
 	assert.equal(error.reason, 'invalid-position');
-	assert.equal(error.message, 'invalid-position: a position is non-empty');
+	assert.equal(error.fix, 'Drop the empty key.');
+	assert.equal(error.message, 'invalid-position: a position is non-empty. Drop the empty key.');
 });
 
 test('heads at and past the one-byte boundary, derived by hand from the specification', () => {

@@ -9,7 +9,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { decodeCommit, encodeCommit } from '@aweftjs/codec';
-import type { Commit } from '@aweftjs/codec';
+import type { Commit, Id, Position, Tag } from '@aweftjs/codec';
+
+// Values the applier must refuse, and the tag nothing in the stack mints yet. Neither can be
+// earned from an assert, because an assert would refuse exactly the value under test.
+const badPosition = (bytes: Uint8Array): Position => bytes as Position;
+const badId = (bytes: Uint8Array): Id => bytes as Id;
+const tagOf = (bytes: Uint8Array): Tag => bytes as Tag;
 
 import {
 	apply, atomic, createArray, createMap, createObject, idOf, observer, snapshot,
@@ -139,7 +145,7 @@ test('an integrity tag is carried without being checked', () => {
 	observer(source).watch((change) => seen.push(change));
 
 	source.title = 'notes';
-	const tagged = { deltas: [...seen[0]!.deltas], tag: Uint8Array.of(1, 2, 3, 4) };
+	const tagged = { deltas: [...seen[0]!.deltas], tag: tagOf(Uint8Array.of(1, 2, 3, 4)) };
 
 	assert.doesNotThrow(() => apply(target, tagged));
 	assert.equal(target.title, 'notes');
@@ -239,9 +245,9 @@ test('a slot key the format forbids is refused where it is applied, not where it
 	const id = idOf(doc);
 
 	for (const [what, key] of [
-		['ending in a zero byte', Uint8Array.of(0x80, 0x00)],
-		['empty', new Uint8Array(0)],
-		['a single zero', Uint8Array.of(0x00)],
+		['ending in a zero byte', badPosition(Uint8Array.of(0x80, 0x00))],
+		['empty', badPosition(new Uint8Array(0))],
+		['a single zero', badPosition(Uint8Array.of(0x00))],
 	] as const) {
 		assert.throws(
 			() => apply(doc, { deltas: [{ type: 'add', id, ref: { kind: 'array', key }, value: 1 }] }),
@@ -258,7 +264,7 @@ test('a slot key the format forbids is refused where it is applied, not where it
 	assert.throws(
 		() => apply(map, {
 			deltas: [{
-				type: 'add', id: idOf(map), ref: { kind: 'map', key: Uint8Array.of(1, 2, 3) }, value: 1,
+				type: 'add', id: idOf(map), ref: { kind: 'map', key: badId(Uint8Array.of(1, 2, 3)) }, value: 1,
 			}],
 		}),
 		/invalid-id/,

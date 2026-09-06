@@ -14,7 +14,7 @@ import { randomBelow, randomFrom } from '@aweftjs/testing';
 
 import {
 	type Delta, type Ref,
-	compareBytes, compareDeltas, createId, encodeValue,
+	assertPosition, compareBytes, compareDeltas, createId, encodeValue,
 } from '../src/index.ts';
 
 /** The order as the specification states it: the encoding of the id, then of the ref. */
@@ -52,7 +52,7 @@ const positions = [
 	Uint8Array.of(0x80), Uint8Array.of(0x81), Uint8Array.of(0x01), Uint8Array.of(0x80, 0x80),
 	Uint8Array.of(0x80, 0x01), Uint8Array.of(0xff), new Uint8Array(23).fill(1),
 	new Uint8Array(24).fill(1), new Uint8Array(25).fill(1),
-];
+].map(assertPosition);
 
 test('the comparator agrees with the encoded order on every pair', () => {
 	const random = randomFrom(20260831);
@@ -129,6 +129,6 @@ test('two deltas addressing one slot compare equal, whatever the slot is', () =>
 
 	assert.notEqual(compareDeltas(
 		{ type: 'remove', id, ref: { kind: 'object', key: 'a' } },
-		{ type: 'remove', id, ref: { kind: 'array', key: Uint8Array.of(0x80) } },
+		{ type: 'remove', id, ref: { kind: 'array', key: assertPosition(Uint8Array.of(0x80)) } },
 	), 0, 'the kind is part of what a delta addresses');
 });

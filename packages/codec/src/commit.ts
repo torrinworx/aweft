@@ -10,8 +10,8 @@ import {
 	writeValue, written,
 } from './wire.ts';
 import { bytesToHex, compareBytes } from './bytes.ts';
-import { assertId, idToText } from './id.ts';
-import { assertPosition } from './position.ts';
+import { type Id, assertId, idToText } from './id.ts';
+import { type Position, assertPosition } from './position.ts';
 
 /**
  * What a delta does to the slot it names.
@@ -47,7 +47,7 @@ export type EdgeKind = 'attach' | 'alias';
 export interface Reference {
 	readonly edge: EdgeKind;
 	readonly kind: ObservableKind;
-	readonly id: Uint8Array;
+	readonly id: Id;
 }
 
 /**
@@ -62,8 +62,8 @@ export type Value = null | boolean | number | string | Uint8Array | Reference;
  * the observable can still tell what it is being told about. */
 export type Ref =
 	| { readonly kind: 'object'; readonly key: string }
-	| { readonly kind: 'array'; readonly key: Uint8Array }
-	| { readonly kind: 'map'; readonly key: Uint8Array };
+	| { readonly kind: 'array'; readonly key: Position }
+	| { readonly kind: 'map'; readonly key: Id };
 
 /**
  * One change to one slot.
@@ -75,7 +75,7 @@ export type Ref =
  */
 export interface Delta {
 	readonly type: DeltaType;
-	readonly id: Uint8Array;
+	readonly id: Id;
 	readonly ref: Ref;
 	readonly value?: Value;
 }
@@ -95,7 +95,7 @@ export interface Delta {
  */
 export interface Commit {
 	readonly deltas: readonly Delta[];
-	readonly tag?: Uint8Array;
+	readonly tag?: Tag;
 }
 
 /**
@@ -105,6 +105,8 @@ export interface Commit {
  *   ref: the slot a delta names
  *
  * Returns: an object key as itself, an array position in hex, a map identity in text form.
+ *
+ * Throws: a CodecError with reason `invalid-id` when a map slot's key is not an id.
  *
  * This is one mapping with one implementation, because a second copy is a second chance to
  * disagree about what a document's own keys are.
@@ -125,6 +127,24 @@ const EDGES = ['attach', 'alias'] as const;
 /** The narrowest and widest a commit tag may be. Section 3.3; the algorithm is open. */
 export const MIN_TAG_BYTES = 4;
 export const MAX_TAG_BYTES = 32;
+
+// Ambient, so it erases with the types and adds no runtime declaration. See id.ts.
+declare const tagBrand: unique symbol;
+
+/**
+ * Bytes that have been checked to be a commit's integrity tag.
+ *
+ * The same bytes a `Uint8Array` holds, and the same bytes on the wire. The brand is a property
+ * that exists only while the compiler is looking, so an id or a position cannot stand in for a
+ * tag in a signature that asks for one (design 104).
+ *
+ * The algorithm that fills a tag is open, so this package computes none and has nothing that
+ * mints one. Whatever computes a digest states that its result is a Tag.
+ *
+ * Example:
+ *   const commit: Commit = { deltas, tag };
+ */
+export type Tag = Uint8Array & { readonly [tagBrand]: true };
 
 /**
  * Is this value a reference to an observable rather than a primitive?
@@ -172,14 +192,16 @@ export const assertValue = (value: Value): void => {
 			return;
 		case 'number':
 			if (!Number.isFinite(value)) {
-				throw codecError('invalid-number', `${String(value)} has no encoding in this format`);
+				throw codecError('invalid-number', `${String(value)} has no encoding in this format`,
+					'Store null in place of a missing number, and screen values with Number.isFinite.');
 			}
 			return;
 		case 'string':
 			assertText(value);
 			return;
 		default:
-			throw codecError('invalid-value', `a ${typeof value} cannot be stored`);
+			throw codecError('invalid-value', `a ${typeof value} cannot be stored`,
+				'Store null, a boolean, a number, a string, bytes, or a reference.');
 	}
 };
 
@@ -187,21 +209,26 @@ export const assertValue = (value: Value): void => {
 
 const writeRef = (w: Writer, ref: Ref): void => {
 	const kind = KINDS.indexOf(ref.kind);
-	if (kind < 0) throw codecError('unknown-ref-kind', `${String(ref.kind)} is not an observable kind`);
+	if (kind < 0) {
+		throw codecError('unknown-ref-kind', `${String(ref.kind)} is not an observable kind`,
+			'Set ref.kind to object, array or map.');
+	}
 
 	writeHead(w, 4, 2);
 	writeValue(w, kind);
 
 	if (ref.kind === 'object') {
 		if (typeof ref.key !== 'string') {
-			throw codecError('invalid-ref', 'an object slot is named by a string');
+			throw codecError('invalid-ref', 'an object slot is named by a string',
+				'Give an object slot a string key, and an array or map slot bytes.');
 		}
 		writeValue(w, ref.key);
 		return;
 	}
 
 	if (!(ref.key instanceof Uint8Array)) {
-		throw codecError('invalid-ref', `a ${ref.kind} slot is named by a byte string`);
+		throw codecError('invalid-ref', `a ${ref.kind} slot is named by a byte string`,
+			'Key an array slot by its position bytes and a map slot by an id.');
 	}
 	writeValue(w, ref.kind === 'array' ? assertPosition(ref.key) : assertId(ref.key));
 };
@@ -216,14 +243,21 @@ const writeFieldValue = (w: Writer, v: Value): void => {
 	}
 
 	if (!isReference(v)) {
-		throw codecError('inline-container', 'a value is a primitive or a reference, never a structure');
+		throw codecError('inline-container', 'a value is a primitive or a reference, never a structure',
+			'Give the nested structure its own observable and store a reference to it.');
 	}
 
 	const kind = KINDS.indexOf(v.kind);
-	if (kind < 0) throw codecError('unknown-ref-kind', `${String(v.kind)} is not an observable kind`);
+	if (kind < 0) {
+		throw codecError('unknown-ref-kind', `${String(v.kind)} is not an observable kind`,
+			'Set the reference kind to object, array or map.');
+	}
 
 	const edge = EDGES.indexOf(v.edge);
-	if (edge < 0) throw codecError('unknown-edge-kind', `${String(v.edge)} is not an edge kind`);
+	if (edge < 0) {
+		throw codecError('unknown-edge-kind', `${String(v.edge)} is not an edge kind`,
+			'Set the edge to attach where the observable lives, and alias everywhere else.');
+	}
 
 	writeHead(w, 4, 3);
 	writeValue(w, edge);
@@ -238,6 +272,8 @@ const writeFieldValue = (w: Writer, v: Value): void => {
  *   a, b: the deltas to compare
  *
  * Returns: -1, 0 or 1. Zero means they address the same slot, which a commit may not do.
+ *
+ * Throws: a CodecError with reason `invalid-id` when either delta's id is not ID_BYTES long.
  *
  * The rule is stated over the encoded form: the id, then the ref. This reads that order off
  * the values instead, which is the same order for a reason worth stating rather than trusting.
@@ -301,13 +337,22 @@ const compareText = (a: string, b: string): number => {
 
 const writeDelta = (w: Writer, d: Delta): void => {
 	const type = DELTA_TYPES.indexOf(d.type);
-	if (type < 0) throw codecError('unknown-delta-type', `${String(d.type)} is not a delta type`);
+	if (type < 0) {
+		throw codecError('unknown-delta-type', `${String(d.type)} is not a delta type`,
+			'Set the delta type to add, replace or remove.');
+	}
 
 	if (d.type === 'remove') {
-		if (d.value !== undefined) throw codecError('unexpected-value', 'a remove carries no value');
+		if (d.value !== undefined) {
+			throw codecError('unexpected-value', 'a remove carries no value',
+				'Leave value off the remove, or make the delta a replace instead.');
+		}
 		writeHead(w, 4, 3);
 	} else {
-		if (d.value === undefined) throw codecError('missing-value', `an ${d.type} carries a value`);
+		if (d.value === undefined) {
+			throw codecError('missing-value', `an ${d.type} carries a value`,
+				'Give the delta a value, or make it a remove.');
+		}
 		writeHead(w, 4, 4);
 	}
 
@@ -332,19 +377,24 @@ const writeDelta = (w: Writer, d: Delta): void => {
 export const encodeCommit = (commit: Commit): Uint8Array => {
 	const { deltas, tag } = commit;
 
-	if (deltas.length === 0) throw codecError('empty-commit', 'a commit carries at least one delta');
+	if (deltas.length === 0) {
+		throw codecError('empty-commit', 'a commit carries at least one delta',
+			'Drop the commit instead of sending it, or add the delta it was meant to carry.');
+	}
 	// The type is checked as well as the length: every other field asserts at the edge, and
 	// without this an encoder could write bytes its own decoder refuses.
 	if (tag !== undefined && (!(tag instanceof Uint8Array)
 		|| tag.length < MIN_TAG_BYTES || tag.length > MAX_TAG_BYTES)) {
-		throw codecError('invalid-tag', `a tag is ${MIN_TAG_BYTES} to ${MAX_TAG_BYTES} bytes`);
+		throw codecError('invalid-tag', `a tag is ${MIN_TAG_BYTES} to ${MAX_TAG_BYTES} bytes`,
+			'Pass a byte string of that width as the tag, or leave the tag off.');
 	}
 
 	const ordered = [...deltas].sort(compareDeltas);
 
 	for (let i = 1; i < ordered.length; i++) {
 		if (compareDeltas(ordered[i - 1]!, ordered[i]!) === 0) {
-			throw codecError('duplicate-slot', 'two deltas in one commit address the same slot');
+			throw codecError('duplicate-slot', 'two deltas in one commit address the same slot',
+				'Merge the two deltas into one, or send them in separate commits.');
 		}
 	}
 
@@ -360,25 +410,31 @@ export const encodeCommit = (commit: Commit): Uint8Array => {
 
 const readRef = (raw: WireValue | undefined): Ref => {
 	if (!Array.isArray(raw) || raw.length !== 2) {
-		throw codecError('invalid-ref', 'a ref is a kind and a key');
+		throw codecError('invalid-ref', 'a ref is a kind and a key',
+			'Re-encode with encodeCommit, which writes a ref as a kind and a key.');
 	}
 
 	const items = raw as readonly WireValue[];
 	const kindIndex = items[0];
 	if (typeof kindIndex !== 'number' || KINDS[kindIndex] === undefined) {
-		throw codecError('unknown-ref-kind', `${String(kindIndex)} is not an observable kind`);
+		throw codecError('unknown-ref-kind', `${String(kindIndex)} is not an observable kind`,
+			'Re-encode with encodeCommit; the kind index is 0 for object, 1 for array, 2 for map.');
 	}
 
 	const kind = KINDS[kindIndex]!;
 	const key = items[1];
 
 	if (kind === 'object') {
-		if (typeof key !== 'string') throw codecError('invalid-ref', 'an object slot is named by a string');
+		if (typeof key !== 'string') {
+			throw codecError('invalid-ref', 'an object slot is named by a string',
+				'Re-encode with encodeCommit, which writes an object slot key as a string.');
+		}
 		return { kind, key };
 	}
 
 	if (!(key instanceof Uint8Array)) {
-		throw codecError('invalid-ref', `a ${kind} slot is named by a byte string`);
+		throw codecError('invalid-ref', `a ${kind} slot is named by a byte string`,
+			'Re-encode with encodeCommit, which writes these slot keys as byte strings.');
 	}
 	if (kind === 'array') return { kind, key: assertPosition(key) };
 	return { kind, key: assertId(key) };
@@ -388,55 +444,78 @@ const readFieldValue = (raw: WireValue | undefined): Value => {
 	if (Array.isArray(raw)) {
 		const items = raw as readonly WireValue[];
 		if (items.length !== 3) {
-			throw codecError('invalid-reference', 'a reference is an edge, a kind and an id');
+			throw codecError('invalid-reference', 'a reference is an edge, a kind and an id',
+				'Re-encode with encodeCommit, which writes a reference as those three items.');
 		}
 
 		const edgeIndex = items[0];
 		if (typeof edgeIndex !== 'number' || EDGES[edgeIndex] === undefined) {
-			throw codecError('unknown-edge-kind', `${String(edgeIndex)} is not an edge kind`);
+			throw codecError('unknown-edge-kind', `${String(edgeIndex)} is not an edge kind`,
+				'Re-encode with encodeCommit; the edge index is 0 for attach and 1 for alias.');
 		}
 
 		const kindIndex = items[1];
 		if (typeof kindIndex !== 'number' || KINDS[kindIndex] === undefined) {
-			throw codecError('unknown-ref-kind', `${String(kindIndex)} is not an observable kind`);
+			throw codecError('unknown-ref-kind', `${String(kindIndex)} is not an observable kind`,
+				'Re-encode with encodeCommit; the kind index is 0 for object, 1 for array, 2 for map.');
 		}
 
 		const id = items[2];
-		if (!(id instanceof Uint8Array)) throw codecError('invalid-reference', 'a reference names an id');
+		if (!(id instanceof Uint8Array)) {
+			throw codecError('invalid-reference', 'a reference names an id',
+				'Re-encode with encodeCommit, which writes a reference id as a byte string.');
+		}
 		return { edge: EDGES[edgeIndex]!, kind: KINDS[kindIndex]!, id: assertId(id) };
 	}
 
-	if (raw === undefined) throw codecError('missing-value', 'the value is absent');
+	if (raw === undefined) {
+		throw codecError('missing-value', 'the value is absent',
+			'Re-encode with encodeCommit; only a remove leaves the value out.');
+	}
 	return raw as Value;
 };
 
 const readDelta = (raw: WireValue | undefined): Delta => {
-	if (!Array.isArray(raw)) throw codecError('invalid-delta', 'a delta is an array');
+	if (!Array.isArray(raw)) {
+		throw codecError('invalid-delta', 'a delta is an array',
+			'Re-encode with encodeCommit, which writes every delta as an array.');
+	}
 
 	const items = raw as readonly WireValue[];
 	if (items.length < 3 || items.length > 4) {
-		throw codecError('invalid-delta', 'a delta is a type, an id, a ref, and a value unless it removes');
+		throw codecError('invalid-delta', 'a delta is a type, an id, a ref, and a value unless it removes',
+			'Re-encode with encodeCommit, which writes three items for a remove and four otherwise.');
 	}
 
 	const typeIndex = items[0];
 	if (typeof typeIndex !== 'number' || DELTA_TYPES[typeIndex] === undefined) {
-		throw codecError('unknown-delta-type', `${String(typeIndex)} is not a delta type`);
+		throw codecError('unknown-delta-type', `${String(typeIndex)} is not a delta type`,
+			'Re-encode with encodeCommit; the type index is 0 for add, 1 for replace, 2 for remove.');
 	}
 	const type = DELTA_TYPES[typeIndex]!;
 
 	const id = items[1];
-	if (!(id instanceof Uint8Array)) throw codecError('invalid-id', 'an id is a byte string');
-	assertId(id);
+	if (!(id instanceof Uint8Array)) {
+		throw codecError('invalid-id', 'an id is a byte string',
+			'Re-encode with encodeCommit, which writes a delta id as a byte string.');
+	}
+	const checked = assertId(id);
 
 	const ref = readRef(items[2]);
 
 	if (type === 'remove') {
-		if (items.length !== 3) throw codecError('unexpected-value', 'a remove carries no value');
-		return { type, id, ref };
+		if (items.length !== 3) {
+			throw codecError('unexpected-value', 'a remove carries no value',
+				'Re-encode with encodeCommit, which writes no value on a remove.');
+		}
+		return { type, id: checked, ref };
 	}
 
-	if (items.length !== 4) throw codecError('missing-value', `an ${type} carries a value`);
-	return { type, id, ref, value: readFieldValue(items[3]) };
+	if (items.length !== 4) {
+		throw codecError('missing-value', `an ${type} carries a value`,
+			'Re-encode with encodeCommit, which writes a value on every add and replace.');
+	}
+	return { type, id: checked, ref, value: readFieldValue(items[3]) };
 };
 
 /**
@@ -453,37 +532,54 @@ const readDelta = (raw: WireValue | undefined): Delta => {
  */
 export const decodeCommit = (bytes: Uint8Array): Commit => {
 	const top = decodeValue(bytes);
-	if (!Array.isArray(top)) throw codecError('invalid-commit', 'a commit is an array');
+	if (!Array.isArray(top)) {
+		throw codecError('invalid-commit', 'a commit is an array',
+			'Decode bytes that encodeCommit wrote, not a bare value.');
+	}
 
 	const parts = top as readonly WireValue[];
 	if (parts.length < 1 || parts.length > 2) {
-		throw codecError('invalid-commit', 'a commit is its deltas and an optional tag');
+		throw codecError('invalid-commit', 'a commit is its deltas and an optional tag',
+			'Re-encode with encodeCommit, which writes the deltas and at most a tag.');
 	}
 
 	const rawDeltas = parts[0];
-	if (!Array.isArray(rawDeltas)) throw codecError('invalid-commit', 'the deltas are an array');
+	if (!Array.isArray(rawDeltas)) {
+		throw codecError('invalid-commit', 'the deltas are an array',
+			'Re-encode with encodeCommit, which writes the deltas as an array.');
+	}
 
 	const list = rawDeltas as readonly WireValue[];
-	if (list.length === 0) throw codecError('empty-commit', 'a commit carries at least one delta');
+	if (list.length === 0) {
+		throw codecError('empty-commit', 'a commit carries at least one delta',
+			'Send a commit with at least one delta, or send nothing at all.');
+	}
 
 	const deltas = list.map(readDelta);
 
 	for (let i = 1; i < deltas.length; i++) {
 		const order = compareDeltas(deltas[i - 1]!, deltas[i]!);
 		if (order === 0) {
-			throw codecError('duplicate-slot', 'two deltas in one commit address the same slot');
+			throw codecError('duplicate-slot', 'two deltas in one commit address the same slot',
+				'Merge the two deltas into one, or send them in separate commits.');
 		}
 		if (order > 0) {
-			throw codecError('deltas-out-of-order', 'deltas are written smallest id and ref first');
+			throw codecError('deltas-out-of-order', 'deltas are written smallest id and ref first',
+				'Re-encode with encodeCommit, which sorts the deltas into that order for you.');
 		}
 	}
 
 	if (parts.length === 1) return { deltas };
 
 	const tag = parts[1];
-	if (!(tag instanceof Uint8Array)) throw codecError('invalid-tag', 'a tag is a byte string');
-	if (tag.length < MIN_TAG_BYTES || tag.length > MAX_TAG_BYTES) {
-		throw codecError('invalid-tag', `a tag is ${MIN_TAG_BYTES} to ${MAX_TAG_BYTES} bytes, got ${tag.length}`);
+	if (!(tag instanceof Uint8Array)) {
+		throw codecError('invalid-tag', 'a tag is a byte string',
+			'Re-encode with encodeCommit, which writes the tag as a byte string.');
 	}
-	return { deltas, tag };
+	if (tag.length < MIN_TAG_BYTES || tag.length > MAX_TAG_BYTES) {
+		throw codecError('invalid-tag', `a tag is ${MIN_TAG_BYTES} to ${MAX_TAG_BYTES} bytes, got ${tag.length}`,
+			'Re-encode with encodeCommit, which refuses a tag outside that width.');
+	}
+	// A mint site: the two checks above are the whole of what makes these bytes a tag.
+	return { deltas, tag: tag as Tag };
 };

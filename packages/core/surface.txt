@@ -1,7 +1,7 @@
 type ArrayChange: type ArrayChange<T> = { readonly type: 'add'; readonly at: number; readonly value: T; } | { readonly type: 'replace'; readonly at: number; readonly value: T; } | { readonly type: 'remove'; readonly at: number; };
 type Change: interface Change extends Commit { readonly deltas: readonly Delta[]; inverse(): Commit; }
-type Commit: interface Commit { readonly deltas: readonly Delta[]; readonly tag?: Uint8Array; } (from @aweftjs/codec)
-type Delta: interface Delta { readonly type: DeltaType; readonly id: Uint8Array; readonly ref: Ref; readonly value?: Value; } (from @aweftjs/codec)
+type Commit: interface Commit { readonly deltas: readonly Delta[]; readonly tag?: Tag; } (from @aweftjs/codec)
+type Delta: interface Delta { readonly type: DeltaType; readonly id: Id; readonly ref: Ref; readonly value?: Value; } (from @aweftjs/codec)
 type Derived: interface Derived<T> { get(): T; set(value: T): void; isImmutable(): boolean; watch(fn: (value: T) => void): () => void; effect(fn: (value: T) => void): () => void; map<U>(fn: (value: T) => U): Derived<U>; setter(fn: (value: T) => void): Derived<T>; unwrap(): Derived<unknown>; bool<U, V>(truthy: U, falsy: V): Derived<U | V>; def<U>(fallback: U): Derived<NonNullable<T> | U>; defined(): Derived<boolean>; selector(compare?: (value: T, key: unknown) => boolean): (key: unknown) => Derived<boolean>; throttle(ms: number): Derived<T>; wait(ms: number): Derived<T>; }
 type EdgeKind: type EdgeKind = 'attach' | 'alias'; (from @aweftjs/codec)
 type EventEmitting: interface EventEmitting<E> { addEventListener(type: string, listener: (event: E) => void): void; removeEventListener(type: string, listener: (event: E) => void): void; }
@@ -22,15 +22,15 @@ value alias: (observable: object) => object
 value all: (inputs: readonly unknown[]) => Derived<unknown[]>
 value apply: (observable: unknown, commit: Commit) => void
 value atomic: <T>(run: () => T) => T
-value byId: (document: unknown, id: string | Uint8Array<ArrayBufferLike>) => object | undefined
-value createArray: <T = unknown>(items?: Iterable<T> | undefined, id?: Uint8Array<ArrayBufferLike> | undefined) => T[]
-value createMap: <T = unknown>(entries?: Iterable<readonly [unknown, T]> | undefined, id?: Uint8Array<ArrayBufferLike> | undefined) => ObservableMap<T>
-value createObject: <T extends object = Record<string, unknown>>(init?: Readonly<Partial<T>> | undefined, id?: Uint8Array<ArrayBufferLike> | undefined) => T
+value byId: (document: unknown, id: string | Id) => object | undefined
+value createArray: <T = unknown>(items?: Iterable<T> | undefined, id?: Id | undefined) => T[]
+value createMap: <T = unknown>(entries?: Iterable<readonly [unknown, T]> | undefined, id?: Id | undefined) => ObservableMap<T>
+value createObject: <T extends object = Record<string, unknown>>(init?: Readonly<Partial<T>> | undefined, id?: Id | undefined) => T
 value fromEvent: <E>(target: EventEmitting<E>, type: string) => Derived<E | undefined>
 value fromSnapshot: (snap: Snapshot) => object
-value idOf: (observable: unknown) => Uint8Array<ArrayBufferLike>
+value idOf: (observable: unknown) => Id
 value immutable: { <T>(value: Derived<T>): Derived<T>; <T>(value: T): Derived<T>; }
-value insertAt: (list: object, position: Uint8Array<ArrayBufferLike>, value: unknown) => void
+value insertAt: (list: object, position: Position, value: unknown) => void
 value intercept: (document: unknown, fn: Interceptor) => () => void
 value isMutableArray: (value: unknown) => boolean
 value isObservable: (value: unknown) => boolean
@@ -41,7 +41,7 @@ value mutableArray: <T = unknown>(items?: Iterable<T> | undefined) => MutableArr
 value observer: (observable: unknown) => Observer
 value parentOf: (observable: unknown) => object | undefined
 value pathOf: (observable: unknown) => readonly string[] | undefined
-value positionsOf: (list: object) => Uint8Array<ArrayBufferLike>[]
+value positionsOf: (list: object) => Position[]
 value snapshot: (observable: unknown) => Snapshot
 value textIdOf: (observable: unknown) => string
 value timer: (ms: number) => Derived<number>

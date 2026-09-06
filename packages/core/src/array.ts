@@ -6,7 +6,7 @@
 // methods is not an array. The mutating half is replaced, since the built-in versions would
 // rewrite every slot after the one that actually moved.
 
-import { assertPosition, bytesFromHex, bytesToHex, codecError } from '@aweftjs/codec';
+import { type Id, type Position, assertPosition, bytesFromHex, bytesToHex, codecError } from '@aweftjs/codec';
 
 import type { Node } from './types.ts';
 import { createNode, indexOfSlot, plantCell } from './node.ts';
@@ -14,12 +14,12 @@ import { between } from './position.ts';
 import { atomic, write } from './transaction.ts';
 import { nodeOf, register, toCell } from './value.ts';
 
-const positionAt = (node: Node, at: number): Uint8Array | null => {
+const positionAt = (node: Node, at: number): Position | null => {
 	const slot = node.order[at];
-	return slot === undefined ? null : bytesFromHex(slot);
+	return slot === undefined ? null : assertPosition(bytesFromHex(slot));
 };
 
-const place = (node: Node, before: Uint8Array | null, after: Uint8Array | null, value: unknown): Uint8Array => {
+const place = (node: Node, before: Position | null, after: Position | null, value: unknown): Position => {
 	const position = between(before, after);
 	write(node, bytesToHex(position), toCell(value));
 	return position;
@@ -47,10 +47,11 @@ const asIndex = (key: string): number => {
 	return Number.isInteger(at) && at >= 0 && String(at) === key ? at : -1;
 };
 
-const unsupported = (name: string, instead: string): never => {
+const unsupported = (name: string, fix: string): never => {
 	throw codecError(
 		'unsupported',
-		`${name} would rewrite every slot it passes over; ${instead}`,
+		`${name} would rewrite every slot it passes over`,
+		fix,
 	);
 };
 
@@ -62,16 +63,20 @@ const unsupported = (name: string, instead: string): never => {
  *   position: the position key. It must be free, and it decides where the value sorts
  *   value: what to put there
  *
+ * Throws: `not-observable` when `list` is not an array observable, `invalid-position` for a
+ * key the format forbids, and `slot-exists` when something already holds that position.
+ *
  * This is what bridging two trees needs: a receiver that has been told a position must be
  * able to honour it rather than generate its own and diverge.
  *
  * Example:
  *   insertAt(mirror, positionsOf(list)[0]!, list[0]);
  */
-export const insertAt = (list: object, position: Uint8Array, value: unknown): void => {
+export const insertAt = (list: object, position: Position, value: unknown): void => {
 	const node = nodeOf(list);
 	if (node === undefined || node.kind !== 'array') {
-		throw codecError('not-observable', 'insertAt takes an array observable');
+		throw codecError('not-observable', 'insertAt takes an array observable',
+			'Pass what createArray returned.');
 	}
 
 	// Refused here rather than at encode time, which may be many commits later on a machine
@@ -79,7 +84,8 @@ export const insertAt = (list: object, position: Uint8Array, value: unknown): vo
 	assertPosition(position);
 	const slot = bytesToHex(position);
 	if (indexOfSlot(node, slot) >= 0) {
-		throw codecError('slot-exists', `${slot} is already taken in this array`);
+		throw codecError('slot-exists', `${slot} is already taken in this array`,
+			'Pick a position no element holds, or assign over the element already there.');
 	}
 
 	write(node, slot, toCell(value));
@@ -93,15 +99,18 @@ export const insertAt = (list: object, position: Uint8Array, value: unknown): vo
  *
  * Returns: one key per element, so a caller can name a place rather than an index.
  *
+ * Throws: `not-observable` when `list` is not an array observable.
+ *
  * Example:
  *   const first = positionsOf(list)[0]; // survives edits elsewhere; list[0] does not
  */
-export const positionsOf = (list: object): Uint8Array[] => {
+export const positionsOf = (list: object): Position[] => {
 	const node = nodeOf(list);
 	if (node === undefined || node.kind !== 'array') {
-		throw codecError('not-observable', 'positionsOf takes an array observable');
+		throw codecError('not-observable', 'positionsOf takes an array observable',
+			'Pass what createArray returned.');
 	}
-	return node.order.map(bytesFromHex);
+	return node.order.map((slot) => assertPosition(bytesFromHex(slot)));
 };
 
 /**
@@ -116,6 +125,10 @@ export const positionsOf = (list: object): Uint8Array[] => {
  * `sort`, `reverse`, `fill` and `copyWithin` throw, because they cannot be expressed as
  * changes to the slots they appear to touch.
  *
+ * Throws: `invalid-value`, `cell-in-document` or `inline-container` for an item a slot cannot
+ * hold, `multiple-attach`, `unreachable` or `duplicate-id` for an observable that already
+ * has a home or an id, and `invalid-id` for an id that is not twelve bytes.
+ *
  * Attaching an observable that already has slots carries those slots in the same commit, one
  * delta for the attach and one for each slot under it, however deep. That is what lets a
  * replica be built from the commits alone: pushing a filled object sends its contents, not
@@ -125,7 +138,7 @@ export const positionsOf = (list: object): Uint8Array[] => {
  *   const blocks = createArray([createObject({ text: 'hi' })]);
  *   blocks.push(createObject({ text: 'there' }));
  */
-export const createArray = <T = unknown>(items?: Iterable<T>, id?: Uint8Array): T[] => {
+export const createArray = <T = unknown>(items?: Iterable<T>, id?: Id): T[] => {
 	const node = createNode('array', id);
 
 	const methods: Record<string, unknown> = {
@@ -162,10 +175,10 @@ export const createArray = <T = unknown>(items?: Iterable<T>, id?: Uint8Array): 
 				return removed;
 			}),
 
-		sort: () => unsupported('sort', 'assign the order you want, or hold the sort outside the state'),
-		reverse: () => unsupported('reverse', 'assign the order you want'),
-		fill: () => unsupported('fill', 'assign the slots you mean'),
-		copyWithin: () => unsupported('copyWithin', 'assign the slots you mean'),
+		sort: () => unsupported('sort', 'Assign the order you want, or hold the sort outside the state.'),
+		reverse: () => unsupported('reverse', 'Assign the order you want.'),
+		fill: () => unsupported('fill', 'Assign the slots you mean.'),
+		copyWithin: () => unsupported('copyWithin', 'Assign the slots you mean.'),
 	};
 
 	const proxy = new Proxy(node.values as T[], {
@@ -178,13 +191,15 @@ export const createArray = <T = unknown>(items?: Iterable<T>, id?: Uint8Array): 
 
 		set: (_target, key, value) => {
 			if (typeof key === 'symbol') {
-				throw codecError('invalid-key', `${String(key)} is not an array slot`);
+				throw codecError('invalid-key', `${String(key)} is not an array slot`,
+					'Index the array with a number, and keep symbol-keyed data elsewhere.');
 			}
 
 			if (key === 'length') {
 				const length = Number(value);
 				if (!Number.isInteger(length) || length < 0 || length > node.order.length) {
-					throw codecError('invalid-write', 'an array grows by inserting, not by its length');
+					throw codecError('invalid-write', 'an array grows by inserting, not by its length',
+						'Call push or splice to grow it; assign a smaller length to shorten it.');
 				}
 				atomic(() => {
 					while (node.order.length > length) removeAt(node, node.order.length - 1);
@@ -193,7 +208,10 @@ export const createArray = <T = unknown>(items?: Iterable<T>, id?: Uint8Array): 
 			}
 
 			const at = asIndex(key);
-			if (at < 0) throw codecError('invalid-key', `${key} is not an array index`);
+			if (at < 0) {
+				throw codecError('invalid-key', `${key} is not an array index`,
+					'Assign a whole number index of zero or more.');
+			}
 
 			const slot = node.order[at];
 			if (slot !== undefined) {
@@ -201,7 +219,8 @@ export const createArray = <T = unknown>(items?: Iterable<T>, id?: Uint8Array): 
 				return true;
 			}
 			if (at !== node.order.length) {
-				throw codecError('invalid-write', 'an array has no gaps; push or splice instead');
+				throw codecError('invalid-write', 'an array has no gaps; push or splice instead',
+					'Push the value on the end, or splice it in where you want it.');
 			}
 
 			place(node, positionAt(node, at - 1), null, value);
@@ -212,6 +231,7 @@ export const createArray = <T = unknown>(items?: Iterable<T>, id?: Uint8Array): 
 			throw codecError(
 				'invalid-write',
 				`deleting ${String(key)} would leave a hole; splice it out instead`,
+				'Call splice to take the element out and close the gap.',
 			);
 		},
 	});
@@ -219,7 +239,7 @@ export const createArray = <T = unknown>(items?: Iterable<T>, id?: Uint8Array): 
 	register(proxy, node);
 
 	if (items !== undefined) {
-		let before: Uint8Array | null = null;
+		let before: Position | null = null;
 		for (const item of items) {
 			before = between(before, null);
 			plantCell(node, bytesToHex(before), toCell(item));

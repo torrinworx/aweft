@@ -6,6 +6,8 @@
 // small ways and a seed that reproduces a failure under one of them reproduces nothing under
 // another.
 
+import { codecError } from '@aweftjs/codec';
+
 /**
  * A seeded stream of numbers in [0, 1).
  *
@@ -40,11 +42,16 @@ export const randomFrom = (seed: number): (() => number) => {
  *
  * Returns: an index into something of that length.
  *
+ * Throws: `invalid-bound` when the bound is under 1.
+ *
  * Example:
  *   const victim = items[randomBelow(random, items.length)];
  */
 export const randomBelow = (random: () => number, bound: number): number => {
 	// A bound of zero has no index to give, and returning 0 anyway would read as one.
-	if (!(bound >= 1)) throw new Error(`randomBelow needs a bound of at least 1, got ${bound}`);
+	if (!(bound >= 1)) {
+		throw codecError('invalid-bound', `${String(bound)} is not a bound of at least 1`,
+			'Check the collection is not empty before asking for an index into it.');
+	}
 	return Math.floor(random() * bound);
 };

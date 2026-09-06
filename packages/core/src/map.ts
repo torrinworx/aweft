@@ -4,7 +4,7 @@
 // matters is which thing an entry is about rather than where it sits. Ids cannot collide with
 // a method name, so unlike an object this one carries methods.
 
-import { codecError, idFromText, idToText } from '@aweftjs/codec';
+import { type Id, assertId, codecError, idFromText, idToText } from '@aweftjs/codec';
 
 import type { Node } from './types.ts';
 import { createNode, plantCell, userValue } from './node.ts';
@@ -13,7 +13,7 @@ import { nodeOf, register, toCell } from './value.ts';
 
 /** A map key in its text form, whether it arrived as bytes, as text, or as an observable. */
 const keyOf = (key: unknown): string => {
-	if (key instanceof Uint8Array) return idToText(key);
+	if (key instanceof Uint8Array) return idToText(assertId(key));
 
 	if (typeof key === 'string') {
 		idFromText(key);
@@ -23,7 +23,8 @@ const keyOf = (key: unknown): string => {
 	const node = nodeOf(key);
 	if (node !== undefined) return node.key;
 
-	throw codecError('invalid-key', 'a map slot is named by an id');
+	throw codecError('invalid-key', 'a map slot is named by an id',
+		'Pass an id, the same id in text form, or the observable it names.');
 };
 
 /** What a map observable answers to. Slots are named by id, so methods cannot collide. */
@@ -56,13 +57,18 @@ export interface ObservableMap<T> {
  * Returns: a map of ids to values. `add` files an observable under its own id, which is the
  * common case; `set` names the id itself.
  *
+ * Throws: `invalid-key` or `invalid-id` for an entry key that is not an id, `invalid-value`,
+ * `cell-in-document` or `inline-container` for a value a slot cannot hold, and
+ * `multiple-attach`, `unreachable` or `duplicate-id` for an observable that already has a
+ * home or an id.
+ *
  * Example:
  *   const presence = createMap();
  *   presence.add(createObject({ cursor: 42 }));
  */
 export const createMap = <T = unknown>(
 	entries?: Iterable<readonly [unknown, T]>,
-	id?: Uint8Array,
+	id?: Id,
 ): ObservableMap<T> => {
 	const node: Node = createNode('map', id);
 
@@ -78,7 +84,10 @@ export const createMap = <T = unknown>(
 		/** File an observable under its own id. */
 		add: (observable: T & object): void => {
 			const held = nodeOf(observable);
-			if (held === undefined) throw codecError('not-observable', 'add takes an observable');
+			if (held === undefined) {
+				throw codecError('not-observable', 'add takes an observable',
+					'Pass an observable, or call set to file a value under an id you choose.');
+			}
 			write(node, held.key, toCell(observable));
 		},
 

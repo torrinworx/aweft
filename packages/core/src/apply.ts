@@ -7,7 +7,7 @@
 // specified, only implemented.
 
 import {
-	type Commit, type Delta, type ObservableKind,
+	type Commit, type Delta, type Id, type ObservableKind,
 	assertId, assertPosition, assertValue, codecError, idToText, isReference, slotKeyOf,
 } from '@aweftjs/codec';
 
@@ -49,7 +49,8 @@ const kindsIn = (commit: Commit, index: Map<string, Node>): Map<string, Observab
 			return;
 		}
 		if (known !== kind) {
-			throw codecError('kind-conflict', `${key} is ${known} but ${where} calls it ${kind}`);
+			throw codecError('kind-conflict', `${key} is ${known} but ${where} calls it ${kind}`,
+				'Keep one kind per id; make a new observable rather than reusing the id.');
 		}
 		kinds.set(key, kind);
 	};
@@ -103,6 +104,7 @@ const checkAttachments = (
 			throw codecError(
 				'multiple-attach',
 				`${key} would have ${count} attach edges, and an observable lives in one place`,
+				`Keep one attach edge in the commit and send the rest as 'alias'.`,
 			);
 		}
 	}
@@ -150,7 +152,10 @@ const checkReach = (
 
 	for (const delta of commit.deltas) {
 		const key = idToText(delta.id);
-		if (!reaches(key)) throw codecError('unreachable', `${key} has no attach path from the root`);
+		if (!reaches(key)) {
+			throw codecError('unreachable', `${key} has no attach path from the root`,
+				'Apply the commit that attaches it first, or replicate from the source root id.');
+		}
 	}
 };
 
@@ -162,15 +167,17 @@ const checkSlots = (commit: Commit, index: Map<string, Node>): void => {
 		const present = index.get(key)?.slots.has(slot) === true;
 
 		if (delta.type === 'add' && present) {
-			throw codecError('slot-exists', `${key} already holds ${slot}`);
+			throw codecError('slot-exists', `${key} already holds ${slot}`,
+				'Replace the slot instead of adding it, or remove what is there first.');
 		}
 		if (delta.type !== 'add' && !present) {
-			throw codecError('slot-missing', `${key} does not hold ${slot}`);
+			throw codecError('slot-missing', `${key} does not hold ${slot}`,
+				'Add the slot before replacing or removing it.');
 		}
 	}
 };
 
-type Resolve = (key: string, kind: ObservableKind, id: Uint8Array) => Node;
+type Resolve = (key: string, kind: ObservableKind, id: Id) => Node;
 
 const cellFor = (delta: Delta, resolve: Resolve): Cell | undefined => {
 	if (delta.type === 'remove') return undefined;
@@ -197,7 +204,7 @@ const cellFor = (delta: Delta, resolve: Resolve): Cell | undefined => {
  * their scope. A watcher cannot tell an applied commit from a local mutation, so anything
  * that records what a watcher delivers, an undo stack included, receives the commits it
  * applies itself and wants a way to tell its own apart, such as a flag held for the duration
- * of the call (`examples/core` does exactly this).
+ * of the call (`recipes/core` does exactly this).
  *
  * That flag only covers this call when the call is made from ordinary code. Userspace calls
  * are deferred, so calling `apply` from inside a watcher hands the commit to the second
@@ -214,13 +221,17 @@ const cellFor = (delta: Delta, resolve: Resolve): Cell | undefined => {
  */
 export const apply = (observable: unknown, commit: Commit): void => {
 	const from = nodeOf(observable);
-	if (from === undefined) throw codecError('not-observable', 'apply takes an observable');
+	if (from === undefined) {
+		throw codecError('not-observable', 'apply takes an observable',
+			'Pass the document createObject, createArray or createMap returned.');
+	}
 
 	const root = from.root;
 	const index = indexOf(root);
 
 	if (commit.deltas.length === 0) {
-		throw codecError('empty-commit', 'a commit carries at least one delta');
+		throw codecError('empty-commit', 'a commit carries at least one delta',
+			'Drop the commit instead of applying it, or add the delta it was meant to carry.');
 	}
 
 	checkWire(commit);

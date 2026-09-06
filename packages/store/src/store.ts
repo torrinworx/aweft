@@ -6,7 +6,8 @@
 // yet written.
 
 import {
-	decodeCommit, encodeCommit, idToText, type Commit, type Delta, type ObservableKind,
+	codecError, decodeCommit, encodeCommit, idToText, type Commit, type Delta, type Id,
+	type ObservableKind,
 } from '@aweftjs/codec';
 import { apply, createArray, createMap, createObject, fromSnapshot, idOf, observer } from '@aweftjs/core';
 import { idFromText } from '@aweftjs/codec';
@@ -56,7 +57,7 @@ interface State {
 	refs: number;
 }
 
-const rootOf = (id: Uint8Array | undefined, kind: ObservableKind): object => {
+const rootOf = (id: Id | undefined, kind: ObservableKind): object => {
 	if (kind === 'object') return createObject(undefined, id);
 	if (kind === 'array') return createArray(undefined, id) as unknown as object;
 	return createMap(undefined, id) as unknown as object;
@@ -80,6 +81,9 @@ export interface Store {
 	 *
 	 * A document is rebuilt from its rows, not by replaying its history: the rows are written
 	 * in the same transaction as the commit, so they are never behind it.
+	 *
+	 * Throws: `create-not-held` when the driver refuses to create the document and does not
+	 * hold it either, which is a driver that broke its own create contract.
 	 *
 	 * Example:
 	 *   const board = await store.open('board:42');
@@ -165,6 +169,9 @@ export interface Store {
 	 *
 	 * Returns: one entry per document, in a stable order, each with its declared fields.
 	 *
+	 * Throws: `invalid-limit` when the limit is not a whole number of at least 1, and `cursor`
+	 * when `after` is not a cursor a previous page of this same call handed back.
+	 *
 	 * This is the un-indexed read, and it is a separate call with a required limit so that
 	 * reaching for one is a decision rather than something a query falls into. What it costs
 	 * depends on the driver, which is exactly why `find` will not do it.
@@ -182,6 +189,9 @@ export interface Store {
 	 *   seq: the sequence the asker already has
 	 *
 	 * Returns: what it missed, oldest first, each with the sequence it was written under.
+	 *
+	 * Throws: `truncated` when the tail no longer reaches back to the sequence asked for, so
+	 * there is a hole the caller has to resynchronize over.
 	 *
 	 * This is what a resuming session asks for (design 045). A sequence older than the tail
 	 * reaches back to is answered with what the tail still holds, so a caller compares the
@@ -218,6 +228,8 @@ export interface Store {
 	 * Returns: their ids. Detaching is not deleting, so these keep their rows until something
 	 * collects them (design 048).
 	 *
+	 * Throws: `not-open` when the handle names a document this store has closed.
+	 *
 	 * Example:
 	 *   if (store.orphans(board).length > 10_000) await store.sweep(board);
 	 */
@@ -230,6 +242,9 @@ export interface Store {
 	 *   handle: the open document
 	 *
 	 * Returns: how many rows went. They are gone from storage, not just from this handle.
+	 *
+	 * Throws: `not-open` when the handle names a document this store has closed, or the first
+	 * write that failed, if one did.
 	 *
 	 * This is the policy call, and it is the application's: nothing here sweeps on its own,
 	 * because the growth is visible and bounded while an automatic sweep is data leaving at a
@@ -272,6 +287,9 @@ export interface Store {
  *
  * Returns: a store. Every document it opens is cached by name, so opening one twice hands
  * back the same live observable and the same handle, reference counted.
+ *
+ * Throws: `empty-path` when a declared field names no steps, and `wildcard-path` when one of
+ * its steps is not a literal. Both are checked here, before anything is built from them.
  *
  * Example:
  *   const store = createStore({ driver: memoryDriver() });
@@ -358,14 +376,16 @@ export const createStore = (
 		enqueue(state, commit);
 	};
 
-	const truncatedPast = (doc: string, seq: number, gone: number): Error => Object.assign(
-		new Error(`truncated: ${doc} no longer holds the commits after ${seq}, the tail starts past ${gone}; take the document instead`),
-		{ reason: 'truncated' },
+	const truncatedPast = (doc: string, seq: number, gone: number): Error => codecError(
+		'truncated',
+		`${doc} no longer holds the commits after ${seq}, the tail starts past ${gone}`,
+		'Open the document and take it whole, rather than asking for the commits it missed.',
 	);
 
-	const sweptAway = (id: string): Error => Object.assign(
-		new Error(`detached-elsewhere: ${id} was swept, so the row holding what it contained is gone and re-attaching it would store an empty one`),
-		{ reason: 'detached-elsewhere' },
+	const sweptAway = (id: string): Error => codecError(
+		'detached-elsewhere',
+		`${id} was swept, so the row holding what it contained is gone and re-attaching it would store an empty one`,
+		'Attach a new observable here instead of one this store already swept.',
 	);
 
 	const raise = (state: State): void => {
@@ -409,7 +429,8 @@ export const createStore = (
 				? { root: rootId, rootKind: kind, rows: [] }
 				: await driver.read(doc);
 			if (stored === null) {
-				throw new Error(`store: the driver would not create ${doc} and does not hold it`);
+				throw codecError('create-not-held', `the driver would not create ${doc} and does not hold it`,
+					'Fix the driver so create refuses only a name it already holds.');
 			}
 		}
 
@@ -451,7 +472,10 @@ export const createStore = (
 
 	const stateOf = (handle: Handle): State => {
 		const state = open_.get(handle.doc);
-		if (state === undefined) throw new Error(`store: ${handle.doc} is not open`);
+		if (state === undefined) {
+			throw codecError('not-open', `${handle.doc} is not open`,
+				'Open the document again and use the handle that call hands back.');
+		}
 		return state;
 	};
 
@@ -463,9 +487,10 @@ export const createStore = (
 			if (state.swept.has(id)) throw sweptAway(id);
 			if (state.live.has(id)) continue;
 			if (!state.rows.has(id)) continue;
-			throw Object.assign(
-				new Error(`detached-elsewhere: ${id} is held as a detached row and cannot be re-attached into a reopened document`),
-				{ reason: 'detached-elsewhere' },
+			throw codecError(
+				'detached-elsewhere',
+				`${id} is held as a detached row and cannot be re-attached into a reopened document`,
+				'Attach a new observable here, or apply the commit to the document that still holds it.',
 			);
 		}
 
@@ -543,7 +568,10 @@ export const createStore = (
 
 	const scan = async (limit: number, after?: string): Promise<Found[]> => {
 		await declared;
-		if (!Number.isInteger(limit) || limit <= 0) throw new Error('store: scan needs a positive limit');
+		if (!Number.isInteger(limit) || limit <= 0) {
+			throw codecError('invalid-limit', `${String(limit)} is not a positive limit`,
+				'Pass a whole number of at least 1 as the limit.');
+		}
 		return after === undefined ? driver.scan(limit) : driver.scan(limit, after);
 	};
 

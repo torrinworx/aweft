@@ -5,8 +5,9 @@
 // this file is what a change is made of.
 
 import {
-	type ObservableKind, type Ref, type Value,
-	bytesFromHex, bytesToHex, codecError, createId, equalBytes, idFromText, idToText,
+	type Id, type ObservableKind, type Ref, type Value,
+	assertPosition, bytesFromHex, bytesToHex, codecError, createId, equalBytes, idFromText,
+	idToText,
 } from '@aweftjs/codec';
 
 import type { Cell, Listener, Node } from './types.ts';
@@ -16,7 +17,7 @@ import type { Cell, Listener, Node } from './types.ts';
 const NO_ORDER: string[] = [];
 const NO_VALUES: unknown[] = [];
 
-export const createNode = (kind: ObservableKind, id: Uint8Array = createId()): Node => {
+export const createNode = (kind: ObservableKind, id: Id = createId()): Node => {
 	const array = kind === 'array';
 	const node: Node = {
 		id,
@@ -55,7 +56,7 @@ export const indexOf = (root: Node): Map<string, Node> => {
 /** The reverse: the ref a delta carries for one of this observable's slots. */
 export const slotRef = (node: Node, slot: string): Ref => {
 	if (node.kind === 'object') return { kind: 'object', key: slot };
-	if (node.kind === 'array') return { kind: 'array', key: bytesFromHex(slot) };
+	if (node.kind === 'array') return { kind: 'array', key: assertPosition(bytesFromHex(slot)) };
 	return { kind: 'map', key: idFromText(slot) };
 };
 
@@ -150,10 +151,12 @@ export const plantCell = (node: Node, slot: string, cell: Cell): void => {
 			throw codecError(
 				'multiple-attach',
 				`${cell.node.key} is already attached, and an observable lives in one place`,
+				'Wrap it in alias here, or clear the slot holding it first.',
 			);
 		}
 		if (isAncestor(cell.node, node)) {
-			throw codecError('unreachable', `${cell.node.key} cannot be attached inside itself`);
+			throw codecError('unreachable', `${cell.node.key} cannot be attached inside itself`,
+				'Attach it somewhere outside its own subtree.');
 		}
 		attachNode(cell.node, node, slot);
 	}
@@ -226,7 +229,8 @@ export const reroot = (child: Node, root: Node): void => {
 	walk(child, (node) => {
 		const taken = index.get(node.key);
 		if (taken !== undefined && taken !== node) {
-			throw codecError('duplicate-id', `${node.key} is already in this document`);
+			throw codecError('duplicate-id', `${node.key} is already in this document`,
+				'Let createObject mint the id rather than reusing one this document holds.');
 		}
 
 		old.index?.delete(node.key);

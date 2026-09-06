@@ -1,6 +1,6 @@
 // Reading an observable's identity and where it lives.
 
-import { codecError, idToText, type ObservableKind } from '@aweftjs/codec';
+import { codecError, idToText, type Id, type ObservableKind } from '@aweftjs/codec';
 
 import { isReachable as reachable, lookup } from './node.ts';
 import type { Node } from './types.ts';
@@ -8,7 +8,10 @@ import { nodeOf } from './value.ts';
 
 const need = (observable: unknown): Node => {
 	const node = nodeOf(observable);
-	if (node === undefined) throw codecError('not-observable', 'this is not an observable');
+	if (node === undefined) {
+		throw codecError('not-observable', 'this is not an observable',
+			'Pass what createObject, createArray or createMap returned.');
+	}
 	return node;
 };
 
@@ -22,10 +25,12 @@ const need = (observable: unknown): Node => {
  * this and nothing else. It is published to everyone who can read the document, so it is
  * never a credential.
  *
+ * Throws: `not-observable` when `observable` is not an observable.
+ *
  * Example:
  *   const mirror = createObject(undefined, idOf(doc));
  */
-export const idOf = (observable: unknown): Uint8Array => need(observable).id;
+export const idOf = (observable: unknown): Id => need(observable).id;
 
 /**
  * The same id in text form.
@@ -35,6 +40,8 @@ export const idOf = (observable: unknown): Uint8Array => need(observable).id;
  *
  * Returns: sixteen base64url characters, safe in a URL, a log line, or a key in a plain
  * object. It is the form a map slot is named by.
+ *
+ * Throws: `not-observable` when `observable` is not an observable.
  *
  * Example:
  *   history.set(textIdOf(entry), createObject({ opened: true }));
@@ -49,6 +56,8 @@ export const textIdOf = (observable: unknown): string => need(observable).key;
  *
  * Returns: 'object', 'array' or 'map'. The kind never changes, and a commit that calls one
  * observable two kinds is refused.
+ *
+ * Throws: `not-observable` when `observable` is not an observable.
  *
  * Example:
  *   if (kindOf(value) === 'array') count = (value as unknown[]).length;
@@ -66,6 +75,8 @@ export const kindOf = (observable: unknown): ObservableKind => need(observable).
  *
  * A reference from somewhere else is an alias and does not answer this question, which is the
  * point: where something lives is a walk up, never a search.
+ *
+ * Throws: `not-observable` when `observable` is not an observable.
  *
  * Example:
  *   const list = parentOf(entry); // the array the entry sits in, or undefined
@@ -86,6 +97,8 @@ export const parentOf = (observable: unknown): object | undefined => need(observ
  * reachable, and for something detached, which is not. Ask here rather than by catching the
  * throw, because control flow through an error hides the ordinary case.
  *
+ * Throws: `not-observable` when `observable` is not an observable.
+ *
  * Example:
  *   if (isReachable(task)) task.done = true;
  */
@@ -104,10 +117,13 @@ export const isReachable = (observable: unknown): boolean => reachable(need(obse
  * Hold the observable itself if you need it after a detach, and ask `isReachable` whether it
  * is still in the document.
  *
+ * Throws: `not-observable` when `document` is not an observable, and `invalid-id` when `id`
+ * is bytes that are not an id.
+ *
  * Example:
  *   const task = byId(board, delta.id);
  */
-export const byId = (document: unknown, id: Uint8Array | string): object | undefined =>
+export const byId = (document: unknown, id: Id | string): object | undefined =>
 	lookup(need(document).root, typeof id === 'string' ? id : idToText(id))?.proxy;
 
 /**
@@ -120,6 +136,8 @@ export const byId = (document: unknown, id: Uint8Array | string): object | undef
  * object key, a map id in text form, an array position in hex. Empty for the root, and
  * undefined for anything nothing attaches. A walk up the parent pointers, so it costs the
  * depth and never the document.
+ *
+ * Throws: `not-observable` when `observable` is not an observable.
  *
  * Example:
  *   pathOf(task);   // ['tasks', '80a1c2e3']

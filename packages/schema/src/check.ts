@@ -75,6 +75,7 @@ export const check = (form: Shape, document: unknown, commit: Commit): readonly 
 			throw codecError(
 				'async-validator',
 				`${path.join('/')} is checked by a validator that answers later, and a commit is decided now`,
+				'Give the slot a validator that answers now, and do the slow check before the write.',
 			);
 		}
 

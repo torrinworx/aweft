@@ -48,12 +48,17 @@ interface Alias {
  * Returns: a marker to assign. The slot then holds an alias edge, which grants nothing and
  * revokes nothing. Every observable lives at exactly one attach edge, and an alias is not it.
  *
+ * Throws: `not-observable` when `observable` is not an observable.
+ *
  * Example:
  *   post.author = alias(users.get(id));
  */
 export const alias = (observable: object): object => {
 	const node = nodeOf(observable);
-	if (node === undefined) throw codecError('not-observable', 'an alias names an observable');
+	if (node === undefined) {
+		throw codecError('not-observable', 'an alias names an observable',
+			'Pass what createObject, createArray or createMap returned.');
+	}
 	return { [ALIAS]: node };
 };
 
@@ -78,11 +83,13 @@ export const toCell = (value: unknown): Cell => {
 			assertValue(value);
 			return { kind: 'value', value };
 		case 'undefined':
-			throw codecError('invalid-value', 'a slot holds a value or does not exist; delete it instead');
+			throw codecError('invalid-value', 'a slot holds a value or does not exist; delete it instead',
+				'Use delete on the slot, or assign null when the slot should stay.');
 		case 'object':
 			break;
 		default:
-			throw codecError('invalid-value', `a ${typeof value} cannot be stored`);
+			throw codecError('invalid-value', `a ${typeof value} cannot be stored`,
+				'Store a string, number, boolean, null, Uint8Array, or an observable.');
 	}
 
 	const object = value as object;
@@ -94,6 +101,7 @@ export const toCell = (value: unknown): Cell => {
 		throw codecError(
 			'cell-in-document',
 			'a cell or derived value does not replicate; store a primitive or an observable, or its get()',
+			'Write its get() into the slot, and keep the cell in the interface.',
 		);
 	}
 
@@ -106,5 +114,6 @@ export const toCell = (value: unknown): Cell => {
 	throw codecError(
 		'inline-container',
 		'a slot holds a primitive or an observable; wrap it with createObject, createArray or createMap',
+		'Build it with createObject, createArray or createMap, then assign that.',
 	);
 };

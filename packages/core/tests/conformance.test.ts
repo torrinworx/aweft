@@ -8,7 +8,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bytesFromHex, bytesToHex, idFromText } from '@aweftjs/codec';
+import { assertPosition, bytesFromHex, bytesToHex, idFromText } from '@aweftjs/codec';
 import type {
 	Applier, DocumentJson, ObservableJson, ValueJson,
 } from '@aweftjs/testing';
@@ -55,7 +55,7 @@ const build = (initial: DocumentJson): object => {
 			const held = valueOf(value, made);
 
 			if (observable.kind === 'object') (holder as Record<string, unknown>)[slot] = held;
-			else if (observable.kind === 'array') insertAt(holder, bytesFromHex(slot), held);
+			else if (observable.kind === 'array') insertAt(holder, assertPosition(bytesFromHex(slot)), held);
 			else (holder as MapLike).set(slot, held);
 		}
 	}

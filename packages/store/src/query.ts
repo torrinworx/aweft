@@ -4,6 +4,7 @@
 // paths inside one document, and a projection holds one value per path per document, so a
 // wildcard has nowhere to land (design 049).
 
+import { codecError } from '@aweftjs/codec';
 import type { SnapshotValue } from '@aweftjs/core';
 
 /**
@@ -57,11 +58,16 @@ export interface Query {
  */
 export const checkDeclaration = (declaration: Declaration): void => {
 	for (const [field, path] of Object.entries(declaration)) {
-		if (path.length === 0) throw new Error(`store: ${field} declares an empty path`);
+		if (path.length === 0) {
+			throw codecError('empty-path', `${field} declares an empty path`,
+				'Give the field the steps from the root to the value it indexes.');
+		}
 		for (const step of path) {
 			if (typeof step !== 'string') {
-				throw new Error(
-					`store: ${field} declares a wildcard, and a wildcard names many paths in one document`,
+				throw codecError(
+					'wildcard-path',
+					`${field} declares a wildcard, and a wildcard names many paths in one document`,
+					'Declare one literal path per field, and one field per path.',
 				);
 			}
 		}
@@ -70,13 +76,14 @@ export const checkDeclaration = (declaration: Declaration): void => {
 
 /** Refuse a query that asks about something nothing indexed. */
 export const checkQuery = (query: Query, declaration: Declaration): void => {
-	if (query.where.length === 0) throw new Error('store: a query carries at least one condition');
+	if (query.where.length === 0) {
+		throw codecError('empty-query', 'a query carries at least one condition',
+			'Put a condition in where, or call scan to read without an index.');
+	}
 	const known = (field: string, what: string): void => {
 		if (declaration[field] === undefined) {
-			throw Object.assign(
-				new Error(`store: ${what} ${field}, which is not declared. Declare it, or use scan`),
-				{ reason: 'undeclared' },
-			);
+			throw codecError('undeclared', `${what} ${field}, which is not declared`,
+				'Declare the path in createStore, or call scan to read without an index.');
 		}
 	};
 	for (const where of query.where) known(where.field, 'a condition names');
@@ -102,9 +109,11 @@ export const valueAt = (rows: Slots, root: string, path: readonly string[]): Ind
 		// stable, so a literal step into one names a place rather than a thing. Left to itself
 		// it would index nothing, quietly, for the life of the declaration.
 		if (row.kind === 'array') {
-			throw new Error(
-				`store: a declared path may not cross an array (at ${path.slice(0, i).join('.')}), `
+			throw codecError(
+				'array-in-path',
+				`a declared path may not cross an array (at ${path.slice(0, i).join('.')}), `
 				+ 'because an array position is not a stable name',
+				'Declare a path that stops above the array, and filter the rest in the caller.',
 			);
 		}
 

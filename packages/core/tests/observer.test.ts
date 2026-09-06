@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { idToText, randomBelow, randomFrom, slotKeyOf } from '@aweftjs/testing';
-import type { Delta } from '@aweftjs/codec';
+import type { Delta, Id } from '@aweftjs/codec';
 
 import { alias, atomic, createArray, createObject, observer, textIdOf } from '../src/index.ts';
 import type { Change } from '../src/index.ts';
@@ -284,12 +284,12 @@ const drive = (seed: number, deep: boolean): Map<string, string[]> => {
 		names.set(textIdOf(made), name);
 		return made;
 	};
-	const name = (id: Uint8Array): string => names.get(idToText(id)) ?? '?';
+	const name = (id: Id): string => names.get(idToText(id)) ?? '?';
 
 	const show = (value: unknown): string => {
 		if (value === undefined) return '';
 		if (value !== null && typeof value === 'object' && 'edge' in (value as object)) {
-			const ref = value as { edge: string; id: Uint8Array };
+			const ref = value as { edge: string; id: Id };
 			return ` =${ref.edge}:${name(ref.id)}`;
 		}
 		return ` =${JSON.stringify(value)}`;

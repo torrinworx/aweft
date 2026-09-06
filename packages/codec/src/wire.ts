@@ -146,11 +146,13 @@ export const assertText = (s: string): void => {
 		if (c >= 0xd800 && c <= 0xdbff) {
 			const next = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
 			if (next < 0xdc00 || next > 0xdfff) {
-				throw codecError('lone-surrogate', `unpaired high surrogate at index ${i}`);
+				throw codecError('lone-surrogate', `unpaired high surrogate at index ${i}`,
+					'Pair the surrogate with its low half, or drop it before encoding.');
 			}
 			i++;
 		} else if (c >= 0xdc00 && c <= 0xdfff) {
-			throw codecError('lone-surrogate', `unpaired low surrogate at index ${i}`);
+			throw codecError('lone-surrogate', `unpaired low surrogate at index ${i}`,
+				'Pair the surrogate with its high half, or drop it before encoding.');
 		}
 	}
 };
@@ -175,7 +177,8 @@ export const writeNumber = (w: Writer, n: number): void => {
 	}
 
 	if (!Number.isFinite(v)) {
-		throw codecError('non-finite-float', `${String(v)} has no encoding`);
+		throw codecError('non-finite-float', `${String(v)} has no encoding`,
+			'Send null in place of a missing number, and screen values with Number.isFinite.');
 	}
 
 	reserve(w, 9);
@@ -215,7 +218,8 @@ export const writeValue = (w: Writer, v: WireValue): void => {
 		return;
 	}
 
-	throw codecError('unsupported-value', `${Object.prototype.toString.call(v)} has no encoding`);
+	throw codecError('unsupported-value', `${Object.prototype.toString.call(v)} has no encoding`,
+		'Pass null, a boolean, a number, a string, bytes, or an array of those.');
 };
 
 /**
@@ -250,7 +254,8 @@ export const createReader = (bytes: Uint8Array): Reader => ({ bytes, offset: 0 }
 
 const need = (r: Reader, n: number): void => {
 	if (r.offset + n > r.bytes.length) {
-		throw codecError('truncated', `wanted ${n} bytes at offset ${r.offset}`);
+		throw codecError('truncated', `wanted ${n} bytes at offset ${r.offset}`,
+			'Pass the whole message; these bytes were cut short in transit or on disk.');
 	}
 };
 
@@ -269,7 +274,10 @@ export const readArg = (r: Reader, info: number): number => {
 	if (info === 24) {
 		need(r, 1);
 		const v = r.bytes[r.offset++]!;
-		if (v < 24) throw codecError('non-canonical-integer', `${v} fits in the initial byte`);
+		if (v < 24) {
+			throw codecError('non-canonical-integer', `${v} fits in the initial byte`,
+				'Encode with encodeValue, which always picks the shortest form.');
+		}
 		return v;
 	}
 
@@ -277,7 +285,10 @@ export const readArg = (r: Reader, info: number): number => {
 		need(r, 2);
 		const v = r.bytes[r.offset]! * 0x100 + r.bytes[r.offset + 1]!;
 		r.offset += 2;
-		if (v < 0x100) throw codecError('non-canonical-integer', `${v} fits in one byte`);
+		if (v < 0x100) {
+			throw codecError('non-canonical-integer', `${v} fits in one byte`,
+				'Encode with encodeValue, which always picks the shortest form.');
+		}
 		return v;
 	}
 
@@ -289,7 +300,10 @@ export const readArg = (r: Reader, info: number): number => {
 			r.bytes[r.offset + 2]! * 0x100 +
 			r.bytes[r.offset + 3]!;
 		r.offset += 4;
-		if (v < 0x10000) throw codecError('non-canonical-integer', `${v} fits in two bytes`);
+		if (v < 0x10000) {
+			throw codecError('non-canonical-integer', `${v} fits in two bytes`,
+				'Encode with encodeValue, which always picks the shortest form.');
+		}
 		return v;
 	}
 
@@ -310,23 +324,34 @@ export const readArg = (r: Reader, info: number): number => {
 		// argument past 2^53 down into the range and the check then passes it, so the decoder
 		// would answer with a number the bytes did not say. 0x200000 is 2^53 divided by 2^32.
 		if (hi > 0x200000 || (hi === 0x200000 && lo !== 0)) {
-			throw codecError('integer-out-of-range', 'this is not exact and must be a float');
+			throw codecError('integer-out-of-range', 'this is not exact and must be a float',
+				'Write a whole number this wide as a float64; encodeValue does that for you.');
 		}
 
 		const v = hi * 0x100000000 + lo;
-		if (v < 0x100000000) throw codecError('non-canonical-integer', `${v} fits in four bytes`);
+		if (v < 0x100000000) {
+			throw codecError('non-canonical-integer', `${v} fits in four bytes`,
+				'Encode with encodeValue, which always picks the shortest form.');
+		}
 		return v;
 	}
 
-	if (info === 31) throw codecError('indefinite-length', 'lengths are always stated');
+	if (info === 31) {
+		throw codecError('indefinite-length', 'lengths are always stated',
+			'Re-encode the value with a definite length; this format has no streaming form.');
+	}
 
-	throw codecError('malformed-head', `additional information ${info} is reserved`);
+	throw codecError('malformed-head', `additional information ${info} is reserved`,
+		'Re-encode with encodeValue; this format never writes a reserved head.');
 };
 
 let textDecoder: InstanceType<typeof TextDecoder> | null = null;
 
 export const readValue = (r: Reader, depth = 0): WireValue => {
-	if (depth >= MAX_DEPTH) throw codecError('nesting-too-deep', `past ${MAX_DEPTH} levels`);
+	if (depth >= MAX_DEPTH) {
+		throw codecError('nesting-too-deep', `past ${MAX_DEPTH} levels`,
+			'Flatten the value, or split it across several commits.');
+	}
 
 	need(r, 1);
 	const initial = r.bytes[r.offset++]!;
@@ -340,7 +365,8 @@ export const readValue = (r: Reader, depth = 0): WireValue => {
 		// MIN_INT, and a check on the value then sees a number that is in range.
 		const arg = readArg(r, info);
 		if (arg >= MAX_INT) {
-			throw codecError('integer-out-of-range', 'this is not exact and must be a float');
+			throw codecError('integer-out-of-range', 'this is not exact and must be a float',
+				'Write a whole number this wide as a float64; encodeValue does that for you.');
 		}
 		return -1 - arg;
 	}
@@ -356,7 +382,8 @@ export const readValue = (r: Reader, depth = 0): WireValue => {
 		try {
 			return (textDecoder ??= new TextDecoder('utf-8', { fatal: true })).decode(slice);
 		} catch {
-			throw codecError('invalid-utf8', `${n} bytes do not decode`);
+			throw codecError('invalid-utf8', `${n} bytes do not decode`,
+				'Encode text with encodeValue, which writes well formed UTF-8.');
 		}
 	}
 
@@ -365,7 +392,8 @@ export const readValue = (r: Reader, depth = 0): WireValue => {
 		// Every item costs at least one byte, so a length beyond what is left is a lie and
 		// there is no reason to allocate for it.
 		if (n > r.bytes.length - r.offset) {
-			throw codecError('truncated', `an array of ${n} cannot fit in the remaining bytes`);
+			throw codecError('truncated', `an array of ${n} cannot fit in the remaining bytes`,
+				'Pass the whole message; the array claims more items than the bytes hold.');
 		}
 
 		const items: WireValue[] = [];
@@ -373,8 +401,14 @@ export const readValue = (r: Reader, depth = 0): WireValue => {
 		return items;
 	}
 
-	if (major === 5) throw codecError('unsupported-major', 'maps are not part of the format');
-	if (major === 6) throw codecError('unsupported-major', 'tags are not part of the format');
+	if (major === 5) {
+		throw codecError('unsupported-major', 'maps are not part of the format',
+			'Use an observable map, which encodes as an observable rather than a map value.');
+	}
+	if (major === 6) {
+		throw codecError('unsupported-major', 'tags are not part of the format',
+			'Drop the tag and write the value on its own.');
+	}
 
 	if (info === 20) return false;
 	if (info === 21) return true;
@@ -386,14 +420,19 @@ export const readValue = (r: Reader, depth = 0): WireValue => {
 		const v = view.getFloat64(0, false);
 		r.offset += 8;
 
-		if (!Number.isFinite(v)) throw codecError('non-finite-float', `${String(v)} is not a value`);
+		if (!Number.isFinite(v)) {
+			throw codecError('non-finite-float', `${String(v)} is not a value`,
+				'Re-encode with encodeValue, which refuses infinity and NaN.');
+		}
 		if (Number.isInteger(v) && v >= MIN_INT && v <= MAX_INT) {
-			throw codecError('non-canonical-float', `${v} is a whole number and belongs in an integer`);
+			throw codecError('non-canonical-float', `${v} is a whole number and belongs in an integer`,
+				'Re-encode with encodeValue, which writes a whole number this size as an integer.');
 		}
 		return v;
 	}
 
-	throw codecError('unsupported-simple', `simple value ${info} is not part of the format`);
+	throw codecError('unsupported-simple', `simple value ${info} is not part of the format`,
+		'Write only null, true and false as simple values.');
 };
 
 /**
@@ -416,7 +455,8 @@ export const decodeValue = (bytes: Uint8Array): WireValue => {
 	const r = createReader(bytes);
 	const v = readValue(r);
 	if (r.offset !== bytes.length) {
-		throw codecError('trailing-bytes', `${bytes.length - r.offset} bytes follow the value`);
+		throw codecError('trailing-bytes', `${bytes.length - r.offset} bytes follow the value`,
+			'Decode one value per buffer; slice the buffer if it holds several.');
 	}
 	return v;
 };

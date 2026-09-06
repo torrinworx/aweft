@@ -7,6 +7,7 @@
 //
 // Append-only. A case is added for every escape ever found and none is removed.
 
+import { codecError } from '@aweftjs/codec';
 import { createArray, createObject } from '@aweftjs/core';
 import { type Runner, type Sandbox, createSandbox } from '@aweftjs/sandbox';
 
@@ -20,7 +21,10 @@ export interface RoomCheck {
 }
 
 const check = (ok: boolean, what: string): void => {
-	if (!ok) throw new Error(`room check failed: ${what}`);
+	if (!ok) {
+		throw codecError('room-check-failed', what,
+			'Fix the runner so it meets this obligation, then run the checks again.');
+	}
 };
 
 const reasonOf = (error: unknown): string => String((error as { reason?: unknown } | null)?.reason);
@@ -255,6 +259,9 @@ const checks: RoomCheck[] = [
  * whatever runner made the room.
  *
  * Returns: the checks, each named, each taking a function that makes a fresh runner.
+ *
+ * Throws: each check's `run` throws `room-check-failed` when the runner misses that
+ * obligation, and the detail says what was expected.
  *
  * Example:
  *   for (const c of roomChecks()) test(c.name, () => c.run(() => inProcess()));

@@ -9,8 +9,9 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
-	type Commit, type Delta, type Ref, type Value,
-	bytesFromHex, bytesToHex, compareBytes, encodeCommit, encodeValue, idToText,
+	type Commit, type Delta, type Id, type Ref, type Tag, type Value,
+	assertId, assertPosition, bytesFromHex, bytesToHex, compareBytes, encodeCommit, encodeValue,
+	idToText,
 } from '@aweftjs/codec';
 
 import {
@@ -21,7 +22,7 @@ import {
 // --- building blocks ----------------------------------------------------------------------
 
 /** Ids are counted rather than random, so a fixture reads the same on every machine. */
-const id = (n: number): Uint8Array => bytesFromHex(n.toString(16).padStart(24, '0'));
+const id = (n: number): Id => assertId(bytesFromHex(n.toString(16).padStart(24, '0')));
 const name = (n: number): string => idToText(id(n));
 
 const obj = (slots: Record<string, ValueJson>): ObservableJson => ({ kind: 'object', slots });
@@ -42,7 +43,7 @@ const aliases = (kind: 'object' | 'array' | 'map', n: number): ValueJson =>
 const raw = (hex: string): ValueJson => ({ bytes: hex });
 
 const key = (k: string): Ref => ({ kind: 'object', key: k });
-const at = (hex: string): Ref => ({ kind: 'array', key: bytesFromHex(hex) });
+const at = (hex: string): Ref => ({ kind: 'array', key: assertPosition(bytesFromHex(hex)) });
 const of = (n: number): Ref => ({ kind: 'map', key: id(n) });
 
 const add = (n: number, ref: Ref, value: Value): Delta => ({ type: 'add', id: id(n), ref, value });
@@ -211,7 +212,7 @@ const cases: Case[] = [
 		name: 'integrity-tag',
 		description: 'A commit carrying the optional tag. The tag rides along and is not read here.',
 		initial: doc(1, { 1: obj({ title: 'a page' }) }),
-		commits: [{ deltas: [put(1, key('title'), 'a page, revised')], tag: bytesFromHex('9f2b41c7') }],
+		commits: [{ deltas: [put(1, key('title'), 'a page, revised')], tag: bytesFromHex('9f2b41c7') as Tag }],
 		final: doc(1, { 1: obj({ title: 'a page, revised' }) }),
 	},
 	{

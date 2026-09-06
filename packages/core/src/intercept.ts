@@ -33,13 +33,18 @@ import { nodeOf } from './value.ts';
  * the commit being decided. Several rules on one document all run and their refusals are
  * concatenated.
  *
+ * Throws: `not-observable` when `document` is not an observable.
+ *
  * Example:
  *   const stop = intercept(doc, (commit) =>
  *     doc.title === '' ? [{ code: 'invalid', message: 'a title cannot be empty' }] : []);
  */
 export const intercept = (document: unknown, fn: Interceptor): (() => void) => {
 	const node = nodeOf(document);
-	if (node === undefined) throw codecError('not-observable', 'intercept takes an observable');
+	if (node === undefined) {
+		throw codecError('not-observable', 'intercept takes an observable',
+			'Pass what createObject, createArray or createMap returned.');
+	}
 
 	return register({ node, fn });
 };

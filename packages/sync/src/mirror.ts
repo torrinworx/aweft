@@ -22,6 +22,8 @@ import { connect } from './link.ts';
  * The target starts by asking for the source's state, so a target holding something else is
  * moved to the source. After that the two are equal ends and a change on either crosses.
  *
+ * Throws: `not-observable` when the source is not part of a document.
+ *
  * Example:
  *   const editing = mirror(stored);
  *   await Promise.resolve();

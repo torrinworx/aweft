@@ -83,7 +83,8 @@ export const applyCommit = (doc: DocumentJson, commit: Commit): DocumentJson => 
 			return;
 		}
 		if (seen !== kind) {
-			throw codecError('kind-conflict', `${id} is ${seen} but ${where} calls it ${kind}`);
+			throw codecError('kind-conflict', `${id} is ${seen} but ${where} calls it ${kind}`,
+				'State one kind for this id in every delta of the commit.');
 		}
 	};
 
@@ -128,6 +129,7 @@ export const applyCommit = (doc: DocumentJson, commit: Commit): DocumentJson => 
 			throw codecError(
 				'multiple-attach',
 				`${id} would have ${count} attach edges, and an observable lives in one place`,
+				'Remove the other attach edge in the same commit, or point at it with a reference.',
 			);
 		}
 	}
@@ -163,7 +165,8 @@ export const applyCommit = (doc: DocumentJson, commit: Commit): DocumentJson => 
 	for (const d of commit.deltas) {
 		const id = idToText(d.id);
 		if (!reachable.has(id)) {
-			throw codecError('unreachable', `${id} has no attach path from the root`);
+			throw codecError('unreachable', `${id} has no attach path from the root`,
+				'Attach it under the root in the same commit that writes into it.');
 		}
 	}
 
@@ -181,10 +184,12 @@ export const applyCommit = (doc: DocumentJson, commit: Commit): DocumentJson => 
 		const present = Object.hasOwn(target.slots, key);
 
 		if (d.type === 'add' && present) {
-			throw codecError('slot-exists', `${idToText(d.id)} already holds ${key}`);
+			throw codecError('slot-exists', `${idToText(d.id)} already holds ${key}`,
+				'Send a replace delta to overwrite the slot, or add under a free key.');
 		}
 		if (d.type !== 'add' && !present) {
-			throw codecError('slot-missing', `${idToText(d.id)} does not hold ${key}`);
+			throw codecError('slot-missing', `${idToText(d.id)} does not hold ${key}`,
+				'Send an add delta first, so the slot exists before it is replaced or removed.');
 		}
 	}
 

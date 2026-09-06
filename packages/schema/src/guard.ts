@@ -21,6 +21,10 @@ import { check } from './check.ts';
  * A guarded slot refuses a half-written value, which is what it is for and what makes it the
  * wrong place to hold one: keep a draft in a cell and write it to the document on submit.
  *
+ * Throws: at the write, not here. A change that breaks the description throws a
+ * `RefusedError` carrying the refusals, and a leaf that answers later throws
+ * `async-validator`.
+ *
  * Example:
  *   const stop = guard(board, Board);
  *   board.title = '';       // throws: the refusal says why

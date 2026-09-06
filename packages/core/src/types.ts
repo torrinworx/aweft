@@ -4,7 +4,7 @@
 // delta and commit machinery reads. Keeping the two apart is what lets an observable's whole
 // property space belong to the user, with no name the framework has taken (design 013).
 
-import type { Commit, Delta, EdgeKind, ObservableKind } from '@aweftjs/codec';
+import type { Commit, Delta, EdgeKind, Id, ObservableKind } from '@aweftjs/codec';
 
 /** Everything a slot can hold that is not another observable. */
 export type Primitive = null | boolean | number | string | Uint8Array;
@@ -24,7 +24,7 @@ export interface RefCell {
 export type Cell = ValueCell | RefCell;
 
 export interface Node {
-	readonly id: Uint8Array;
+	readonly id: Id;
 	/** The id in text form. Slot maps, indexes and record keys are all keyed by it. */
 	readonly key: string;
 	readonly kind: ObservableKind;

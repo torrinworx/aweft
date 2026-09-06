@@ -194,4 +194,4 @@ Deliberately not here:
   commit to make it fit.
 
 The reasoning lives in `docs/design/057` and `058`, and a complete program using all of the
-above in `examples/schema/`.
+above in `recipes/schema/`.

@@ -515,7 +515,8 @@ export const chain = <T>(source: Source): Derived<T> => {
 
 		set: (value) => {
 			if (source.write === undefined) {
-				throw codecError('read-only', 'this chain declares no write path; see setter');
+				throw codecError('read-only', 'this chain declares no write path; see setter',
+					'Give the chain a write path with setter before calling set.');
 			}
 			source.write(value);
 		},
@@ -562,7 +563,8 @@ export const chain = <T>(source: Source): Derived<T> => {
 			// wildcard scope) stays that way; setter replaces a write path, it does not mint the
 			// right to have one (design 028).
 			if (source.immutable?.() === true) {
-				throw codecError('read-only', 'this chain is immutable by construction; setter cannot reopen it');
+				throw codecError('read-only', 'this chain is immutable by construction; setter cannot reopen it',
+					'Build the chain over a writable source rather than an immutable one.');
 			}
 			return chain({
 				...source,

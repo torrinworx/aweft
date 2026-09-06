@@ -92,6 +92,17 @@ isValidPosition(Uint8Array.of(0x80, 0x00));  // false, ends in a zero byte
 `assertId` and `assertPosition` hand the value back, so they can wrap it on the way into a
 structure rather than sitting on a line of their own.
 
+`Id`, `Position` and `Tag` are three distinct types, not three spellings of `Uint8Array`.
+They are the same bytes at runtime and on the wire; the difference exists only while the
+compiler is looking, so a signature that wants an id refuses a position (design 104). Bytes
+from anywhere else become an id or a position by going through `assertId` or
+`assertPosition`, which is the check they needed anyway.
+
+```ts
+const id: Id = assertId(bytes);          // checked, and now typed as an id
+const key: Position = assertPosition(k); // same, for an array slot key
+```
+
 This package judges positions and never mints one. Choosing a key between two others is left
 open by the format on purpose, and `@aweftjs/core` is what makes the choice: ordinary array
 work does it for you, so `list.splice(1, 0, x)` on `['a', 'c']` turns positions `80 81` into
@@ -168,7 +179,7 @@ const frame = (bytes: Uint8Array): Uint8Array => {
 
 `decodeCommit` takes one commit with nothing before or after it, so the framing decides
 where a commit ends, and anything that must survive a hostile channel adds its own checksum
-or signature at this layer. `examples/codec/main.ts` is a complete log doing this.
+or signature at this layer. `recipes/codec/main.ts` is a complete log doing this.
 
 ## Boundaries
 

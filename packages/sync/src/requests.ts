@@ -5,6 +5,8 @@
 // WebSocket's own text-or-binary bit: the socket adapter ignores text, and this ignores
 // bytes. Either end may ask and either may answer, so nothing here says which end is which.
 
+import { codecError } from '@aweftjs/codec';
+
 import type { SocketLike } from './channel.ts';
 import type { WireReason } from './frame.ts';
 
@@ -70,8 +72,19 @@ const SOCKET_OPEN = 1;
 // every request, so the second's asks would resolve with the first's answers.
 const taken = new WeakSet<SocketLike>();
 
-const requestError = (reason: string, message: string, reasons?: readonly WireReason[]): RequestError =>
-	Object.assign(new Error(message), reasons === undefined ? { reason } : { reason, reasons });
+const requestError = (reason: string, detail: string, fix: string, reasons?: readonly WireReason[]): RequestError => {
+	const error = codecError(reason, detail, fix);
+	return reasons === undefined ? error : Object.assign(error, { reasons });
+};
+
+// What a caller can do about a failure the other end raised. The answerer's own remedy, when
+// it had one, is already inside the message that crossed.
+const REMOTE_FIX = 'Handle this reason where the ask was made, or fix the answerer that raised it.';
+
+// The other end wrote its own message and it crosses whole, so it replaces the rendering here.
+// Rendering it again would say the reason twice and push what the answerer said off the front.
+const crossed = (reason: string, message: string, reasons?: readonly WireReason[]): RequestError =>
+	Object.assign(requestError(reason, message, REMOTE_FIX, reasons), { message });
 
 const isReason = (value: unknown): value is WireReason => {
 	const held = value as { code?: unknown; message?: unknown } | null;
@@ -90,10 +103,10 @@ const errorFrame = (error: unknown): { reason: string; message: string; reasons?
 /** The error an answer's `error` field becomes here. A malformed one is `failed` with what it said. */
 const errorOf = (value: unknown): RequestError => {
 	const held = value as { reason?: unknown; message?: unknown; reasons?: unknown } | null;
-	if (held === null || typeof held !== 'object') return requestError('failed', String(value));
+	if (held === null || typeof held !== 'object') return crossed('failed', String(value));
 	const reason = typeof held.reason === 'string' ? held.reason : 'failed';
 	const reasons = Array.isArray(held.reasons) ? held.reasons.filter(isReason) : undefined;
-	return requestError(reason, String(held.message ?? reason), reasons?.length ? reasons : undefined);
+	return crossed(reason, String(held.message ?? reason), reasons?.length ? reasons : undefined);
 };
 
 /**
@@ -111,6 +124,8 @@ const errorOf = (value: unknown): RequestError => {
  * that arrives with no answerer registered is answered `missing`. One channel per socket: a
  * second `requests` on the same socket throws `duplicate` until the first has stopped.
  *
+ * Throws: `duplicate` when this socket already has a request channel.
+ *
  * Example:
  *   const asks = requests(socket);
  *   asks.answer((name, args, progress) => handle(name, args, progress));
@@ -118,7 +133,8 @@ const errorOf = (value: unknown): RequestError => {
  */
 export const requests = (socket: SocketLike): Requests => {
 	if (taken.has(socket)) {
-		throw requestError('duplicate', 'this socket already has a request channel; one requests() per socket, both directions');
+		throw requestError('duplicate', 'this socket already has a request channel; one requests() per socket, both directions',
+			'Reuse the requests() this socket already has, or stop it first.');
 	}
 	taken.add(socket);
 	const pending = new Map<number, Waiting>();
@@ -153,7 +169,8 @@ export const requests = (socket: SocketLike): Requests => {
 		taken.delete(socket);
 		for (const [, waiting] of pending) {
 			clearTimeout(waiting.timer);
-			waiting.fail(requestError('closed', 'the socket closed before the answer arrived'));
+			waiting.fail(requestError('closed', 'the socket closed before the answer arrived',
+				'Reconnect and ask again; a socket that closed answers nothing.'));
 		}
 		pending.clear();
 	};
@@ -239,7 +256,8 @@ export const requests = (socket: SocketLike): Requests => {
 	return {
 		ask: (name, args, options = {}) => new Promise((resolve, reject) => {
 			if (over) {
-				reject(requestError('closed', 'the socket has closed'));
+				reject(requestError('closed', 'the socket has closed',
+					'Open a new socket and make a fresh requests() on it.'));
 				return;
 			}
 			const id = next;
@@ -249,24 +267,28 @@ export const requests = (socket: SocketLike): Requests => {
 			try {
 				sent = send({ id, name, args: args === undefined ? null : args });
 			} catch (error) {
-				reject(requestError('not-data', `${name}: the arguments could not be encoded: ${String((error as Error).message)}`));
+				reject(requestError('not-data', `${name}: the arguments could not be encoded: ${String((error as Error).message)}`,
+					'Send arguments JSON.stringify can carry.'));
 				return;
 			}
 			if (!sent) {
-				reject(requestError('closed', 'the socket is not open'));
+				reject(requestError('closed', 'the socket is not open',
+					'Wait until the socket opens, then ask again.'));
 				return;
 			}
 			if (options.timeout !== undefined) {
 				waiting.timer = setTimeout(() => {
 					if (!pending.has(id)) return;
 					pending.delete(id);
-					reject(requestError('timeout', `${name} was not answered within ${options.timeout} ms`));
+					reject(requestError('timeout', `${name} was not answered within ${options.timeout} ms`,
+						'Raise the timeout, or check that the other end answers this name.'));
 				}, options.timeout);
 			}
 			pending.set(id, waiting);
 		}),
 		answer: (fn) => {
-			if (answerer !== undefined) throw requestError('answering', 'something already answers on this socket');
+			if (answerer !== undefined) throw requestError('answering', 'something already answers on this socket',
+				'Stop the answerer already registered before adding another.');
 			answerer = fn;
 			return () => { if (answerer === fn) answerer = undefined; };
 		},

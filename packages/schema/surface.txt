@@ -1,4 +1,4 @@
-type Commit: interface Commit { readonly deltas: readonly Delta[]; readonly tag?: Uint8Array; } (from @aweftjs/core)
+type Commit: interface Commit { readonly deltas: readonly Delta[]; readonly tag?: Tag; } (from @aweftjs/core)
 type Refusal: interface Refusal { readonly code: string; readonly message: string; readonly path?: readonly string[]; } (from @aweftjs/core)
 type Shape: type Shape = ShapeOf | ListOf | TableOf;
 type StandardSchema: interface StandardSchema { readonly '~standard': { readonly version: 1; readonly vendor: string; validate(value: unknown): StandardResult | Promise<StandardResult>; }; }

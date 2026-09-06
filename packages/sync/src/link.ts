@@ -10,7 +10,7 @@
 // networks on one document work: a commit that lands through this link is an ordinary local
 // commit to every other link, store and watcher holding the same document (design 055).
 
-import { type Commit, idToText } from '@aweftjs/codec';
+import { type Commit, codecError, idToText } from '@aweftjs/codec';
 import { apply, idOf, kindOf, snapshot } from '@aweftjs/core';
 
 import type { Channel } from './channel.ts';
@@ -98,9 +98,11 @@ interface Topic {
 
 const DEFAULT_WINDOW = 256;
 
+// One fix covers every fault a topic can end with, whatever the cause: the topic is over and
+// only a fresh share brings the document back.
 /** A fault the topic ends with, as an error `ready` can be rejected with. */
 const faulted = (reason: string, message: string): Error =>
-	Object.assign(new Error(`${reason}: ${message}`), { reason });
+	codecError(reason, message, 'Share the document again on a new link; a topic that ended does not resume.');
 
 /**
  * Share documents with the other end of a channel.

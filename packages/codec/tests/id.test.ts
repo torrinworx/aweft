@@ -41,8 +41,8 @@ test('the textual form is sixteen characters and round trips', () => {
 });
 
 test('the textual form has no padding and no characters needing escapes', () => {
-	assert.equal(idToText(bytesFromHex('000000000000000000000000')), 'AAAAAAAAAAAAAAAA');
-	assert.equal(idToText(bytesFromHex('ffffffffffffffffffffffff')), '________________');
+	assert.equal(idToText(assertId(bytesFromHex('000000000000000000000000'))), 'AAAAAAAAAAAAAAAA');
+	assert.equal(idToText(assertId(bytesFromHex('ffffffffffffffffffffffff'))), '________________');
 	assert.match(idToText(createId()), /^[A-Za-z0-9_-]{16}$/);
 });
 
