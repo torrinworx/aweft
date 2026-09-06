@@ -1,12 +1,20 @@
 // What every module here reads off the loader's props: the application's store.
 
+import { codecError } from '@aweftjs/codec';
 import type { Store } from '@aweftjs/store';
 
-/** The store the loader was made with. Loud when it was not, rather than undefined at the first write. */
+/**
+ * The store the loader was made with. Loud when it was not, rather than undefined at the first write.
+ *
+ * Throws: `no-store` when the loader's props carry no store.
+ */
 export const storeOf = (props: Readonly<Record<string, unknown>>): Store => {
 	const store = props.store as Store | undefined;
 	if (store === undefined || typeof store.open !== 'function') {
-		throw new Error('auth: the loader needs a store in its props: createLoader({ sources, props: { store } })');
+		throw codecError(
+			'no-store', 'the loader needs a store in its props',
+			'Build it as createLoader({ sources, props: { store } }).',
+		);
 	}
 	return store;
 };

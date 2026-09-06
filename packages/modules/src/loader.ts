@@ -24,10 +24,13 @@ export interface Loader {
 	 * Returns: the named instances, keyed by name. A module already loaded is handed back as
 	 * it is; its factory does not run again.
 	 *
-	 * Throws a `ModulesError` when a name is in no source (`missing`), has only configuration
-	 * (`no-implementation`), sits in a dependency cycle (`cycle`), needs two dependencies whose
-	 * names end the same way (`ambiguous-import`), or whose factory threw (`failed`, with the
-	 * cause). Whatever was instantiated before the failure stays loaded.
+	 * Throws: a `ModulesError` naming the rule. `missing` when a name is in no source, when a
+	 * dependency it needs is not loaded, or when a factory unloaded it while this load was
+	 * running; `no-implementation` when every file for a name is configuration only; `cycle` for
+	 * a dependency cycle; `ambiguous-import` when two dependencies end in the same segment;
+	 * `duplicate` when one source lists a name twice; `invalid-name` when a source's path leaves
+	 * no name; and `failed` when a factory threw, carrying it as the cause. Whatever was
+	 * instantiated before the failure stays loaded.
 	 *
 	 * Example:
 	 *   const { 'auth/Session': session } = await loader.load(['auth/Session']);
@@ -100,7 +103,10 @@ export const createLoader = (
 			const seen = new Set<string>();
 			for (const candidate of await source.candidates()) {
 				if (seen.has(candidate.name)) {
-					throw modulesError('duplicate', candidate.name, `${candidate.name} appears twice in one source`);
+					throw modulesError(
+						'duplicate', candidate.name, `${candidate.name} appears twice in one source`,
+						'Keep one file per module name in a source.',
+					);
 				}
 				seen.add(candidate.name);
 				let list = byName.get(candidate.name);
@@ -119,13 +125,17 @@ export const createLoader = (
 				throw modulesError(
 					'ambiguous-import', definition.name,
 					`${definition.name} depends on two modules named ${short}; imports are keyed by the last segment`,
+					'Rename one of the two modules so their last segments differ.',
 				);
 			}
 			const instance = held.get(dep);
 			if (instance === undefined) {
 				// Unreachable through `load`, which orders dependencies first; kept as a loud stop
 				// rather than an undefined import.
-				throw modulesError('missing', definition.name, `${definition.name} needs ${dep}, which is not loaded`);
+				throw modulesError(
+					'missing', definition.name, `${definition.name} needs ${dep}, which is not loaded`,
+					'Load the dependency first, or list it in the module deps.',
+				);
 			}
 			imports[short] = instance.instance;
 		}
@@ -143,7 +153,10 @@ export const createLoader = (
 		try {
 			instance = await definition.factory(moduleProps);
 		} catch (error) {
-			throw modulesError('failed', definition.name, `${definition.name} failed to load: ${String((error as Error)?.message ?? error)}`, error);
+			throw modulesError(
+				'failed', definition.name, `${definition.name} failed to load: ${String((error as Error)?.message ?? error)}`,
+				'Fix what the factory threw; the error carries it as its cause.', error,
+			);
 		}
 		held.set(definition.name, { instance, deps: definition.deps });
 		return instance;
@@ -178,7 +191,10 @@ export const createLoader = (
 			// A factory is user code and may have unloaded a sibling while this load was running.
 			const found = held.get(name);
 			if (found === undefined) {
-				throw modulesError('missing', name, `${name} was unloaded while it was being loaded`);
+				throw modulesError(
+					'missing', name, `${name} was unloaded while it was being loaded`,
+					'Do not unload a module from a factory while a load is running.',
+				);
 			}
 			out[name] = found.instance;
 		}

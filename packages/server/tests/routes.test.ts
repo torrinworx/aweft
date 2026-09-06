@@ -101,7 +101,7 @@ test('a conflict met at request time is 500 and reported as routes', async () =>
 	await server.start();
 	await loader.load(['app/Two']);
 	assert.equal((await listening.handlers().request(request('/same'), peer)).status, 500);
-	assert.deepEqual(failed, ['routes: server: app/One and app/Two both declare GET /same']);
+	assert.deepEqual(failed, ['routes: route-conflict: app/One and app/Two both declare GET /same. Rename one of the two routes, or unload one of the modules.']);
 	await server.stop();
 });
 
@@ -113,7 +113,7 @@ test('a route that answers with something that is not a Response is 500 and repo
 	assert.equal((await handlers.request(request('/plain'), peer)).status, 500);
 	assert.equal((await handlers.request(request('/nothing'), peer)).status, 500);
 	assert.equal(failed.length, 2);
-	assert.match(failed[0]!, /^app\/Odd: server: app\/Odd answered GET \/plain with something that is not a Response/);
+	assert.match(failed[0]!, /^app\/Odd: not-a-response: app\/Odd answered GET \/plain with something that is not a Response/);
 	await server.stop();
 });
 

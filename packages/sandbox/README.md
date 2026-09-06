@@ -8,7 +8,7 @@ module inside can reach came through that link, by name.
 what crosses the link: the module document, the props, the granted names, and plain data, and
 nothing else. The wall around the room is a runner's, and the operator's. `child` runs under
 Node's permission model, which Node itself calls a seat belt rather than a boundary; put a jail
-around it (the `examples/` show bubblewrap and docker) when a room must be safe beside your
+around it (the `recipes/` show bubblewrap and docker) when a room must be safe beside your
 database. `iframe` runs in an opaque-origin frame, which is the browser's own boundary.
 `inProcess` isolates nothing, and is for tests and for code you trust.
 
@@ -107,7 +107,7 @@ unless given), and `wrap` (a command in front of the Node command: a bubblewrap 
 `sudo -u`). `createSandbox` takes `limits.callMs` (a call the room does not answer in time
 errors with `timeout`), because a room of any runner can hang. None of the limits ship with a
 value. A runner is `start()` returning a channel and
-`stop()`; a room on another machine is the same runner over a socket, and `examples/` shows a
+`stop()`; a room on another machine is the same runner over a socket, and `recipes/` shows a
 docker one whose channel is the container's stdin and stdout.
 
 A runner proves what it stops by passing `roomChecks()` from `@aweftjs/testing`, an append-only

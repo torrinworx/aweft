@@ -19,6 +19,10 @@ const refuses = (markup: string, message: RegExp): void => {
 		assert.ok(error instanceof TransformError, 'a fault in the source is a TransformError');
 		assert.match((error as TransformError).message, message);
 		assert.equal(typeof (error as TransformError).at, 'number');
+		// Every refusal in the stack carries a token to branch on and a remedy to act on
+		// (design 101), and a build-time one is read by whoever is fixing the page.
+		assert.match((error as TransformError).reason, /^[a-z][a-z-]*$/, 'a stable reason token');
+		assert.match((error as TransformError).fix, /^[A-Z].*\.$/, 'a remedy, written as a sentence');
 		return true;
 	});
 };

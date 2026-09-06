@@ -17,6 +17,9 @@ import type { DocumentLike, ParentLike } from './types.ts';
  * dynamic part (a scope, a component, each item of a list) is bracketed with `<!--[-->` and
  * `<!--]-->` so `hydrate` can find it. No doctype; the page adds its own.
  *
+ * Throws: whatever mounting the item throws, which for a caller mistake is an assert, loud
+ * in development and stripped in a release build.
+ *
  * Example:
  *   const page = await render(h(App, { url }));
  */
@@ -49,6 +52,10 @@ export const render = async (item: unknown, options: { context?: unknown } = {})
  * replaced with what the client built. One live hydration per target: a second call over the
  * same target asserts, because it would claim the first one's nodes.
  *
+ * Throws: an assert, loud in development and stripped in a release build, for a second live
+ * hydration over the same target, a target with no document, or markup that does not match
+ * what the client builds.
+ *
  * Example:
  *   hydrate(document.body, h(App, { url: location.pathname }));
  */
@@ -59,7 +66,7 @@ export const hydrate = (target: ParentLike, item: unknown, context?: unknown): R
 	const own = target.ownerDocument;
 	const page = (globalThis as { document?: DocumentLike }).document;
 	const document = own ?? page;
-	assert(document !== undefined && document !== null, 'hydrate needs a document: the target has none and there is no page');
+	assert(document !== undefined && document !== null, 'hydrate needs a document: the target has none and there is no page; hydrate into a node from the page, or call render');
 
 	const hydration = new Hydration();
 	const root = createRoot(document!, false, hydration);

@@ -72,7 +72,7 @@ test('several cookies of the name: the first that names a live session wins, and
 test('a lifetime that is not a positive number is refused when the module is made', async () => {
 	const store = newStore();
 	for (const sessionMs of ['60000', -1, 0, Number.NaN, Number.POSITIVE_INFINITY, null, true]) {
-		await assert.rejects(module<Session>('Session', store, {}, { sessionMs }), /sessionMs is a positive number of milliseconds/, JSON.stringify(sessionMs));
+		await assert.rejects(module<Session>('Session', store, {}, { sessionMs }), /sessionMs/, JSON.stringify(sessionMs));
 	}
 	await store.stop();
 });

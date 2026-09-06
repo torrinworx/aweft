@@ -32,6 +32,9 @@ export const entryNames = (document: object): string[] =>
  * document is a candidate on the next `load`, and `exports()` compiles the source as it is at
  * that moment.
  *
+ * Throws: a `ModulesError` with reason `missing`, out of the `load` that is using it, when an
+ * entry leaves the document between being listed and being compiled.
+ *
  * Example:
  *   const plugins = createObject({ 'plugin/Shout': { source: 'export default () => ({ ... })' } });
  *   const loader = createLoader({ sources: [fromDocument(plugins)] });
@@ -44,7 +47,10 @@ export const fromDocument = (document: object, options: { readonly compile?: Com
 			exports: async () => {
 				const source = sourceOf(document, name);
 				if (source === undefined) {
-					throw modulesError('missing', name, `${name} has no source any more; it left the document after it was listed`);
+					throw modulesError(
+						'missing', name, `${name} has no source any more; it left the document after it was listed`,
+						'Leave the entry in the document until the load is over.',
+					);
 				}
 				return compile(source);
 			},

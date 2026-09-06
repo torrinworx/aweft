@@ -56,7 +56,7 @@ const nodeAt = (root: ElementLike, path: readonly number[]): ElementLike => {
 	for (const index of path) {
 		let child = node.firstChild;
 		for (let i = 0; i < index && child !== null; i++) child = child.nextSibling;
-		assert(child !== null, 'a template edit names a node the template does not have');
+		assert(child !== null, 'a template edit names a node the template does not have; check the edit path against the element tree');
 		node = child!;
 	}
 	return node as ElementLike;
@@ -150,6 +150,10 @@ const plan = (edits: readonly TemplateEdit[]): Step[] => {
  * order from the one they are given in: every element's children before its own properties,
  * so a property that rewrites the element's content still wins.
  *
+ * Throws: the instancing function asserts, loud in development and stripped in a release
+ * build, for an edit path the element tree does not have, one element's child edits listed in
+ * two places, or `undefined` where a value goes.
+ *
  * Example:
  *   const row = template(['li', { class: 'row' }, ['span', null]], [['child', [0], -1]]);
  *   mount(list, row([title]));
@@ -192,7 +196,7 @@ export const template = (spec: TemplateElement, edits: readonly TemplateEdit[]):
 			if (step.kind === 'props') {
 				const props = values[step.at];
 				assert(props === null || props === undefined || typeof props === 'object',
-					'a template property edit takes an object of properties');
+					'a template property edit takes an object of properties; pass null for none');
 				bindProps(element, (props ?? {}) as Record<string, unknown>, signals);
 			} else {
 				applyChildren(element, step, values, document, signals);
@@ -238,7 +242,7 @@ const applyChildren = (
 		const anchor = target < statics.length ? statics[target]! : null;
 
 		const value = values[step.at[i]!];
-		assert(value !== undefined, 'cannot mount undefined; hide something with null');
+		assert(value !== undefined, 'cannot mount undefined; hide something with null instead');
 		if (value === null || value === undefined) continue;
 
 		const placed = (node: NodeLike): void => {

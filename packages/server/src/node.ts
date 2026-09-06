@@ -67,7 +67,7 @@ const bounded = (req: IncomingMessage, max: number): ReadableStream => {
 			seen += chunk.length;
 			if (seen > max) {
 				req.destroy();
-				done(new Error(`the request body is over ${max} bytes`));
+				done(serverError('over-bound', `the request body is over ${max} bytes`, 'Send a smaller body, or raise maxPayload on the listener.'));
 				return;
 			}
 			done(null, chunk);
@@ -131,6 +131,9 @@ const refuseUpgrade = async (response: Response, socket: Duplex): Promise<void> 
  *
  * Returns: the listener, with `port` readable once started.
  *
+ * Throws: a ServerError with reason `started` when it is already started. A request body over
+ * `maxPayload` ends the body stream with `over-bound` rather than being read to the end.
+ *
  * Example:
  *   const listener = node({ port: 8080, heartbeatMs: 30_000 });
  *   const server = createServer({ loader, gate, listener });
@@ -173,7 +176,7 @@ export const node = (options: NodeOptions): NodeListener => {
 		},
 
 		start: async (handlers: ListenerHandlers) => {
-			if (server !== undefined) throw serverError('started', 'this listener is already started');
+			if (server !== undefined) throw serverError('started', 'this listener is already started', 'Call stop before starting it again.');
 			const http = options.server ?? createHttpServer();
 			const accepting = new WebSocketServer({
 				noServer: true, ...(options.maxPayload === undefined ? {} : { maxPayload: options.maxPayload }),

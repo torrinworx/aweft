@@ -5,17 +5,18 @@
 		"schema":  { "tier": 3, "plane": "isomorphic", "imports": ["codec", "core"] },
 		"sync":    { "tier": 4, "plane": "isomorphic", "imports": ["codec", "core"] },
 		"store":   { "tier": 4, "plane": "isomorphic", "imports": ["codec", "core"] },
-		"modules": { "tier": 5, "plane": "isomorphic", "imports": ["core"] },
-		"sandbox": { "tier": 5, "plane": "isomorphic", "imports": ["core", "modules", "sync"] },
-		"dom":     { "tier": 6, "plane": "client", "imports": ["core"] },
-		"server":  { "tier": 6, "plane": "server", "imports": ["core", "modules", "sync"] },
+		"modules": { "tier": 5, "plane": "isomorphic", "imports": ["codec", "core"] },
+		"sandbox": { "tier": 5, "plane": "isomorphic", "imports": ["codec", "core", "modules", "sync"] },
+		"dom":     { "tier": 6, "plane": "client", "imports": ["codec", "core"] },
+		"server":  { "tier": 6, "plane": "server", "imports": ["codec", "core", "modules", "sync"] },
 		"ui":      { "tier": 7, "plane": "client", "imports": ["core", "dom"] },
 		"icons":   { "tier": 7, "plane": "client", "imports": ["core"] },
-		"jobs":    { "tier": 7, "plane": "server", "imports": ["core"] },
+		"jobs":    { "tier": 7, "plane": "server", "imports": ["codec", "core"] },
 		"auth":    { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
 		"aweft":   { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
 		"ssg":     { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
 		"testing": { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
+		"debug":   { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
 		"build":   { "tier": "integrator", "plane": "isomorphic", "imports": "*" }
 	}
 }

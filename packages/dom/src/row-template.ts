@@ -287,7 +287,8 @@ const stamp = (template: RowTemplate, values: readonly Values[]): unknown => {
 	// onto the wrong elements. Everything else the contract asks for is still unchecked.
 	assert(values.length === template.calls.length,
 		`a component under each must call h the same number of times on every row: the first row made `
-		+ `${template.calls.length} and this one made ${values.length}`);
+		+ `${template.calls.length} and this one made ${values.length}`
+		+ '; put the branch in a child component, or bind it as a value');
 	const row = (template.row as NodeLike & { cloneNode(deep: boolean): NodeLike }).cloneNode(true);
 	const nodes: NodeLike[] = [];
 	for (const path of template.paths) nodes.push(nodeAt(row, path));

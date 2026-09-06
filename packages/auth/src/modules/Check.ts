@@ -1,6 +1,7 @@
 // auth/Check: does anyone have this email. Public, so a sign-in form can ask before it asks
 // for a password.
 
+import { codecError } from '@aweftjs/codec';
 import type { ModuleProps } from '@aweftjs/modules';
 
 import { storeOf } from '../props.ts';
@@ -21,7 +22,9 @@ export default (props: ModuleProps): Check => {
 		exists,
 		call: async (args) => {
 			const email: unknown = (args as { email?: unknown } | null)?.email;
-			if (typeof email !== 'string') throw Object.assign(new Error('auth/Check asks for { email }'), { reason: 'malformed' });
+			if (typeof email !== 'string') {
+				throw codecError('malformed', 'auth/Check was called without an email string', 'Call it as { email: "someone@example.com" }.');
+			}
 			return { exists: await exists(email) };
 		},
 	};

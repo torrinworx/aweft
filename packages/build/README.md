@@ -61,7 +61,9 @@ A spread is the one form with two spellings. `=${props}` is the explicit one; a 
 with no name in front of it, means the same thing. Both compile to `{ ...props }`.
 
 What compiling changes is when a mistake is reported: every fault the parser would have thrown at
-render time is thrown here instead, as a `TransformError` carrying `at`, the offset in the file.
+render time is thrown here instead, as a `TransformError` carrying `at`, the offset in the file,
+and the `reason` and `fix` every refusal in the stack carries. `packages/build/errors.txt` lists
+every reason.
 One check does not survive compilation, and it is named rather than hidden. The parser asserts
 that a spread is an object; a compiled template writes `{ ...expr }`, which spreads whatever it
 is handed. A string spreads as one attribute per character, so `=${'not a tag'}` renders
@@ -163,7 +165,7 @@ When source that arrives at run time is compiled, or by whom.
 
 ## Proven by
 
-`examples/build/main.ts` builds a real page through the transforms, runs it in all three modes,
+`recipes/build/main.ts` builds a real page through the transforms, runs it in all three modes,
 and checks that a release build of the binding's own source has no asserts left in it. The
 package's own suite is the equivalence suite: every fixture runs twice, once as written and
 once transformed, mounted, rendered and hydrated, over a document whose nodes clone and one

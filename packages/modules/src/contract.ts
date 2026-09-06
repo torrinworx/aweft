@@ -4,6 +4,8 @@
 // source lists candidates, each a name and a way to get those exports, and evaluates nothing
 // until a loader asks. Nothing here runs code.
 
+import { codecError } from '@aweftjs/codec';
+
 /**
  * What a module's factory receives.
  *
@@ -67,5 +69,5 @@ export interface ModulesError extends Error {
 	readonly module: string;
 }
 
-export const modulesError = (reason: string, module: string, detail: string, cause?: unknown): ModulesError =>
-	Object.assign(new Error(`modules: ${detail}`, cause === undefined ? undefined : { cause }), { reason, module });
+export const modulesError = (reason: string, module: string, detail: string, fix: string, cause?: unknown): ModulesError =>
+	Object.assign(codecError(reason, detail, fix), cause === undefined ? { module } : { module, cause });

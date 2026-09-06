@@ -11,7 +11,7 @@
 
 import type { Node } from './ast.ts';
 import { type Child, type Element, type Property, childCode, collapseText, emitCall } from './element.ts';
-import { TransformError } from './error.ts';
+import { transformError } from './error.ts';
 
 export interface MarkupReader {
 	/** The name to call for an element: always `dom`'s `h`, whatever else the file calls `h`.
@@ -72,7 +72,10 @@ const readAttributes = (c: Cursor, frame: Frame, reader: MarkupReader): boolean 
 		}
 		skipSpace(c);
 		if (atHole(c)) continue;
-		if (atEnd(c)) throw new TransformError(`unterminated <${nameOf(frame)}>`, frame.at);
+		if (atEnd(c)) {
+			throw transformError('unterminated-tag', `unterminated <${nameOf(frame)}>`,
+				'Close the opening tag with > or />.', frame.at);
+		}
 
 		const text = rest(c);
 		if (text.startsWith('/>')) {
@@ -86,14 +89,19 @@ const readAttributes = (c: Cursor, frame: Frame, reader: MarkupReader): boolean 
 		if (text[0] === '=') {
 			c.at += 1;
 			skipSpace(c);
-			if (!atHole(c)) throw new TransformError('a spread is written =${object}', here(c));
+			if (!atHole(c)) {
+				throw transformError('spread-needs-hole', 'a spread is written =${object}',
+					'Put the object in a hole, written as =${object}.', here(c));
+			}
 			frame.properties.push({ kind: 'spread', code: reader.code(takeHole(c)) });
 			continue;
 		}
 
 		const match = /^[^\s"'>/=]+/.exec(text);
 		if (match === null) {
-			throw new TransformError(`unexpected ${JSON.stringify(text[0])} in <${nameOf(frame)}>`, here(c));
+			throw transformError('bad-attribute-name',
+				`unexpected ${JSON.stringify(text[0])} in <${nameOf(frame)}>`,
+				'Start the attribute with a name, or close the tag.', here(c));
 		}
 		const name = match[0];
 		c.at += name.length;
@@ -110,7 +118,10 @@ const readAttributes = (c: Cursor, frame: Frame, reader: MarkupReader): boolean 
 			frame.properties.push({ kind: 'expr', name, code: reader.code(takeHole(c)) });
 			continue;
 		}
-		if (atEnd(c)) throw new TransformError(`${name} needs a value`, here(c));
+		if (atEnd(c)) {
+			throw transformError('attribute-needs-value', `${name} needs a value`,
+				'Give the attribute a value, or drop the = to make it true.', here(c));
+		}
 
 		const quote = rest(c)[0];
 		if (quote === '"' || quote === "'") {
@@ -120,7 +131,10 @@ const readAttributes = (c: Cursor, frame: Frame, reader: MarkupReader): boolean 
 		}
 
 		const bare = /^[^\s>]+/.exec(rest(c));
-		if (bare === null) throw new TransformError(`${name} needs a value`, here(c));
+		if (bare === null) {
+			throw transformError('attribute-needs-value', `${name} needs a value`,
+				'Give the attribute a value, or drop the = to make it true.', here(c));
+		}
 		frame.properties.push({ kind: 'static', name, value: bare[0] });
 		c.at += bare[0].length;
 	}
@@ -137,7 +151,10 @@ const quoted = (c: Cursor, name: string, quote: string, reader: MarkupReader): P
 			parts.push({ text: null, code: reader.code(takeHole(c)) });
 			continue;
 		}
-		if (atEnd(c)) throw new TransformError(`unterminated attribute ${name}`, here(c));
+		if (atEnd(c)) {
+			throw transformError('unterminated-attribute', `unterminated attribute ${name}`,
+				'Close the value with the same quote it opened with.', here(c));
+		}
 		const close = rest(c).indexOf(quote);
 		if (close < 0) {
 			piece += rest(c);
@@ -181,7 +198,8 @@ export const readMarkup = (node: Node, reader: MarkupReader): string => {
 	for (const piece of pieces) {
 		const cooked = (piece['value'] as { cooked?: string | null })['cooked'];
 		if (cooked === null || cooked === undefined) {
-			throw new TransformError('markup cannot hold an invalid escape sequence', piece.start);
+			throw transformError('invalid-escape', 'markup cannot hold an invalid escape sequence',
+				'Use an escape the template accepts, or write the character itself.', piece.start);
 		}
 		strings.push(cooked);
 		offsets.push(piece.start);
@@ -229,7 +247,10 @@ export const readMarkup = (node: Node, reader: MarkupReader): string => {
 		if (text0.startsWith('<!--', open)) {
 			flushText();
 			const end = text0.indexOf('-->', open);
-			if (end < 0) throw new TransformError('a comment must end in the same template piece', here(c));
+			if (end < 0) {
+				throw transformError('unterminated-comment', 'a comment must end in the same template piece',
+					'Close the comment with --> before the next hole.', here(c));
+			}
 			c.at += end - open + 3;
 			continue;
 		}
@@ -244,7 +265,10 @@ export const readMarkup = (node: Node, reader: MarkupReader): string => {
 					takeHole(c);
 					continue;
 				}
-				if (atEnd(c)) throw new TransformError('unterminated closing tag', closingAt);
+				if (atEnd(c)) {
+					throw transformError('unterminated-closing-tag', 'unterminated closing tag',
+						'End the closing tag with >.', closingAt);
+				}
 				const end = rest(c).indexOf('>');
 				if (end < 0) {
 					name += rest(c);
@@ -258,10 +282,12 @@ export const readMarkup = (node: Node, reader: MarkupReader): string => {
 			name = name.trim();
 			const frame = stack.pop();
 			if (frame === undefined || frame === root) {
-				throw new TransformError('a closing tag with nothing open', closingAt);
+				throw transformError('nothing-to-close', 'a closing tag with nothing open',
+					'Remove the closing tag, or open the element it closes.', closingAt);
 			}
 			if (name !== '' && frame.tag !== null && frame.tag !== name) {
-				throw new TransformError(`</${name}> closes <${frame.tag}>`, closingAt);
+				throw transformError('mismatched-closing-tag', `</${name}> closes <${frame.tag}>`,
+					'Name the element being closed, or write </> for the innermost one.', closingAt);
 			}
 			close(frame);
 			continue;
@@ -275,7 +301,10 @@ export const readMarkup = (node: Node, reader: MarkupReader): string => {
 			code = reader.code(takeHole(c));
 		} else {
 			const match = /^[^\s/>]+/.exec(rest(c));
-			if (match === null) throw new TransformError('a tag needs a name', openAt);
+			if (match === null) {
+				throw transformError('tag-needs-name', 'a tag needs a name',
+					'Put a tag name after the <, or write the tag as a hole.', openAt);
+			}
 			tag = match[0];
 			code = JSON.stringify(tag);
 			c.at += tag.length;
@@ -285,7 +314,10 @@ export const readMarkup = (node: Node, reader: MarkupReader): string => {
 		else stack.push(frame);
 	}
 	flushText();
-	if (stack.length !== 1) throw new TransformError(`unclosed <${nameOf(top())}>`, top().at);
+	if (stack.length !== 1) {
+		throw transformError('unclosed-element', `unclosed <${nameOf(top())}>`,
+			'Close the element, or write it as <tag /> if it has no children.', top().at);
+	}
 
 	const out = root.children;
 	if (out.length === 0) return 'null';

@@ -18,7 +18,7 @@ export interface Row extends Record<string, unknown> {
 	args: string;
 	/** JSON text of what the function returned. */
 	result?: string;
-	/** JSON text of `{ reason, message }`. */
+	/** JSON text of `{ reason, message }`, with `path` when the reason names one. */
 	error?: string;
 }
 
@@ -38,6 +38,13 @@ interface Waiting {
 	timer: ReturnType<typeof setTimeout> | undefined;
 }
 
+// What a call that could not be answered at all says, whichever end could not answer it; what
+// a caller does with a room that has ended; and what is left to do about a failure the other
+// end raised, whose own remedy is already inside the message that crossed.
+const SAME_VERSION = 'Check that the host and the room run the same version of this package.';
+const CLOSED = 'Make a new sandbox; a room that has stopped does not start again.';
+const REMOTE_FIX = 'Handle this reason where the call was made, or fix the function it names.';
+
 const errorText = (reason: string, message: string, path?: string): string =>
 	JSON.stringify(path === undefined ? { reason, message } : { reason, message, path });
 
@@ -53,6 +60,11 @@ const reasonOf = (error: unknown): string => {
 
 const messageOf = (error: unknown): string =>
 	String((error as { message?: unknown } | null)?.message ?? error);
+
+// The end that raised it wrote its own message and it crosses whole, so it replaces the
+// rendering here (design 101). Rendering it again would say the reason and the remedy twice.
+const crossed = (reason: string, message: string, path?: string): SandboxError =>
+	Object.assign(sandboxError(reason, message, REMOTE_FIX, path), { message });
 
 /**
  * This end of the calls document.
@@ -146,7 +158,7 @@ export const createBridge = (
 			waiting.fail(error);
 			return;
 		}
-		waiting.fail(sandboxError(reasonOf(reported), messageOf(reported), pathOf(reported)));
+		waiting.fail(crossed(reasonOf(reported), messageOf(reported), pathOf(reported)));
 	};
 
 	const scan = (): void => {
@@ -157,7 +169,7 @@ export const createBridge = (
 				// The other end deleted a row it did not write. Nothing will answer it now.
 				pending.delete(id);
 				clearTimeout(waiting.timer);
-				waiting.fail(sandboxError('closed', `the call ${id} vanished before it was answered`));
+				waiting.fail(sandboxError('closed', `the call ${id} vanished before it was answered`, CLOSED));
 			} else if (typeof row.result === 'string' || typeof row.error === 'string') {
 				settle(id, waiting, row);
 			}
@@ -179,7 +191,7 @@ export const createBridge = (
 	const call = (to: string, method: string, args: readonly unknown[]): Promise<unknown> =>
 		new Promise((resolve, reject) => {
 			if (over) {
-				reject(sandboxError('closed', 'the room has stopped'));
+				reject(sandboxError('closed', 'the room has stopped', CLOSED));
 				return;
 			}
 			let text: string;
@@ -189,7 +201,9 @@ export const createBridge = (
 				// A throw while encoding the arguments is a refusal to carry them: report it with a
 				// reason a caller can branch on, the same as the result side does (contract's
 				// SandboxError). A getter that throws mid-walk lands here rather than as a bare throw.
-				reject(reasonOf(error) === 'not-data' ? error : sandboxError('not-data', `${to}.${method}: an argument could not be encoded: ${messageOf(error)}`));
+				reject(reasonOf(error) === 'not-data'
+					? error
+					: sandboxError('not-data', `${to}.${method}: an argument could not be encoded: ${messageOf(error)}`, 'Pass plain JSON data as the arguments.'));
 				return;
 			}
 			const id = `${side}${next}`;
@@ -200,7 +214,10 @@ export const createBridge = (
 					if (!pending.has(id)) return;
 					pending.delete(id);
 					delete calls[id];
-					reject(sandboxError('timeout', `${to}.${method} was not answered within ${options.callMs} ms`));
+					reject(sandboxError(
+						'timeout', `${to}.${method} was not answered within ${options.callMs} ms`,
+						'Raise limits.callMs, or make the call inside the room answer sooner.',
+					));
 				}, options.callMs);
 			}
 			pending.set(id, waiting);
@@ -215,7 +232,7 @@ export const createBridge = (
 			stopWatching();
 			for (const [id, waiting] of pending) {
 				clearTimeout(waiting.timer);
-				waiting.fail(sandboxError('closed', `the room stopped before ${id} was answered`));
+				waiting.fail(sandboxError('closed', `the room stopped before ${id} was answered`, CLOSED));
 			}
 			pending.clear();
 		},

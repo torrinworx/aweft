@@ -11,7 +11,7 @@
 
 import { type Channel, fromMessagePort } from '@aweftjs/sync';
 
-import type { Runner } from './contract.ts';
+import { type Runner, sandboxError } from './contract.ts';
 
 /** What this runner needs from an iframe element. */
 export interface FrameLike {
@@ -64,6 +64,9 @@ const inScript = (value: unknown): string => JSON.stringify(value).replaceAll('<
  *
  * Returns: a runner. The frame it makes is `element` once started, so a page can size it.
  *
+ * Throws: a SandboxError with reason `no-page` when there is no document and no MessageChannel
+ * to be found, which is every runtime that is not a page.
+ *
  * Example:
  *   const runner = iframe({ inside: '/room/inside.js', into: document.body });
  *   const sandbox = await createSandbox({ runner, modules, grants });
@@ -72,7 +75,10 @@ export const iframe = (options: FrameOptions): Runner & { readonly element: Fram
 	const doc = options.document ?? (globalThis as { document?: DocumentLike }).document;
 	const Channel = options.MessageChannel ?? (globalThis as unknown as { MessageChannel?: new () => MessageChannelLike }).MessageChannel;
 	if (doc === undefined || Channel === undefined) {
-		throw new Error('sandbox: the iframe runner needs a document and a MessageChannel; pass them when there is no page');
+		throw sandboxError(
+			'no-page', 'the iframe runner found no document and no MessageChannel',
+			'Pass document and MessageChannel to iframe when there is no page.',
+		);
 	}
 
 	let frame: FrameLike | undefined;

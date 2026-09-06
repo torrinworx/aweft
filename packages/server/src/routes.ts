@@ -31,7 +31,10 @@ export const routeTable = (loader: Loader): Map<string, Owned> => {
 			if (typeof route !== 'function') continue;
 			const held = table.get(key);
 			if (held !== undefined) {
-				throw serverError('route-conflict', `${held.name} and ${name} both declare ${key}`);
+				throw serverError(
+					'route-conflict', `${held.name} and ${name} both declare ${key}`,
+					'Rename one of the two routes, or unload one of the modules.',
+				);
 			}
 			table.set(key, { name, instance, route });
 		}

@@ -26,7 +26,7 @@ interface Channel {
 
 `inProcess()`, `fromWebSocket(socket)` and `fromMessagePort(port)` ship. Anything else is
 yours, and it is the same size: put `encodeFrame(frame)` on the wire, hand `decodeFrame(bytes)`
-back. `examples/sync/main.ts` writes one over a TCP socket in about forty lines and runs the
+back. `recipes/sync/main.ts` writes one over a TCP socket in about forty lines and runs the
 whole scenario over it, beside the shipped ones, to make the point that they are not special.
 
 Delivery is always asynchronous, on every channel including the in-process one. Applying a
@@ -194,6 +194,23 @@ first has stopped.
 
 The frames are `{ id, name, args }`, `{ id, result }`, `{ id, progress }` and `{ id, error }`,
 so a client in another language writes them by hand. Design 073.
+
+## A remote error keeps its own words
+
+Every refusal in this stack renders as `reason: detail. fix`. An error that came back from the
+other end of `requests` is the exception: its `message` is the answerer's message, unchanged,
+because you asked a remote question and that is the remote answer. The `reason` and the `fix`
+are still on the error object, and `explain(error)` from `@aweftjs/debug` shows all three.
+
+```ts
+try {
+	await asking.ask('rebuild', { id });
+} catch (e) {
+	console.log(e.message);   // what the far end said
+	console.log(e.reason);    // what to branch on
+	console.log(e.fix);       // what to do about it
+}
+```
 
 ## Boundaries
 

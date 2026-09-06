@@ -1,6 +1,6 @@
 // auth/Session: sessions as documents, the cookie, and who a request is (design 074).
 
-import { createId, idFromText, idToText } from '@aweftjs/codec';
+import { codecError, createId, idFromText, idToText } from '@aweftjs/codec';
 import { atomic } from '@aweftjs/core';
 import type { ModuleProps } from '@aweftjs/modules';
 import type { Identified } from '@aweftjs/server';
@@ -40,7 +40,10 @@ export default ({ config, ...props }: ModuleProps): Session => {
 	// number is a mistake to stop here rather than a session that quietly never expires.
 	if (config.sessionMs !== undefined
 		&& !(typeof config.sessionMs === 'number' && Number.isFinite(config.sessionMs) && config.sessionMs > 0)) {
-		throw new Error(`auth/Session: sessionMs is a positive number of milliseconds, got ${JSON.stringify(config.sessionMs)}`);
+		throw codecError(
+			'invalid-config', `auth/Session was given sessionMs ${JSON.stringify(config.sessionMs)}`,
+			'Set sessionMs to a positive number of milliseconds, or leave it out.',
+		);
 	}
 	const sessionMs = config.sessionMs as number | undefined;
 	const doc = (token: string): string => `session:${token}`;

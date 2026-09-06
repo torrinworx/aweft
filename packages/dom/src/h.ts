@@ -31,21 +31,25 @@ import { isNodeLike } from './types.ts';
  * Returns: the element itself when nothing in it is reactive, so it can be used as a node;
  * otherwise a value `mount` binds. For a component, a mounter to hand to `mount`.
  *
+ * Throws: an assert, loud in development and stripped in a release build, for a null tag, a
+ * tag that is neither an element name nor a component, `undefined` as a child, children given
+ * both ways, or an object written as an attribute.
+ *
  * Example:
  *   mount(document.body, h('button', { $onclick: () => count.set(count.get() + 1) }, 'clicked ', count));
  */
 export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...children: unknown[]): unknown => {
-	assert(tag !== null && tag !== undefined, 'a tag name cannot be null or undefined');
+	assert(tag !== null && tag !== undefined, 'a tag name cannot be null or undefined; pass an element name, a node or a component');
 	const given = props ?? {};
 
 	if (children.length === 0) {
 		assert(given['children'] === undefined || given['children'] === null || Array.isArray(given['children']),
-			'children must be null or an array');
+			'children must be null or an array; wrap a single child in an array');
 		children = (given['children'] as unknown[] | null | undefined) ?? [];
 	} else {
 		assert(given['children'] === undefined || given['children'] === null
 			|| (Array.isArray(given['children']) && given['children'].length === 0),
-			'an element with a body cannot also take children as a property');
+			'an element with a body cannot also take children as a property; drop one of the two');
 	}
 
 	if (typeof tag === 'function') {
@@ -63,7 +67,7 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
 		// A node from outside this row: nothing a clone could carry.
 		if (tracing) traceNode(element);
 	} else {
-		assert(typeof tag === 'string', `unsupported tag: ${typeof tag}`);
+		assert(typeof tag === 'string', `unsupported tag: ${typeof tag}; pass an element name, a node or a component`);
 		element = markMade(activeDocument().createElement(String(tag)));
 	}
 
@@ -79,7 +83,7 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
 
 	for (let at = 0; at < children.length; at += 1) {
 		const child = children[at];
-		assert(child !== undefined, 'cannot mount undefined; hide something with null');
+		assert(child !== undefined, 'cannot mount undefined; hide something with null instead');
 		if (child === null || child === undefined) continue;
 		if (isBound(child)) {
 			if (tracing) traceNode(child);

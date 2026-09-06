@@ -84,6 +84,14 @@ const pluginsFor = (filename: string | undefined): ('jsx' | 'typescript')[] => {
  *
  * Returns: the transformed code and its source map.
  *
+ * Throws: a `TransformError` for a fault in the markup or the JSX, carrying `at`, the offset
+ * in the source. Its `reason` names the rule broken: `unterminated-tag`, `unclosed-element`,
+ * `mismatched-closing-tag`, `nothing-to-close`, `unterminated-closing-tag`, `tag-needs-name`,
+ * `bad-attribute-name`, `attribute-needs-value`, `unterminated-attribute`, `spread-needs-hole`,
+ * `unterminated-comment`, `invalid-escape`, `namespaced-tag`, `namespaced-attribute`,
+ * `empty-expression` or `unsupported-child`. Source the parser cannot read throws the parser's
+ * own error instead.
+ *
  * Example:
  *   const { code, map } = transform(source, { filename: 'app.tsx', release: true });
  */

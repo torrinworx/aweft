@@ -86,6 +86,10 @@ export const joined = (parts: unknown[]): unknown =>
  *
  * Returns: a tag function for template literals.
  *
+ * Throws: the tag function asserts, loud in development and stripped in a release build, on
+ * markup it cannot read: an unclosed tag, an attribute with no value, a comment or a quote
+ * left open, or a closing tag that matches nothing.
+ *
  * Example:
  *   const html = htm(myH);
  *   html`<p class="note ${tone}">${text}</p>`
@@ -97,13 +101,13 @@ export const htm = (h: H, options: { join?: (parts: unknown[]) => unknown } = {}
 		for (;;) {
 			if (atHole(r)) {
 				const spread = takeHole(r);
-				assert(typeof spread === 'object' && spread !== null, 'a spread in a tag must be an object');
+				assert(typeof spread === 'object' && spread !== null, 'a spread in a tag must be an object; pass an object of props');
 				Object.assign(frame.props, spread as Record<string, unknown>);
 				continue;
 			}
 			skipSpace(r);
 			if (atHole(r)) continue;
-			assert(!atEnd(r), `unterminated <${String(frame.tag)}>`);
+			assert(!atEnd(r), `unterminated <${String(frame.tag)}>; close the tag with >`);
 
 			const here = rest(r);
 			if (here.startsWith('/>')) {
@@ -117,15 +121,15 @@ export const htm = (h: H, options: { join?: (parts: unknown[]) => unknown } = {}
 			if (here[0] === '=') {
 				r.at += 1;
 				skipSpace(r);
-				assert(atHole(r), 'a spread is written =${object}');
+				assert(atHole(r), 'a spread is written =${object}; put the object straight after the equals sign');
 				const spread = takeHole(r);
-				assert(typeof spread === 'object' && spread !== null, 'a spread in a tag must be an object');
+				assert(typeof spread === 'object' && spread !== null, 'a spread in a tag must be an object; pass an object of props');
 				Object.assign(frame.props, spread as Record<string, unknown>);
 				continue;
 			}
 
 			const nameMatch = /^[^\s"'>/=]+/.exec(here);
-			assert(nameMatch !== null, `unexpected ${JSON.stringify(here[0])} in <${String(frame.tag)}>`);
+			assert(nameMatch !== null, `unexpected ${JSON.stringify(here[0])} in <${String(frame.tag)}>; write an attribute name, a spread, or close the tag`);
 			const name = nameMatch![0];
 			r.at += name.length;
 
@@ -141,7 +145,7 @@ export const htm = (h: H, options: { join?: (parts: unknown[]) => unknown } = {}
 				frame.props[name] = takeHole(r);
 				continue;
 			}
-			assert(!atEnd(r), `${name} needs a value`);
+			assert(!atEnd(r), `${name} needs a value; write ${name}="text" or leave the equals sign off`);
 
 			const quote = rest(r)[0];
 			if (quote === '"' || quote === "'") {
@@ -155,7 +159,7 @@ export const htm = (h: H, options: { join?: (parts: unknown[]) => unknown } = {}
 						parts.push(takeHole(r));
 						continue;
 					}
-					assert(!atEnd(r), `unterminated attribute ${name}`);
+					assert(!atEnd(r), `unterminated attribute ${name}; close the quote`);
 					const close = rest(r).indexOf(quote);
 					if (close < 0) {
 						piece += rest(r);
@@ -172,7 +176,7 @@ export const htm = (h: H, options: { join?: (parts: unknown[]) => unknown } = {}
 			}
 
 			const bare = /^[^\s>]+/.exec(rest(r));
-			assert(bare !== null, `${name} needs a value`);
+			assert(bare !== null, `${name} needs a value; write ${name}="text" or leave the equals sign off`);
 			const value = bare![0];
 			frame.props[name] = value;
 			r.at += value.length;
@@ -216,7 +220,7 @@ export const htm = (h: H, options: { join?: (parts: unknown[]) => unknown } = {}
 			if (here.startsWith('<!--', open)) {
 				flushText();
 				const end = here.indexOf('-->', open);
-				assert(end >= 0, 'a comment must end in the same template segment');
+				assert(end >= 0, 'a comment must end in the same template segment; close it with --> before the next hole');
 				r.at += end - open + 3;
 				continue;
 			}
@@ -230,7 +234,7 @@ export const htm = (h: H, options: { join?: (parts: unknown[]) => unknown } = {}
 						takeHole(r);
 						continue;
 					}
-					assert(!atEnd(r), 'unterminated closing tag');
+					assert(!atEnd(r), 'unterminated closing tag; close it with >');
 					const end = rest(r).indexOf('>');
 					if (end < 0) {
 						name += rest(r);
@@ -243,9 +247,9 @@ export const htm = (h: H, options: { join?: (parts: unknown[]) => unknown } = {}
 				}
 				name = name.trim();
 				const frame = stack.pop();
-				assert(frame !== undefined && frame !== root, 'a closing tag with nothing open');
+				assert(frame !== undefined && frame !== root, 'a closing tag with nothing open; drop it, or open the tag first');
 				assert(name === '' || typeof frame!.tag !== 'string' || frame!.tag === name,
-					`</${name}> closes <${String(frame!.tag)}>`);
+					`</${name}> closes <${String(frame!.tag)}>; close the tags in the order they opened`);
 				close(frame!);
 				continue;
 			}
@@ -256,7 +260,7 @@ export const htm = (h: H, options: { join?: (parts: unknown[]) => unknown } = {}
 				tag = takeHole(r);
 			} else {
 				const nameMatch = /^[^\s/>]+/.exec(rest(r));
-				assert(nameMatch !== null, 'a tag needs a name');
+				assert(nameMatch !== null, 'a tag needs a name; write the element name straight after the <');
 				tag = nameMatch![0];
 				r.at += nameMatch![0].length;
 			}
@@ -265,7 +269,7 @@ export const htm = (h: H, options: { join?: (parts: unknown[]) => unknown } = {}
 			else stack.push(frame);
 		}
 		flushText();
-		assert(stack.length === 1, `unclosed <${String(top().tag)}>`);
+		assert(stack.length === 1, `unclosed <${String(top().tag)}>; close it before the template ends`);
 
 		const out = root.children;
 		if (out.length === 0) return null;

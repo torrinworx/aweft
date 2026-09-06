@@ -12,6 +12,9 @@ import { type RoomDocument, type Sandbox, type SandboxOptions, type Stub, sandbo
 import { encode } from './data.ts';
 import { methodsOf, stubFor } from './stubs.ts';
 
+// An answer from the room that is not the shape asked for is not the application's mistake.
+const SAME_VERSION = 'Check that the room runs the same version of this package as the host.';
+
 const READ_ONLY: ShareHandlers = {
 	accept: () => [{ code: 'read-only', message: 'the room reads this document and does not write it' }],
 };
@@ -31,7 +34,9 @@ const READ_ONLY: ShareHandlers = {
  *
  * Returns: the sandbox, once the runner has made the room. `expose` names before `load`.
  *
- * Throws `not-data` when a prop is not plain data, naming it.
+ * Throws: a `SandboxError`. `malformed` when `modules` is not an observable object or
+ * `grants` is not an observable array, and `not-data` when a prop is not plain data, with
+ * `path` naming it.
  *
  * Example:
  *   const grants = createArray(['files/Read']);
@@ -42,10 +47,10 @@ const READ_ONLY: ShareHandlers = {
 export const createSandbox = async (options: SandboxOptions): Promise<Sandbox> => {
 	const { runner, modules, grants, handlers = {}, limits = {} } = options;
 	if (!isObservable(modules) || kindOf(modules) !== 'object') {
-		throw sandboxError('malformed', 'modules must be an observable object from createObject');
+		throw sandboxError('malformed', 'modules must be an observable object from createObject', 'Build the module document with createObject from @aweftjs/core.');
 	}
 	if (!isObservable(grants) || kindOf(grants) !== 'array') {
-		throw sandboxError('malformed', 'grants must be an observable array from createArray');
+		throw sandboxError('malformed', 'grants must be an observable array from createArray', 'Build the grants with createArray from @aweftjs/core.');
 	}
 
 	const exposed = new Map<string, object>();
@@ -75,13 +80,19 @@ export const createSandbox = async (options: SandboxOptions): Promise<Sandbox> =
 				handlers.failed?.(String(args[0]), String(args[1]));
 				return null;
 			}
-			throw sandboxError('missing', `the host has no ${method}`);
+			throw sandboxError('missing', `the host has no ${method}`, 'Call one of the two the host answers: applied and failed.');
 		}
-		if (!grants.includes(to)) throw sandboxError('refused', `${to} is not granted to this room`);
+		if (!grants.includes(to)) {
+			throw sandboxError('refused', `${to} is not granted to this room`, 'Add the name to the sandbox grants, or call it from the host instead.');
+		}
 		const instance = exposed.get(to);
-		if (instance === undefined) throw sandboxError('missing', `${to} is granted but nothing is exposed under it`);
+		if (instance === undefined) {
+			throw sandboxError('missing', `${to} is granted but nothing is exposed under it`, 'Expose the name on the host with sandbox.expose first.');
+		}
 		const fn: unknown = (instance as Record<string, unknown>)[method];
-		if (typeof fn !== 'function') throw sandboxError('missing', `${to} has no function ${method}`);
+		if (typeof fn !== 'function') {
+			throw sandboxError('missing', `${to} has no function ${method}`, 'Call a function the exposed instance has.');
+		}
 		return await (fn as (...a: unknown[]) => unknown).apply(instance, [...args]);
 	}, { callMs: limits.callMs });
 	// The room went away, or the transport did: every call still waiting rejects with `closed`
@@ -90,12 +101,12 @@ export const createSandbox = async (options: SandboxOptions): Promise<Sandbox> =
 
 	const stubsOf = (table: unknown): Readonly<Record<string, Stub>> => {
 		if (table === null || typeof table !== 'object' || Array.isArray(table)) {
-			throw sandboxError('malformed', 'the room answered load with something that is not a table');
+			throw sandboxError('malformed', 'the room answered load with something that is not a table', SAME_VERSION);
 		}
 		const stubs: Record<string, Stub> = {};
 		for (const [name, methods] of Object.entries(table as Record<string, unknown>)) {
 			if (!Array.isArray(methods) || methods.some((m) => typeof m !== 'string')) {
-				throw sandboxError('malformed', `the room answered load with no function list for ${name}`);
+				throw sandboxError('malformed', `the room answered load with no function list for ${name}`, SAME_VERSION);
 			}
 			stubs[name] = stubFor(methods as string[], (method, args) => bridge.call(name, method, args));
 		}
@@ -109,7 +120,7 @@ export const createSandbox = async (options: SandboxOptions): Promise<Sandbox> =
 		loaded: async () => {
 			const names = await bridge.call('sandbox', 'loaded', []);
 			if (!Array.isArray(names) || names.some((n) => typeof n !== 'string')) {
-				throw sandboxError('malformed', 'the room answered loaded with something that is not a list of names');
+				throw sandboxError('malformed', 'the room answered loaded with something that is not a list of names', SAME_VERSION);
 			}
 			return names as string[];
 		},

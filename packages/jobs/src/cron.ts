@@ -55,15 +55,19 @@ const HOUR = 60 * MINUTE;
  */
 const HORIZON = (4 * 366 + 1) * 24 * HOUR;
 
-const invalid = (text: string, detail: string) => jobsError('invalid', `cron "${text}" ${detail}`);
+const invalid = (text: string, detail: string, fix: string) => jobsError('invalid', `cron "${text}" ${detail}`, fix);
 
 const whole = (token: string): number | undefined => (/^\d+$/.test(token) ? Number(token) : undefined);
 
 const valueOf = (token: string, name: Name, text: string): number => {
 	const value = NAMES[name]?.[token.toUpperCase()] ?? whole(token);
-	if (value === undefined) throw invalid(text, `has "${token}" where a ${name} should be`);
+	if (value === undefined) {
+		throw invalid(text, `has "${token}" where a ${name} should be`, 'Write a whole number, or a name such as JAN or MON.');
+	}
 	const [low, high] = RANGE[name];
-	if (value < low || value > high) throw invalid(text, `has ${name} ${token} outside ${low} to ${high}`);
+	if (value < low || value > high) {
+		throw invalid(text, `has ${name} ${token} outside ${low} to ${high}`, 'Write a value inside the range the message names.');
+	}
 	return value;
 };
 
@@ -73,19 +77,25 @@ const fieldOf = (part: string, name: Name, text: string): Field => {
 	const values = new Set<number>();
 	for (const segment of part.split(',')) {
 		const [base, stepText, ...more] = segment.split('/');
-		if (base === undefined || base === '' || more.length > 0) throw invalid(text, `has "${segment}" where a ${name} should be`);
+		if (base === undefined || base === '' || more.length > 0) {
+			throw invalid(text, `has "${segment}" where a ${name} should be`, 'Write the field as a value, a range, or a range and one step.');
+		}
 		const step = stepText === undefined ? 1 : (whole(stepText) ?? 0);
-		if (step < 1) throw invalid(text, `has a step in "${segment}" that is not a positive whole number`);
+		if (step < 1) {
+			throw invalid(text, `has a step in "${segment}" that is not a positive whole number`, 'Write the step after the slash as 1 or more.');
+		}
 		let start: number;
 		let end: number;
 		if (base === '*') {
 			[start, end] = [low, high];
 		} else if (base.includes('-')) {
 			const [from, to, ...rest] = base.split('-');
-			if (from === undefined || to === undefined || from === '' || to === '' || rest.length > 0) throw invalid(text, `has a range "${base}" it cannot read`);
+			if (from === undefined || to === undefined || from === '' || to === '' || rest.length > 0) {
+				throw invalid(text, `has a range "${base}" it cannot read`, 'Write a range as two values with one hyphen between them, such as 1-5.');
+			}
 			start = valueOf(from, name, text);
 			end = valueOf(to, name, text);
-			if (end < start) throw invalid(text, `has a range "${base}" that runs backwards`);
+			if (end < start) throw invalid(text, `has a range "${base}" that runs backwards`, 'Put the lower value first in the range.');
 		} else {
 			start = valueOf(base, name, text);
 			end = stepText === undefined ? start : high;
@@ -103,7 +113,9 @@ const fieldOf = (part: string, name: Name, text: string): Field => {
  */
 export const parseCron = (text: string): CronSpec => {
 	const parts = text.trim().split(/\s+/);
-	if (parts.length !== 5 || parts[0] === '') throw invalid(text, `has ${parts[0] === '' ? 0 : parts.length} fields, not 5`);
+	if (parts.length !== 5 || parts[0] === '') {
+		throw invalid(text, `has ${parts[0] === '' ? 0 : parts.length} fields, not 5`, 'Write five fields: minute, hour, day, month and weekday.');
+	}
 	const [minute, hour, day, month, weekday] = parts as [string, string, string, string, string];
 	return {
 		minute: fieldOf(minute, 'minute', text),

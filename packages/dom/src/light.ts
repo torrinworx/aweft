@@ -7,6 +7,8 @@
 // enforces HTML's tree-construction rules; markup round-trips only if it was written so the
 // browser's parser produces the same tree, and design 078 says what that asks of a page.
 
+import { codecError } from '@aweftjs/codec';
+
 import { setFallbackDocument } from './ambient.ts';
 import type { CommentLike, DocumentLike, ElementLike, NodeLike, ParentLike, TextLike } from './types.ts';
 import { COMMENT, ELEMENT, TEXT } from './types.ts';
@@ -70,8 +72,17 @@ export class LightNode implements NodeLike {
 		return this.insertBefore(node, null);
 	}
 
+	/**
+	 * Put a node in front of one of this node's children, or at the end when `before` is null.
+	 *
+	 * Throws: `not-a-child` when the reference node belongs to someone else, as a browser
+	 * throws rather than guessing where the node was meant to go.
+	 */
 	insertBefore(node: LightNode, before: LightNode | null): LightNode {
-		if (before !== null && before.parentNode !== this) throw new Error('light: the reference node is not a child');
+		if (before !== null && before.parentNode !== this) {
+			throw codecError('not-a-child', 'the reference node is not a child of this node',
+				'Pass one of this node\'s children as the reference, or null to append.');
+		}
 		if (node === before) return node;
 		if (node.parentNode !== null) unlink(node.parentNode, node);
 		node.parentNode = this;
@@ -84,12 +95,25 @@ export class LightNode implements NodeLike {
 		return node;
 	}
 
+	/**
+	 * Take one of this node's children back out.
+	 *
+	 * Throws: `not-a-child` when the node is somewhere else in the tree.
+	 */
 	removeChild(node: LightNode): LightNode {
-		if (node.parentNode !== this) throw new Error('light: not a child of this node');
+		if (node.parentNode !== this) {
+			throw codecError('not-a-child', 'the node is not a child of this node',
+				'Call removeChild on the node\'s own parent, which parentNode names.');
+		}
 		unlink(this, node);
 		return node;
 	}
 
+	/**
+	 * Swap one of this node's children for another.
+	 *
+	 * Throws: `not-a-child` when `old` belongs to someone else.
+	 */
 	replaceChild(node: LightNode, old: LightNode): LightNode {
 		this.insertBefore(node, old);
 		return this.removeChild(old);

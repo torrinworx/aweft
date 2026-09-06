@@ -22,7 +22,7 @@ export interface Room {
 
 const namesOf = (value: unknown, what: string): string[] => {
 	if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
-		throw sandboxError('malformed', `${what} is not a list of names`);
+		throw sandboxError('malformed', `${what} is not a list of names`, 'Check that the host runs the same version of this package as the room.');
 	}
 	return value as string[];
 };
@@ -34,6 +34,10 @@ const namesOf = (value: unknown, what: string): string[] => {
  *   channel: the room's end of the channel the runner made
  *
  * Returns: the room, once the host's documents have arrived. Rejects if the link ends first.
+ *
+ * Throws: a `SandboxError` with reason `malformed` when the host's documents are not what this
+ * version of the package writes, which is what a host and a room on different versions look
+ * like from in here.
  *
  * Example, in a child process the `child` runner spawned:
  *   const room = await inside(fromIpc(process));
@@ -48,7 +52,7 @@ export const inside = async (channel: Channel): Promise<Room> => {
 
 	const props = decode(room.props, 'props');
 	if (props === null || typeof props !== 'object' || Array.isArray(props)) {
-		throw sandboxError('malformed', 'props is not an object');
+		throw sandboxError('malformed', 'props is not an object', 'Pass props to createSandbox as a plain object.');
 	}
 
 	let bridge: Bridge;
@@ -92,12 +96,16 @@ export const inside = async (channel: Channel): Promise<Room> => {
 			}
 			if (method === 'unload') return await loader.unload(String(args[0]));
 			if (method === 'loaded') return [...loader.loaded()];
-			throw sandboxError('missing', `the room has no ${method}`);
+			throw sandboxError('missing', `the room has no ${method}`, 'Call one of the three the room answers: load, unload and loaded.');
 		}
 		const instance = loader.get(to);
-		if (instance === undefined) throw sandboxError('missing', `${to} is not loaded in this room`);
+		if (instance === undefined) {
+			throw sandboxError('missing', `${to} is not loaded in this room`, 'Load the module in the room before calling it.');
+		}
 		const fn: unknown = (instance as Record<string, unknown>)[method];
-		if (typeof fn !== 'function') throw sandboxError('missing', `${to} has no function ${method}`);
+		if (typeof fn !== 'function') {
+			throw sandboxError('missing', `${to} has no function ${method}`, 'Call a function the loaded module has.');
+		}
 		return await (fn as (...a: unknown[]) => unknown).apply(instance, [...args]);
 	});
 

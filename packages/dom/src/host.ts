@@ -16,6 +16,9 @@ import { markMade } from './props.ts';
  * Returns: a fresh, unattached element. Outside any mount it comes from the page's document,
  * or from a light document where there is no page.
  *
+ * Throws: an assert, loud in development and stripped in a release build, when there is no
+ * page and no mount is running, so there is no document to make the node in.
+ *
  * Example:
  *   const circle = createElement('circle', 'http://www.w3.org/2000/svg');
  */
@@ -29,6 +32,9 @@ export const createElement = (tag: string, namespace?: string): ElementLike =>
  *   text: its content
  *
  * Returns: a fresh, unattached text node.
+ *
+ * Throws: an assert, loud in development and stripped in a release build, when there is no
+ * page and no mount is running, so there is no document to make the node in.
  *
  * Example:
  *   const label = createTextNode('hello');

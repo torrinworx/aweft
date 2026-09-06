@@ -25,7 +25,9 @@ export interface Definition {
  * exports only `config`.
  */
 export const resolve = async (name: string, candidates: readonly Candidate[]): Promise<Definition> => {
-	if (candidates.length === 0) throw modulesError('missing', name, `${name} is not in any source`);
+	if (candidates.length === 0) {
+		throw modulesError('missing', name, `${name} is not in any source`, 'Add the module to one of the loader sources, or fix the name.');
+	}
 
 	const all = await Promise.all(candidates.map((c) => c.exports()));
 
@@ -46,7 +48,10 @@ export const resolve = async (name: string, candidates: readonly Candidate[]): P
 	}
 
 	if (factory === undefined) {
-		throw modulesError('no-implementation', name, `${name} has no implementation, only configuration`);
+		throw modulesError(
+			'no-implementation', name, `${name} has no implementation, only configuration`,
+			'Give one of the files for this name a default export, the factory.',
+		);
 	}
 
 	// Fold from the lowest precedence up, so the earliest source's contribution is merged last
@@ -76,7 +81,10 @@ export const order = (definitions: ReadonlyMap<string, Definition>): string[] =>
 		const at = walking.indexOf(name);
 		if (at >= 0) {
 			const cycle = [...walking.slice(at), name].join(' -> ');
-			throw modulesError('cycle', name, `a dependency cycle: ${cycle}`);
+			throw modulesError(
+				'cycle', name, `a dependency cycle: ${cycle}`,
+				'Drop one of the deps, or move what the two share into a third module.',
+			);
 		}
 		const definition = definitions.get(name);
 		if (definition === undefined) return;

@@ -31,6 +31,15 @@ test('mount returns the remove function, which answers getFirst and removes twic
 	assert.equal(mount(doc.body, null)(getFirst), null, 'a null mount answers its anchor');
 });
 
+test('a null anchor asserts loudly instead of being called as a function', () => {
+	const doc = createDocument();
+	assert.throws(
+		() => mount(doc.body, 'x', null as unknown as undefined),
+		(error: Error) => !(error instanceof TypeError) && /leave the argument off/.test(error.message),
+		'the message names the argument and what to do instead',
+	);
+});
+
 test('a cell updates its text node in place, and a type change remounts', () => {
 	const { document, ops } = recordingDocument();
 	const cell = mutable<unknown>('a');

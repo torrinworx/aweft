@@ -83,7 +83,7 @@ const documentOf = (elem: ParentLike): DocumentLike => {
 	const own = elem.ownerDocument;
 	if (own !== undefined && own !== null) return own;
 	const page = (globalThis as { document?: DocumentLike }).document;
-	assert(page !== undefined, 'mount needs a document: the target has none and there is no page');
+	assert(page !== undefined, 'mount needs a document: the target has none and there is no page; mount into a node from createDocument instead');
 	return page!;
 };
 
@@ -186,11 +186,19 @@ const remover = (elem: ParentLike, node: NodeLike): (() => void) => {
  * Returns: the remove function. Call it to unmount; call it with `getFirst` for the first
  * live node. `undefined` is refused: hide something with `null`.
  *
+ * Throws: an assert, loud in development and stripped in a release build. `undefined` as the
+ * item, `null` as the anchor, a plain object, a node already mounted elsewhere and a target
+ * with no document are all caller mistakes rather than data the mounter refuses.
+ *
  * Example:
  *   const stop = mount(document.body, h('p', {}, 'hello ', name));
  *   stop();
  */
 export const mount = (elem: ParentLike, item: unknown, before?: Remove, context?: unknown): Remove => {
+	// A null anchor otherwise reaches the closure below and fails there as `before is not a
+	// function`, which names neither the argument nor what to pass instead.
+	assert((before as Remove | null | undefined) !== null,
+		'the before anchor cannot be null; leave the argument off to mount at the end');
 	const anchor: Before = before === undefined ? () => null : () => before(getFirst) ?? null;
 	if (current !== null) {
 		const { root, scope, owner } = current;
@@ -207,7 +215,7 @@ const isIterable = (value: unknown): value is Iterable<unknown> =>
 	typeof value === 'object' && value !== null && Symbol.iterator in value;
 
 export const mountItem = (ctx: Ctx, item: unknown, before: Before): Handle => {
-	assert(item !== undefined, 'cannot mount undefined; hide something with null');
+	assert(item !== undefined, 'cannot mount undefined; hide something with null instead');
 	if (item === null || item === undefined) return nullHandle();
 
 	if (isBound(item)) return nodeHandle(ctx, item.node, item.signals, before);
@@ -267,7 +275,7 @@ const beforeOf = (signal: ChildSignal): Before => () => {
 };
 
 const nodeHandle = (ctx: Ctx, fresh: NodeLike, signals: Signal[] | null, before: Before): Handle => {
-	assert(fresh.parentNode === null, 'cannot mount a node that is already mounted elsewhere');
+	assert(fresh.parentNode === null, 'cannot mount a node that is already mounted elsewhere; clone it or remove it first');
 
 	// Under hydration the node in the document is the server's, and every signal that named
 	// the fresh one, or a node inside it, now names its pair. Otherwise the subtree is bound
@@ -356,8 +364,8 @@ const dynamicHandle = (ctx: Ctx, source: { effect(fn: (v: unknown) => void): () 
 
 		const apply = (value: unknown): void => {
 			if (dead) return;
-			assert(value !== undefined, 'a mounted value resolved to undefined; hide something with null');
-			assert(!isSource(value), 'a value that is itself a scope or cell cannot be mounted; unwrap it');
+			assert(value !== undefined, 'a mounted value resolved to undefined; put null in the cell to hide something');
+			assert(!isSource(value), 'a value that is itself a scope or cell cannot be mounted; unwrap it with get first');
 			if (value === undefined) value = null;
 			if (live !== null && live.update !== undefined && live.update(value)) return;
 			live?.remove();
@@ -387,7 +395,7 @@ const listHandle = (ctx: Ctx, source: unknown, before: Before, mountOne: MountOn
 			const inner: Ctx = { ...ctx, scope };
 			let list: List | null = null;
 			const stop = source.effect((value) => withRoot(ctx.root, scope, ctx.owner, () => {
-				assert(isIterable(value), 'the each property must be iterable, like an array');
+				assert(isIterable(value), 'the each property must be iterable; pass an array, a document array or a Set');
 				if (list === null) list = itemList(inner, b, mountOne, value as Iterable<unknown>);
 				else list.setItems(value as Iterable<unknown>);
 			}));
@@ -400,7 +408,7 @@ const listHandle = (ctx: Ctx, source: unknown, before: Before, mountOne: MountOn
 			};
 		});
 	}
-	assert(isIterable(source), 'the each property must be iterable, like an array');
+	assert(isIterable(source), 'the each property must be iterable; pass an array, a document array or a Set');
 	// A plain iterable is static: its items get no markers of their own.
 	const list = itemList(ctx, before, mountOne, source as Iterable<unknown>, false);
 	return {
@@ -524,7 +532,7 @@ export const componentMounter = (component: Component, props: Record<string, unk
 		return listHandle(ctx, props['each'], anchor, (value, b, scope) => componentHandle({ ...ctx, scope }, component, props, value, b));
 	};
 	const mounter: Mounter = (elem, _item, before, context) => {
-		assert(current !== null, 'a component mounts inside a mount');
+		assert(current !== null, 'a component mounts inside a mount; call it through mount, render or hydrate');
 		const { root, scope, owner } = current!;
 		const own = scope !== null && scope.parent === elem ? scope : (root.hydration?.scopeOf(elem) ?? null);
 		const anchor: Before = () => before(getFirst) ?? null;
@@ -551,7 +559,7 @@ export const componentHandle = (ctx: Ctx, component: Component, props: Record<st
 			}
 		};
 		const mounted: Mounted = (...fns) => {
-			assert(!rec.bodyDone, 'mounted may only be called while the component is mounting');
+			assert(!rec.bodyDone, 'mounted may only be called while the component is mounting; call it from the body, not from a callback');
 			rec.mountedCbs.push(...fns);
 		};
 		const pending: Pending = (promise) => {

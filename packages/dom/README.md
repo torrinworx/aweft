@@ -199,7 +199,7 @@ wrote: write `tbody` yourself, and avoid whitespace-only text where the browser 
 A component that waits with `pending` runs again on the client, and starting its wait again
 would render the loading state over the server's finished one, which is a mismatch. Give it
 the resolved value as a prop from data the page embeds (`h(Status, { known })`), so it renders
-what it knows and only waits when it has nothing; `examples/dom/` shows the pattern.
+what it knows and only waits when it has nothing; `recipes/dom/` shows the pattern.
 
 One live hydration per target: a second `hydrate` over the same target asserts, because it
 would claim the nodes the first one holds. Remove the first, then hydrate again.
@@ -253,4 +253,4 @@ store persists or a link shares.
 
 `@aweftjs/dom` imports `@aweftjs/core` and nothing else. The complete program using all of
 the above, with its DOM operations asserted one by one against the recording host in
-`@aweftjs/testing`, is `examples/dom/`.
+`@aweftjs/testing`, is `recipes/dom/`.

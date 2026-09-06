@@ -1,6 +1,7 @@
 // What a room is (design 066), what a grant is (design 067), and what a runner is
 // (design 069). Types only; nothing here runs code.
 
+import { codecError } from '@aweftjs/codec';
 import type { Channel } from '@aweftjs/sync';
 
 /**
@@ -47,7 +48,16 @@ export interface SandboxLimits {
 	readonly callMs?: number | undefined;
 }
 
-/** A loaded module inside the room, as the host sees it: one function per function the instance had. */
+/**
+ * A loaded module inside the room, as the host sees it: one function per function the instance
+ * had.
+ *
+ * Throws: a `SandboxError` from the promise a stub function returns. `not-data` when an
+ * argument or the result is not plain data, with `path` naming it; `missing` when the room has
+ * no such module or the instance has no such function; `timeout` when the room did not answer
+ * within `limits.callMs`; `closed` when the room stopped with the call still waiting; and,
+ * when the function itself threw, whatever it refused for, with its own message unchanged.
+ */
 export type Stub = Readonly<Record<string, (...args: unknown[]) => Promise<unknown>>>;
 
 /** The host's side of a room. */
@@ -61,17 +71,32 @@ export interface Sandbox {
 	 * Returns: one stub per name. Calling a stub's function is a call across the boundary,
 	 * answered by the loaded instance; the arguments and the result must be plain data.
 	 *
-	 * Throws a `SandboxError` with the loader's reason when the room could not load them, or
-	 * `closed` when the room has stopped.
+	 * Throws: a `SandboxError`. The loader's own reason when the room could not load them,
+	 * `closed` when the room has stopped, `timeout` when the room did not answer within
+	 * `limits.callMs`, and `malformed` when the room answered with something that is not a
+	 * table of stubs.
 	 *
 	 * Example:
 	 *   const { 'report/Summarize': summarize } = await sandbox.load(['report/Summarize']);
 	 *   const text = await summarize.run('2026-09');
 	 */
 	load(names: readonly string[]): Promise<Readonly<Record<string, Stub>>>;
-	/** Unload one module inside the room, calling its `stop` if it has one. True when it was loaded. */
+	/**
+	 * Unload one module inside the room, calling its `stop` if it has one. True when it was
+	 * loaded.
+	 *
+	 * Throws: a `SandboxError` with reason `closed` when the room has stopped, `timeout` when
+	 * it did not answer within `limits.callMs`, and `malformed` when it answered with
+	 * something that is not an answer to this question.
+	 */
 	unload(name: string): Promise<boolean>;
-	/** The names loaded inside the room right now, in the order they were instantiated. */
+	/**
+	 * The names loaded inside the room right now, in the order they were instantiated.
+	 *
+	 * Throws: a `SandboxError` with reason `closed` when the room has stopped, `timeout` when
+	 * it did not answer within `limits.callMs`, and `malformed` when it answered with
+	 * something that is not a list of names.
+	 */
 	loaded(): Promise<readonly string[]>;
 	/**
 	 * Put a trusted instance behind a name the room may be granted.
@@ -99,15 +124,16 @@ export interface Sandbox {
  * it), `refused` (a name that is not granted), `missing` (a name that is granted but not
  * exposed, or a function the instance does not have), `malformed` (a row the other end wrote
  * that is not a call), `timeout`, `closed`, `failed` (the function threw; `message` carries
- * what it said), and the loader's own reasons passed through unchanged.
+ * what it said), `no-page` (the iframe runner found no document and no MessageChannel), and
+ * the loader's own reasons passed through unchanged.
  */
 export interface SandboxError extends Error {
 	readonly reason: string;
 	readonly path?: string;
 }
 
-export const sandboxError = (reason: string, detail: string, path?: string): SandboxError =>
-	Object.assign(new Error(`sandbox: ${detail}`), path === undefined ? { reason } : { reason, path });
+export const sandboxError = (reason: string, detail: string, fix: string, path?: string): SandboxError =>
+	path === undefined ? codecError(reason, detail, fix) : Object.assign(codecError(reason, detail, fix), { path });
 
 /** The two ends, as a row names them. */
 export type Side = 'host' | 'room';

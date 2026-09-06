@@ -53,19 +53,33 @@ const keyOf = (job: Job): string => JSON.stringify([job.at, job.every, job.cron,
 const planOf = (job: Job): Plan => {
 	const given = (['at', 'every', 'cron'] as const).filter((field) => job[field] !== undefined);
 	if (given.length !== 1) {
-		throw jobsError('invalid', `a row needs exactly one of at, every and cron; this one has ${given.length === 0 ? 'none' : given.join(' and ')}`);
+		throw jobsError(
+			'invalid',
+			`a row needs exactly one of at, every and cron; this one has ${given.length === 0 ? 'none' : given.join(' and ')}`,
+			'Give the row one of at, every or cron, and tz beside cron.',
+		);
 	}
 	if (job.at !== undefined) {
-		if (typeof job.at !== 'number') throw jobsError('invalid', 'at must be a number of milliseconds since the epoch');
+		if (typeof job.at !== 'number') {
+			throw jobsError('invalid', 'at must be a number of milliseconds since the epoch', 'Set at to a number, as Date.now() gives one.');
+		}
 		return { kind: 'at', at: job.at };
 	}
 	if (job.every !== undefined) {
-		if (typeof job.every !== 'number' || job.every <= 0) throw jobsError('invalid', 'every must be a positive number of milliseconds');
+		if (typeof job.every !== 'number' || job.every <= 0) {
+			throw jobsError('invalid', 'every must be a positive number of milliseconds', 'Set every to a positive number of milliseconds.');
+		}
 		return { kind: 'every', every: job.every };
 	}
-	if (typeof job.cron !== 'string') throw jobsError('invalid', 'cron must be a string of five fields');
-	if (typeof job.tz !== 'string' || job.tz === '') throw jobsError('invalid', 'a cron row needs tz, an IANA time zone name; there is no default');
-	if (!knownZone(job.tz)) throw jobsError('invalid', `tz "${job.tz}" is not a time zone this runtime knows`);
+	if (typeof job.cron !== 'string') {
+		throw jobsError('invalid', 'cron must be a string of five fields', 'Write five fields: minute, hour, day, month and weekday.');
+	}
+	if (typeof job.tz !== 'string' || job.tz === '') {
+		throw jobsError('invalid', 'a cron row needs tz, an IANA time zone name; there is no default', 'Add tz to the row, such as America/Toronto.');
+	}
+	if (!knownZone(job.tz)) {
+		throw jobsError('invalid', `tz "${job.tz}" is not a time zone this runtime knows`, 'Use an IANA time zone name, such as America/Toronto.');
+	}
 	return { kind: 'cron', spec: parseCron(job.cron), tz: job.tz };
 };
 
@@ -91,6 +105,10 @@ const describe = (error: unknown): Last['error'] => {
  *
  * Returns: the scheduler, which is `stop()`.
  *
+ * Throws: a JobsError. `missing` without `jobs` or `run`, `not-a-list` when `jobs` is not an
+ * observable array. A row that cannot be scheduled is `invalid`, reported to `handlers.failed`
+ * rather than thrown from here.
+ *
  * The scheduler follows the array: a row pushed is scheduled, a row removed has its timer
  * cancelled, a row whose `at`, `every`, `cron` or `tz` changes is rescheduled. It writes
  * `last` onto a row when a run starts and when it ends, and nothing else. A periodic row's
@@ -106,10 +124,18 @@ const describe = (error: unknown): Last['error'] => {
 export const createScheduler = (options: SchedulerOptions): Scheduler => {
 	const jobs = options?.jobs;
 	const run = options?.run;
-	if (jobs === undefined) throw jobsError('missing', 'createScheduler needs jobs, the array of rows');
-	if (typeof run !== 'function') throw jobsError('missing', 'createScheduler needs run, the function that does a job');
+	if (jobs === undefined) {
+		throw jobsError('missing', 'createScheduler needs jobs, the array of rows', 'Pass both: createScheduler({ jobs, run }).');
+	}
+	if (typeof run !== 'function') {
+		throw jobsError('missing', 'createScheduler needs run, the function that does a job', 'Pass both: createScheduler({ jobs, run }).');
+	}
 	if (!Array.isArray(jobs) || !isObservable(jobs)) {
-		throw jobsError('not-a-list', 'jobs must be an observable array from @aweftjs/core (createArray), so the scheduler can follow it');
+		throw jobsError(
+			'not-a-list',
+			'jobs must be an observable array from @aweftjs/core (createArray), so the scheduler can follow it',
+			'Build the array with createArray from @aweftjs/core.',
+		);
 	}
 	const handlers: SchedulerHandlers = options.handlers ?? {};
 	const clock = options.clock ?? realClock;
@@ -148,7 +174,11 @@ export const createScheduler = (options: SchedulerOptions): Scheduler => {
 				const due = nextCron(plan.spec, plan.tz, previous === undefined ? now : Math.max(now, previous));
 				if (due === undefined) {
 					entry.plan = undefined;
-					report(job, jobsError('invalid', `cron "${String(job.cron)}" does not occur in the four years ahead`));
+					report(job, jobsError(
+						'invalid',
+						`cron "${String(job.cron)}" does not occur in the four years ahead`,
+						'Write a cron expression whose day and month can fall together.',
+					));
 				}
 				return due;
 			}

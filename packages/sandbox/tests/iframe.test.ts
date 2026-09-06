@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { iframe } from '@aweftjs/sandbox';
-import type { DocumentLike, FrameLike, MessageChannelLike } from '@aweftjs/sandbox';
+import type { DocumentLike, FrameLike, MessageChannelLike, SandboxError } from '@aweftjs/sandbox';
 
 /** A frame that captures its attributes and fires load once its srcdoc is set. */
 const fakeFrame = () => {
@@ -61,7 +61,7 @@ test('start makes an opaque-origin, script-locked frame and posts the room its p
 });
 
 test('the iframe runner refuses to run without a document and a MessageChannel', () => {
-	assert.throws(() => iframe({ inside: 'x', into: { appendChild: () => {} } }), /needs a document and a MessageChannel/);
+	assert.throws(() => iframe({ inside: 'x', into: { appendChild: () => {} } }), (e: SandboxError) => e.reason === 'no-page');
 });
 
 test('a bare inside URL with no path still yields a usable script-src origin', async () => {

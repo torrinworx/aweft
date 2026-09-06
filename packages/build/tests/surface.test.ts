@@ -19,6 +19,9 @@ test('every export does the job it is for', () => {
 
 	assert.equal(build.aweft().transform(source, 'a.ts')?.code, result.code);
 	assert.ok(build.mangle.pattern.test('internal_'));
-	assert.ok(new build.TransformError('m', 3) instanceof Error);
-	assert.equal(new build.TransformError('m', 3).at, 3);
+	const fault = new build.TransformError('unclosed-element: <p> is open. Close it.', 3, 'unclosed-element', 'Close it.');
+	assert.ok(fault instanceof Error);
+	assert.equal(fault.at, 3);
+	assert.equal(fault.reason, 'unclosed-element');
+	assert.equal(fault.fix, 'Close it.');
 });

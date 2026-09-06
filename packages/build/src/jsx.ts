@@ -7,7 +7,7 @@
 
 import type { Node } from './ast.ts';
 import { type Child, type Element, type Property, childCode, collapseText, emitCall } from './element.ts';
-import { TransformError } from './error.ts';
+import { transformError } from './error.ts';
 
 export interface JsxReader {
 	/** The name to call for an element, asked for only when one is printed as a call. */
@@ -29,13 +29,15 @@ const tagOf = (name: Node, reader: JsxReader): { readonly tag: string | null; re
 	if (name.type === 'JSXMemberExpression') {
 		return { tag: null, code: reader.source.slice(name.start, name.end) };
 	}
-	throw new TransformError('a namespaced JSX tag has no meaning here', name.start);
+	throw transformError('namespaced-tag', 'a namespaced JSX tag has no meaning here',
+		'Write the tag as a plain name or a member expression.', name.start);
 };
 
 const attributeValue = (attribute: Node, reader: JsxReader): Property => {
 	const name = (attribute['name'] as Node);
 	if (name.type !== 'JSXIdentifier') {
-		throw new TransformError('a namespaced JSX attribute has no meaning here', name.start);
+		throw transformError('namespaced-attribute', 'a namespaced JSX attribute has no meaning here',
+			'Write the attribute name without a colon in it.', name.start);
 	}
 	const key = name['name'] as string;
 	const value = attribute['value'] as Node | null;
@@ -44,7 +46,8 @@ const attributeValue = (attribute: Node, reader: JsxReader): Property => {
 	if (value.type === 'JSXExpressionContainer') {
 		const inner = value['expression'] as Node;
 		if (inner.type === 'JSXEmptyExpression') {
-			throw new TransformError(`${key} was given no value`, value.start);
+			throw transformError('empty-expression', `${key} was given no value`,
+				'Put an expression in the braces, or drop them to make the attribute true.', value.start);
 		}
 		return literalOr(key, inner, reader);
 	}
@@ -73,7 +76,8 @@ const childrenOf = (nodes: readonly Node[], reader: JsxReader): Child[] => {
 		} else if (node.type === 'JSXElement' || node.type === 'JSXFragment') {
 			children.push(childOf(node, reader));
 		} else {
-			throw new TransformError(`${node.type} has no meaning inside JSX here`, node.start);
+			throw transformError('unsupported-child', `${node.type} has no meaning inside JSX here`,
+				'Write the child as text, an element, or an expression in braces.', node.start);
 		}
 	}
 	return children;

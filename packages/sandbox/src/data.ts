@@ -7,6 +7,11 @@ import { isObservable } from '@aweftjs/core';
 
 import { sandboxError } from './contract.ts';
 
+// Two checks refuse for one rule (a function and a class instance are both not plain data), and
+// a row that will not parse is the same trouble whichever end wrote it, so each says one thing.
+const PLAIN_DATA = 'Send plain JSON data: null, booleans, finite numbers, strings, arrays and plain objects.';
+const SAME_VERSION = 'Check that the host and the room run the same version of this package.';
+
 const isPlainObject = (value: object): boolean => {
 	const proto: unknown = Object.getPrototypeOf(value);
 	return proto === null || proto === Object.prototype;
@@ -30,17 +35,23 @@ export const assertData = (value: unknown, path: string): void => {
 		if (v === null || typeof v === 'boolean' || typeof v === 'string') return;
 		if (typeof v === 'number') {
 			if (Number.isFinite(v)) return;
-			throw sandboxError('not-data', `${at} is ${String(v)}, which JSON cannot carry`, at);
+			throw sandboxError('not-data', `${at} is ${String(v)}, which JSON cannot carry`, 'Send a finite number, or null.', at);
 		}
 		// A function, a symbol or a bigint: named by its typeof, which also narrows v to an
 		// object for the checks below. A class instance or a Map falls through to the else.
-		if (typeof v !== 'object') throw sandboxError('not-data', `${at} is a ${typeof v}, and only data crosses the boundary`, at);
-		if (isObservable(v)) throw sandboxError('not-data', `${at} is an observable, and only data crosses the boundary`, at);
-		if (seen.has(v)) throw sandboxError('not-data', `${at} refers back to something above it`, at);
+		if (typeof v !== 'object') {
+			throw sandboxError('not-data', `${at} is a ${typeof v}, and only data crosses the boundary`, PLAIN_DATA, at);
+		}
+		if (isObservable(v)) {
+			throw sandboxError('not-data', `${at} is an observable, and only data crosses the boundary`, 'Send a plain copy of the value, not the observable.', at);
+		}
+		if (seen.has(v)) throw sandboxError('not-data', `${at} refers back to something above it`, 'Break the cycle before sending the value.', at);
 		seen.add(v);
 		if (Array.isArray(v)) {
 			for (let i = 0; i < v.length; i++) {
-				if (v[i] === undefined) throw sandboxError('not-data', `${at}[${i}] is undefined, which JSON turns into null`, `${at}[${i}]`);
+				if (v[i] === undefined) {
+					throw sandboxError('not-data', `${at}[${i}] is undefined, which JSON turns into null`, 'Write null instead of undefined inside an array.', `${at}[${i}]`);
+				}
 				walk(v[i], `${at}[${i}]`);
 			}
 		} else if (isPlainObject(v)) {
@@ -49,7 +60,7 @@ export const assertData = (value: unknown, path: string): void => {
 				walk(item, `${at}.${key}`);
 			}
 		} else {
-			throw sandboxError('not-data', `${at} is a ${v.constructor?.name ?? 'non-plain object'}, and only data crosses the boundary`, at);
+			throw sandboxError('not-data', `${at} is a ${v.constructor?.name ?? 'non-plain object'}, and only data crosses the boundary`, PLAIN_DATA, at);
 		}
 		seen.delete(v);
 	};
@@ -65,10 +76,10 @@ export const encode = (value: unknown, path: string): string => {
 
 /** Text back to data. Text the other end wrote that is not JSON is `malformed`. */
 export const decode = (text: unknown, what: string): unknown => {
-	if (typeof text !== 'string') throw sandboxError('malformed', `${what} is not text`);
+	if (typeof text !== 'string') throw sandboxError('malformed', `${what} is not text`, SAME_VERSION);
 	try {
 		return JSON.parse(text);
 	} catch {
-		throw sandboxError('malformed', `${what} is not JSON`);
+		throw sandboxError('malformed', `${what} is not JSON`, SAME_VERSION);
 	}
 };

@@ -169,7 +169,8 @@ export class Hydration {
 			server.splitText(fresh.data.length);
 			return;
 		}
-		assert(false, `hydration text mismatch: server ${JSON.stringify(server.data)}, client ${JSON.stringify(fresh.data)}`);
+		assert(false, `hydration text mismatch: server ${JSON.stringify(server.data)}, client ${JSON.stringify(fresh.data)}`
+			+ '; render the same item on the server and the client');
 		server.data = fresh.data;
 	}
 
@@ -177,7 +178,7 @@ export class Hydration {
 		for (const name of fresh.getAttributeNames()) {
 			const value = fresh.getAttribute(name) ?? '';
 			if (server.getAttribute(name) !== value) {
-				assert(false, `hydration attribute mismatch on <${fresh.localName} ${name}>`);
+				assert(false, `hydration attribute mismatch on <${fresh.localName} ${name}>; render the same item on the server and the client`);
 				server.setAttribute(name, value);
 			}
 		}
@@ -185,7 +186,8 @@ export class Hydration {
 			// `$style` is a property on the client and an attribute in the markup; the property
 			// replay below sets it on the claimed node.
 			if (!fresh.hasAttribute(name) && !isReactiveAttribute(fresh, name) && !isRecordedProperty(fresh, name)) {
-				assert(false, `hydration attribute mismatch: the server has <${fresh.localName} ${name}> and the client does not`);
+				assert(false, `hydration attribute mismatch: the server has <${fresh.localName} ${name}> and the client does not`
+					+ '; render the same item on the server and the client');
 				server.removeAttribute(name);
 			}
 		}
@@ -202,7 +204,7 @@ export class Hydration {
 	}
 
 	private fail(scope: Scope, message: string): void {
-		assert(false, `hydration mismatch: ${message}`);
+		assert(false, `hydration mismatch: ${message}; render the same item on the server and the client`);
 		scope.failed = true;
 		// Production: what the client builds replaces what the server sent, from here to the
 		// end of this run. Claimed nodes before it stay.
@@ -249,7 +251,8 @@ export class Hydration {
 			if (scope.failed) continue;
 			const surplus = this.surplusOf(scope);
 			if (surplus.nodes.length > 0) {
-				assert(false, `hydration mismatch: the server sent ${surplus.nodes.length} node(s), ${surplus.regions} region(s) among them, that the client did not render`);
+				assert(false, `hydration mismatch: the server sent ${surplus.nodes.length} node(s), ${surplus.regions} region(s) among them, `
+					+ `that the client did not render; render the same item on the server and the client`);
 				this.dropUnclaimed(scope);
 			}
 		}

@@ -1,6 +1,8 @@
 // What a row says, what the scheduler writes back, and what the application hands in
 // (designs 075, 076).
 
+import { codecError } from '@aweftjs/codec';
+
 /** What the scheduler writes onto a row about its most recent run. */
 export interface Last {
 	/** When the run started, in milliseconds since the epoch. */
@@ -91,5 +93,5 @@ export interface JobsError extends Error {
 	readonly reason: string;
 }
 
-export const jobsError = (reason: string, detail: string): JobsError =>
-	Object.assign(new Error(`jobs: ${detail}`), { reason });
+export const jobsError = (reason: string, detail: string, fix: string): JobsError =>
+	codecError(reason, detail, fix);

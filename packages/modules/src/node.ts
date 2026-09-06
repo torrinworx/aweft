@@ -25,6 +25,9 @@ const isModuleFile = (file: string): boolean =>
  * a candidate is `import()` of its file. Two files that would share one name, `thing.js` beside
  * `thing.ts`, are refused by the loader as `duplicate`.
  *
+ * Throws: a `ModulesError` with reason `invalid-name`, out of the `load` that lists it, for a
+ * file whose name is nothing but an extension.
+ *
  * Example:
  *   const loader = createLoader({ sources: [fromDirectory('./app/modules'), fromDirectory('./lib/modules')] });
  */

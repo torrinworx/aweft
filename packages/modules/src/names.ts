@@ -13,7 +13,10 @@ export const nameOfPath = (path: string, prefix?: string): string => {
 		: path.replace(/^\.\//, '');
 	const name = trimmed.replace(/\.[^./]+$/, '');
 	if (name === '') {
-		throw modulesError('invalid-name', path, `${path} leaves no module name once its extension is removed`);
+		throw modulesError(
+			'invalid-name', path, `${path} leaves no module name once its extension is removed`,
+			'Give the file a name before its extension.',
+		);
 	}
 	return name;
 };

@@ -25,8 +25,8 @@ const empty = (status: number): Response => new Response(null, { status });
  *
  * Returns: `start` and `stop`. Nothing listens until `start`.
  *
- * Throws `missing` when one of the three is absent, so a JavaScript caller cannot start a
- * server with no gate by leaving the field out.
+ * Throws: a `ServerError` with reason `missing` when one of the three is absent, so a
+ * JavaScript caller cannot start a server with no gate by leaving the field out.
  *
  * Example:
  *   const loader = createLoader({ sources: [fromDirectory('./modules'), auth], props: { store } });
@@ -37,7 +37,9 @@ const empty = (status: number): Response => new Response(null, { status });
 export const createServer = (options: ServerOptions): Server => {
 	const { loader, gate, listener, handlers = {} } = options;
 	for (const [what, value] of [['loader', loader], ['gate', gate], ['listener', listener]] as const) {
-		if (value === undefined || value === null) throw serverError('missing', `createServer needs a ${what}; there is no default`);
+		if (value === undefined || value === null) {
+			throw serverError('missing', `createServer needs a ${what}; there is no default`, 'Pass all three: createServer({ loader, gate, listener }).');
+		}
 	}
 	const live = new Set<Live>();
 	let started = false;
@@ -74,7 +76,10 @@ export const createServer = (options: ServerOptions): Server => {
 			if (answer instanceof Response) return answer;
 			// A route that answered with something else is the module's defect, and it is reported
 			// like a throw rather than turned into a bare 500 nobody hears about.
-			throw serverError('not-a-response', `${owned.name} answered ${routeKey(request)} with something that is not a Response`);
+			throw serverError(
+				'not-a-response', `${owned.name} answered ${routeKey(request)} with something that is not a Response`,
+				'Return a Response from the route.',
+			);
 		} catch (error) {
 			report(owned.name, error);
 			return empty(500);
@@ -94,7 +99,7 @@ export const createServer = (options: ServerOptions): Server => {
 
 	return {
 		start: async () => {
-			if (started) throw serverError('started', 'this server is already started');
+			if (started) throw serverError('started', 'this server is already started', 'Call stop before starting it again.');
 			routeTable(loader);
 			started = true;
 			await listener.start({ request: onRequest, socket: onSocket });

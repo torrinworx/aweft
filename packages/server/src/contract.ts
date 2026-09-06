@@ -1,6 +1,7 @@
 // What a gate is (design 071), what a listener and a connection are (design 072), and
 // what a module may carry for the server to run. Types, plus the one error shape.
 
+import { codecError } from '@aweftjs/codec';
 import type { Refusal } from '@aweftjs/core';
 import type { Loader } from '@aweftjs/modules';
 import type { Commit, ShareHandlers, Shared, SocketLike, WireReason } from '@aweftjs/sync';
@@ -73,7 +74,9 @@ export interface GatedLink {
 	 *   document: the document, or `undefined` to take the other end's
 	 *   handlers: with `accept`, always; pass `open` for the trusted case
 	 *
-	 * Returns: the share, as `@aweftjs/sync` hands it back. Throws `no-accept` without one.
+	 * Returns: the share, as `@aweftjs/sync` hands it back.
+	 *
+	 * Throws: a `ServerError` with reason `no-accept` when the handlers carry no `accept`.
 	 */
 	share<T extends object>(name: string, document: T | undefined, handlers: Accepting): Shared<T>;
 }
@@ -109,7 +112,13 @@ export type Ending = (() => unknown) | undefined | void;
 export interface ServerModule<C = unknown> {
 	/** Run once per connection the gate allows this module to see. May return the function run when it ends. */
 	connection?(connection: Connection<C>): Ending | Promise<Ending>;
-	/** Answer an `ask` naming this module, after the gate allowed it. */
+	/**
+	 * Answer an `ask` naming this module, after the gate allowed it.
+	 *
+	 * Throws: the asks this never sees are refused for the caller instead, with reason
+	 * `closed` when the connection has ended, `missing` when the module is not loaded or has
+	 * no `call`, and `refused` when the gate answered with reasons.
+	 */
 	call?(args: unknown, context: C, tools: Progress): unknown;
 	/** HTTP routes keyed by exact `METHOD /path`, such as `POST /api/session`. */
 	readonly routes?: Readonly<Record<string, Route<C>>>;
@@ -154,7 +163,12 @@ export interface ServerOptions {
 }
 
 export interface Server {
-	/** Check the routes, then start the listener. Throws `route-conflict` naming both modules. */
+	/**
+	 * Check the routes, then start the listener.
+	 *
+	 * Throws: a `ServerError` with reason `route-conflict` when two loaded modules declare the
+	 * same `METHOD /path`, naming both, and `started` when this server is already started.
+	 */
 	start(): Promise<void>;
 	/** End every connection and stop the listener. */
 	stop(): Promise<void>;
@@ -163,13 +177,16 @@ export interface Server {
 /**
  * An error this package raises, with a reason a caller can branch on.
  *
- * Reasons: `missing` (`createServer` without one of its three), `route-conflict`, `no-accept`
- * (a share on a connection without `accept`), `not-a-response` (a route answered with
- * something else; reported, never thrown to a caller), `started`.
+ * Reasons: `missing` (`createServer` without one of its three, or an ask naming a module that
+ * is not loaded or has no `call`), `route-conflict`, `no-accept` (a share on a connection
+ * without `accept`), `not-a-response` (a route answered with something else; reported, never
+ * thrown to a caller), `started`, `over-bound` (a request body past the listener's
+ * `maxPayload`), `refused` (the gate refused an ask) and `closed` (an ask on a connection that
+ * has ended).
  */
 export interface ServerError extends Error {
 	readonly reason: string;
 }
 
-export const serverError = (reason: string, detail: string): ServerError =>
-	Object.assign(new Error(`server: ${detail}`), { reason });
+export const serverError = (reason: string, detail: string, fix: string): ServerError =>
+	codecError(reason, detail, fix);

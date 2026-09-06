@@ -2,6 +2,13 @@
 //
 // The markup pass makes every refusal the runtime parser makes, but at build time, so the fault
 // has a position in a file rather than a stack in a browser (design 096).
+//
+// It is the one refusal in the stack that stays a class, because a caller catches it with
+// `instanceof` and the README says so. The reason and the fix are the same three-part shape
+// every other package throws, built by `codecError` so the message renders identically
+// (design 101).
+
+import { codecError } from '@aweftjs/codec';
 
 /**
  * What `transform` throws when the source says something a compiled template cannot mean.
@@ -26,10 +33,30 @@
 export class TransformError extends Error {
 	/** The offset in the source the fault is at. */
 	readonly at: number;
+	/** The stable token naming the rule the source broke. Branch on this, never on the message. */
+	readonly reason: string;
+	/** One sentence saying what to write instead. */
+	readonly fix: string;
 
-	constructor(message: string, at: number) {
+	constructor(message: string, at: number, reason: string, fix: string) {
 		super(message);
 		this.name = 'TransformError';
 		this.at = at;
+		this.reason = reason;
+		this.fix = fix;
 	}
 }
+
+/**
+ * Refuse a fault in the source at the offset it is at.
+ *
+ * Params:
+ *   reason: the stable token for the rule that was broken
+ *   detail: what was actually written, for a person reading the message
+ *   fix: one sentence saying what to write instead, in the imperative
+ *   at: the offset in the file the fault is at
+ */
+export const transformError = (reason: string, detail: string, fix: string, at: number): TransformError => {
+	const refusal = codecError(reason, detail, fix);
+	return new TransformError(refusal.message, at, reason, fix);
+};

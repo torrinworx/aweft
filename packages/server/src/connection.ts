@@ -1,6 +1,7 @@
 // One connection: one socket, a link on its binary messages, requests on its text, and the
 // modules' `connection` hooks behind the gate (designs 071, 072, 073).
 
+import { codecError } from '@aweftjs/codec';
 import type { Loader } from '@aweftjs/modules';
 import { connect, fromWebSocket, requests } from '@aweftjs/sync';
 import type { SocketLike } from '@aweftjs/sync';
@@ -39,8 +40,8 @@ const callOf = (instance: unknown): Call | undefined => {
 };
 
 /** What an `ask` is refused or fails with; the reason and reasons cross to the asker. */
-const asking = (reason: string, message: string, reasons?: readonly unknown[]): Error =>
-	Object.assign(new Error(message), reasons === undefined ? { reason } : { reason, reasons });
+const asking = (reason: string, detail: string, fix: string, reasons?: readonly unknown[]): Error =>
+	reasons === undefined ? codecError(reason, detail, fix) : Object.assign(codecError(reason, detail, fix), { reasons });
 
 export const openConnection = ({ socket, request, context, loader, gate, report }: Wiring): Live => {
 	const channel = fromWebSocket(socket);
@@ -54,7 +55,10 @@ export const openConnection = ({ socket, request, context, loader, gate, report 
 	const gated: GatedLink = {
 		share: (name, document, handlers) => {
 			if (typeof handlers?.accept !== 'function') {
-				throw serverError('no-accept', `${name}: a share on a connection says who may write; pass open for the trusted case`);
+				throw serverError(
+					'no-accept', `${name}: a share on a connection says who may write; pass open for the trusted case`,
+					'Pass accept in the share handlers, or open for the trusted case.',
+				);
 			}
 			return link.share(name, document, handlers);
 		},
@@ -79,12 +83,12 @@ export const openConnection = ({ socket, request, context, loader, gate, report 
 
 	asks.answer(async (name, args, progress) => {
 		await ready;
-		if (over) throw asking('closed', 'the connection has ended');
+		if (over) throw asking('closed', 'the connection has ended', 'Open a new connection and ask again.');
 		const instance = loader.get(name);
 		const call = callOf(instance);
-		if (call === undefined) throw asking('missing', `${name} is not loaded or has no call`);
+		if (call === undefined) throw asking('missing', `${name} is not loaded or has no call`, 'Load the module, and give it a call function.');
 		const reasons = await gate.access({ name, instance }, context);
-		if (reasons.length > 0) throw asking('refused', `${name} refused the call`, reasons);
+		if (reasons.length > 0) throw asking('refused', `${name} refused the call`, 'Sign in, or ask for something the gate allows.', reasons);
 		return await call.call(instance, args, context, { progress });
 	});
 

@@ -17,7 +17,9 @@ export type BundleEntry = ModuleExports | (() => Promise<ModuleExports>);
  *
  * Returns: a source whose names are the keys without that prefix and without the file
  * extension, so `./modules/auth/Session.js` is `auth/Session` under `prefix: './modules/'`.
- * Throws `invalid-name` at once for a key that leaves no name.
+ *
+ * Throws: a `ModulesError` with reason `invalid-name`, at once, for a key that leaves no name
+ * once its extension is removed.
  *
  * Example:
  *   const source = fromBundle(import.meta.glob('./modules/**\/*.js'), { prefix: './modules/' });

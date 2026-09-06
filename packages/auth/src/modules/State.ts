@@ -1,6 +1,7 @@
 // auth/State: the user's own state document, shared on every connection of theirs. Private,
 // so the gate never lets an anonymous connection this far (design 074).
 
+import { codecError } from '@aweftjs/codec';
 import type { ModuleProps } from '@aweftjs/modules';
 import { type Connection, open } from '@aweftjs/server';
 
@@ -19,7 +20,10 @@ export default (props: ModuleProps): State => {
 			if (user === null) {
 				// Only a gate that is not the auth gate lets an anonymous connection reach a private
 				// module. Loud, because sharing nothing in silence would look like an empty state.
-				throw new Error('auth/State: an anonymous connection reached a private module; the gate in front is not auth/Gate');
+				throw codecError(
+					'not-gated', 'an anonymous connection reached a private module',
+					'Put auth/Gate in front of the server, or make the module public.',
+				);
 			}
 			const handle = await store.open(`state:${user}`);
 			// The user's own document: whatever they write is theirs to write.
