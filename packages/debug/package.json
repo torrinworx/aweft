@@ -1,0 +1,25 @@
+{
+	"name": "@aweftjs/debug",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"description": "Reads a running document or commit back as text.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "node --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/codec": "*",
+		"@aweftjs/core": "*"
+	},
+	"devDependencies": {
+		"@aweftjs/testing": "*"
+	},
+	"aweft": {
+		"tier": "integrator",
+		"branchCoverage": 80
+	}
+}

@@ -1,0 +1,8 @@
+type Described: interface Described { readonly kind: string; readonly id?: string; readonly facts: readonly Fact[]; readonly children?: readonly Described[]; }
+type Fact: type Fact = readonly [ label: string, value: unknown ];
+type Trace: interface Trace { text(): string; count(): number; stop(): void; }
+value commitOf: (commit: Commit, document?: unknown) => Described
+value documentOf: (document: unknown) => Described
+value explain: (subject: unknown, document?: unknown) => string
+value render: (d: Described) => string
+value trace: (document: unknown, limit?: number) => Trace
