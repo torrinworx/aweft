@@ -1,0 +1,10 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"include": [
+		"src", "tests",
+		"../../recipes/debug",
+		"../../recipes/todo-list",
+		"../../recipes/two-clients",
+		"../../recipes/optimistic-write"
+	]
+}

@@ -13,8 +13,9 @@
 // implementations of this format agree at all.
 
 import {
-	type Commit, type Delta, type Value,
-	bytesFromHex, bytesToHex, compareDeltas, createId, decodeCommit, encodeCommit,
+	type Commit, type Delta, type Id, type Position, type Tag, type Value,
+	assertId, assertPosition, bytesFromHex, bytesToHex, compareDeltas, createId, decodeCommit,
+	encodeCommit,
 } from '@aweftjs/codec';
 import { randomFrom } from '@aweftjs/testing';
 
@@ -40,10 +41,22 @@ const random = randomFrom(SEED);
 const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)]!;
 
 /** Ids from the same seeded source, so the whole log is reproducible from the seed alone. */
-const seededId = (): Uint8Array => {
+const seededId = (): Id => {
 	const bytes = new Uint8Array(12);
 	for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(random() * 256);
-	return bytes;
+	return assertId(bytes);
+};
+
+/**
+ * A tag from the same seeded source.
+ *
+ * Nothing in the stack mints one: the algorithm that fills a tag is open, so the width the
+ * encoder enforces is the whole of what makes these bytes a tag.
+ */
+const seededTag = (): Tag => {
+	const bytes = new Uint8Array(12);
+	for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(random() * 256);
+	return bytes as Tag;
 };
 
 const doc = seededId();
@@ -60,10 +73,10 @@ check(bytesToHex(minted) !== bytesToHex(createId()), 'two minted ids came back t
 const words = ['the', 'quick', 'observable', 'commits', 'a', 'delta', 'over', 'the', 'wire'];
 
 /** A position key: non-empty, never ending in a zero byte, as section 6.6 requires. */
-const position = (n: number): Uint8Array => {
+const position = (n: number): Position => {
 	const bytes = [0x80 + (n & 0x3f)];
 	if (n > 0x3f) bytes.push(0x80 + ((n >> 6) & 0x3f));
-	return Uint8Array.from(bytes);
+	return assertPosition(Uint8Array.from(bytes));
 };
 
 const value = (): Value => {
@@ -122,7 +135,7 @@ const commit = (): Commit => {
 	}
 
 	const out: Commit = { deltas };
-	return random() < 0.3 ? { ...out, tag: seededId() } : out;
+	return random() < 0.3 ? { ...out, tag: seededTag() } : out;
 };
 
 // --- write the log -----------------------------------------------------------------------
@@ -252,8 +265,8 @@ for (const frame of frames.slice(0, 40)) {
 // fixed ids rather than the seeded stream, so the census is the same on every run and the
 // README can quote it.
 
-const A = bytesFromHex('000102030405060708090a0b');
-const B = bytesFromHex('0b0a09080706050403020100');
+const A = assertId(bytesFromHex('000102030405060708090a0b'));
+const B = assertId(bytesFromHex('0b0a09080706050403020100'));
 
 const census: Commit[] = [
 	{ deltas: [{ type: 'add', id: A, ref: { kind: 'object', key: 'title' }, value: 'plan' }] },
@@ -261,7 +274,7 @@ const census: Commit[] = [
 		{ type: 'add', id: A, ref: { kind: 'object', key: 'n' }, value: 42 },
 		{ type: 'add', id: A, ref: { kind: 'object', key: 'kids' }, value: { edge: 'attach', kind: 'array', id: B } },
 	] },
-	{ deltas: [{ type: 'replace', id: B, ref: { kind: 'array', key: Uint8Array.of(0x80) }, value: 3.5 }] },
+	{ deltas: [{ type: 'replace', id: B, ref: { kind: 'array', key: assertPosition(Uint8Array.of(0x80)) }, value: 3.5 }] },
 ];
 
 let unnoticed = 0;

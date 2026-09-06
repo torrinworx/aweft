@@ -49,7 +49,7 @@ const driven = (start: number) => {
 	return { clock, advance, sleep: (ms: number) => { now += ms; } };
 };
 
-// 06:00 in Toronto, the morning before the clocks go forward.
+// 06:00 in Toronto on the Saturday morning before the clocks go forward.
 const { clock, advance, sleep } = driven(Date.UTC(2026, 2, 7, 11, 0));
 
 // --- the report an agent wrote, run in a room -----------------------------------------------
