@@ -37,6 +37,7 @@ const packages = new URL('../../', import.meta.url);
 const resolved: Record<string, string> = {
 	'@aweftjs/dom': new URL('dom/src/index.ts', packages).href,
 	'@aweftjs/core': new URL('core/src/index.ts', packages).href,
+	'@aweftjs/ui': new URL('ui/src/index.ts', packages).href,
 };
 
 /** A module written to a scratch file and imported. The stack's specifiers become file URLs, so

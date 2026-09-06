@@ -21,6 +21,7 @@ import { freshName, freshPrefix, readBindings } from './bindings.ts';
 import { stripAsserts } from './asserts.ts';
 
 const DOM = '@aweftjs/dom';
+const UI = '@aweftjs/ui';
 
 /**
  * What a caller may say about the source it hands `transform`.
@@ -36,6 +37,15 @@ export interface TransformOptions {
 	readonly filename?: string;
 	/** A release build: assert calls are removed. */
 	readonly release?: boolean;
+	/**
+	 * The package a file that binds no `h` of its own gets one from. `@aweftjs/dom` when it is
+	 * left off, so `build` assumes nothing about `ui`.
+	 *
+	 * An application whose pages are `ui` pages sets it to `@aweftjs/ui`. Without it, JSX in a
+	 * file that imports `Theme` and `mount` but forgets `h` compiles to `dom`'s `h`, and a
+	 * `theme` prop is written out as a literal attribute that nothing reads.
+	 */
+	readonly defaultH?: '@aweftjs/dom' | '@aweftjs/ui';
 }
 
 /** A source map in the shape every bundler and every browser reads. */
@@ -107,30 +117,48 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 	// (design 092), so a file that declares one, or imports one from elsewhere, keeps it even
 	// when it also has `dom`'s under another name.
 	const needsH = !bindings.binds.has('h');
-	// Hoisting needs `h` to be provably `dom`'s: either the file binds none and the import above
-	// supplies it, or its one binding of the name is that import (design 095, case 4).
-	const domIsH = needsH || bindings.domH === 'h';
+	// Hoisting needs `h` to be provably `dom`'s or `ui`'s: either the file binds none and the
+	// import below supplies the caller's default, or its one binding of the name is one of those
+	// two imports (designs 095 case 4, and 108).
+	const uiIsH = bindings.uiH === 'h' || (needsH && options.defaultH === UI);
+	const domIsH = !uiIsH && (needsH || bindings.domH === 'h');
+	const hoisting = domIsH || uiIsH;
 	const jsxH = 'h';
-	// Markup is `dom`'s tag and means `dom`'s `h`, whatever else this file calls `h`. When the
-	// file's `h` is its own, `dom`'s comes in under a name nothing else in the file uses.
-	const markupH = domIsH ? 'h' : bindings.domH ?? freshName('_h', bindings.names);
+	// A hand-written call is read as an element only when it calls the same `h` a hoisted
+	// template would stand in for. A file holding both packages' `h` keeps the other one's calls
+	// exactly as written.
+	const primaryH = uiIsH ? bindings.uiH : bindings.domH;
+	// Markup means whichever package's `html` tagged it. When that package's `h` is not the
+	// file's own `h`, it comes in under a name nothing else in the file uses.
+	const domMarkupH = domIsH ? 'h' : bindings.domH ?? freshName('_h', bindings.names);
+	const uiMarkupH = uiIsH ? 'h' : bindings.uiH ?? freshName('_uh', bindings.names);
 	const templateName = freshName('_template', bindings.names);
 	const joinedName = freshName('_joined', bindings.names);
-	const hoister = createHoister(domIsH, templateName, freshPrefix('_t', bindings.names));
+	// A `ui` file's properties never go in the prototype, because `theme` is not an attribute and
+	// `build` does not carry `ui`'s vocabulary (design 108).
+	const hoister = createHoister(hoisting, templateName, freshPrefix('_t', bindings.names), !uiIsH);
 
 	let usedJsxH = false;
-	let usedMarkupH = false;
+	let usedDomMarkupH = false;
+	let usedUiMarkupH = false;
 	let usedJoined = false;
 
 	const isDomHCall = (node: Node): boolean =>
-		node.type === 'CallExpression' && bindings.domH !== null
+		node.type === 'CallExpression' && primaryH !== null
 		&& (node['callee'] as Node).type === 'Identifier'
-		&& (node['callee'] as Node)['name'] === bindings.domH;
+		&& (node['callee'] as Node)['name'] === primaryH;
 
-	const isMarkup = (node: Node): boolean =>
-		node.type === 'TaggedTemplateExpression' && bindings.domHtml !== null
-		&& (node['tag'] as Node).type === 'Identifier'
-		&& (node['tag'] as Node)['name'] === bindings.domHtml;
+	const markupTagOf = (node: Node): string | null => {
+		if (node.type !== 'TaggedTemplateExpression') return null;
+		const tag = node['tag'] as Node;
+		if (tag.type !== 'Identifier') return null;
+		const name = tag['name'] as string;
+		if (bindings.uiHtml !== null && name === bindings.uiHtml) return UI;
+		if (bindings.domHtml !== null && name === bindings.domHtml) return DOM;
+		return null;
+	};
+
+	const isMarkup = (node: Node): boolean => markupTagOf(node) !== null;
 
 	const isJsx = (node: Node): boolean => node.type === 'JSXElement' || node.type === 'JSXFragment';
 
@@ -163,7 +191,7 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 
 	const code = (node: Node): string => {
 		if (isJsx(node)) return readJsx(node, jsxReader);
-		if (isMarkup(node)) return readMarkup(node, markupReader);
+		if (isMarkup(node)) return readMarkup(node, markupTagOf(node) === UI ? uiMarkupReader : domMarkupReader);
 		if (isDomHCall(node)) {
 			const element = readCall(node, callReader);
 			return element === null ? inner(node) : hoister.emit(element);
@@ -184,15 +212,25 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 		source,
 		emit,
 	};
-	const markupReader: MarkupReader = {
+	const joinedCode = (pieces: string[]): string => {
+		usedJoined = true;
+		return `${joinedName}([${pieces.join(', ')}])`;
+	};
+	const domMarkupReader: MarkupReader = {
 		h: () => {
-			usedMarkupH = true;
-			return markupH;
+			usedDomMarkupH = true;
+			return domMarkupH;
 		},
-		joined: (pieces) => {
-			usedJoined = true;
-			return `${joinedName}([${pieces.join(', ')}])`;
+		joined: joinedCode,
+		code,
+		emit,
+	};
+	const uiMarkupReader: MarkupReader = {
+		h: () => {
+			usedUiMarkupH = true;
+			return uiMarkupH;
 		},
+		joined: joinedCode,
 		code,
 		emit,
 	};
@@ -204,13 +242,20 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 		stripAsserts(program, bindings.assert, magic);
 	}
 
-	const imported: string[] = [];
-	if (needsH && (usedJsxH || usedMarkupH)) imported.push('h');
-	if (!domIsH && bindings.domH === null && usedMarkupH) imported.push(`h as ${markupH}`);
-	if (usedJoined) imported.push(`joined as ${joinedName}`);
-	if (hoister.declarations.length > 0) imported.push(`template as ${templateName}`);
+	const fromDom: string[] = [];
+	const fromUi: string[] = [];
+	// The injected `h` comes from whichever package this file's `h` is, which is the default when
+	// the file binds none.
+	if (needsH && (usedJsxH || (domIsH && usedDomMarkupH) || (uiIsH && usedUiMarkupH))) (uiIsH ? fromUi : fromDom).push('h');
+	if (!domIsH && bindings.domH === null && usedDomMarkupH) fromDom.push(`h as ${domMarkupH}`);
+	if (!uiIsH && bindings.uiH === null && usedUiMarkupH) fromUi.push(`h as ${uiMarkupH}`);
+	if (usedJoined) fromDom.push(`joined as ${joinedName}`);
+	if (hoister.declarations.length > 0) (uiIsH ? fromUi : fromDom).push(`template as ${templateName}`);
 
-	const preamble = imported.length > 0 ? `import { ${imported.join(', ')} } from '${DOM}';\n` : '';
+	const preamble = [
+		fromDom.length > 0 ? `import { ${fromDom.join(', ')} } from '${DOM}';\n` : '',
+		fromUi.length > 0 ? `import { ${fromUi.join(', ')} } from '${UI}';\n` : '',
+	].join('');
 	const declarations = hoister.declarations.length > 0 ? `${hoister.declarations.join('\n')}\n` : '';
 
 	// Above everything, not after the last import. A module may legally put a statement before an

@@ -40,9 +40,12 @@ const isPrototypeAttribute = (property: Property): property is Property & { kind
  *
  * Params:
  *   enabled: false leaves every element as its own fallback, which is what a file whose `h` is
- *            not provably `dom`'s gets (design 092)
- *   template: the local name of `dom`'s `template`
+ *            not provably `dom`'s or `ui`'s gets (designs 092, 108)
+ *   template: the local name of the `template` to call
  *   prefix: the base for each generated declaration's name
+ *   prototypeAttributes: false puts every property in the per-instance edits instead of in the
+ *            prototype, which is what a `ui` file gets: `theme` is not an attribute, and only
+ *            `ui` knows which of the names it claims (design 108)
  *
  * Returns: the hoister. Read `declarations` after every element has been emitted.
  *
@@ -50,7 +53,12 @@ const isPrototypeAttribute = (property: Property): property is Property & { kind
  *   const hoister = createHoister(true, '_template', '_t');
  *   const code = hoister.emit(element);
  */
-export const createHoister = (enabled: boolean, template: string, prefix: string): Hoister => {
+export const createHoister = (
+	enabled: boolean,
+	template: string,
+	prefix: string,
+	prototypeAttributes = true,
+): Hoister => {
 	const declarations: string[] = [];
 
 	const emit = (element: Element): string => {
@@ -69,7 +77,7 @@ export const createHoister = (enabled: boolean, template: string, prefix: string
 		const attributes: Record<string, string | number | boolean> = {};
 		const varying: Property[] = [];
 		for (const property of element.properties) {
-			if (!isPrototypeAttribute(property)) {
+			if (!prototypeAttributes || !isPrototypeAttribute(property)) {
 				varying.push(property);
 				continue;
 			}

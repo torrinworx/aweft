@@ -7,6 +7,9 @@
 import { type Node, patternNames, walk } from './ast.ts';
 
 const DOM = '@aweftjs/dom';
+// The second blessed identity (design 108). `build` knows this specifier and nothing else about
+// the package behind it.
+const UI = '@aweftjs/ui';
 
 // A neighbouring assert module: a relative specifier whose last segment is `assert`. That is how
 // every assert in this stack is imported, and it never matches `node:assert/strict`.
@@ -17,6 +20,10 @@ export interface Bindings {
 	readonly domH: string | null;
 	/** The local name bound to `dom`'s `html` tag, or null. */
 	readonly domHtml: string | null;
+	/** The local name bound to `ui`'s `h`, or null when the file has no `h` from `ui`. */
+	readonly uiH: string | null;
+	/** The local name bound to `ui`'s `html` tag, or null. */
+	readonly uiHtml: string | null;
 	/** The local name of an assert imported from a neighbouring assert module, or null. */
 	readonly assert: string | null;
 	/** Every name the file binds, however it binds it. */
@@ -36,8 +43,8 @@ const boundOnlyByImport = (name: string, counts: ReadonlyMap<string, number>): b
  * Params:
  *   program: the parsed file's Program node
  *
- * Returns: which names came from `@aweftjs/dom`, the assert to strip, and every name the file
- * binds or merely mentions.
+ * Returns: which names came from `@aweftjs/dom` and `@aweftjs/ui`, the assert to strip, and
+ * every name the file binds or merely mentions.
  *
  * Example:
  *   const bindings = readBindings(ast.program);
@@ -50,6 +57,8 @@ export const readBindings = (program: Node): Bindings => {
 
 	let importedH: string | null = null;
 	let importedHtml: string | null = null;
+	let importedUiH: string | null = null;
+	let importedUiHtml: string | null = null;
 	let importedAssert: string | null = null;
 
 	for (const statement of program['body'] as Node[]) {
@@ -63,6 +72,8 @@ export const readBindings = (program: Node): Bindings => {
 			const name = imported.type === 'Identifier' ? imported['name'] as string : imported['value'] as string;
 			if (from === DOM && name === 'h') importedH = local;
 			if (from === DOM && name === 'html') importedHtml = local;
+			if (from === UI && name === 'h') importedUiH = local;
+			if (from === UI && name === 'html') importedUiHtml = local;
 			if (NEIGHBOURING_ASSERT.test(from) && name === 'assert') importedAssert = local;
 		}
 	}
@@ -98,6 +109,8 @@ export const readBindings = (program: Node): Bindings => {
 	return {
 		domH: importedH !== null && boundOnlyByImport(importedH, counts) ? importedH : null,
 		domHtml: importedHtml !== null && boundOnlyByImport(importedHtml, counts) ? importedHtml : null,
+		uiH: importedUiH !== null && boundOnlyByImport(importedUiH, counts) ? importedUiH : null,
+		uiHtml: importedUiHtml !== null && boundOnlyByImport(importedUiHtml, counts) ? importedUiHtml : null,
 		assert: importedAssert,
 		binds: new Set(counts.keys()),
 		names,
