@@ -8,24 +8,12 @@
 
 import { assert } from './assert.ts';
 import { activeDocument } from './ambient.ts';
-import { setAttribute } from './host.ts';
+import { type Bound, BOUND, type ChildSignal, type Signal, attributeSet, isBound, isPlainObject, propertySet } from './bound.ts';
 import { setProperty } from './hydration.ts';
-import { type Bound, BOUND, type ChildSignal, type Component, type Mounter, type Signal, componentMounter, isBound } from './mount.ts';
+import { type Component, type Mounter, componentMounter } from './mount.ts';
 import { markMade, recordProperty, recordReactiveAttribute } from './props.ts';
 import type { ElementLike, NodeLike } from './types.ts';
 import { isNodeLike, isSource } from './types.ts';
-
-const propertySet = (target: object, name: string, value: unknown): void => {
-	(target as Record<string, unknown>)[name] = value;
-};
-
-const attributeSet = (target: object, name: string, value: unknown): void => {
-	setAttribute(target as ElementLike, name, value);
-};
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-	typeof value === 'object' && value !== null && !Array.isArray(value) && !isNodeLike(value) && !isSource(value)
-	&& Object.getPrototypeOf(value) === Object.prototype;
 
 /**
  * Make an element, or a component's mounter.

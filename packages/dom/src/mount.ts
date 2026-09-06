@@ -10,6 +10,7 @@ import type { ArrayChange, Change, MutableArray } from '@aweftjs/core';
 
 import { assert } from './assert.ts';
 import { setActiveDocument } from './ambient.ts';
+import { type ChildSignal, type Signal, isBound } from './bound.ts';
 import { Hydration, type Region, type Scope } from './hydration.ts';
 import { type Before, type Handle, type List, type Step, createList, hex, seek } from './list.ts';
 import type { DocumentLike, ElementLike, NodeLike, ParentLike, TextLike } from './types.ts';
@@ -42,42 +43,9 @@ export type Pending = (promise: Promise<unknown>) => void;
 export type Component<P = Record<string, unknown>> =
 	(props: P & { children: unknown[]; each?: unknown }, cleanup: Cleanup, mounted: Mounted, pending: Pending) => unknown;
 
-export const BOUND: unique symbol = Symbol('aweft.bound');
-
 /** A mounter `h` made carries its handle factory, so the walk need not go through `Remove`. */
 const DIRECT: unique symbol = Symbol('aweft.direct');
 type Direct = Mounter & { [DIRECT]: (ctx: Ctx, before: Before) => Handle };
-
-export interface ChildSignal {
-	readonly kind: 'child';
-	parent: ElementLike;
-	readonly item: unknown;
-	staticNext: NodeLike | null;
-	next: ChildSignal | null;
-	handle: Handle | null;
-}
-
-export interface PropSignal {
-	readonly kind: 'prop';
-	element: ElementLike;
-	/** The property whose value is the real target (`style`), or null for the element itself. */
-	readonly via: string | null;
-	readonly name: string;
-	readonly source: { effect(fn: (value: unknown) => void): () => void };
-	readonly set: (target: object, name: string, value: unknown) => void;
-}
-
-export type Signal = ChildSignal | PropSignal;
-
-/** An element `h` made with reactive parts still to bind. */
-export interface Bound {
-	readonly [BOUND]: true;
-	node: ElementLike;
-	readonly signals: Signal[];
-}
-
-export const isBound = (value: unknown): value is Bound =>
-	typeof value === 'object' && value !== null && (value as { [BOUND]?: true })[BOUND] === true;
 
 interface Root {
 	readonly queue: (() => void)[];

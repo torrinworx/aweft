@@ -12,7 +12,8 @@
 import { assert } from './assert.ts';
 import { activeDocument } from './ambient.ts';
 import { bindProps } from './h.ts';
-import { type Bound, BOUND, type ChildSignal, type Signal, hydrating, isBound } from './mount.ts';
+import { type Bound, BOUND, type ChildSignal, type Signal, isBound } from './bound.ts';
+import { hydrating } from './mount.ts';
 import { markMade } from './props.ts';
 import { setAttribute } from './host.ts';
 import type { DocumentLike, ElementLike, NodeLike } from './types.ts';
