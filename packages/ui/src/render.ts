@@ -15,8 +15,8 @@ import {
 } from '@aweftjs/dom';
 
 import { assert } from './assert.ts';
-import { type HeadList, attachHead, createHeadList, holdHead } from './head-list.ts';
-import { type Ids, type Registry, createIds, createRegistry } from './registry.ts';
+import { type HeadList, attachHead, createHeadList } from './head-list.ts';
+import { type Ids, type Registry, createIds, createRegistry, hold } from './registry.ts';
 import { type Sheet, createSheet } from './sheet.ts';
 import type { StageEntry } from './stage-entry.ts';
 
@@ -268,10 +268,11 @@ export const mount = (target: ParentLike, item: unknown, before?: Remove, render
  * Returns: the item's markup. The theme's CSS and the page's head tags are not in it: read
  * `context.theme.markup()` and `context.head.markup()` and put both in the page's own head.
  *
- * The head list is held for the whole render, because a static render takes the page down as soon
- * as it has serialized it and the tags have to still be there afterwards. So a render object that
- * has been through `render` keeps every tag its page declared; use one per page, as design 109
- * says.
+ * The head list and the stage list are both held for the whole render, because a static render
+ * takes the page down as soon as it has serialized it and both have to still be there afterwards.
+ * So a render object that has been through `render` keeps every tag its page declared and every
+ * stage its page mounted; use one per page, as design 109 says. `use(context).stage` after the
+ * call is what a static walk reads to learn which URLs the page declares (designs 126, 145).
  *
  * Example:
  *   const ui = context();
@@ -281,7 +282,13 @@ export const mount = (target: ParentLike, item: unknown, before?: Remove, render
  */
 export const render = async (item: unknown, options: { context?: Render } = {}): Promise<string> => {
 	const own = options.context ?? context();
-	holdHead(own.head);
+	// The hold is what keeps the lists after the page comes down, and it is also what makes a
+	// second render on one object accumulate: the first page's tags and stages are still in there.
+	// A render object is for one page (designs 109, 127, 145), and this is where that is enforced.
+	const again = hold(own.head);
+	hold(own.stage);
+	assert(!again,
+		'this render object has already rendered a page, so its head tags and stages are still in it; make one context() per page');
 	return domRender(item, { context: rooted(own) });
 };
 

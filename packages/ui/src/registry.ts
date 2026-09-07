@@ -37,6 +37,27 @@ export const drop = <T>(items: MutableArray<T>, item: T): void => {
 	if (at >= 0) items.splice(at, 1);
 };
 
+const HOLD: unique symbol = Symbol('aweft.ui.registry.hold');
+
+/**
+ * Keep a registry's items after the page that added them has been taken down.
+ *
+ * A static render mounts the page, serializes it and unmounts it, so by the time the caller
+ * reads the head tags or the stage list every component that added one has already been
+ * removed. `render` holds both lists before it starts, which is why they are still there
+ * afterwards (designs 127 and 145).
+ *
+ * An internal seam behind a symbol rather than a name on `Registry`: only this package's
+ * `render` may do it, and a page that mounts has to keep letting go as it navigates.
+ *
+ * Returns: whether it was already held, so a caller can tell a second use of one render object
+ * from the first.
+ */
+export const hold = <T>(registry: Registry<T>): boolean => {
+	const held = (registry as unknown as Record<symbol, (() => boolean) | undefined>)[HOLD];
+	return held === undefined ? false : held();
+};
+
 /**
  * Make an empty registry.
  *
@@ -46,18 +67,27 @@ export const drop = <T>(items: MutableArray<T>, item: T): void => {
 export const createRegistry = <T>(): Registry<T> => {
 	const items = mutableArray<T>();
 	let taken = false;
-	return {
+	let holding = false;
+	const registry = {
 		items,
 		claim: () => {
 			if (taken) return false;
 			taken = true;
 			return true;
 		},
-		add: (item) => {
+		add: (item: T) => {
 			items.push(item);
-			return () => { drop(items, item); };
+			return () => {
+				if (!holding) drop(items, item);
+			};
+		},
+		[HOLD]: () => {
+			const already = holding;
+			holding = true;
+			return already;
 		},
 	};
+	return registry as Registry<T>;
 };
 
 /** The id source behind an `aria-labelledby` and its friends. */

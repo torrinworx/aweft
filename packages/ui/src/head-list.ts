@@ -129,38 +129,18 @@ const dress = (element: ElementLike, tag: HeadTag, stamp: string): (() => void)[
 };
 
 /**
- * Keep a list's tags even after the page that declared them is taken down.
- *
- * A static render mounts the page, serializes it and unmounts it, so by the time the caller reads
- * `markup()` every head component has already been removed. `render` holds the list before it
- * starts, which is why the tags are still there afterwards. An internal seam behind a symbol
- * rather than a name on `HeadList`: only this package's `render` may do it, and a page that mounts
- * has to keep removing tags as it navigates.
- */
-export const holdHead = (list: HeadList): void => {
-	(list as unknown as Record<symbol, (() => void) | undefined>)[HOLD]?.();
-};
-
-const HOLD: unique symbol = Symbol('aweft.ui.head.hold');
-
-/**
  * Make the head list one render owns.
+ *
+ * The registry underneath is what `hold` in `registry.ts` keeps, so a static render still has
+ * the tags after it has taken the page down (design 127).
  *
  * Example:
  *   const stop = use(context).head.add({ kind: 'title', group: 'title', depth: 0, attrs: {}, text: 'Home' });
  */
 export const createHeadList = (): HeadList => {
 	const registry = createRegistry<HeadTag>();
-	let holding = false;
 	const list = {
 		...registry,
-		add: (tag: HeadTag) => {
-			const drop = registry.add(tag);
-			return () => {
-				if (!holding) drop();
-			};
-		},
-		[HOLD]: () => { holding = true; },
 		title: () => {
 			const found = resolveTags(registry.items).find((entry) => entry.tag.kind === 'title');
 			return found === undefined ? null : textOf(found.tag.text);

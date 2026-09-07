@@ -8,7 +8,9 @@ import { mutable } from '@aweftjs/core';
 import { createDocument, mount as domMount, parseHtml, toHtml } from '@aweftjs/dom';
 import type { DocumentLike, LightDocument } from '@aweftjs/dom';
 import { recordingDocument } from '@aweftjs/testing';
-import { Theme, context, h, hydrate, mount, render, use } from '@aweftjs/ui';
+import { createRouter } from '@aweftjs/dom/router';
+import type { Router } from '@aweftjs/dom/router';
+import { Stage, StageContext, Theme, context, h, hydrate, mount, render, use } from '@aweftjs/ui';
 
 // Entries of this file's own. Defining a property the default theme already sets, with another
 // value, is a refusal (design 111), so a test theme picks names the library does not use.
@@ -227,4 +229,34 @@ test('a theme cell that moves twice writes once each time, and stops when the el
 	ops.length = 0;
 	tone.set('badge');
 	assert.deepEqual(page(), [], 'nothing is written to an element that has been unmounted');
+});
+
+test('a render keeps the stages its page mounted, so a static walk can read them afterwards', async () => {
+	// `render` mounts the page, serializes it and takes it down, so by the time a caller reads the
+	// registry every stage has been removed from it. The list is held for the length of the call
+	// (design 145), which is what a walk over the pages of a site needs.
+	const acts = { '': () => h('main', {}, 'home'), 'posts/:id': () => h('main', {}, 'post') };
+	const Site = (props: { router: Router }): unknown =>
+		h(StageContext, { router: props.router, acts }, h(Stage, {}));
+
+	const own = context();
+	assert.equal(own.stage.items.length, 0, 'a fresh render has no stages in it');
+
+	const markup = await render(h(Site, { router: createRouter({ url: '/' }) }), { context: own });
+	assert.ok(markup.includes('home'));
+
+	assert.equal(own.stage.items.length, 1, 'and one page leaves one entry behind');
+	const entry = own.stage.items[0]!;
+	assert.equal(entry.prefix, '');
+	assert.equal(entry.parent, null);
+	assert.deepEqual(entry.acts.map((act) => act.name), ['', 'posts/:id']);
+
+	// A page that mounts is the other half of the rule: it keeps letting go, so a live page's
+	// registry is what is on the page now.
+	const document = createDocument();
+	const live = context();
+	const stop = mount(document.body, h(Site, { router: createRouter({ url: '/' }) }), undefined, live);
+	assert.equal(live.stage.items.length, 1);
+	stop();
+	assert.equal(live.stage.items.length, 0, 'a mount that is taken down leaves nothing behind');
 });
