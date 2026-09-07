@@ -38,6 +38,7 @@ danger9
 dangerForeground
 dangerSubtle
 dangerSubtleForeground
+dialogWidth
 div
 dotSize
 ease
@@ -47,8 +48,15 @@ floor
 font
 fontMono
 foreground
+hairline
 hoverTint
 hue
+hue0
+hue120
+hue180
+hue240
+hue300
+hue60
 iconSize
 if
 input
@@ -80,6 +88,7 @@ ringOffset
 ringWidth
 round
 saturate
+scrim
 shiftBrightness
 slow
 space
@@ -110,4 +119,5 @@ textXlLine
 textXs
 textXsLine
 thumbSize
+tooltipWidth
 trackHeight

@@ -279,6 +279,142 @@ defineTheme({
 		padding: '$space2',
 	},
 
+	// Off the screen and still in the reading order. Put it in a class list beside anything: a file
+	// input that has to stay focusable, a message shown somewhere else, a label a page replaced.
+	offscreen: {
+		$hairline: '1px',
+		position: 'absolute',
+		width: '$hairline',
+		height: '$hairline',
+		padding: 0,
+		overflow: 'hidden',
+		clipPath: 'inset(50%)',
+		whiteSpace: 'nowrap',
+		border: 0,
+	},
+
+	// A modal dialog. The element is in the top layer already, so there is no z-index here either;
+	// the scrim is a name because a black at half strength is right in both modes and neither role
+	// pair says it.
+	dialog: {
+		$dialogWidth: '32rem',
+		$scrim: 'rgba(0, 0, 0, 0.5)',
+		width: '100%',
+		maxWidth: '$dialogWidth',
+		padding: '$space4',
+		border: '$borderWidth solid $border',
+		borderRadius: '$radiusLg',
+		background: '$surface',
+		color: '$surfaceForeground',
+		'_cssProp_::backdrop': { background: '$scrim' },
+	},
+	dialog_head: {
+		display: 'flex',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		gap: '$space2',
+		marginBottom: '$space2',
+	},
+	dialog_body: { display: 'flex', flexDirection: 'column', gap: '$space2' },
+
+	// A tip is the page's own colours the other way up, which is the same contrast ratio read from
+	// the other side and so is compliant wherever the pair it inverts is.
+	tooltip: {
+		$tooltipWidth: '18rem',
+		maxWidth: '$tooltipWidth',
+		padding: '$space $space2',
+		borderRadius: '$radius',
+		background: '$foreground',
+		color: '$background',
+		fontFamily: '$font',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+	},
+
+	// A disclosure: the summary is a button, so it takes the `button` entry and adds only what a
+	// summary needs. `listStyle` and the vendor marker are the two ways a host draws the triangle.
+	disclosure: { display: 'block', width: '100%' },
+	disclosure_summary: {
+		display: 'flex',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		gap: '$space2',
+		listStyle: 'none',
+		cursor: 'pointer',
+		'_cssProp_::-webkit-details-marker': { display: 'none' },
+	},
+	disclosure_summary_left: { justifyContent: 'flex-start' },
+	// The platform has no `disabled` for a summary, so the pointer is taken away here and the focus
+	// order in the component.
+	disclosure_summary_disabled: { pointerEvents: 'none' },
+
+	filedrop: {
+		display: 'flex',
+		flexDirection: 'column',
+		gap: '$space2',
+		padding: '$space4',
+		border: '$borderWidth dashed $input',
+		borderRadius: '$radius',
+		background: '$background',
+		color: '$foreground',
+		cursor: 'pointer',
+	},
+	filedrop_dragging: {
+		borderColor: '$accent',
+		background: '$accentSubtle',
+		color: '$accentSubtleForeground',
+	},
+	filedrop_prompt: {
+		display: 'flex',
+		alignItems: 'center',
+		gap: '$space2',
+		fontFamily: '$font',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+		color: '$mutedForeground',
+		cursor: 'pointer',
+	},
+	filedrop_input: { extends: 'offscreen' },
+	filedrop_list: {
+		display: 'flex',
+		flexDirection: 'column',
+		gap: '$space',
+		listStyle: 'none',
+		margin: 0,
+		padding: 0,
+	},
+	filedrop_entry: { display: 'flex', alignItems: 'center', gap: '$space2' },
+	filedrop_entry_error: { color: '$dangerSubtleForeground' },
+
+	// The message a `Validate` shows, beside its icon. The colour and the type are `field_error`,
+	// which the class list already carries.
+	validate: { display: 'flex', alignItems: 'center', gap: '$space' },
+
+	// Four sliders and a swatch. The hue track is the only gradient with a fixed set of stops, so it
+	// is the only one written here; the other three are the colour that is chosen now (design 139).
+	colorpicker: { display: 'flex', alignItems: 'flex-start', gap: '$space3' },
+	colorpicker_swatch: {
+		width: '$space12',
+		height: '$space12',
+		flexShrink: 0,
+		borderRadius: '$radius',
+		border: '$borderWidth solid $border',
+	},
+	colorpicker_track: {
+		borderRadius: '$radius',
+		'_cssProp_::-webkit-slider-runnable-track': { background: 'transparent' },
+		'_cssProp_::-moz-range-track': { background: 'transparent' },
+	},
+	colorpicker_hue: {
+		$hue0: 'hsl(0, 100%, 50%)',
+		$hue60: 'hsl(60, 100%, 50%)',
+		$hue120: 'hsl(120, 100%, 50%)',
+		$hue180: 'hsl(180, 100%, 50%)',
+		$hue240: 'hsl(240, 100%, 50%)',
+		$hue300: 'hsl(300, 100%, 50%)',
+		background: 'linear-gradient(to right, $hue0, $hue60, $hue120, $hue180, $hue240, $hue300, $hue0)',
+	},
+
 	text: {
 		fontFamily: '$font',
 		fontSize: '$textMd',

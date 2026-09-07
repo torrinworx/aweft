@@ -65,7 +65,7 @@ own subpath. No published set has that name.
 
 Everything in `@aweftjs/ui` that shows an icon asks for a name, never a drawing:
 `chevron-down`, `chevron-up`, `chevron-left`, `chevron-right`, `check`, `x`, `triangle-alert`,
-`search`. The list is `standardIcons`, exported by `ui`.
+`search`, `upload`. The list is `standardIcons`, exported by `ui`.
 
 ```tsx
 import { Icons } from '@aweftjs/ui';

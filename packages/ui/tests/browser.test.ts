@@ -44,7 +44,7 @@ const page = async (name: string, html: string, entry: string): Promise<{ url: s
 				// one reaches its file by name. Before the package, because an alias matches a
 				// subpath under its own key.
 				'@aweftjs/ui/dialog': join(repo, 'packages/ui/src/dialog.ts'),
-				'@aweftjs/ui/tooltip': join(repo, 'packages/ui/src/tooltip.ts'),
+				'@aweftjs/ui/tooltip': join(repo, 'packages/ui/src/tooltip-trigger.ts'),
 				'@aweftjs/ui': join(repo, 'packages/ui/src/index.ts'),
 				// Before the package itself, because an alias matches a subpath under its own key.
 				'@aweftjs/dom/router': join(repo, 'packages/dom/src/router.ts'),
@@ -413,6 +413,13 @@ test('an act change scrolls to the element the URL\'s hash names', async () => {
 const BLANK = '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>';
 
 /** Build a page, open it, run the checks, and take everything down. */
+/**
+ * A page holding a composite answers the icon names it asks for: `Icons` starts empty and a name
+ * nothing answers asserts (design 144). One drawing under every name is enough here, because what
+ * is being driven is the component and never the glyph.
+ */
+const ANY_ICON = "const anyIcon = () => ({ body: '<path d=\"M0 0L10 10\"/>', width: 10, height: 10 });";
+
 const drive = async (name: string, entry: string, check: (view: Page) => Promise<void>): Promise<void> => {
 	const site = await page(name, BLANK, entry);
 	const browser = await chromium.launch();
@@ -829,5 +836,216 @@ test('the same stage, taken over from server markup, still routes after the swap
 		await go('/');
 		await view.waitForSelector('#one');
 		assert.equal(await view.title(), 'One');
+	});
+});
+
+// --- the composites, driven for real -------------------------------------------------------------
+
+test('a modal opened with history: true closes on Escape, on its button and on back, at one URL', async () => {
+	await drive('modal-history', `
+		import { createRouter } from '@aweftjs/dom/router';
+		import { Icons, Modal, Stage, StageContext, h, mount } from '@aweftjs/ui';
+
+		${ANY_ICON}
+		let stage = null;
+		const Home = (props) => { stage = props.stage; return <main id="home">home</main>; };
+		const Edit = () => <p id="editing">editing</p>;
+
+		const router = createRouter();
+		mount(document.body, (
+			<Icons value={anyIcon}>
+				<StageContext router={router} acts={{ '': Home, edit: Edit }}><Stage /></StageContext>
+			</Icons>
+		));
+		globalThis.openIt = () => stage.open({ name: 'edit', template: Modal, history: true });
+	`, async (view) => {
+		await view.waitForSelector('#home');
+		const start = await view.evaluate(() => location.href);
+
+		const open = async (): Promise<void> => {
+			await view.evaluate(() => (globalThis as never as { openIt(): void }).openIt());
+			await view.waitForSelector('#editing');
+		};
+
+		await open();
+		assert.equal(await view.evaluate(() => document.querySelector('dialog')!.matches(':modal')), true,
+			'the element is showing as a modal, which is what puts it in the top layer');
+		assert.equal(await view.evaluate(() => location.href), start,
+			'a history: true open does not move the address bar (design 124)');
+
+		// Escape, which the platform delivers as the element's own `cancel`.
+		await view.keyboard.press('Escape');
+		await view.waitForFunction(() => document.querySelector('#editing') === null);
+		assert.equal(await view.evaluate(() => location.href), start, 'and closing it does not either');
+		await view.waitForSelector('#home');
+
+		// The close button and back land on the same page, because both are the stage's close.
+		await open();
+		await view.click('dialog button[aria-label="Close"]');
+		await view.waitForFunction(() => document.querySelector('#editing') === null);
+		const afterButton = await view.evaluate(() => location.href);
+
+		await open();
+		await view.evaluate(() => { history.back(); });
+		await view.waitForFunction(() => document.querySelector('#editing') === null);
+		assert.equal(await view.evaluate(() => location.href), afterButton,
+			'back and the close button are one navigation, not two ways to be half closed');
+		await view.waitForSelector('#home');
+	});
+});
+
+test('a real hover shows a Tooltip after the pause, and a real focus shows it at once', async () => {
+	await drive('tooltip-component', `
+		import { PopupContext, Tooltip, h, mount } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+		const shown = mutable(false);
+		globalThis.read = () => shown.get();
+		mount(document.body, (
+			<PopupContext>
+				<main id="page" style={{ padding: '80px' }}>
+					<Tooltip label="an explanation" enabled={shown}>
+						<button id="anchor">what is this</button>
+					</Tooltip>
+				</main>
+			</PopupContext>
+		));
+	`, async (view) => {
+		await view.waitForSelector('#anchor');
+		const panel = '[role="tooltip"]';
+		assert.equal(await view.evaluate(() => (globalThis as never as { read(): boolean }).read()), false);
+		assert.equal(
+			await view.evaluate((query: string) =>
+				document.querySelector('#anchor')!.getAttribute('aria-describedby')
+					=== document.querySelector(query)!.getAttribute('id'), panel),
+			true, 'the anchor names the panel, so a screen reader reads the tip');
+
+		await view.hover('#anchor');
+		await view.waitForFunction(() => (globalThis as never as { read(): boolean }).read());
+		assert.equal(await view.getAttribute(panel, 'popover'), 'hint',
+			'hint, not manual: a tip does not close a menu that is already open');
+
+		await view.mouse.move(0, 400);
+		await view.waitForFunction(() => !(globalThis as never as { read(): boolean }).read());
+
+		// Focus does not wait: the person arrived on purpose.
+		await view.focus('#anchor');
+		assert.equal(await view.evaluate(() => (globalThis as never as { read(): boolean }).read()), true,
+			'a keyboard sees it without the pause a pointer gets');
+	});
+});
+
+test('Space on a drop down summary toggles it, and the cell follows', async () => {
+	await drive('dropdown-keys', `
+		import { DropDown, Icons, h, mount } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+		${ANY_ICON}
+		const open = mutable(false);
+		globalThis.read = () => open.get();
+		globalThis.openIt = () => { open.set(true); };
+		mount(document.body, (
+			<Icons value={anyIcon}>
+				<DropDown id="filters" label="Filters" open={open}><p id="inside">inside</p></DropDown>
+			</Icons>
+		));
+	`, async (view) => {
+		await view.waitForSelector('#filters');
+		assert.equal(await view.evaluate(() => document.querySelector('#filters summary')!.tagName), 'SUMMARY');
+
+		await view.focus('#filters summary');
+		await view.keyboard.press('Space');
+		await view.waitForFunction(() => (globalThis as never as { read(): boolean }).read());
+		assert.equal(await view.evaluate(() => document.querySelector('#filters')!.hasAttribute('open')), true,
+			'the platform opened it and the cell heard about it');
+
+		await view.keyboard.press('Space');
+		await view.waitForFunction(() => !(globalThis as never as { read(): boolean }).read());
+
+		// And the other way: the cell opens it without anybody pressing anything.
+		await view.evaluate(() => (globalThis as never as { openIt(): void }).openIt());
+		await view.waitForFunction(() => document.querySelector('#filters')!.hasAttribute('open'));
+	});
+});
+
+test('a real file set on the input lands in the files array as a ready entry', async () => {
+	await drive('filedrop-input', `
+		import { FileDrop, Icons, h, mount } from '@aweftjs/ui';
+		import { mutableArray } from '@aweftjs/core';
+		${ANY_ICON}
+		const files = mutableArray();
+		globalThis.read = () => [...files].map((entry) => [entry.name, entry.status, entry.file instanceof File]);
+		mount(document.body, (
+			<Icons value={anyIcon}><FileDrop id="drop" files={files} extensions={['image/png']} /></Icons>
+		));
+	`, async (view) => {
+		await view.waitForSelector('#drop');
+		await view.setInputFiles('#drop input[type=file]', {
+			name: 'shot.png',
+			mimeType: 'image/png',
+			buffer: Buffer.from('not really a png'),
+		});
+		await view.waitForFunction(() => (globalThis as never as { read(): unknown[] }).read().length > 0);
+		assert.deepEqual(
+			await view.evaluate(() => (globalThis as never as { read(): unknown[] }).read()),
+			[['shot.png', 'ready', true]],
+			'the entry carries the platform File itself, which is what an application uploads');
+	});
+});
+
+test('a real click on a FileDrop.Button opens the file dialog once', async () => {
+	// The button opens the input, and that click then reaches the zone, which resolves the same
+	// input. Without the zone's guard the dialog opens twice, which no light-tree test sees:
+	// bubbling is the browser's.
+	await drive('filedrop-button-once', `
+		import { FileDrop, Icons, h, mount } from '@aweftjs/ui';
+		${ANY_ICON}
+		mount(document.body, (
+			<Icons value={anyIcon}>
+				<FileDrop id="drop">
+					<FileDrop.Button id="pick" label="Choose a file" />
+				</FileDrop>
+			</Icons>
+		));
+		globalThis.opens = 0;
+		document.querySelector('#drop input[type=file]').click = () => { globalThis.opens += 1; };
+	`, async (view) => {
+		await view.waitForSelector('#pick');
+		await view.click('#pick');
+		assert.equal(await view.evaluate(() => (globalThis as never as { opens: number }).opens), 1,
+			'the button opened it, and the click arriving at the zone did not open it again');
+
+		// The zone itself still opens the dialog, which is what the guard must not cost.
+		await view.click('#drop', { position: { x: 5, y: 5 } });
+		assert.equal(await view.evaluate(() => (globalThis as never as { opens: number }).opens), 2,
+			'a click on the zone away from the button still opens it');
+	});
+});
+
+test('End on a colour picker slider writes the cell', async () => {
+	await drive('colorpicker-keys', `
+		import { ColorPicker, h, mount } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+		const picked = mutable('#1b6ef3');
+		globalThis.read = () => picked.get();
+		mount(document.body, <ColorPicker id="pick" value={picked} hasAlpha={false} />);
+	`, async (view) => {
+		await view.waitForSelector('#pick');
+		const started = await view.evaluate(() => (globalThis as never as { read(): string }).read());
+		assert.equal(started, '#1b6ef3',
+			'mounting the picker left the caller\'s colour and its notation alone');
+
+		await view.focus('#pick input[type=range]');
+		await view.keyboard.press('End');
+		await view.waitForFunction((was: string) =>
+			(globalThis as never as { read(): string }).read() !== was, started);
+
+		const hue = await view.evaluate(() =>
+			document.querySelector('#pick input[type=range]')!.value);
+		assert.equal(hue, '360', 'End took the hue slider to its end');
+
+		const ended = await view.evaluate(() => (globalThis as never as { read(): string }).read());
+		assert.match(ended, /^rgb\(/, 'a slider move is what writes the cell, as rgb() text');
+		const [red, green, blue] = (/rgb\((\d+), (\d+), (\d+)\)/.exec(ended) ?? []).slice(1).map(Number);
+		assert.ok(red! > green! && red! > blue!,
+			`a hue of 360 is a red, and the cell says ${ended}`);
 	});
 });

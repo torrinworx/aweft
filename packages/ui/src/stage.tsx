@@ -125,8 +125,21 @@ const componentOf = (loaded: unknown): Component => {
 	return found as Component;
 };
 
-/** The template a stage uses when the page named none. */
-const Pass = (props: { children?: unknown[] }): unknown => props.children ?? [];
+/**
+ * The template that adds nothing: the act, and no element around it.
+ *
+ * This is what a stage uses when the page named no `template`, and it is exported so a page that
+ * names one for some acts can name this one for the rest rather than leaving a gap.
+ *
+ * Params:
+ *   props: `children`, the act
+ *
+ * Returns: the children, unchanged.
+ *
+ * Example:
+ *   stage.open({ name: 'preview', template: Default });
+ */
+export const Default = (props: { children?: unknown[] }): unknown => props.children ?? [];
 
 /** Wraps the act so the stage learns when the act itself, and not its loading fallback, mounted. */
 const Ready = (
@@ -277,7 +290,7 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 		assert(act !== undefined, `the stage has no act named ${JSON.stringify(name)}; declare it in acts`);
 		const held = opened.get();
 		const mine = held !== null && held.name === name;
-		const template = (mine ? held.template : null) ?? props.template ?? Pass;
+		const template = (mine ? held.template : null) ?? props.template ?? Default;
 		// The stage goes to the act as a prop, so an act reads `params` and `query` without
 		// reaching into the context. It is written after the open's props, because the stage an act
 		// is in is not a thing an open gets to name.

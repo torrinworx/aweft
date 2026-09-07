@@ -22,4 +22,5 @@ export const standardIcons: readonly string[] = Object.freeze([
 	'x',
 	'triangle-alert',
 	'search',
+	'upload',
 ]);

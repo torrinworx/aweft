@@ -351,7 +351,8 @@ property follows the cell once the page is alive, which is what the platform doe
 attributes too: they say what the control started as, not what it holds now.
 
 **An `error` cell is announced when it arrives.** While it says something the control carries
-`aria-invalid`, its `aria-describedby` names the message, and the message is a live region.
+`aria-invalid`, its `aria-describedby` names the message, and the message is a live region. Once the
+error clears the attribute is removed rather than set to `false`.
 
 **A promise makes a button busy.** A promise `onClick` returns disables the button and shows the
 `LoaderContext` loader until it settles, however it settles, so a double click cannot submit twice.
@@ -397,7 +398,7 @@ with a pack or resolver that has it.
 
 **The components here ask for names, never for drawings.** `standardIcons` is that list, in the
 spelling the sets publish: `chevron-down`, `chevron-up`, `chevron-left`, `chevron-right`, `check`,
-`x`, `triangle-alert`, `search`. Give one of them a drawing of your own by putting a pack of your
+`x`, `triangle-alert`, `search`, `upload`. Give one of them a drawing of your own by putting a pack of your
 own in front, which is what `Icons` is for.
 
 **Laying things out is a theme entry, not a component** (design 132): `row` and `column`, each with
@@ -409,6 +410,157 @@ and `end` mean across the page on both.
 ```
 
 `recipes/ui/controls.html` is every control in every state, in both modes, driven in Chromium by
+`recipes/ui/main.ts` with axe-core over it.
+
+## Composites
+
+Eight more components, each built out of the controls above and the behaviours underneath them.
+
+```tsx
+import { ColorPicker, Default, DropDown, FileDrop, Modal, Tooltip, Validate, ValidateContext } from '@aweftjs/ui';
+```
+
+| component | what it is | its own props |
+|---|---|---|
+| `Modal` | a stage template: the act inside a native `<dialog>` | `label`, `noEsc`, `noClickEsc`, `type` |
+| `Default` | the stage template that adds nothing | none |
+| `Tooltip` | `Detached` plus the hover and focus trigger | `label`, `enabled`, `locations`, `type` |
+| `DropDown` | a `<details>` whose `<summary>` wears the `button` theme | `open`, `label`, `icon`, `iconOpen`, `iconClose`, `arrow`, `type`, `disabled` |
+| `FileDrop` | a drop zone with a real file input in it | `files`, `extensions`, `multiple`, `limit`, `clickable`, `disabled`, `onDrop`, `ready`, `type` |
+| `Validate` | a check around a control, and the message it shows | `value`, `validate`, `signal`, `valid`, `error`, `showError`, `icon`, `type` |
+| `ValidateContext` | the form's answer: every `Validate` below it | `value` |
+| `ColorPicker` | four `Slider`s and a swatch | `value`, `hasAlpha`, `disabled`, `type` |
+
+These ask for `chevron-up`, `chevron-down`, `x`, `triangle-alert` and `upload` by name, so a page
+using them answers those five through `Icons`; `@aweftjs/icons/<set>/+standard` does.
+
+**A modal is a stage template, so back closes it.**
+
+```tsx
+stage.open({ name: 'edit', history: true, template: Modal });
+```
+
+A stage calls a template as `h(template, {}, act)`, so there is no way to pass `label` through
+`open`. Name the props by writing the template yourself:
+
+```tsx
+stage.open({ name: 'edit', history: true, template: (p) => <Modal label="Edit">{p.children}</Modal> });
+```
+
+Escape (through the element's own `cancel` event), a mousedown on the backdrop and the close button
+all call the stage's `close()`, so a modal that owns a history entry goes down the same way whichever
+one you used (design 124). `noEsc` and `noClickEsc` turn the first two off. A `Modal` with no stage
+above it is an assert naming the call that shows one. The popup sink stays outside the dialog: wrap
+the modal's children in a `PopupContext` of their own to keep its popups inside it.
+
+**A tip is on hover and on focus, and the anchor names it.** The children are the anchor, and a
+`<mark.popup>` replaces the label with markup. The pause before a hover shows it belongs to the
+behaviour, so every tip on a page waits the same time and there is no prop for it; focus shows it at
+once. Each element in the anchor gets `aria-describedby` naming the panel, written when the
+component mounts, which a static render does too, so it is in the server's markup as well. It is
+taken off again when the component unmounts.
+
+**Two things a `Tooltip` cannot do today**, both inherited from `Detached` and both measured on the
+commit this work started from: it does not take over server markup, and it cannot sit inside an act
+that a stage swaps away. Both are known limits, with what would settle them. Put a tip beside a
+stage rather than inside it, which is what the composites page does.
+
+**A drop down is a disclosure, not a floating menu.** The content is the children, in the page's
+flow. The `open` cell goes both ways: writing it opens and closes the element, and a person opening
+it writes the cell. Space, Enter, the `button` role and the expanded state are the platform's,
+because the element is a `<details>`. A floating menu under a button is `Detached` with a `Button`
+anchor, which is one call and no new component.
+
+**A file drop holds entries, and no upload.**
+
+```tsx
+const picked = mutableArray();
+<FileDrop files={picked} extensions={['image/png', '.csv']} limit={4_000_000} ready={file} />
+```
+
+An entry is `{ name, file, status, error }`. A file the zone accepted starts as `ready` and one it
+refused as `error`, with `error` saying why: the wrong type, over `limit`, or a second file while
+`multiple` is false. A refused file stays in the list with its reason rather than disappearing.
+Move `status` to `loading` while you upload by writing the entry back, `files[0] = { ...files[0],
+status: 'loading' }`, which is the edit a list can hear. `ready` is written null while anything is
+loading, and otherwise the file, or the array of files when `multiple` is true, counting every entry
+that is not in error. The transport is yours: the entry carries the platform `File`.
+
+The zone listens for `dragenter`, `dragleave` and `drop`, and reads the dropped files off the
+event's `dataTransfer.files`; the input listens for `change` and reads its own `files`. Those four
+are the whole of what reaches this component from the host.
+
+Children replace the prompt line and the listing. `FileDrop.Button` is a `Button` that opens the file
+dialog, for use inside those children; one outside a `FileDrop` is an assert. The input itself is
+visually hidden rather than `display: none`, so it is still focusable, and its label is the zone's
+prompt whichever chrome is showing. `look.test.ts` reads the `filedrop_input` rule and fails if it
+ever becomes `display: none`.
+
+**A check is given the cell, not the value.**
+
+```tsx
+<ValidateContext value={allValid}>
+	<Validate value={email} validate="email" signal={submitted}>
+		<TextField label="Email" value={email} />
+	</Validate>
+</ValidateContext>
+```
+
+`validate` is a function of the cell returning the problem, `''` or `null`, or the name of one of
+eight built-ins: `phone`, `email`, `pan`, `expDate`, `postalCode`, `date`, `number` and `float`. Four
+of them write a formatted value back into the cell: `phone`, `pan`, `expDate` and `postalCode`. Each
+answers nothing for an empty value, so a field is not invalid before anybody has typed in it. They
+are small on purpose, each doing what its name promises and no more: `email` is a shape check,
+`date` is `YYYY-MM-DD`, `postalCode` is the Canadian one, and `pan` is a Luhn check on thirteen to
+nineteen digits. Write a function for anything else.
+
+With a `signal`, nothing is checked until that cell changes for the first time, and every change to
+`value` is checked after that. With none, checking is live from the start.
+
+The message is rendered once, after the children, as a live region. It also reaches the control:
+a control of this package that was given no `error` of its own goes `aria-invalid` and its
+`aria-describedby` names that message. A `Validate` around a plain `<input>` still shows and
+announces the message and leaves the input unmarked, because nothing read it. `showError` false takes
+the message off the screen and leaves it announced.
+
+A `Validate` wraps one control. Every control under it takes the message, so a `Validate` around two
+of them marks both invalid and points both at the one message. Two controls want two `Validate`s.
+
+A validator that throws is reported on a microtask the host sees, the way every handler a page wrote
+is reported here, and the value counts as invalid with the error's message. A form is never quietly
+valid because its check crashed.
+
+`ValidateContext` writes its `value` cell true while every `Validate` under it is happy. Each one
+registers when it mounts and leaves when it unmounts, so a field that goes away stops holding the
+form invalid.
+
+**A colour picker is four sliders.** `value` is a cell holding CSS colour text, anything `readColour`
+reads, and it is written back as `rgb()` or `rgba()`; text that is not a colour is an assert naming
+the text. Hue, saturation, brightness and opacity, the last only when `hasAlpha` is not false, each
+labelled and each a real range input with the platform's keyboard on it. The swatch beside them is
+`aria-hidden`, because it says what the four already say. There is no eyedropper and no hex field;
+a `TextField` on the same cell is the hex field, because the cell is text.
+
+Moving a slider is the only thing that writes the cell, so mounting a picker on a colour leaves that
+colour and its notation alone. With `hasAlpha` false a write keeps the alpha the cell already had:
+nothing on the screen can change an alpha nobody can see.
+
+The hue track is a gradient of six named hues in the `colorpicker_hue` entry. The other three tracks
+are the colour chosen right now, so the component builds a `linear-gradient(...)` from what the cell
+holds and puts that text in the element's inline `style`. The theme check reads source text, and
+that gradient is arithmetic rather than a value anybody typed, so there is nothing there for it to
+refuse.
+
+**A state prop takes a cell.** `open`, `enabled`, `value` and `files` are cells or absent; give one a
+plain value and it is a loud assert naming the prop and the fix, because a component that quietly
+kept a cell of its own would look as though it had honoured what you asked for.
+
+**The theme entries these add**, on top of the ones above: `dialog` with its `::backdrop`, `tooltip`,
+`disclosure` and `disclosure_summary`, `filedrop` with `dragging`, `prompt`, `list` and `entry`,
+`validate`, and `colorpicker` with `swatch`, `track` and `hue`. `offscreen` is one more, and it is
+yours to use: it takes an element off the screen and leaves it in the reading order.
+
+`recipes/ui/composites.html` is every composite in both modes, driven in Chromium by
 `recipes/ui/main.ts` with axe-core over it.
 
 ## The look
@@ -484,6 +636,13 @@ ask for. Everything else is yours to define.
 | `dots`, `dot` | the three pulsing dots of `LoadingDots` |
 | `icon` | an icon, sized in `em` so it follows the text |
 | `row`, `column`, `divider` | laying things out in a line, with the seven modifiers above |
+| `dialog`, `dialog_head`, `dialog_body` | a modal dialog, its heading row and its content; the scrim is on `::backdrop` |
+| `tooltip` | a tip: the page's own colours the other way up |
+| `disclosure`, `disclosure_summary` | a `<details>` and the summary that wears the `button` entry |
+| `filedrop` and its `dragging`, `prompt`, `input`, `list` and `entry` | a drop zone, its prompt and its listing |
+| `validate` | the message a `Validate` shows, beside its icon |
+| `colorpicker` and its `swatch`, `track` and `hue` | four sliders and the colour they name |
+| `offscreen` | off the screen and still in the reading order |
 
 `hovered`, `pressed` and `disabled` are three more entries, and you put them in a class list
 yourself: `theme={['button', hovered.bool('hovered', null)]}`. They match anywhere, so they apply

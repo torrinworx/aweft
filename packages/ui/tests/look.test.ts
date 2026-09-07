@@ -191,6 +191,18 @@ test('the switch, the slider and the tick box are drawn out of named values only
 	assert.match(rulesFor(['slider']), /margin-top: calc\(\(6px - 16px\) \/ 2\)/);
 });
 
+test('the file input is hidden and still focusable, which is what offscreen means', () => {
+	// The README says the input is visually hidden rather than `display: none`, so the keyboard can
+	// still reach it. `display: none` takes an element out of the focus order, so the claim is only
+	// true while the rule stays a clipped one-pixel box.
+	const rules = rulesFor(['filedrop', 'input']);
+	assert.notEqual(rules, '', 'the default theme has a filedrop_input entry');
+	assert.doesNotMatch(rules, /display: *none/, 'display: none would take it off the keyboard');
+	assert.match(rules, /clip-path: inset\(50%\)/);
+	assert.match(rules, /width: 1px/);
+	assert.match(rules, /height: 1px/);
+});
+
 test('the dots move only inside the query that asks whether the person wants motion', () => {
 	const rules = rulesFor(['dot']);
 	assert.match(rules, /@keyframes pulse-/, 'the keyframes are named after the entry that owns them');

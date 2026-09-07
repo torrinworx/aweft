@@ -6,6 +6,8 @@
 //
 // This is not exported. `Modal` calls it, and `internal.dialog.test.ts` drives it directly.
 
+import { within } from './tree.ts';
+
 /** What a caller tells the dialog. */
 export interface DialogOptions {
 	/** Called after it has closed, however it closed. */
@@ -32,17 +34,7 @@ interface DialogLike {
 	removeAttribute(name: string): void;
 	addEventListener?(type: string, listener: (event: unknown) => void): void;
 	removeEventListener?(type: string, listener: (event: unknown) => void): void;
-	readonly parentNode?: unknown;
 }
-
-/** Whether `node` is `ancestor` or sits under it. Walked by hand, because the light tree has no
- * `contains` and a dialog nested in a wrapper must not be made inert along with the wrapper. */
-const holds = (ancestor: unknown, node: unknown): boolean => {
-	for (let at = node as DialogLike | null; at !== null && at !== undefined; at = (at.parentNode ?? null) as DialogLike | null) {
-		if (at === ancestor) return true;
-	}
-	return false;
-};
 
 interface Focusable {
 	focus?(): void;
@@ -95,8 +87,9 @@ export const dialogControl = (element: unknown, options: DialogOptions = {}): Di
 		if (children === undefined || children === null) return;
 		for (let at = 0; at < children.length; at += 1) {
 			const child = children[at]!;
-			// The dialog's own branch stays reachable; everything beside it does not.
-			if (holds(child, target)) continue;
+			// The dialog's own branch stays reachable; everything beside it does not. A dialog
+			// nested in a wrapper must not go inert along with the wrapper.
+			if (within(target, [child])) continue;
 			child.setAttribute('inert', '');
 			inerted.push(child);
 		}

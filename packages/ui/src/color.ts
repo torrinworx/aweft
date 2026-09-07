@@ -58,7 +58,8 @@ const amount = (text: string, full: number): number | null => {
 const parts = (body: string): string[] =>
 	body.replace('/', ',').split(/[\s,]+/).map((piece) => piece.trim()).filter((piece) => piece !== '');
 
-const hsvOf = (colour: Colour): { h: number; s: number; v: number } => {
+/** A colour in hue, saturation and brightness. Internal: `ColorPicker` picks along these. */
+export const hsvOf = (colour: Colour): { h: number; s: number; v: number } => {
 	const r = colour.r / 255, g = colour.g / 255, b = colour.b / 255;
 	const max = Math.max(r, g, b), min = Math.min(r, g, b);
 	const span = max - min;
@@ -73,7 +74,8 @@ const hsvOf = (colour: Colour): { h: number; s: number; v: number } => {
 	return { h, s: max === 0 ? 0 : span / max, v: max };
 };
 
-const fromHsv = (h: number, s: number, v: number, a: number): Colour => {
+/** The colour those three and an alpha name. Internal, and the inverse of `hsvOf`. */
+export const fromHsv = (h: number, s: number, v: number, a: number): Colour => {
 	const hue = ((h % 360) + 360) % 360;
 	const chroma = clamp(v, 0, 1) * clamp(s, 0, 1);
 	const second = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));

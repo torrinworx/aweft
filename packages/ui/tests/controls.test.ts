@@ -282,6 +282,24 @@ test('a slider holds a number, and step zero is written out as any', () => {
 	any.stop();
 });
 
+test('a slider calls an onInput of the caller\'s own, after it has written the cell', () => {
+	const volume = mutable(3);
+	const seen: number[] = [];
+	const { body, stop } = page(h(Slider as never, {
+		label: 'Volume', value: volume, min: 0, max: 10,
+		onInput: () => { seen.push(volume.get() as number); },
+	}));
+
+	const line = byRole(body.firstChild, 'slider');
+	setProp(line, 'value', '7');
+	fire(line, 'input');
+	// Spreading the caller's props alone put this handler on the element and then wrote over it,
+	// which lost it in silence. `ColorPicker` is what needs it: a slider's `input` is the only
+	// thing that writes its colour.
+	assert.deepEqual(seen, [7], 'called once, with the cell already written');
+	stop();
+});
+
 test('a text area grows to its content where there is a layout to measure', () => {
 	const value = mutable('');
 	const document = createDocument();

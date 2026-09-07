@@ -9,7 +9,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { mutable } from '@aweftjs/core';
 
-import { tooltipTrigger } from '../src/tooltip.ts';
+import { tooltipTrigger } from '../src/tooltip-trigger.ts';
 
 interface Listener { (event: unknown): void }
 

@@ -18,7 +18,7 @@ export { Head, Link, Meta, Script, Style, Title } from './head.tsx';
 export type { TagProps } from './head.tsx';
 export type { HeadKind, HeadList, HeadTag } from './head-list.ts';
 
-export { Stage, StageContext } from './stage.tsx';
+export { Default, Stage, StageContext } from './stage.tsx';
 export type { Act, ActComponent, LazyAct, OpenOptions, StageContextComponent, StageProps, StageValue } from './stage.tsx';
 export type { ActEntries, StageAct, StageEntry } from './stage-entry.ts';
 
@@ -58,6 +58,19 @@ export { TextField } from './text-field.tsx';
 export type { TextFieldProps } from './text-field.tsx';
 export { Toggle } from './toggle.tsx';
 export type { ToggleProps } from './toggle.tsx';
+
+export { ColorPicker } from './color-picker.tsx';
+export type { ColorPickerProps } from './color-picker.tsx';
+export { DropDown } from './drop-down.tsx';
+export type { DropDownProps } from './drop-down.tsx';
+export { FileDrop } from './file-drop.tsx';
+export type { FileDropComponent, FileDropEntry, FileDropProps } from './file-drop.tsx';
+export { Modal } from './modal.tsx';
+export type { ModalProps } from './modal.tsx';
+export { Tooltip } from './tooltip.tsx';
+export type { TooltipProps } from './tooltip.tsx';
+export { Validate, ValidateContext } from './validate.tsx';
+export type { ValidateContextProps, ValidateProps } from './validate.tsx';
 
 export { Shown, Switch } from './flow.tsx';
 export { LoaderContext, suspend } from './suspend.tsx';

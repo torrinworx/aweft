@@ -7,6 +7,8 @@
 // This is not exported. `Popup` calls it for the mousedown half, and the tooltip trigger calls it
 // for the Escape half.
 
+import { within } from './tree.ts';
+
 /** What a caller tells `dismiss`. */
 export interface DismissOptions {
 	/** The nodes a mousedown inside does not count. Read on every event, so it may grow. */
@@ -26,18 +28,6 @@ interface Listening {
 	addEventListener?(type: string, listener: (event: unknown) => void): void;
 	removeEventListener?(type: string, listener: (event: unknown) => void): void;
 }
-
-interface Walkable {
-	readonly parentNode?: Walkable | null;
-}
-
-/** Whether the event happened inside one of these nodes. */
-const within = (target: unknown, nodes: readonly unknown[]): boolean => {
-	for (let node = target as Walkable | null; node !== null && node !== undefined; node = node.parentNode ?? null) {
-		if (nodes.includes(node)) return true;
-	}
-	return false;
-};
 
 /**
  * Close something on a mousedown outside it, and on Escape when asked.

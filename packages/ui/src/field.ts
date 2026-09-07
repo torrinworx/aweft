@@ -10,6 +10,7 @@
 import { h } from './h.ts';
 import { use } from './render.ts';
 import { through } from './source.ts';
+import { errorAt } from './validation.ts';
 
 /** What a control hands the wiring: whatever of the three parts it was given. */
 export interface FieldProps {
@@ -50,7 +51,11 @@ export const empty = (value: unknown): boolean =>
  *
  * Returns: the field wiring. `aria` carries `id`, `aria-describedby` and `aria-invalid`, the
  * last two following the `error` cell, so a control that becomes invalid is announced as invalid
- * without the component watching anything itself.
+ * without the component watching anything itself. Once the error clears, `aria-invalid` is removed
+ * rather than set to `false`.
+ *
+ * With no `error` of its own, a control inside a `Validate` takes that one: it is announced as
+ * invalid and its `aria-describedby` names the message the `Validate` rendered (design 138).
  *
  * Example:
  *   const field = wireField(context, props);
@@ -64,11 +69,16 @@ export const wireField = (context: unknown, props: FieldProps): Field => {
 		: String(props.id);
 	const labelId = `${id}-label`;
 	const descriptionId = `${id}-note`;
-	const errorId = `${id}-error`;
 
 	const hasLabel = !empty(props.label);
 	const hasDescription = !empty(props.description);
-	const error = props.error;
+
+	// A `Validate` above this control shows the message itself (design 138), so the control points
+	// at that element rather than rendering a second one. Read only where the caller gave no `error`
+	// of its own: theirs wins, and then both are shown, which is the caller's choice to make.
+	const outer = props.error === undefined ? errorAt(context) : null;
+	const error = props.error ?? outer?.error;
+	const errorId = outer === null ? `${id}-error` : outer.id;
 
 	// One `aria-describedby` naming whichever of the two is saying something. The error half
 	// follows the cell, so the attribute is written again when the error arrives and goes.
@@ -84,7 +94,9 @@ export const wireField = (context: unknown, props: FieldProps): Field => {
 	return {
 		id,
 		aria: { id, 'aria-describedby': describedBy, 'aria-invalid': invalid },
-		wrapped: hasLabel || hasDescription || error !== undefined,
+		// What the caller asked for, not what a `Validate` above lent us: an error borrowed from
+		// there is announced by the control and rendered by the `Validate`, so it wraps nothing.
+		wrapped: hasLabel || hasDescription || props.error !== undefined,
 		label: () => (hasLabel
 			? h('label', { id: labelId, for: id, theme: ['field', 'label'] }, props.label)
 			: null),
@@ -92,7 +104,7 @@ export const wireField = (context: unknown, props: FieldProps): Field => {
 			hasDescription
 				? h('span', { id: descriptionId, theme: ['field', 'hint'] }, props.description)
 				: null,
-			through(error, (value) => (empty(value)
+			outer !== null ? null : through(error, (value) => (empty(value)
 				? null
 				: h('span', { id: errorId, role: 'alert', theme: ['field', 'error'] }, value))),
 		],

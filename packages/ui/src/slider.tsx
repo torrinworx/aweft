@@ -54,6 +54,8 @@ export interface SliderProps {
  *
  * `step: 0` is written out as `any`, which is what the platform calls a range with no steps in it.
  *
+ * An `onInput` of your own is called with the event, after the cell has been written.
+ *
  * Fires the `InputContext` `slide` event with `{ component: 'Slider', label, value }` on every
  * change, unless `track` is false.
  *
@@ -62,7 +64,8 @@ export interface SliderProps {
  */
 export const Slider = (props: SliderProps): Mounter => (elem, _item, before, context) => {
 	const {
-		value, label, description, error, min, max, step, disabled, type, track, element, theme, ...rest
+		value, label, description, error, min, max, step, disabled, type, track, element, theme,
+		onInput, ...rest
 	} = props;
 
 	const low = min ?? 0;
@@ -86,6 +89,9 @@ export const Slider = (props: SliderProps): Mounter => (elem, _item, before, con
 		onInput: (event: unknown) => {
 			const next = Number(valueOf(event));
 			cell.set(next);
+			// A handler of the caller's own is called after the cell, not instead of it: spreading
+			// `rest` alone put it there and then wrote over it, which lost it in silence.
+			(onInput as ((event: unknown) => void) | undefined)?.(event);
 			if (track !== false) {
 				InputContext.fire(context, 'slide', { component: 'Slider', label, value: next });
 			}

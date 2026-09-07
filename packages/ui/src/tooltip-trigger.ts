@@ -4,7 +4,7 @@
 // read. The pause is what stops a row of buttons flashing tips at somebody moving the pointer
 // across it, and it is skipped on focus, where the person has already arrived deliberately.
 //
-// This is not exported. The second round's `Tooltip` calls it; the first round drives it from its own tests.
+// This is not exported. `Tooltip` calls it, and `internal.tooltip.test.ts` drives it directly.
 
 import { dismiss } from './dismiss.ts';
 
