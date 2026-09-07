@@ -1,3 +1,7 @@
+// The JSX namespace this package's `h` is written against, pointed at rather than imported: a
+// `.d.ts` has no runtime half, and a project that consumes this package writes JSX against it.
+/// <reference path="./jsx.d.ts" />
+
 import './defaults.ts';
 
 export { h, svg, html } from './h.ts';
