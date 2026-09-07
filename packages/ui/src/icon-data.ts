@@ -33,6 +33,12 @@ export interface IconPack {
 	readonly prefix?: string;
 	readonly icons: Readonly<Record<string, IconData>>;
 	readonly aliases?: Readonly<Record<string, IconAlias>>;
+	/**
+	 * The set's own box, used by every icon in it that declares none (design 144). The sets
+	 * state it once at the root: Lucide says 24 by 24 and 1865 of its 1866 icons say nothing.
+	 */
+	readonly width?: number;
+	readonly height?: number;
 }
 
 /** A function that finds an icon, or answers null so the next source in the stack is asked. */
@@ -54,12 +60,24 @@ const withoutPrefix = (pack: IconPack, name: string): string | null => {
 	return name.slice(0, at) === pack.prefix ? name.slice(at + 1) : null;
 };
 
+/** The icon with the set's own box on it, where the icon states none (design 144). */
+const sized = (pack: IconPack, data: IconData): IconData => {
+	const width = data.width ?? pack.width;
+	const height = data.height ?? pack.height;
+	if (width === undefined && height === undefined) return data;
+	return {
+		...data,
+		...(width === undefined ? {} : { width }),
+		...(height === undefined ? {} : { height }),
+	};
+};
+
 /** One pack's answer, following an alias once. */
 export const fromPack = (pack: IconPack, name: string): IconData | null => {
 	const key = withoutPrefix(pack, name);
 	if (key === null) return null;
 	const found = pack.icons[key];
-	if (found !== undefined) return found;
+	if (found !== undefined) return sized(pack, found);
 
 	const alias = pack.aliases?.[key];
 	if (alias === undefined) return null;
@@ -68,13 +86,17 @@ export const fromPack = (pack: IconPack, name: string): IconData | null => {
 	// An alias is its parent with the alias's own turns and flips on top, which is the shape the
 	// sets publish and the reason an alias is not simply a second name for one object.
 	const over: IconData = { ...parent };
-	return {
+	return sized(pack, {
 		...over,
 		...(alias.rotate === undefined ? {} : { rotate: alias.rotate }),
 		...(alias.hFlip === undefined ? {} : { hFlip: alias.hFlip }),
 		...(alias.vFlip === undefined ? {} : { vFlip: alias.vFlip }),
-	};
+	});
 };
+
+/** Whether a value is a promise, by the one thing that makes it usable as one. */
+export const isPromise = (value: unknown): value is Promise<IconData | null> =>
+	typeof (value as Promise<unknown> | null)?.then === 'function';
 
 /**
  * Ask a stack of packs and resolvers for one name.
@@ -83,16 +105,23 @@ export const fromPack = (pack: IconPack, name: string): IconData | null => {
  *   name: what to look for, with or without a pack's prefix
  *   stack: the sources, newest first
  *
- * Returns: the first answer that is not null, which may be a promise a resolver made, or null
- * when nothing in the stack knows the name.
+ * Returns: the first answer that is not null, or null when nothing in the stack knows the name.
+ * A source that answers a promise gives a promise back, and a null inside it goes on to the rest
+ * of the stack in order, the first answer that is not null winning. Without that continuation a
+ * resolver in front of a pack would answer for every name, because a promise is not null and the
+ * pack behind it would never be asked.
  */
 export const lookupIcon = (
 	name: string,
 	stack: readonly IconSource[],
 ): IconData | Promise<IconData | null> | null => {
-	for (const source of stack) {
+	for (let at = 0; at < stack.length; at += 1) {
+		const source = stack[at]!;
 		const found = isPack(source) ? fromPack(source, name) : source(name);
-		if (found !== null && found !== undefined) return found;
+		if (found === null || found === undefined) continue;
+		if (!isPromise(found)) return found;
+		const rest = stack.slice(at + 1);
+		return found.then((data) => (data === null || data === undefined ? lookupIcon(name, rest) : data));
 	}
 	return null;
 };
