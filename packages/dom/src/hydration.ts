@@ -134,6 +134,12 @@ export class Hydration {
 			return null;
 		}
 
+		// `''` serializes to no characters, so the server markup holds no node to pair an empty
+		// text node with. It goes in as it is, and the cell behind it then writes into a node that
+		// is really in the page. Without this an empty error line or an empty label reads as
+		// markup that ran out, and the whole run after it is thrown away.
+		if (fresh.nodeType === TEXT && (fresh as TextLike).data === '') return null;
+
 		if (cursor === null || cursor === scope.end) {
 			this.fail(scope, `the server markup ran out where a ${describe(fresh)} was expected`);
 			return null;

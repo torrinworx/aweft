@@ -201,6 +201,11 @@ would render the loading state over the server's finished one, which is a mismat
 the resolved value as a prop from data the page embeds (`h(Status, { known })`), so it renders
 what it knows and only waits when it has nothing; `recipes/dom/` shows the pattern.
 
+An empty text node is inserted rather than paired. `''` renders to no characters, so the
+markup holds no node to pair it with, and a form's error line that is empty until something
+goes wrong is the ordinary case. The node goes in where the cursor is and the cell behind it
+writes into a node that is really on the page.
+
 One live hydration per target: a second `hydrate` over the same target asserts, because it
 would claim the nodes the first one holds. Remove the first, then hydrate again.
 
@@ -208,9 +213,18 @@ would claim the nodes the first one holds. Remove the first, then hydrate again.
 
 `createDocument()` makes a document with no browser behind it: `createElement`,
 `createTextNode`, `createComment`, `body`, `head`, attributes, `style`, `classList`, listeners
-that are kept and dispatched only by `dispatchEvent`. `toHtml(node)` serializes; `parseHtml
-(markup)` reads markup back into light nodes, so a page can be rendered, parsed and hydrated
-in a test with no browser. It applies no auto-closing or implied elements.
+that are kept and dispatched only by `dispatchEvent`. `toHtml(node)` serializes. It applies no
+auto-closing or implied elements.
+
+`parseHtml(markup, document)` reads markup back into light nodes and **answers the top-level nodes
+it read, not a document**. Put them somewhere yourself, which is what makes a page renderable,
+parseable and hydratable in a test with no browser:
+
+```ts
+const document = createDocument();
+for (const node of parseHtml(markup, document)) document.body.appendChild(node);
+hydrate(document.body, h(App, {}));
+```
 
 It is also where `h` makes a node when nobody has said where: inside a mount the mount says,
 outside one the page's `document` does, and where there is no page the light tree registers

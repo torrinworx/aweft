@@ -9,7 +9,7 @@ import { atomic, createArray, createObject, mutable, mutableArray, observer } fr
 import { recordingDocument } from '@aweftjs/testing';
 
 import type { Cleanup, LightElement, Mounted } from '../src/index.ts';
-import { createDocument, getFirst, h, html, mount, toHtml } from '../src/index.ts';
+import { createDocument, getFirst, h, html, hydrate, mount, parseHtml, render, toHtml } from '../src/index.ts';
 
 interface Row extends Record<string, unknown> { label?: string }
 const row = (label: string): Row => createObject<Row>({ label });
@@ -490,4 +490,38 @@ test('the mount context reaches a component under a raw element', () => {
 	};
 	mount(doc.body, h('div', {}, h('p', {}, h(Reader))), undefined, { site: 1 });
 	assert.deepEqual(heard, { site: 1 });
+});
+
+// --- hydration ---------------------------------------------------------------------------------
+
+test('an empty string in a reactive text slot hydrates, and the cell still fills it afterwards', async () => {
+	// `''` renders to no characters, so the server markup holds no node to pair the client's empty
+	// text node with. Every form with an error line that is empty until something goes wrong is
+	// this case, and pairing it read as markup that ran out (design 146).
+	const cases: [string, () => unknown][] = [
+		['a cell holding an empty string', () => h('p', {}, mutable(''))],
+		['an empty string written out', () => h('p', {}, '')],
+		['an empty string in front of text', () => h('p', {}, '', 'after')],
+		['an empty cell between two strings', () => h('p', {}, 'a', mutable(''), 'b')],
+	];
+
+	for (const [what, make] of cases) {
+		const markup = await render(h(make as never, {}));
+		const doc = createDocument();
+		for (const node of parseHtml(markup, doc)) doc.body.appendChild(node);
+		const stop = hydrate(doc.body, h(make as never, {}));
+		assert.ok(typeof stop === 'function', what);
+		stop();
+	}
+
+	// And the node that went in is really in the page: writing to the cell shows.
+	const cell = mutable('');
+	const Line = () => h('p', {}, 'error: ', cell);
+	const markup = await render(h(Line, {}));
+	const doc = createDocument();
+	for (const node of parseHtml(markup, doc)) doc.body.appendChild(node);
+	hydrate(doc.body, h(Line, {}));
+	assert.equal(doc.body.textContent, 'error: ');
+	cell.set('too short');
+	assert.equal(doc.body.textContent, 'error: too short');
 });
