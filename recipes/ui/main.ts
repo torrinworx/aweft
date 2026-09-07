@@ -6,11 +6,11 @@
 // a real keystroke reach the handlers, that focus moves, that a popup is measured against its
 // anchor and placed, and that it asks for the top layer with `popover` rather than a z-index.
 //
-// It drives three pages. The gallery is every system the package ships. The preview is the look
+// It drives four pages. The gallery is every system the package ships. The preview is the look
 // itself, light and dark side by side, and it is where the look is judged. The controls page
-// is every control in every state, in both modes, written the way an application writes them. The
-// assertions on the last two are about the contract rather than about the systems, and axe-core
-// runs over both.
+// is every control in every state, in both modes, written the way an application writes them, and
+// the composites page is everything built out of those. The assertions on the last three are about
+// the contract rather than about the systems, and axe-core runs over all three.
 //
 // Run: node recipes/ui/main.ts
 // Serve it instead, to click around: npx vite recipes/ui
@@ -409,6 +409,123 @@ try {
 	}
 	assert.equal(controlsAudit.violations.length, 0, 'axe found nothing to fix on the controls page');
 	console.log(`recipes/ui: axe passed ${String(controlsAudit.passes.length)} rules on the controls page with no violation`);
+
+	// --- the composites page: everything built out of the controls ----------------------------------
+
+	await page.goto(site.url + 'composites.html');
+	await page.waitForSelector('#composites');
+
+	// A modal is opened by the stage, and every way of closing it is the stage's close.
+	assert.equal(await page.locator('dialog').count(), 0, 'no modal before anybody asked for one');
+	await page.click('#open-modal-light');
+	await page.waitForSelector('#editing-light');
+	const modal = await page.evaluate(() => {
+		const dialog = document.querySelector('#modal-light')!;
+		return {
+			tag: dialog.tagName.toLowerCase(),
+			modal: dialog.matches(':modal'),
+			named: document.querySelector(`#${dialog.getAttribute('aria-labelledby') ?? ''}`)?.textContent ?? '',
+		};
+	});
+	assert.deepEqual(modal, { tag: 'dialog', modal: true, named: 'Edit the thing' },
+		'a real <dialog>, showing as a modal, with a name a screen reader can read');
+	await page.click('#modal-light button[aria-label="Close"]');
+	await page.waitForFunction(() => document.querySelector('#editing-light') === null);
+
+	// A tip on a real hover, and the anchor points at the panel.
+	const tipId = await page.getAttribute('#tip-anchor-light', 'aria-describedby') ?? '';
+	assert.notEqual(tipId, '', 'the anchor names its tip');
+	assert.equal(await page.getAttribute(`#${tipId}`, 'role'), 'tooltip');
+	await page.hover('#tip-anchor-light');
+	await page.waitForFunction((id: string) => document.querySelector(`#${id}`)!.matches(':popover-open'), tipId);
+	assert.equal(await page.getAttribute(`#${tipId}`, 'popover'), 'hint',
+		'the tip asked for the top layer as a hint, with no z-index anywhere');
+	await page.mouse.move(0, 0);
+	await page.waitForFunction((id: string) => !document.querySelector(`#${id}`)!.matches(':popover-open'), tipId);
+
+	// A disclosure opens in the page's flow, and the platform's own keyboard does it.
+	assert.equal(await page.evaluate(() => document.querySelector('#dropdown-light')!
+		.contains(document.querySelector('#dropdown-content-light'))), true,
+		'the content is inside the details, not in the popup sink');
+	const shut = await page.evaluate(() =>
+		document.querySelector('#dropdown-light')!.getBoundingClientRect().height);
+	await page.focus('#dropdown-light summary');
+	await page.keyboard.press('Space');
+	await page.waitForFunction(() => document.querySelector('#dropdown-light')!.hasAttribute('open'));
+	const shown = await page.evaluate(() =>
+		document.querySelector('#dropdown-light')!.getBoundingClientRect().height);
+	assert.ok(shown > shut,
+		`an open disclosure pushes the page down rather than floating over it: ${String(shut)} to ${String(shown)}`);
+
+	// A real file, through the input the zone hides but keeps focusable.
+	await page.setInputFiles('#filedrop-light input[type=file]', {
+		name: 'shot.png', mimeType: 'image/png', buffer: Buffer.from('not really a png'),
+	});
+	await page.waitForSelector('#filedrop-light li');
+	assert.match(await page.textContent('#filedrop-light li') ?? '', /shot\.png/,
+		'the entry is listed with its name');
+	const hidden = await page.evaluate(() => {
+		const input = document.querySelector('#filedrop-light input[type=file]')!;
+		const style = getComputedStyle(input);
+		return { display: style['display'], width: input.getBoundingClientRect().width };
+	});
+	assert.notEqual(hidden.display, 'none', 'the input is off the screen, not out of the focus order');
+	assert.ok(hidden.width < 4, `and it takes no room: ${String(hidden.width)}px`);
+
+	// The signal is what starts the checking, and the context tallies the answers.
+	assert.equal(await page.locator('#composites [role="alert"]').count(), 0,
+		'a person typing is not a person who is wrong yet');
+	await page.click('#validate-email-light');
+	await page.keyboard.type('nope');
+	assert.equal(await page.locator('#composites [role="alert"]').count(), 0);
+	await page.click('#submit-light');
+	await page.waitForSelector('#composites [role="alert"]');
+	assert.equal(await page.textContent('#valid-light'), 'the form is not happy');
+	assert.equal(await page.getAttribute('#validate-email-light', 'aria-invalid'), 'true',
+		'and the control the wrapper holds says so itself');
+
+	await page.click('#validate-email-light');
+	await page.keyboard.press('Control+a');
+	await page.keyboard.type('ada@example.com');
+	await page.click('#validate-phone-light');
+	await page.keyboard.type('5195551234');
+	await page.click('#composites-heading');
+	await page.waitForFunction(() => document.querySelector('#valid-light')!.textContent === 'the form is happy');
+	assert.equal(await page.evaluate(() => document.querySelector('#validate-phone-light')!.value),
+		'(519) 555-1234', 'a formatting validator wrote the value back punctuated');
+
+	// The picker's sliders are real range inputs, and End on the hue is a keyboard away.
+	const knobs = await page.evaluate(() =>
+		Array.from(document.querySelectorAll('#picker-light input')).map((node) => node.getAttribute('type')));
+	assert.deepEqual(knobs, ['range', 'range', 'range'], 'three sliders, because hasAlpha is false');
+	assert.equal(await page.locator('#picker-alpha-light input').count(), 4, 'and four with alpha');
+	const started = await page.textContent('#picked-light') ?? '';
+	await page.focus('#picker-light input[type=range]');
+	await page.keyboard.press('End');
+	await page.waitForFunction((was: string) => document.querySelector('#picked-light')!.textContent !== was,
+		started);
+	assert.match(await page.textContent('#picked-light') ?? '', /^rgb\(/,
+		'the cell is written back as rgb() text');
+
+	// The two modes resolve their own roles, on the composites as on everything else.
+	const composedModes = await page.evaluate(() => ({
+		light: getComputedStyle(document.querySelector('#tip-anchor-light')!).backgroundColor,
+		dark: getComputedStyle(document.querySelector('#tip-anchor-dark')!).backgroundColor,
+	}));
+	assert.notEqual(composedModes.light, composedModes.dark, 'a composite resolves the mode of its pane');
+
+	// --- axe over the composites page --------------------------------------------------------------
+
+	await page.addScriptTag({ path: fileURLToPath(import.meta.resolve('axe-core/axe.min.js')) });
+	const composedAudit = await page.evaluate(async () => axe.run(document, {
+		runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
+	}));
+	for (const violation of composedAudit.violations) {
+		console.error(`axe ${violation.id}: ${violation.help} (${String(violation.nodes.length)} node(s))`);
+		for (const node of violation.nodes) console.error(`  ${node.html}`);
+	}
+	assert.equal(composedAudit.violations.length, 0, 'axe found nothing to fix on the composites page');
+	console.log(`recipes/ui: axe passed ${String(composedAudit.passes.length)} rules on the composites page with no violation`);
 
 	assert.deepEqual(problems, [], 'the page threw nothing');
 	console.log('recipes/ui: ok');

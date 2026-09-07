@@ -54,4 +54,8 @@ declare const axe: {
 
 declare const window: { scrollTo(x: number, y: number): void; readonly scrollY: number };
 
+declare const location: { readonly href: string; readonly pathname: string; readonly search: string };
+
+declare const history: { back(): void; readonly length: number };
+
 declare function getComputedStyle(element: RecipeElement, pseudo?: string): Record<string, string>;
