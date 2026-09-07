@@ -23,6 +23,7 @@ Start here if you know what you are trying to build.
 | `optimistic-write/` | A write that applies locally before the server sees it, is refused, and is rolled back | core, sync, debug |
 | `debug/` | Finding a bug in a document you did not write | core, debug |
 | `ui/` | A page with themes, contexts, control flow, a popup and a suspend, built by vite and driven in a real browser | core, dom, ui, build |
+| `icons/` | Icons named three ways, and what each way puts in the bundle | ui, icons, build |
 | `routed-site/` | A site with real URLs: nested pages, a page with a parameter, a page that arrives later, a dialog the back button dismisses, and a title per page | core, dom, ui, build |
 
 ## By package
@@ -31,7 +32,7 @@ Start here if you know which package you need and want to see it do its hardest 
 each of these has to demonstrate is the table in `docs/architecture.md`.
 
 `codec/`, `core/`, `schema/`, `sync/`, `store/`, `modules/`, `sandbox/`, `server/`, `jobs/`,
-`dom/`, `ui/`, `build/`, `debug/`.
+`dom/`, `ui/`, `icons/`, `build/`, `debug/`.
 
 ## What a recipe is
 
