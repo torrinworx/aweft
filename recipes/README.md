@@ -23,6 +23,7 @@ Start here if you know what you are trying to build.
 | `optimistic-write/` | A write that applies locally before the server sees it, is refused, and is rolled back | core, sync, debug |
 | `debug/` | Finding a bug in a document you did not write | core, debug |
 | `ui/` | A page with themes, contexts, control flow, a popup and a suspend, built by vite and driven in a real browser | core, dom, ui, build |
+| `routed-site/` | A site with real URLs: nested pages, a page with a parameter, a page that arrives later, a dialog the back button dismisses, and a title per page | core, dom, ui, build |
 
 ## By package
 

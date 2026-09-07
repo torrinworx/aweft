@@ -15,6 +15,7 @@ interface RecipeElement {
 	blur(): void;
 	focus(): void;
 	scrollIntoView(options?: { block?: string }): void;
+	readonly offsetTop: number;
 	readonly value: string;
 	readonly textContent: string | null;
 }
@@ -42,6 +43,6 @@ declare const axe: {
 	}>;
 };
 
-declare const window: { scrollTo(x: number, y: number): void };
+declare const window: { scrollTo(x: number, y: number): void; readonly scrollY: number };
 
 declare function getComputedStyle(element: RecipeElement): Record<string, string>;
