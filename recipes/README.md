@@ -25,6 +25,8 @@ Start here if you know what you are trying to build.
 | `ui/` | A page with themes, contexts, control flow, a popup and a suspend, built by vite and driven in a real browser | core, dom, ui, build |
 | `icons/` | Icons named three ways, and what each way puts in the bundle | ui, icons, build |
 | `routed-site/` | A site with real URLs: nested pages, a page with a parameter, a page that arrives later, a dialog the back button dismisses, and a title per page | core, dom, ui, build |
+| `ssg/` | A routed site written out as files, served by anything, and taken over in place when the browser gets to it | dom, ui, build, ssg |
+| `posts-to-pages/` | Pages written while the application runs: a post published over a socket becomes a page, and a scheduled full write refreshes the sitemap | store, modules, server, jobs, ui, ssg |
 
 ## By package
 
@@ -32,7 +34,7 @@ Start here if you know which package you need and want to see it do its hardest 
 each of these has to demonstrate is the table in `docs/architecture.md`.
 
 `codec/`, `core/`, `schema/`, `sync/`, `store/`, `modules/`, `sandbox/`, `server/`, `jobs/`,
-`dom/`, `ui/`, `icons/`, `build/`, `debug/`.
+`dom/`, `ui/`, `icons/`, `build/`, `ssg/`, `debug/`.
 
 ## What a recipe is
 
