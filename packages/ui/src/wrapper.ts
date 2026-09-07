@@ -4,7 +4,8 @@
 // is a mounter (design 107). Both `h` and the hoisted template go through here, so an element
 // written by hand and the same element compiled into a template do the same thing.
 
-import { type ElementLike, type Mounter, h as domH, mount, setAttribute } from '@aweftjs/dom';
+import { type Mounter, h as domH, mount } from '@aweftjs/dom';
+import { mutable } from '@aweftjs/core';
 
 import { assert } from './assert.ts';
 import { use } from './render.ts';
@@ -14,28 +15,50 @@ import { type Lookup, NO_THEME, cssName, declarationValue, parseValue, resolve }
 
 const STATE = ['isHovered', 'isFocused', 'isClicked', 'isTouched'] as const;
 
-/** A state prop, and the two events that drive it. */
+/**
+ * A state prop, the events that turn it on, and the events that turn it off.
+ *
+ * Every event here is one the platform keeps an `on<type>` property for, which is what makes it
+ * survive a hydration (design 133). So `focus` and `blur` rather than `focusin` and `focusout`,
+ * which means `isFocused` is the element's own focus and a block that wants focus-within asks the
+ * theme for `:focus-within`; and pointer events rather than touch events, with the pointer type
+ * saying it was a finger.
+ */
 const STATE_EVENTS: Record<string, readonly [on: string[], off: string[]]> = {
 	isHovered: [['mouseenter'], ['mouseleave']],
-	isFocused: [['focusin'], ['focusout']],
+	isFocused: [['focus'], ['blur']],
 	isClicked: [['mousedown'], ['mouseup', 'mouseleave']],
-	isTouched: [['touchstart'], ['touchend', 'touchcancel']],
+	isTouched: [['pointerdown'], ['pointerup', 'pointercancel']],
 };
+
+/** A finger, rather than a mouse or a pen. */
+const isTouch = (event: unknown): boolean =>
+	(event as { pointerType?: unknown }).pointerType === 'touch';
 
 const isEventProp = (name: string): boolean =>
 	name.length > 2 && name.startsWith('on') && name[2]! >= 'A' && name[2]! <= 'Z';
 
-/** What `ui` took off an element's props. */
+/** Where a computed string goes: an attribute cell `dom` bound on the element. */
+export interface Attribute {
+	set(value: unknown): void;
+}
+
+/**
+ * What `ui` took off an element's props and can only do with the mount context in hand, and the
+ * two cells those answers are written into.
+ *
+ * The answers go into cells rather than onto the element because a hydration keeps the server's
+ * node and drops the one these props were written on. `dom` re-targets a bound attribute onto the
+ * node it adopted; a `setAttribute` here would land on the node it dropped (design 133).
+ */
 export interface Claimed {
 	theme?: unknown;
 	class?: unknown;
 	style?: unknown;
-	isHovered?: unknown;
-	isFocused?: unknown;
-	isClicked?: unknown;
-	isTouched?: unknown;
-	/** Event name as `addEventListener` spells it, and the handler. */
-	events?: [string, unknown][];
+	/** Required beside a `theme`: the `class` attribute cell. */
+	classInto?: Attribute;
+	/** Required beside a `style`: the `style` attribute cell. */
+	styleInto?: Attribute;
 }
 
 /**
@@ -47,7 +70,12 @@ export interface Claimed {
  *
  * Returns: `rest`, what goes to `dom`'s `h`, and `claimed`, or null when `ui` claimed nothing.
  * `class` is claimed only alongside a `theme`, so a plain `class` stays an attribute `dom`
- * writes and costs nothing.
+ * writes and costs nothing. Every handler this package owns leaves in `rest`, as one `$on<type>`
+ * property per event type, because that is what survives a hydration (design 133).
+ *
+ * Throws: an assert, loud in development and stripped in a release build, for a state prop that
+ * is not a writable cell, an `onXxx` that is not a function, and a caller's own `$on<type>` that
+ * is not a function beside one of those.
  *
  * Example:
  *   const { rest, claimed } = splitProps({ id: 'x', theme: 'button', onClick: go });
@@ -76,6 +104,19 @@ export const splitProps = (
 	const claimed: Claimed = {};
 	const themed = themes && props['theme'] !== undefined && props['theme'] !== null;
 
+	// Event type to the handlers that run for it, in the order they are found here: what this
+	// call claimed, then the cells the state props name. The caller's own `$on<type>` goes in
+	// front of both below, once every key has been read.
+	const handlers = new Map<string, ((event: unknown) => void)[]>();
+	const forType = (type: string): ((event: unknown) => void)[] => {
+		let list = handlers.get(type);
+		if (list === undefined) {
+			list = [];
+			handlers.set(type, list);
+		}
+		return list;
+	};
+
 	for (const key of keys) {
 		const value = props[key];
 		if (key === 'theme') {
@@ -91,14 +132,57 @@ export const splitProps = (
 			continue;
 		}
 		if ((STATE as readonly string[]).includes(key)) {
-			if (value !== undefined && value !== null) claimed[key as (typeof STATE)[number]] = value;
+			if (value === undefined || value === null) continue;
+			assert(isWritable(value),
+				`${key} must be a cell this component can write; pass mutable(false) or leave it off`);
+			if (!isWritable(value)) continue;
+			const [on, off] = STATE_EVENTS[key]!;
+			// A finger is what `isTouched` is about, and a pointer event says which it was. The
+			// events that clear it are not gated: whatever ended the press, the press is over.
+			const gated = key === 'isTouched';
+			for (const type of on) forType(type).push((event) => { if (!gated || isTouch(event)) value.set(true); });
+			for (const type of off) forType(type).push(() => { value.set(false); });
 			continue;
 		}
 		if (isEventProp(key)) {
-			if (value !== undefined && value !== null) (claimed.events ??= []).push([key.slice(2).toLowerCase(), value]);
+			if (value === undefined || value === null) continue;
+			assert(typeof value === 'function', `${key} must be a function; pass the handler itself, not its result`);
+			if (typeof value !== 'function') continue;
+			forType(key.slice(2).toLowerCase()).push(value as (event: unknown) => void);
 			continue;
 		}
 		rest[key] = value;
+	}
+
+	// One property per event type. A property is what a hydration replays onto the node it
+	// adopted, and a listener registered with `addEventListener` leaves nothing for it to find,
+	// so a page that came from a server was inert until this was a property (design 133).
+	// The two attribute cells, handed to `dom` in the props so it binds them on the element and
+	// re-targets them onto the node a hydration adopts.
+	if (claimed.theme !== undefined) {
+		const cell = mutable<unknown>(null);
+		claimed.classInto = cell;
+		rest['class'] = cell;
+	}
+	if (claimed.style !== undefined) {
+		const cell = mutable<unknown>(null);
+		claimed.styleInto = cell;
+		rest['style'] = cell;
+	}
+
+	for (const [type, list] of handlers) {
+		const name = `$on${type}`;
+		const own = rest[name];
+		if (own !== undefined && own !== null) {
+			assert(typeof own === 'function',
+				`${name} must be a function beside an on${type} or a state prop that uses ${type}`);
+			// The caller's own handler runs first: theirs is the one that may want to stop the
+			// event before this package's own reads it.
+			if (typeof own === 'function') list.unshift(own as (event: unknown) => void);
+		}
+		rest[name] = list.length === 1
+			? list[0]
+			: (event: unknown) => { for (const fn of list) fn(event); };
 	}
 
 	return { rest, claimed };
@@ -176,36 +260,29 @@ const cssTextOf = (value: unknown, deep: Deep, lookup: Lookup): string => {
 
 // --- applying --------------------------------------------------------------------------------
 
-interface Listening {
-	addEventListener?(type: string, listener: (event: unknown) => void): void;
-	removeEventListener?(type: string, listener: (event: unknown) => void): void;
-}
-
-const listen = (element: ElementLike, type: string, handler: (event: unknown) => void): (() => void) => {
-	const target = element as unknown as Listening;
-	if (typeof target.addEventListener !== 'function') return () => undefined;
-	target.addEventListener(type, handler);
-	return () => { target.removeEventListener?.(type, handler); };
-};
-
 /**
- * Do what `ui` claimed, on one element, with the mount context in hand.
+ * Do what `ui` claimed for one element, with the mount context in hand.
  *
  * Params:
- *   element: the element the props were written on
- *   claimed: what `splitProps` took
+ *   claimed: what `splitProps` took, and the two attribute cells its answers go into
  *   context: the opaque context `dom` handed the mounter
  *
- * Returns: the teardown: every listener removed and every subscription dropped.
+ * Returns: the teardown: every subscription dropped. The handlers are properties of the element
+ * by now and the class and the style are cells `dom` writes (design 133), so nothing here touches
+ * a node at all.
  *
  * Throws: an assert, loud in development and stripped in a release build, when the mount has no
- * `ui` systems, or when a state prop is not a cell.
+ * `ui` systems, or when a claim arrived without the cell its answer goes into.
  *
  * Example:
- *   const stop = applyClaimed(element, claimed, context);
+ *   const stop = applyClaimed(claimed, context);
  */
-export const applyClaimed = (element: ElementLike, claimed: Claimed, context: unknown): (() => void) => {
+export const applyClaimed = (claimed: Claimed, context: unknown): (() => void) => {
 	const stops: (() => void)[] = [];
+	assert(claimed.theme === undefined || claimed.classInto !== undefined,
+		'a claimed theme needs the class cell dom bound on the element; pass it as classInto');
+	assert(claimed.style === undefined || claimed.styleInto !== undefined,
+		'a claimed style needs the style cell dom bound on the element; pass it as styleInto');
 
 	if (claimed.theme !== undefined) {
 		const sheet = use(context).theme;
@@ -222,7 +299,7 @@ export const applyClaimed = (element: ElementLike, claimed: Claimed, context: un
 				return [...own, generated].join(' ');
 			},
 			// One write per change, so a theme cell moving is one attribute operation on the tree.
-			(value) => { setAttribute(element, 'class', value); },
+			(value) => { claimed.classInto?.set(value); },
 		));
 
 		if (claimed.style !== undefined) {
@@ -234,7 +311,7 @@ export const applyClaimed = (element: ElementLike, claimed: Claimed, context: un
 			};
 			stops.push(track(
 				(deep) => cssTextOf(claimed.style, deep, lookup),
-				(css) => { setAttribute(element, 'style', css === '' ? null : css); },
+				(css) => { claimed.styleInto?.set(css === '' ? null : css); },
 			));
 		}
 	} else if (claimed.style !== undefined) {
@@ -242,26 +319,8 @@ export const applyClaimed = (element: ElementLike, claimed: Claimed, context: un
 		// to nothing, a call is left as written, and `$$` is still an escape.
 		stops.push(track(
 			(deep) => cssTextOf(claimed.style, deep, NO_THEME),
-			(css) => { setAttribute(element, 'style', css === '' ? null : css); },
+			(css) => { claimed.styleInto?.set(css === '' ? null : css); },
 		));
-	}
-
-	for (const name of STATE) {
-		const cell = claimed[name];
-		if (cell === undefined) continue;
-		assert(isWritable(cell),
-			`${name} must be a cell this component can write; pass mutable(false) or leave it off`);
-		if (!isWritable(cell)) continue;
-		const [on, off] = STATE_EVENTS[name]!;
-		const write = (value: boolean) => () => { cell.set(value); };
-		for (const type of on) stops.push(listen(element, type, write(true)));
-		for (const type of off) stops.push(listen(element, type, write(false)));
-	}
-
-	for (const [type, handler] of claimed.events ?? []) {
-		assert(typeof handler === 'function', `on${type} must be a function; pass the handler itself, not its result`);
-		if (typeof handler !== 'function') continue;
-		stops.push(listen(element, type, handler as (event: unknown) => void));
 	}
 
 	return () => {
@@ -274,30 +333,24 @@ export const applyClaimed = (element: ElementLike, claimed: Claimed, context: un
 
 const WRAPPED: unique symbol = Symbol('aweft.ui.wrapped');
 
-/** One element and what `ui` claimed off it. */
-export interface Pair {
-	readonly element: ElementLike;
-	readonly claimed: Claimed;
-}
-
 /** What `h` returns for a subtree with claimed props in it: mountable, and still openable. */
 export interface Wrapped {
 	(...args: never[]): unknown;
-	readonly [WRAPPED]: { readonly made: unknown; readonly pairs: Pair[] };
+	readonly [WRAPPED]: { readonly made: unknown; readonly claims: Claimed[] };
 }
 
 /** Whether a value is one of these, so an enclosing `h` can fold it into its own. */
 export const isWrapped = (value: unknown): value is Wrapped =>
 	typeof value === 'function' && (value as Partial<Wrapped>)[WRAPPED] !== undefined;
 
-/** What is inside one: the item `dom` would have mounted, and the elements still to be dressed. */
-export const openWrapped = (value: Wrapped): { made: unknown; pairs: Pair[] } => value[WRAPPED];
+/** What is inside one: the item `dom` would have mounted, and the claims still to be applied. */
+export const openWrapped = (value: Wrapped): { made: unknown; claims: Claimed[] } => value[WRAPPED];
 
-const Dress = (props: { made: unknown; pairs: readonly Pair[] }): Mounter =>
+const Dress = (props: { made: unknown; claims: readonly Claimed[] }): Mounter =>
 	(elem, _item, before, context) => {
-		// Before the mount, so a class is on the element as it goes into the document rather than
-		// being written onto it afterwards, and so a hydration compares the class the server wrote.
-		const stops = props.pairs.map((pair) => applyClaimed(pair.element, pair.claimed, context));
+		// Before the mount, so every cell holds its string before `dom` binds it, and the class the
+		// server wrote is the class the element carries as it goes into the document.
+		const stops = props.claims.map((claimed) => applyClaimed(claimed, context));
 		const remove = mount(elem, props.made, before, context);
 		return (arg) => {
 			if (arg !== undefined) return remove(arg);
@@ -311,25 +364,25 @@ const Dress = (props: { made: unknown; pairs: readonly Pair[] }): Mounter =>
  *
  * Params:
  *   made: what `dom` would have mounted
- *   pairs: the elements inside it and what was claimed off each, in document order
+ *   claims: what was claimed off each element inside it, in document order
  *
  * Returns: a component's mounter. It is a component rather than a bare mounter because `dom`
  * brackets a component and does not bracket a mounter, and the brackets are what a hydration
  * reads to know a dynamic mount sits between two static siblings.
  *
  * Example:
- *   return pairs.length === 0 ? made : dress(made, pairs);
+ *   return claims.length === 0 ? made : dress(made, claims);
  */
-export const dress = (made: unknown, pairs: Pair[]): Wrapped => {
-	const mounter = domH(Dress, { made, pairs }) as (...args: never[]) => unknown;
-	return Object.assign(mounter, { [WRAPPED]: { made, pairs } }) as Wrapped;
+export const dress = (made: unknown, claims: Claimed[]): Wrapped => {
+	const mounter = domH(Dress, { made, claims }) as (...args: never[]) => unknown;
+	return Object.assign(mounter, { [WRAPPED]: { made, claims } }) as Wrapped;
 };
 
 /**
- * Fold any wrapped children into one list of pairs, so a subtree written as nested `h` calls
+ * Fold any wrapped children into one list of claims, so a subtree written as nested `h` calls
  * mounts under one bracket rather than one per themed element.
  */
-export const foldChildren = (children: unknown[]): { children: unknown[]; pairs: Pair[] } => {
+export const foldChildren = (children: unknown[]): { children: unknown[]; claims: Claimed[] } => {
 	// Nothing to fold is the common case, and it keeps the array it was given.
 	let found = false;
 	for (const child of children) {
@@ -337,20 +390,20 @@ export const foldChildren = (children: unknown[]): { children: unknown[]; pairs:
 		found = true;
 		break;
 	}
-	if (!found) return { children, pairs: EMPTY };
+	if (!found) return { children, claims: EMPTY };
 
 	const out: unknown[] = [];
-	const pairs: Pair[] = [];
+	const claims: Claimed[] = [];
 	for (const child of children) {
 		if (isWrapped(child)) {
 			const inner = openWrapped(child);
 			out.push(inner.made);
-			pairs.push(...inner.pairs);
+			claims.push(...inner.claims);
 			continue;
 		}
 		out.push(child);
 	}
-	return { children: out, pairs };
+	return { children: out, claims };
 };
 
-const EMPTY: Pair[] = [];
+const EMPTY: Claimed[] = [];

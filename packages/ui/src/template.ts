@@ -7,7 +7,7 @@
 
 import { type ElementLike, type Template, type TemplateEdit, type TemplateElement, template as domTemplate } from '@aweftjs/dom';
 
-import { type Claimed, type Pair, dress, splitProps } from './wrapper.ts';
+import { type Claimed, dress, splitProps } from './wrapper.ts';
 
 const WRAP: unique symbol = Symbol('aweft.ui.wrap');
 
@@ -54,19 +54,19 @@ const markerOf = (source: unknown): Marker | null => {
  * for, and an element that got `aw0` when the page was written by hand has to get `aw0` when the
  * same page is compiled.
  */
-const unmark = (made: unknown): Pair[] => {
+const unmark = (made: unknown): Claimed[] => {
 	const signals = (made as Partial<Bound>).signals;
 	if (!Array.isArray(signals)) return [];
-	const found: { element: ElementLike; claimed: Claimed; at: number }[] = [];
+	const found: { claimed: Claimed; at: number }[] = [];
 	for (let i = signals.length - 1; i >= 0; i -= 1) {
 		const signal = signals[i]!;
 		const mark = markerOf(signal.source);
-		if (mark === null || signal.element === undefined) continue;
-		found.push({ element: signal.element, claimed: mark[WRAP], at: mark.at });
+		if (mark === null) continue;
+		found.push({ claimed: mark[WRAP], at: mark.at });
 		signals.splice(i, 1);
 	}
 	found.sort((a, b) => a.at - b.at);
-	return found;
+	return found.map((one) => one.claimed);
 };
 
 /**
@@ -112,7 +112,7 @@ export const template = (spec: TemplateElement, edits: readonly TemplateEdit[]):
 
 		const made = inner(out);
 		if (!marked) return made;
-		const pairs = unmark(made);
-		return pairs.length === 0 ? made : dress(made, pairs);
+		const claims = unmark(made);
+		return claims.length === 0 ? made : dress(made, claims);
 	};
 };

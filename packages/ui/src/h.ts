@@ -4,20 +4,18 @@
 // is a mounter, because the theme it gets and the `$var`s in its style are decided where the
 // context is, and `dom` hands the context to a mounter and to nothing else.
 
-import { type ElementLike, createElement, h as domH, htm } from '@aweftjs/dom';
+import { createElement, h as domH, htm } from '@aweftjs/dom';
 
 import { assert } from './assert.ts';
 import { type Marked, makeMark, markNameOf } from './mark.ts';
-import { type Pair, dress, foldChildren, splitProps } from './wrapper.ts';
+import { type Claimed, dress, foldChildren, splitProps } from './wrapper.ts';
 
 const SVG = 'http://www.w3.org/2000/svg';
 
 const EACH = /^each:(.+)$/;
 
-const nodeOf = (made: unknown): ElementLike =>
-	(typeof (made as { nodeType?: unknown }).nodeType === 'number'
-		? made
-		: (made as { node: ElementLike }).node) as ElementLike;
+const isNode = (value: unknown): boolean =>
+	typeof (value as { nodeType?: unknown } | null)?.nodeType === 'number';
 
 /** `each:name` on a component: the item arrives under `name` instead of under `each`. */
 const withEachName = (
@@ -56,16 +54,15 @@ const build = (
 	// so a subtree written as nested `h` calls mounts under one bracket.
 	const folded = foldChildren(children);
 	// An SVG element is made here rather than by `dom`'s `h`, because the namespace is what
-	// makes it one and `h` takes a tag name with no namespace beside it.
-	const target = namespace === null ? tag : createElement(String(tag), namespace);
+	// makes it one and `h` takes a tag name with no namespace beside it. A node handed in is
+	// already the element, in whatever namespace it was made in.
+	const target = namespace === null || isNode(tag) ? tag : createElement(String(tag), namespace);
 	const made = domH(target, rest, ...folded.children);
-	if (claimed === null && folded.pairs.length === 0) return made;
+	if (claimed === null && folded.claims.length === 0) return made;
 	// This element's own props first: document order is what decides which element asks the
 	// render's class cache for a name first, and a compiled page has to ask in the same order.
-	const pairs: Pair[] = claimed === null
-		? folded.pairs
-		: [{ element: nodeOf(made), claimed }, ...folded.pairs];
-	return dress(made, pairs);
+	const claims: Claimed[] = claimed === null ? folded.claims : [claimed, ...folded.claims];
+	return dress(made, claims);
 };
 
 /**

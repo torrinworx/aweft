@@ -17,7 +17,7 @@ import { template } from '../src/template.ts';
 Theme.define({ boxed: { padding: 8 } });
 
 /** What `dom` hands back for an instance with something reactive in it. */
-interface Bound { readonly signals: { readonly source?: unknown }[] }
+interface Bound { readonly signals: { readonly source?: unknown; readonly name?: string }[] }
 
 const openWrapped = (made: unknown): Bound => {
 	const inner = (made as { [key: symbol]: unknown });
@@ -37,9 +37,10 @@ test('every marker is taken back out of the instance before it is mounted', () =
 
 	const inner = openWrapped(made);
 	assert.ok(Array.isArray(inner.signals));
-	// The one signal `dom` should be left holding is none: the class edit was ui's and the cell
-	// edit was a literal attribute `dom` wrote outright.
-	assert.deepEqual(inner.signals, []);
+	// The markers are gone, and the one signal `dom` is left holding is the `class` attribute cell
+	// `ui` handed it: the theme's answer goes in there, so it reaches a node a hydration adopts
+	// (design 133). The cell edit was a literal attribute `dom` wrote outright.
+	assert.deepEqual(inner.signals.map((signal) => signal.name), ['class']);
 });
 
 test('a template with nothing ui claims is dom\'s instance exactly', () => {
