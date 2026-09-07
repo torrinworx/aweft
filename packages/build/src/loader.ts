@@ -16,8 +16,10 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { register } from 'node:module';
 
+import { codecError } from '@aweftjs/codec';
+
 import { iconRequest } from './icons.ts';
-import { transform } from './transform.ts';
+import { type TransformOptions, transform } from './transform.ts';
 
 /** The scheme a generated icon module answers under. Nothing on disk has it. */
 const SCHEME = 'aweft-icons:';
@@ -84,6 +86,34 @@ export const resolve = async (
 	return { url, format: 'module', shortCircuit: true };
 };
 
+/**
+ * The environment variable a Node process names `defaultH` in.
+ *
+ * A bundler takes the setting as a plugin option. `--import` is a flag with nowhere to hang one,
+ * so the environment is the only place a process can put it, and it is what makes a server render
+ * and a bundle compile one file the same way (design 147).
+ */
+const SETTING = 'AWEFT_DEFAULT_H';
+
+const PACKAGES = ['@aweftjs/dom', '@aweftjs/ui'];
+
+/** The `defaultH` this process asked for, checked, or nothing when it asked for none. */
+const settingOf = (): TransformOptions['defaultH'] | undefined => {
+	const named = process.env[SETTING];
+	if (named === undefined || named === '') return undefined;
+	if (!PACKAGES.includes(named)) {
+		throw codecError('unknown-default-h', `${SETTING}=${named}`,
+			'Set it to @aweftjs/dom or @aweftjs/ui, or leave it unset to compile a file with no h of its own against dom.');
+	}
+	return named as TransformOptions['defaultH'];
+};
+
+// Read here rather than per file, so a process that sets it to something this cannot honour is
+// stopped as it starts rather than at whichever `.tsx` happens to be imported first, or never at
+// all in a run that compiles none. A worker takes its environment when it is made, so the value
+// cannot change under a running process anyway.
+const DEFAULT_H = settingOf();
+
 /** What the parser or the transform said about where the fault is: `:line:column`, or nothing. */
 const positionOf = (fault: unknown, source: string): string => {
 	const held = fault as { loc?: { line?: number; column?: number }; at?: number };
@@ -105,12 +135,15 @@ const positionOf = (fault: unknown, source: string): string => {
  *
  * Returns: for a `.tsx` file, its source with the JSX compiled, as `module-typescript` so
  * Node strips the types afterwards. For a URL `resolve` above claimed, the generated icon
- * module. For anything else, whatever the rest of the chain says.
+ * module. For anything else, whatever the rest of the chain says. A file that binds no `h`
+ * of its own gets one from the package `AWEFT_DEFAULT_H` names, and from `@aweftjs/dom` when
+ * nothing names one.
  *
  * Throws: an `Error` naming the file and the line, with the fault as its `cause`. The fault is a
  * `TransformError` for a rule a compiled template cannot meet, and the parser's own `SyntaxError`
  * for source it cannot read. Neither names the file on its own, and a stack into a parser is not
- * where the reader has to look.
+ * where the reader has to look. `AWEFT_DEFAULT_H` set to anything but the two package names is
+ * refused when this module loads, before any file is read and whether or not one ever is.
  */
 export const load = async (url: string, context: unknown, nextLoad: NextLoad): Promise<LoadResult> => {
 	if (url.startsWith(SCHEME)) {
@@ -127,7 +160,9 @@ export const load = async (url: string, context: unknown, nextLoad: NextLoad): P
 	const source = await readFile(filename, 'utf8');
 	let code: string;
 	try {
-		code = transform(source, { filename }).code;
+		// Written this way rather than `defaultH: named`, because the repo compiles with
+		// `exactOptionalPropertyTypes` and an explicit undefined is not the same as an absent field.
+		code = transform(source, DEFAULT_H === undefined ? { filename } : { filename, defaultH: DEFAULT_H }).code;
 	} catch (fault) {
 		const where = positionOf(fault, source);
 		const said = fault instanceof Error ? fault.message : String(fault);

@@ -2,9 +2,12 @@
 
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const repo = fileURLToPath(new URL('../../../', import.meta.url));
 
 import { scratch } from './fixtures.ts';
 
@@ -80,4 +83,85 @@ test('an icon import for a set nobody installed says how to install it', async (
 		assert.match(error.message, /npm install @iconify-json\/nosuchset/);
 		return true;
 	});
+});
+
+// --- the package a file with no `h` of its own gets one from (design 147) ---------------------------
+
+/** A `.tsx` that binds no `h` at all, and a script that mounts what it makes. */
+const PROBE = 'export const make = () => <p theme="card">x</p>;\n';
+/** A script that compiles no `.tsx` at all, so nothing ever reaches the load hook. */
+const PLAIN = 'console.log("ran");\n';
+
+const DRIVER = `import { createDocument, toHtml } from '@aweftjs/dom';
+import { mount } from '@aweftjs/ui';
+
+import { make } from './probe.tsx';
+
+const document = createDocument();
+mount(document.body, make());
+console.log(toHtml(document.body));
+`;
+
+/**
+ * Run the driver in a process of its own, with the setting the case is about.
+ *
+ * A process of its own because the hook runs on a worker thread, and a worker takes its
+ * environment when it is made: a variable written after the process started reaches nobody. That
+ * is the mechanism, not a limitation of the test.
+ */
+const drove = (setting?: string, script = 'driver.ts'): { out: string; error: string; status: number } => {
+	const dir = join(space.dir, `default-h-${setting === undefined ? 'unset' : setting.replace(/\W+/g, '-')}`);
+	mkdirSync(dir, { recursive: true });
+	// The stack's specifiers resolve by walking up from the file, and a scratch directory has
+	// nowhere to walk to, so the workspace's own tree is pointed at from here.
+	const modules = join(dir, 'node_modules');
+	if (!existsSync(modules)) symlinkSync(join(repo, 'node_modules'), modules, 'dir');
+	writeFileSync(join(dir, 'probe.tsx'), PROBE);
+	writeFileSync(join(dir, 'driver.ts'), DRIVER);
+	writeFileSync(join(dir, 'plain.ts'), PLAIN);
+
+	const env = { ...process.env };
+	delete env['AWEFT_DEFAULT_H'];
+	if (setting !== undefined) env['AWEFT_DEFAULT_H'] = setting;
+
+	const run = spawnSync(process.execPath, ['--import', '@aweftjs/build/loader', join(dir, script)],
+		{ cwd: dir, env, encoding: 'utf8' });
+	return { out: run.stdout ?? '', error: run.stderr ?? '', status: run.status ?? -1 };
+};
+
+test('with nothing set, a file that binds no h gets dom\'s, so theme is a literal attribute', () => {
+	const run = drove();
+	assert.equal(run.status, 0, run.error);
+	// `dom` knows nothing about themes, so the prop goes out as an attribute nothing reads. That is
+	// the failure the setting exists to prevent.
+	assert.match(run.out, /<p theme="card">x<\/p>/);
+});
+
+test('with AWEFT_DEFAULT_H set to ui, the same file gets ui\'s h and the theme becomes a class', () => {
+	const run = drove('@aweftjs/ui');
+	assert.equal(run.status, 0, run.error);
+	assert.match(run.out, /<p class="[^"]+">x<\/p>/);
+	assert.ok(!run.out.includes('theme='), 'and the prop is not on the element at all');
+});
+
+test('an empty setting is no setting, and an unknown one is refused before a file is read', () => {
+	assert.match(drove('').out, /<p theme="card">x<\/p>/);
+
+	const refused = drove('@aweftjs/preact');
+	assert.notEqual(refused.status, 0);
+	assert.match(refused.error, /unknown-default-h: AWEFT_DEFAULT_H=@aweftjs\/preact/);
+	assert.match(refused.error, /Set it to @aweftjs\/dom or @aweftjs\/ui/);
+});
+
+test('an unknown setting is refused even by a run that compiles no .tsx at all', () => {
+	// The setting is checked when the hook loads, not when a file reaches it. Checked per file, a
+	// build script that happens to import no `.tsx` runs to the end with a value the loader could
+	// not have honoured, and the refusal the README promises never happens.
+	const plain = drove('@aweftjs/preact', 'plain.ts');
+	assert.notEqual(plain.status, 0);
+	assert.match(plain.error, /unknown-default-h: AWEFT_DEFAULT_H=@aweftjs\/preact/);
+	assert.ok(!plain.out.includes('ran'), 'and the script never started');
+
+	// A good one leaves that run alone.
+	assert.equal(drove('@aweftjs/ui', 'plain.ts').out.trim(), 'ran');
 });

@@ -26,6 +26,11 @@ import { transform } from '@aweftjs/build';
 const { code, map } = transform(source, { filename: 'page.tsx', release: true });
 ```
 
+```
+# A Node process, which has no bundler config to put an option in.
+AWEFT_DEFAULT_H=@aweftjs/ui node --import @aweftjs/build/loader build-site.ts
+```
+
 Both produce the same bytes for the same input, and there is a fixture suite that says so
 (`tests/modes.test.ts`). That equality is not a nicety: source validated by one transform and
 executed by another can validate, be stored, and break when it renders.
@@ -86,6 +91,13 @@ fragment, `<>...</>`, becomes an array of items, which is what `mount` takes.
 declares its own `h`, or imports one from elsewhere, keeps it, and its JSX compiles to that
 one. That is what lets a component library ship its own `h`, its own theming and a wholly
 separate definition without this package knowing anything about it.
+
+Which package supplies that import is `defaultH`. A bundler takes it as a plugin option,
+`aweft({ defaultH: '@aweftjs/ui' })`. A Node process running the loader has no config to put
+one in, so it says the same thing in the environment: `AWEFT_DEFAULT_H=@aweftjs/ui`, read once
+per file, and refused by name if it is set to anything but the two package names. Set them to
+the same value when one `.tsx` is rendered on a server and bundled for a browser, or the two
+sides compile it differently and the page will not hydrate (design 147).
 
 ### Static hoisting
 

@@ -9,6 +9,7 @@ nothing-to-close: Remove the closing tag, or open the element it closes.
 spread-needs-hole: Put the object in a hole, written as =${object}.
 tag-needs-name: Put a tag name after the <, or write the tag as a hole.
 unclosed-element: Close the element, or write it as <tag /> if it has no children.
+unknown-default-h: Set it to @aweftjs/dom or @aweftjs/ui, or leave it unset to compile a file with no h of its own against dom.
 unsupported-child: Write the child as text, an element, or an expression in braces.
 unterminated-attribute: Close the value with the same quote it opened with.
 unterminated-closing-tag: End the closing tag with >.
