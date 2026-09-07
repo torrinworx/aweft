@@ -1,5 +1,5 @@
 type Mangle: interface Mangle { readonly pattern: RegExp; readonly terser: { readonly mangle: { readonly properties: { readonly regex: RegExp; }; }; }; readonly esbuild: { readonly mangleProps: RegExp; }; }
-type Plugin: interface Plugin { readonly name: string; readonly enforce: 'pre'; transform(code: string, id: string): { code: string; map: string; } | null; }
+type Plugin: interface Plugin { readonly name: string; readonly enforce: 'pre'; transform(code: string, id: string): { code: string; map: string; } | null; resolveId(source: string, importer?: string): Promise<string | null>; load(id: string): Promise<string | null>; }
 type SourceMap: interface SourceMap { readonly version: number; readonly sources: readonly string[]; readonly names: readonly string[]; readonly mappings: string; toString(): string; toUrl(): string; }
 value TransformError: typeof TransformError
 type TransformOptions: interface TransformOptions { readonly filename?: string; readonly release?: boolean; readonly defaultH?: '@aweftjs/dom' | '@aweftjs/ui'; }
@@ -8,3 +8,4 @@ value aweft: (options?: Omit<TransformOptions, "filename">) => Plugin
 value mangle: Mangle
 value transform: (source: string, options?: TransformOptions) => TransformResult
 ./loader value load: (url: string, context: unknown, nextLoad: NextLoad) => Promise<LoadResult>
+./loader value resolve: (specifier: string, context: unknown, nextResolve: NextResolve) => Promise<ResolveResult>

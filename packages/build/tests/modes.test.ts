@@ -7,6 +7,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { join } from 'node:path';
 
 import { aweft, transform } from '../src/index.ts';
 import { fixtures } from './fixtures.ts';
@@ -62,4 +63,44 @@ test('the plugin names itself and runs before the rest of the pipeline', () => {
 	const plugin = aweft();
 	assert.equal(plugin.name, 'aweft');
 	assert.equal(plugin.enforce, 'pre');
+});
+
+test('the plugin claims an icon import and generates its module', async () => {
+	// One plugin is the whole registration: the same object that compiles a page answers the
+	// imports that compiling it wrote (design 141).
+	const plugin = aweft();
+	const importer = join(import.meta.dirname, 'page.tsx');
+
+	const id = await plugin.resolveId('@aweftjs/icons/lucide/check', importer);
+	assert.ok(id !== null && id.startsWith('\0'), 'a generated module is nobody\'s file');
+
+	const source = await plugin.load(id);
+	assert.match(source ?? '', /^export default \{/);
+	assert.match(source ?? '', /"width":24/, 'the set\'s root size is on the icon');
+});
+
+test('the plugin leaves alone what is not a generated icon module', async () => {
+	const plugin = aweft();
+	const importer = join(import.meta.dirname, 'page.tsx');
+
+	assert.equal(await plugin.resolveId('@aweftjs/icons', importer), null, 'the root entry is a file');
+	assert.equal(await plugin.resolveId('@aweftjs/icons/node', importer), null, 'and so is the generator');
+	assert.equal(await plugin.resolveId('@aweftjs/icons/node/x', importer), null,
+		'so a set named node could never be reached, and none is published');
+	assert.equal(await plugin.resolveId('@aweftjs/ui', importer), null);
+	assert.equal(await plugin.resolveId('@aweftjs/icons/lucide/check', undefined), null,
+		'with no importer there is no directory to resolve the set from');
+
+	// A specifier that is not a request the generator answers is left to ordinary resolution,
+	// so a path out of the sets never becomes a module (design 141).
+	for (const source of ['@aweftjs/icons/..', '@aweftjs/icons/../x', '@aweftjs/icons/lucide/Check']) {
+		assert.equal(await plugin.resolveId(source, importer), null, `${source} is not an icon import`);
+	}
+	assert.equal(await plugin.load('/some/page.tsx'), null);
+});
+
+test('the plugin refuses a set nobody installed, naming the install', async () => {
+	const plugin = aweft();
+	const id = await plugin.resolveId('@aweftjs/icons/nosuchset/home', join(import.meta.dirname, 'page.tsx'));
+	await assert.rejects(async () => plugin.load(id!), /npm install @iconify-json\/nosuchset/);
 });

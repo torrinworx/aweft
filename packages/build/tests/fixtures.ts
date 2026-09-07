@@ -9,10 +9,9 @@
 // A fixture that writes JSX carries a second source, `same`, that says what it means in plain
 // `h` calls. That pair is how the JSX pass is checked, because JSX does not run untransformed.
 
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createDocument, hydrate, mount, parseHtml, render, toHtml } from '@aweftjs/dom';
 import type { LightDocument, LightElement, LightNode, LightText } from '@aweftjs/dom';
@@ -52,8 +51,18 @@ export const loadModule = async (dir: string, name: string, source: string): Pro
 	return await import(pathToFileURL(file).href) as { create(): Page };
 };
 
+/**
+ * A directory to write a fixture into, inside the repo rather than in the system temp.
+ *
+ * A fixture that imports an installed package, which the icon fixtures do, has to resolve it the
+ * way a file in this repo resolves it, and resolution walks up from the file. `.scratch/` is
+ * ignored by git and by every check in the gate, and Node refuses to strip types under
+ * `node_modules`, which rules out the other place inside the repo that resolution would reach.
+ */
 export const scratch = (): { dir: string; done(): void } => {
-	const dir = mkdtempSync(join(tmpdir(), 'aweft-build-'));
+	const root = fileURLToPath(new URL('../../../.scratch/', import.meta.url));
+	mkdirSync(root, { recursive: true });
+	const dir = mkdtempSync(join(root, 'build-'));
 	return { dir, done: () => rmSync(dir, { recursive: true, force: true }) };
 };
 
