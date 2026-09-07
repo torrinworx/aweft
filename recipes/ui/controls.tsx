@@ -3,6 +3,9 @@
 // Every control here is written the way an application writes one: the component, a cell, and a
 // theme entry the library already ships. Nothing on this page draws a control out of `div`s,
 // because there is nothing here that has to.
+//
+// The icons are named `lucide:name`, which the build turns into an import of that one icon
+// (design 141). The stack ships no drawings of its own (design 144).
 
 import { mutable } from '@aweftjs/core';
 import {
@@ -71,8 +74,8 @@ const Controls = (props: { mode?: unknown }): unknown => {
 					<Button label="Off" disabled={true} id={at('button-disabled')} />
 					<Button label="Working" loading={busy} id={at('button-loading')} />
 					<Button label="Docs" href="https://example.com/docs" type="quiet" id={at('button-link')} />
-					<Button label="Search" icon={<Icon name="search" />} id={at('button-icon')} />
-					<Button label="More" icon={<Icon name="chevron-down" />} iconPosition="right" id={at('button-icon-right')} />
+					<Button label="Search" icon={<Icon name="lucide:search" />} id={at('button-icon')} />
+					<Button label="More" icon={<Icon name="lucide:chevron-down" />} iconPosition="right" id={at('button-icon-right')} />
 				</div>
 				<div theme="row">
 					<Button label="Start" onClick={() => { busy.set(!busy.get()); }} id={at('button-toggle-busy')} type="quiet" />
@@ -118,11 +121,11 @@ const Controls = (props: { mode?: unknown }): unknown => {
 					<p theme={['text', 'muted']}>A raised block is told apart by its tint and its line.</p>
 				</Paper>
 				<div theme="row" id={at('icons')}>
-					<Icon name="check" label="done" id={at('icon-check')} />
-					<Icon name="x" label="not done" />
-					<Icon name="alert" label="careful" />
-					<Icon name="chevron-right" label="next" />
-					<Icon name="search" size="2rem" label="find" id={at('icon-big')} />
+					<Icon name="lucide:check" label="done" id={at('icon-check')} />
+					<Icon name="lucide:x" label="not done" />
+					<Icon name="lucide:triangle-alert" label="careful" />
+					<Icon name="lucide:chevron-right" label="next" />
+					<Icon name="lucide:search" size="2rem" label="find" id={at('icon-big')} />
 				</div>
 				<hr theme="divider" id={at('divider')} />
 				<div theme={['row', 'spread']} id={at('spread')}>
