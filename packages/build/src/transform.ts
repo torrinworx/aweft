@@ -13,7 +13,8 @@ import { parse } from '@babel/parser';
 
 import { type Node, forEachChild } from './ast.ts';
 import { type CallReader, readCall } from './call.ts';
-import type { Element } from './element.ts';
+import type { Element, Property } from './element.ts';
+import { createIconImports } from './icons.ts';
 import { createHoister } from './hoist.ts';
 import { type JsxReader, readJsx } from './jsx.ts';
 import { type MarkupReader, readMarkup } from './markup.ts';
@@ -137,6 +138,7 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 	// A `ui` file's properties never go in the prototype, because `theme` is not an attribute and
 	// `build` does not carry `ui`'s vocabulary (design 108).
 	const hoister = createHoister(hoisting, templateName, freshPrefix('_t', bindings.names), !uiIsH);
+	const icons = createIconImports(freshPrefix('_icon', bindings.names));
 
 	let usedJsxH = false;
 	let usedDomMarkupH = false;
@@ -177,16 +179,61 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 		return found;
 	};
 
-	/** The source of a node with every transformable strictly inside it replaced. */
-	const inner = (node: Node): string => {
+	/** The source of a node with the given pieces of it replaced, in source order. */
+	const spliced = (node: Node, pieces: readonly (readonly [Node, string])[]): string => {
 		const parts: string[] = [];
 		let at = node.start;
-		for (const found of inside(node)) {
-			parts.push(source.slice(at, found.start), code(found));
+		for (const [found, text] of [...pieces].sort((a, b) => a[0].start - b[0].start)) {
+			parts.push(source.slice(at, found.start), text);
 			at = found.end;
 		}
 		parts.push(source.slice(at, node.end));
 		return parts.join('');
+	};
+
+	/** The source of a node with every transformable strictly inside it replaced. */
+	const inner = (node: Node): string =>
+		spliced(node, inside(node).map((found) => [found, code(found)] as const));
+
+	/**
+	 * The `name` string literal of an `h(Icon, { name: 'set:name' })` call, or null.
+	 *
+	 * A spread anywhere in the properties answers null: it may carry a `name` of its own at run
+	 * time, and which of the two wins is not something the source says.
+	 */
+	const iconName = (node: Node): Node | null => {
+		if (bindings.uiIcon === null) return null;
+		const args = node['arguments'] as Node[];
+		const callee = args[0];
+		if (callee === undefined || callee.type !== 'Identifier' || callee['name'] !== bindings.uiIcon) return null;
+		const properties = args[1];
+		if (properties === undefined || properties.type !== 'ObjectExpression') return null;
+
+		let found: Node | null = null;
+		for (const entry of properties['properties'] as Node[]) {
+			if (entry.type === 'SpreadElement') return null;
+			if (entry.type !== 'ObjectProperty' || entry['computed'] === true) continue;
+			const key = entry['key'] as Node;
+			const named = key.type === 'Identifier' ? key['name'] as string
+				: key.type === 'StringLiteral' ? key['value'] as string
+					: null;
+			if (named !== 'name') continue;
+			const value = entry['value'] as Node;
+			found = value.type === 'StringLiteral' ? value : null;
+		}
+		return found;
+	};
+
+	/** An `h(Icon, ...)` call with its literal name replaced, or null when nothing is rewritten. */
+	const iconCall = (node: Node): string | null => {
+		const literal = iconName(node);
+		if (literal === null) return null;
+		const bound = icons.take(literal['value'] as string);
+		if (bound === null) return null;
+		return spliced(node, [
+			...inside(node).map((found) => [found, code(found)] as const),
+			[literal, bound] as const,
+		]);
 	};
 
 	const code = (node: Node): string => {
@@ -194,7 +241,8 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 		if (isMarkup(node)) return readMarkup(node, markupTagOf(node) === UI ? uiMarkupReader : domMarkupReader);
 		if (isDomHCall(node)) {
 			const element = readCall(node, callReader);
-			return element === null ? inner(node) : hoister.emit(element);
+			if (element !== null) return hoister.emit(element);
+			return iconCall(node) ?? inner(node);
 		}
 		return inner(node);
 	};
@@ -207,6 +255,18 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 		h: () => {
 			usedJsxH = true;
 			return jsxH;
+		},
+		properties: (tag, properties) => {
+			if (bindings.uiIcon === null || tag !== bindings.uiIcon) return properties;
+			// A spread may carry a `name` of its own, and which of the two wins is not something
+			// the source says, so a spread anywhere leaves the element alone.
+			if (properties.some((property) => property.kind === 'spread')) return properties;
+			return properties.map((property): Property => {
+				if (property.kind !== 'static' || property.name !== 'name') return property;
+				if (typeof property.value !== 'string') return property;
+				const bound = icons.take(property.value);
+				return bound === null ? property : { kind: 'expr', name: 'name', code: bound };
+			});
 		},
 		code,
 		source,
@@ -253,6 +313,7 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 	if (hoister.declarations.length > 0) (uiIsH ? fromUi : fromDom).push(`template as ${templateName}`);
 
 	const preamble = [
+		icons.declarations.length > 0 ? `${icons.declarations.join('\n')}\n` : '',
 		fromDom.length > 0 ? `import { ${fromDom.join(', ')} } from '${DOM}';\n` : '',
 		fromUi.length > 0 ? `import { ${fromUi.join(', ')} } from '${UI}';\n` : '',
 	].join('');

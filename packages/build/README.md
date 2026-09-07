@@ -141,6 +141,12 @@ rather than called, and a call whose value something reads, so `const ok = asser
 keeps its initializer. To get your own asserts stripped, import them by name from a module
 called `assert` next to the file.
 
+### Icon names
+
+A string literal shaped `set:name`, on the `name` prop of the `Icon` a file bound from
+`@aweftjs/ui`, becomes an import of that one icon and the plugin and loader answer that import.
+`packages/icons/README.md` says exactly which names move and which are left for run time.
+
 ## The release mangle
 
 `mangle` is the configuration for renaming this stack's internal properties, in the pattern and

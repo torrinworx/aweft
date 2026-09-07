@@ -287,3 +287,46 @@ export const create = () => ({ item: h('div', { class: 'kept' }, 'hi') });
 	assert.match(transform(bound, { filename: 'page.ts', defaultH: '@aweftjs/ui' }).code,
 		/template as _template \} from '@aweftjs\/dom'/);
 });
+
+/** An icon named when the page runs: the set is a pack in `Icons`, the name is a variable. */
+const iconLookedUp = `
+import { h, Icon, Icons } from '@aweftjs/ui';
+import lucide from '@aweftjs/icons/lucide';
+
+export const create = () => {
+	const wanted = 'lucide:check';
+	return { item: h(Icons, { value: lucide }, h('p', { class: 'holder' }, h(Icon, { name: wanted, label: 'done' }))) };
+};
+`;
+
+/**
+ * The same page with the name written out, which is what the transform takes (design 141).
+ *
+ * The empty `Icons` is here so both pages have the same shape: a component mounts as a fragment
+ * and the markup carries its markers, so a page with one more component in it differs for a
+ * reason that has nothing to do with icons.
+ */
+const iconNamed = `
+import { h, Icon, Icons } from '@aweftjs/ui';
+
+export const create = () => ({
+	item: h(Icons, { value: [] }, h('p', { class: 'holder' }, h(Icon, { name: 'lucide:check', label: 'done' }))),
+});
+`;
+
+test('an icon named at build time draws what the run-time lookup draws', async () => {
+	const compiled = transform(iconNamed, { filename: 'named.tsx' });
+	assert.match(compiled.code, /import _icon0 from '@aweftjs\/icons\/lucide\/check';/,
+		'the fixture exercises the rewrite');
+
+	const looked = await loadModule(space.dir, 'iconlookedup', iconLookedUp);
+	const built = await loadModule(space.dir, 'iconnamed', compiled.code);
+	await compare('icon', looked.create as () => Page, built.create as () => Page);
+
+	// The page that names the icon carries a specifier; the page that looks it up carries a set.
+	// Both draw the same element, which is what makes the first one worth building.
+	assert.ok(compiled.code.length < 400, `the compiled page is ${String(compiled.code.length)} bytes`);
+	const drawn = await uiRendered(built.create as () => Page);
+	assert.match(drawn.markup, /viewBox="0 0 24 24"/, 'the set\'s root size reached the element');
+	assert.match(drawn.markup, /<path/, 'and the drawing is in the page');
+});

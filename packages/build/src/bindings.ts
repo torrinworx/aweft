@@ -26,6 +26,8 @@ export interface Bindings {
 	readonly uiHtml: string | null;
 	/** The local name of an assert imported from a neighbouring assert module, or null. */
 	readonly assert: string | null;
+	/** The local name bound to `ui`'s `Icon`, or null when the file has no `Icon` from `ui`. */
+	readonly uiIcon: string | null;
 	/** Every name the file binds, however it binds it. */
 	readonly binds: ReadonlySet<string>;
 	/** Every name that appears in the file, bound or merely used, so a generated name can dodge
@@ -44,7 +46,9 @@ const boundOnlyByImport = (name: string, counts: ReadonlyMap<string, number>): b
  *   program: the parsed file's Program node
  *
  * Returns: which names came from `@aweftjs/dom` and `@aweftjs/ui`, the assert to strip, and
- * every name the file binds or merely mentions.
+ * every name the file binds or merely mentions. A name the file binds twice, by its import and
+ * again by something else, is answered as null: what it means at a given line is no longer the
+ * import's business.
  *
  * Example:
  *   const bindings = readBindings(ast.program);
@@ -60,6 +64,7 @@ export const readBindings = (program: Node): Bindings => {
 	let importedUiH: string | null = null;
 	let importedUiHtml: string | null = null;
 	let importedAssert: string | null = null;
+	let importedIcon: string | null = null;
 
 	for (const statement of program['body'] as Node[]) {
 		if (statement.type !== 'ImportDeclaration') continue;
@@ -74,6 +79,7 @@ export const readBindings = (program: Node): Bindings => {
 			if (from === DOM && name === 'html') importedHtml = local;
 			if (from === UI && name === 'h') importedUiH = local;
 			if (from === UI && name === 'html') importedUiHtml = local;
+			if (from === UI && name === 'Icon') importedIcon = local;
 			if (NEIGHBOURING_ASSERT.test(from) && name === 'assert') importedAssert = local;
 		}
 	}
@@ -112,6 +118,7 @@ export const readBindings = (program: Node): Bindings => {
 		uiH: importedUiH !== null && boundOnlyByImport(importedUiH, counts) ? importedUiH : null,
 		uiHtml: importedUiHtml !== null && boundOnlyByImport(importedUiHtml, counts) ? importedUiHtml : null,
 		assert: importedAssert,
+		uiIcon: importedIcon !== null && boundOnlyByImport(importedIcon, counts) ? importedIcon : null,
 		binds: new Set(counts.keys()),
 		names,
 	};

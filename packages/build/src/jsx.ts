@@ -12,6 +12,12 @@ import { transformError } from './error.ts';
 export interface JsxReader {
 	/** The name to call for an element, asked for only when one is printed as a call. */
 	h(): string;
+	/**
+	 * The element's properties, once its tag is known and before anything is emitted. This is
+	 * where a literal icon name on `Icon` becomes an import (design 141); everything else comes
+	 * back as it went in.
+	 */
+	properties(tag: string, properties: readonly Property[]): readonly Property[];
 	/** The code for an expression inside the JSX, with anything nested already transformed. */
 	code(node: Node): string;
 	/** The source text, for a tag written as a member expression. */
@@ -122,7 +128,7 @@ export const readElement = (node: Node, reader: JsxReader): Element => {
 
 	const element: Element = {
 		tag: tag.tag,
-		properties,
+		properties: reader.properties(tag.code, properties),
 		children: childrenOf((node['children'] ?? []) as Node[], reader),
 		fallback: () => emitCall(reader.h(), tag.code, element, reader.emit),
 	};
