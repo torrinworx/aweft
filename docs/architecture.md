@@ -81,7 +81,7 @@ aweft/
     dom/                   direct DOM binding, hydration, static render
                            + dom/router subpath: history and URL to state
     ui/                    components and theming
-    icons/                 icon driver interface plus one driver
+    icons/                 icon sets as modules, and one resolver
     server/                connections and requests behind a gate: a listener, the link and
                            the call channel on one socket, the modules' hooks
     auth/                  the first battery: the gate, sessions, sign-in, per-user state
@@ -116,6 +116,7 @@ version in lockstep.
 | `sandbox` | The window: a loader on the far end of a link, the grants, calls as rows, and the runners that make a room | What the code it runs is for; what wall is around the room; who may load, grant or call; how many rooms and for how long |
 | `dom` | Mounting, hydration, static render, URL and history, and the prototype a hoisted template is instanced from | Storage, transport, components |
 | `ui` | Components, theming | Storage, transport, server |
+| `icons` | Turning an installed icon set into modules a page imports: one icon, a whole set, the standard names, and a resolver for a name known only at run time | Which sets an application installs, whether a page fetches, what an icon looks like; any icon data of its own |
 | `server` | Accepting connections and requests through a listener; one socket as a link and a call channel; running the modules' `connection`, `call` and `routes` hooks behind the gate the application supplies | Who is on a connection, who may reach a module, who may write a commit, which modules load; users, sessions, storage; component internals |
 | `auth` | The gate that reads `public`, sessions as documents, sign-in and sign-up, the per-user state document, as server modules | Which application loads it; the client, this round |
 | `jobs` | When a row runs, over an observable array the application hands in: the timers, the cron arithmetic, `last` written onto the row | What a job does; who may add, edit or remove a row; storage; queues, retries, catch-up; modules; component internals |
@@ -307,7 +308,7 @@ indexed by the job rather than the package, are not in this table.
 | sandbox | a hostile module runs the escape suite and stays contained, while a benign module does real work through granted capabilities |
 | dom | mount and hydrate a page with a dynamic list; edits assert exact DOM operations against the mock |
 | ui | an interactive page composed from components, driven and asserted against the mock (plus a manual browser page, outside CI) |
-| icons | a page rendering through the driver interface with the iconify driver |
+| icons | a page naming icons three ways (written out, a standard name, a name fetched when the page runs), with the bundle weighed: the icons it named and not the one it looked up |
 | server | a full-stack app: an authenticated connection syncs state through the application's rules to store and back; an anonymous one reaches only what the gate allows; `gate: open` reaches everything; a gate with no session in it works in its place |
 | auth | inside the server recipe: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous |
 | jobs | a scheduled job runs, persists an effect, and survives a restart |
