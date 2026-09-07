@@ -361,6 +361,11 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 			return above === null ? '' : above.basePath();
 		},
 		parent: above?.entry ?? null,
+		fallback: props.fallback ?? null,
+		// Read on every ask, not captured: a walk renders a URL and then asks what that URL showed.
+		get current() {
+			return nameNow();
+		},
 	};
 
 	// --- the mount ---------------------------------------------------------------------------------

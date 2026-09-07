@@ -152,6 +152,9 @@ const page = `<!doctype html><html><head><style data-aweft>${ui.theme.markup()}<
 `head` (the page's head tags, and `head.markup()`) and `stage` (one entry per live
 `StageContext`).
 
+`render` holds the head list and the stage list for the length of the call, so a caller can read
+both after the page has been taken down. A render object is therefore for one page.
+
 `mount` puts the stylesheet in the document head and takes it back out when it unmounts.
 `hydrate` adopts the one the server wrote rather than making a second. `render` returns the item's
 markup only; the CSS is `context.theme.markup()`, which the page puts in its own head.
@@ -497,6 +500,10 @@ Either may nest inside the other, and each subtree resolves its own roles, becau
 subtree generates its own classes. Following the operating system is your call, in your own theme,
 with the `_media_` directive the engine already has.
 
+**A cell in the value is what a switch is.** `<Theme value={mode}>` with `mode` a cell holding
+`light` or `dark` moves every class below it when the cell moves, on a page that is already up. A
+plain object subscribes to nothing and costs nothing extra.
+
 **No unnamed value.** A component of this package writes `$name`, never a colour, a size or a
 duration. `node packages/testing/scripts/check-theme.ts` refuses one that does, over
 `packages/ui/src` and `recipes/`, and `packages/ui/tokens.txt` is the committed list of every name
@@ -592,6 +599,11 @@ and each act's `entries`, its `prefix` (what its parent actually matched, `posts
 `posts/:id`) and its `parent`. That is what a static walk reads to know which URLs a site has. The
 acts come in the order the `acts` object itself lists them, which puts a whole-number name such as
 `404` first however it was written.
+
+A page that mounts takes its entry out again when the stage unmounts, so a live page's registry is
+what is on the page now. `render` is the exception: it holds the list for the length of the call,
+because it takes the page down as soon as it has serialized it and a walk reads the list afterwards
+(design 145). `@aweftjs/ssg` is what does the walking.
 
 ## Head tags
 

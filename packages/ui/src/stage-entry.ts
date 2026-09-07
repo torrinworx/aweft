@@ -35,4 +35,16 @@ export interface StageEntry {
 	readonly prefix: string;
 	/** The stage above, or null at the root. */
 	readonly parent: StageEntry | null;
+	/**
+	 * The act shown when nothing matched, by name, or null when the stage names none.
+	 *
+	 * A static walk writes no page for it: the fallback is what a URL nothing matches shows, and
+	 * that is the site's 404 rather than a page of its own (design 152).
+	 */
+	readonly fallback: string | null;
+	/**
+	 * The act showing now, by name, or null when nothing is. Read each time it is asked for, so a
+	 * caller that renders a URL and then reads it learns what that URL actually showed.
+	 */
+	readonly current: string | null;
 }
