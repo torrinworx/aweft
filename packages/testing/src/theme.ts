@@ -108,6 +108,9 @@ const textOf = (node: ts.Expression): string | undefined =>
 
 const isDirective = (key: string): boolean => /^_[A-Za-z]+_/.test(key);
 
+// The calls whose props object holds DOM properties rather than theme names.
+const ELEMENT_CALLS: ReadonlySet<string> = new Set(['h', 'svg']);
+
 /** One declaration, flattened out of an entry and its nested blocks. */
 interface Declaration {
 	readonly property: string;
@@ -308,8 +311,20 @@ export const themeTokens = (files: readonly ThemeSource[]): string[] => {
 
 	for (const file of files) {
 		const source = parse(file);
+		// A `$name` in the props handed to `h` or `svg` is a DOM property, which is what a leading
+		// `$` means on an element (design 107). `$value` on an input is not a theme name and does
+		// not belong in the snapshot.
+		const properties = new Set<ts.Node>();
+
 		const walk = (node: ts.Node): void => {
-			if (ts.isPropertyAssignment(node)) {
+			if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+				&& ELEMENT_CALLS.has(node.expression.text)) {
+				for (const argument of node.arguments) {
+					if (!ts.isObjectLiteralExpression(argument)) continue;
+					for (const member of argument.properties) properties.add(member);
+				}
+			}
+			if (ts.isPropertyAssignment(node) && !properties.has(node)) {
 				const key = keyOf(node.name);
 				if (key !== undefined && key.startsWith('$') && key.length > 1) found.add(key.slice(1));
 			}

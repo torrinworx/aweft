@@ -9,6 +9,7 @@ import { type MutableArray, mutable, mutableArray } from '@aweftjs/core';
 import { type Mounter, type NodeLike, type ParentLike, createElement, mount } from '@aweftjs/dom';
 
 import { assert } from './assert.ts';
+import { dismiss } from './dismiss.ts';
 import { h } from './h.ts';
 import { categories } from './mark.ts';
 import { type Placed, type Placement, type Rect, CORNERS, place } from './placement.ts';
@@ -201,23 +202,17 @@ export const Popup = (props: {
 	if (isSource(held)) stops.push(held.effect(() => apply()));
 	else apply();
 
-	// Closing on an outside click is only possible where clicks happen, so a static render and
-	// the light tree simply do not install it.
-	const page = (globalThis as { document?: { addEventListener?: unknown; removeEventListener?: unknown } }).document;
-	if (isSource(held) && page !== undefined && typeof page.addEventListener === 'function') {
-		const onDown = (event: unknown): void => {
-			if (at() === null) return;
-			const target = (event as { target?: NodeLike | null }).target ?? null;
-			for (let node2: NodeLike | null = target; node2 !== null; node2 = node2.parentNode as NodeLike | null) {
-				if (node2 === (element as unknown as NodeLike)) return;
-			}
-			if (props.canClose !== undefined && !props.canClose(event)) return;
-			held.set?.(null);
-		};
-		(page.addEventListener as (t: string, f: (e: unknown) => void) => void)('mousedown', onDown);
-		stops.push(() => {
-			(page.removeEventListener as (t: string, f: (e: unknown) => void) => void)('mousedown', onDown);
-		});
+	// Closing on an outside click is the dismiss behaviour (design 129), asked for its mousedown
+	// half only: a `Popup` is a box somebody put on the screen, and swallowing an Escape the page
+	// wanted is not this component's to do. It is a no-op with no page, so a static render and the
+	// light tree install nothing.
+	if (isSource(held)) {
+		stops.push(dismiss({
+			inside: () => [element],
+			active: () => at() !== null,
+			canClose: props.canClose,
+			onDismiss: () => { held.set?.(null); },
+		}));
 	}
 
 	const drop = sink.add(node);

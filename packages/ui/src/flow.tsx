@@ -5,11 +5,7 @@ import { all } from '@aweftjs/core';
 
 import { assert } from './assert.ts';
 import { categories, isMark } from './mark.ts';
-import { isSource } from './source.ts';
-
-/** Follow a value that may or may not be reactive, through one function. */
-const through = (value: unknown, pick: (value: unknown) => unknown): unknown =>
-	(isSource(value) && value.map !== undefined ? value.map(pick) : pick(value));
+import { isSource, through } from './source.ts';
 
 /**
  * One of two subtrees, by a condition.

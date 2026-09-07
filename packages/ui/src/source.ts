@@ -22,3 +22,16 @@ export const isSource = (value: unknown): value is Source =>
 /** Whether a source can be written to, which is what a state prop has to be. */
 export const isWritable = (value: unknown): value is Source & { set(value: unknown): void } =>
 	isSource(value) && typeof value.set === 'function';
+
+/**
+ * Read a value through a function, following it when it is reactive.
+ *
+ * Params:
+ *   value: a plain value, or a cell or derived value
+ *   pick: what to make of it
+ *
+ * Returns: `pick(value)` for a plain value, and a derived value for a reactive one, so the
+ * result can go straight into `h` as a child or an attribute.
+ */
+export const through = (value: unknown, pick: (value: unknown) => unknown): unknown =>
+	(isSource(value) && value.map !== undefined ? value.map(pick) : pick(value));
