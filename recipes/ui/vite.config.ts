@@ -1,7 +1,8 @@
 // The one plugin a page needs. `npx vite recipes/ui` reads this, and so does `main.ts`.
 //
-// Two pages: the gallery, which exercises every system the package ships, and the preview, which
-// is the look itself in both modes. One recipe, one build, one driver.
+// Three pages: the gallery, which exercises every system the package ships; the preview, which is
+// the look itself in both modes; and the controls, which is every control in every state. One
+// recipe, one build, one driver.
 
 import { join } from 'node:path';
 
@@ -19,6 +20,7 @@ export default defineConfig({
 			input: {
 				index: join(import.meta.dirname, 'index.html'),
 				preview: join(import.meta.dirname, 'preview.html'),
+				controls: join(import.meta.dirname, 'controls.html'),
 			},
 		},
 	},
