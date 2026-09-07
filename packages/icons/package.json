@@ -1,0 +1,35 @@
+{
+	"name": "@aweftjs/icons",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"description": "Icon sets as modules: one icon at build time, a whole set, the standard names, and a resolver for a name known only at run time.",
+	"exports": {
+		".": "./src/index.ts",
+		"./node": "./src/node.ts"
+	},
+	"scripts": {
+		"test": "node --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/codec": "*",
+		"@aweftjs/ui": "*"
+	},
+	"peerDependencies": {
+		"@iconify-json/lucide": "^1.2.0"
+	},
+	"peerDependenciesMeta": {
+		"@iconify-json/lucide": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@aweftjs/testing": "*",
+		"@iconify-json/lucide": "^1.2.0"
+	},
+	"aweft": {
+		"tier": 7,
+		"branchCoverage": 80
+	}
+}

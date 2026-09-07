@@ -1,0 +1,5 @@
+type IconSet: interface IconSet { readonly prefix?: string; readonly icons?: Readonly<Record<string, SetIcon>>; readonly aliases?: Readonly<Record<string, SetAlias>>; readonly width?: number; readonly height?: number; }
+type SetAlias: interface SetAlias { readonly parent: string; readonly rotate?: number; readonly hFlip?: boolean; readonly vFlip?: boolean; }
+type SetIcon: interface SetIcon { readonly body: string; readonly width?: number; readonly height?: number; readonly left?: number; readonly top?: number; readonly rotate?: number; readonly hFlip?: boolean; readonly vFlip?: boolean; }
+value fromUrl: (base: string) => (name: string) => Promise<IconData | null>
+./node value moduleFor: (request: string, from: string) => string | null
