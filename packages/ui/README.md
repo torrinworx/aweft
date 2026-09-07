@@ -148,8 +148,9 @@ const page = `<!doctype html><html><head><style data-aweft>${ui.theme.markup()}<
 
 `mount`, `render` and `hydrate` each make one and thread it through `dom`'s context. It carries
 `theme` (this render's class cache and stylesheet), `ids` (the counter behind an
-`aria-labelledby`, counting from zero per render so a server and a browser agree), `popups`, and
-`head` and `stage`, which step 18 fills.
+`aria-labelledby`, counting from zero per render so a server and a browser agree), `popups`,
+`head` (the page's head tags, and `head.markup()`) and `stage` (one entry per live
+`StageContext`).
 
 `mount` puts the stylesheet in the document head and takes it back out when it unmounts.
 `hydrate` adopts the one the server wrote rather than making a second. `render` returns the item's
@@ -380,13 +381,137 @@ theme does not use are yours to define outright.
 the pair is below 4.5:1, this package says so in the console, with the ratio, the target and the
 role to use. Theme-derived pairs only, and the call is not in a release build.
 
+## Routing
+
+```tsx
+import { createRouter } from '@aweftjs/dom/router';
+import { Stage, StageContext, mount } from '@aweftjs/ui';
+
+const acts = {
+	'': Home,
+	'posts/:id': Post,
+	docs: Docs,                                 // renders a StageContext of its own
+	about: { load: () => import('./about.tsx') },
+	missing: NotFound,
+};
+
+const router = createRouter();
+mount(document.body, (
+	<StageContext router={router} acts={acts} template={Layout} fallback="missing">
+		<Nav /><Stage />
+	</StageContext>
+));
+router.links(document.body);
+```
+
+`StageContext` holds the acts and, given a router, the URL. `Stage` renders whichever act is
+current, inside the template. They are two components because one that did template selection, URL
+matching, child coordination and the accessibility work at once would be unchangeable.
+
+**An act key** is a path with no leading slash. `''` is the index and matches `/` only. `:name`
+takes one segment, and one trailing `*name` takes the rest. A key whose whole text is the path wins
+outright, and otherwise a literal segment beats `:name`, `:name` beats `*name`, and the longer
+pattern breaks a tie. There are no optional segments and no patterns.
+
+**An act** is the component, or `{ load: () => import('./page.tsx') }` for one that arrives later.
+A lazy act runs through the same `suspend` everything slow goes through, with the `LoaderContext`'s
+loading and failed components. Either kind may carry `entries()`, an async function returning the
+parameter sets a static walk should render it at; nothing calls it yet.
+
+**The stage value** is `StageContext.read(context)`, or `StageContext.use(stage => ...)`, and every
+act is handed it as its **`stage` prop**, so `const Post = (props) => <h1>{props.stage.params.get().id}</h1>`
+needs no context at all. It holds `current`, `params` (the `:name` values), `query` (a cell: write
+to it and the URL's query is updated with `replace`, so a filter leaves one history entry), `open`
+and `close`. A prop named `stage` in an `open` does not reach the act; the stage does.
+
+**Nesting.** An act that renders a `StageContext` of its own gets what the act above it did not
+match: `/docs/install` reaches the `docs` act, whose child stage sees `install`. A deep link that
+arrives before the child has mounted waits for it, and is dropped on the next navigation. One child
+per stage claims it; a second stage under one act is a content swapper, not a route.
+
+**`open({ name, template, history, ...props })`** shows an act now whatever the URL says, wrapped in
+the template you name for this open. Props do not accumulate: each `open` replaces the last one's.
+`history: true` pushes a history entry **at the URL the page is already on**, so back dismisses it
+and a copied link is the link to the page. It is held in memory against that entry, so a reload
+lands on the page under it. A stage owns one entry at a time: a second `history: true` open while
+one is showing replaces that entry rather than pushing a second, so one back closes whatever is
+open and lands on the page.
+
+**`fallback`** is the 404: an act name, matched last, rendered when nothing matched. **`initial`**
+is what shows when no URL decides: no router, or a parent that took the whole path.
+
+**On every act change, in a browser**, focus moves to the act's root element (given `tabindex="-1"`
+if it cannot take focus), a visually hidden live region announces the new title, and the page goes
+to the top, or to the URL's hash, unless the router has a position saved for this entry. The first
+act is not a change: a page load should not steal focus. All three are no-ops with no `window`.
+
+`context().stage` holds one entry per live `StageContext`: its declared `acts` with a `loader` flag
+and each act's `entries`, its `prefix` (what its parent actually matched, `posts/3` and not
+`posts/:id`) and its `parent`. That is what a static walk reads to know which URLs a site has. The
+acts come in the order the `acts` object itself lists them, which puts a whole-number name such as
+`404` first however it was written.
+
+## Head tags
+
+```tsx
+const Layout = (props) => <div><Title>My site</Title>{props.children}</div>;
+
+const Post = () => (
+	<article>
+		<Head>
+			<Title>{post.title}</Title>
+			<Meta name="description" content={post.summary} />
+			<Link rel="canonical" href={`https://example.com/posts/${post.id}`} />
+		</Head>
+		…
+	</article>
+);
+```
+
+`Head`, `Title`, `Meta`, `Link`, `Script` and `Style` render nothing where they are written and put
+a tag in the render's head list. `Head` opens a deeper scope, and within a group the deepest tag
+wins, then the latest, so a page beats the layout it is inside without knowing the layout is there.
+
+A group is the tag's own identity, or an explicit `key`: a `title` is one per page; a `meta` by its
+`charset`, `http-equiv`, `name` or `property`; a `link` by `rel` and `href` together, with
+`rel="canonical"` a singleton; a `script` by its `src` and `type`, or inline plus type; a `style` by
+its `media`. A tag with none of those and no `key` is additive, so every one of them is emitted.
+**Two inline scripts of one type are one group**: give each a `key` to keep both.
+
+Every value takes a value or a cell, and a cell rewrites the tag in place.
+
+Tags come out in one fixed order however they were written: charset, viewport, other meta, title,
+links that preload or preconnect, styles, other links, then scripts.
+
+```ts
+const ui = context();
+const body = await render(<App />, { context: ui });
+const page = `<!doctype html><html><head>${ui.head.markup()}</head><body>${body}</body></html>`;
+```
+
+`head.markup()` stamps each tag with `data-aweft-head`, its group. `mount` writes the list into
+`document.head` as one run **at the front of it**, because `document.title` is the first title
+element there is and one appended after a page shell's would do nothing. A `<meta charset>` the
+shell wrote first stays first, because a charset read late is not read at all. `hydrate` adopts a
+stamped tag whose group matches, updating it in place rather than removing and re-adding it.
+
+Two renders in one page neither adopt nor remove each other's tags, and each writes its own title
+into the head. `document.title` is whichever of them is nearest the front, so the one mounted last
+takes the tab. **Use one render per page** and mount the whole page into it, which is what the
+default shared render already does.
+
+A static render holds its list, because `render` takes the page down as soon as it has serialized
+it and `markup()` is read afterwards. Use one `context()` per page.
+
 ## What it never decides
 
 Storage, transport, and anything server-side. Data fetching: `suspend` takes a promise and does
 not make one. Upload transport. Auth. Where analytics go: `InputContext` fires and the application
 listens. What your application looks like: a default theme ships so a bare `theme="button"` renders
 as something readable, and every value in it is yours to replace. What your own components name
-their own values, and whether you run the theme check. Routing and head tags, which are step 18.
+their own values, and whether you run the theme check. Which acts a site has, what a template looks
+like, and whether links outside the routed root are intercepted. Writing pages to disk, which is
+`ssg`.
 
 ## Boundaries
 

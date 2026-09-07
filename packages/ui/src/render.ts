@@ -15,24 +15,21 @@ import {
 } from '@aweftjs/dom';
 
 import { assert } from './assert.ts';
+import { type HeadList, attachHead, createHeadList, holdHead } from './head-list.ts';
 import { type Ids, type Registry, createIds, createRegistry } from './registry.ts';
 import { type Sheet, createSheet } from './sheet.ts';
+import type { StageEntry } from './stage-entry.ts';
 
 const UI: unique symbol = Symbol('aweft.ui');
 
-/**
- * Everything one render owns.
- *
- * `head` and `stage` are reserved: they are registries this step never writes to, and step 18
- * fills them without changing anything a caller does.
- */
+/** Everything one render owns. */
 export interface Render {
 	/** The class cache and the stylesheet for this render. */
 	readonly theme: Sheet;
-	/** Reserved for the head system (step 18). */
-	readonly head: Registry;
-	/** Reserved for the router's act registry (step 18). */
-	readonly stage: Registry;
+	/** The head tags this render's page declares, and the markup they come out as. */
+	readonly head: HeadList;
+	/** One entry per live `StageContext`, so a static walk can enumerate the pages. */
+	readonly stage: Registry<StageEntry>;
 	/** The counter behind an `aria-labelledby` and its friends. */
 	readonly ids: Ids;
 	/** Where a popup mounts: `PopupContext` renders what is in here, after everything else. */
@@ -55,8 +52,8 @@ export type Context = Readonly<Record<symbol, unknown>>;
  */
 export const context = (): Render => ({
 	theme: createSheet(),
-	head: createRegistry(),
-	stage: createRegistry(),
+	head: createHeadList(),
+	stage: createRegistry<StageEntry>(),
 	ids: createIds(),
 	popups: createRegistry(),
 });
@@ -167,7 +164,9 @@ const OWNED: unique symbol = Symbol('aweft.ui.document');
 /** The render a document's mounts share, and the live mounts each render has in it. */
 interface Held {
 	own: Render | null;
-	readonly sheets: Map<Render, { count: number; detach: () => void }>;
+	readonly attached: Map<Render, { count: number; detach: () => void }>;
+	/** The head elements the renders in this document have taken, so no two adopt the same tag. */
+	readonly tags: Set<unknown>;
 }
 
 // Kept on the document rather than in a table here, so this file still holds nothing mutable at
@@ -176,7 +175,7 @@ const heldBy = (target: ParentLike): Held | null => {
 	const document = documentOf(target);
 	if (document === null) return null;
 	const slot = document as unknown as Record<symbol, Held | undefined>;
-	return slot[OWNED] ??= { own: null, sheets: new Map() };
+	return slot[OWNED] ??= { own: null, attached: new Map(), tags: new Set() };
 };
 
 /** The render a mount into this target gets when the caller named none. */
@@ -186,23 +185,36 @@ const documentRender = (target: ParentLike): Render => {
 	return held.own ??= context();
 };
 
+/** The render's stylesheet and its head tags, both into the target's document head. */
+const attachSystems = (target: ParentLike, render: Render, adopt: boolean, tags: Set<unknown>): (() => void) => {
+	const sheet = attachSheet(target, render.theme, adopt);
+	const head = headOf(target);
+	const tagsOff = head === null
+		? () => undefined
+		: attachHead(head as unknown as ParentLike, render.head, adopt, tags);
+	return () => {
+		tagsOff();
+		sheet();
+	};
+};
+
 /**
- * Attach the render's stylesheet for one mount, and count the mounts that share it.
+ * Attach the render's stylesheet and head tags for one mount, and count the mounts that share them.
  *
- * Two mounts sharing a render share its `<style>`, so the second adds no element and the first
- * to be removed takes none away. The count is per render per document: an explicit `context()`
- * still gets a sheet of its own.
+ * Two mounts sharing a render share its `<style>` and its tags, so the second adds no element and
+ * the first to be removed takes none away. The count is per render per document: an explicit
+ * `context()` still gets a sheet and a set of tags of its own.
  */
 const attachFor = (target: ParentLike, render: Render, adopt: boolean): (() => void) => {
 	const held = heldBy(target);
-	if (held === null) return attachSheet(target, render.theme, adopt);
+	if (held === null) return attachSystems(target, render, adopt, new Set());
 
-	let sheet = held.sheets.get(render);
-	if (sheet === undefined) {
-		sheet = { count: 0, detach: attachSheet(target, render.theme, adopt) };
-		held.sheets.set(render, sheet);
+	let entry = held.attached.get(render);
+	if (entry === undefined) {
+		entry = { count: 0, detach: attachSystems(target, render, adopt, held.tags) };
+		held.attached.set(render, entry);
 	}
-	const state = sheet;
+	const state = entry;
 	state.count += 1;
 	let released = false;
 	return () => {
@@ -210,7 +222,7 @@ const attachFor = (target: ParentLike, render: Render, adopt: boolean): (() => v
 		released = true;
 		state.count -= 1;
 		if (state.count > 0) return;
-		held.sheets.delete(render);
+		held.attached.delete(render);
 		state.detach();
 	};
 };
@@ -253,16 +265,25 @@ export const mount = (target: ParentLike, item: unknown, before?: Remove, render
  *   options: `context`, the systems to use. Omitted, a fresh set is made and the CSS it
  *            generated is unreachable, so pass one whenever the page needs its stylesheet
  *
- * Returns: the item's markup. The theme's CSS is not in it: read `context.theme.markup()` and
- * put it in the page's own head.
+ * Returns: the item's markup. The theme's CSS and the page's head tags are not in it: read
+ * `context.theme.markup()` and `context.head.markup()` and put both in the page's own head.
+ *
+ * The head list is held for the whole render, because a static render takes the page down as soon
+ * as it has serialized it and the tags have to still be there afterwards. So a render object that
+ * has been through `render` keeps every tag its page declared; use one per page, as design 109
+ * says.
  *
  * Example:
  *   const ui = context();
  *   const body = await render(h(App, {}), { context: ui });
- *   const page = `<html><head><style data-aweft>${ui.theme.markup()}</style></head><body>${body}</body></html>`;
+ *   const head = `<style data-aweft>${ui.theme.markup()}</style>${ui.head.markup()}`;
+ *   const page = `<html><head>${head}</head><body>${body}</body></html>`;
  */
-export const render = async (item: unknown, options: { context?: Render } = {}): Promise<string> =>
-	domRender(item, { context: rooted(options.context ?? context()) });
+export const render = async (item: unknown, options: { context?: Render } = {}): Promise<string> => {
+	const own = options.context ?? context();
+	holdHead(own.head);
+	return domRender(item, { context: rooted(own) });
+};
 
 /**
  * Take over markup `render` wrote, with the `ui` systems under it.

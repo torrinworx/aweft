@@ -41,6 +41,8 @@ const page = async (name: string, html: string, entry: string): Promise<{ url: s
 		resolve: {
 			alias: {
 				'@aweftjs/ui': join(repo, 'packages/ui/src/index.ts'),
+				// Before the package itself, because an alias matches a subpath under its own key.
+				'@aweftjs/dom/router': join(repo, 'packages/dom/src/router.ts'),
 				'@aweftjs/dom': join(repo, 'packages/dom/src/index.ts'),
 				'@aweftjs/core': join(repo, 'packages/core/src/index.ts'),
 				'@aweftjs/codec': join(repo, 'packages/codec/src/index.ts'),
@@ -295,6 +297,106 @@ test('light and dark nested on one page each compute their own roles', async () 
 		// One entry, two modes, and the browser is what says the roles actually moved.
 		assert.notEqual(seen['pale'], seen['deep'], 'the two surfaces differ');
 		assert.notEqual(seen['paleInk'], seen['deepInk'], 'and so does the text on them');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
+
+test('a hydrated page adopts the server\'s head tags, and a title cell moves document.title', async () => {
+	const site = await page('head', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { mutable } from '@aweftjs/core';
+		import { Link, Meta, Title, context, h, hydrate, render } from '@aweftjs/ui';
+
+		const heading = mutable('Server title');
+		const App = () => (
+			<main id="app">
+				<Title>{heading}</Title>
+				<Meta name="description" content="what this page is" />
+				<Link rel="canonical" href="https://example.test/here" />
+				<p>body</p>
+			</main>
+		);
+
+		const server = context();
+		const markup = await render(<App />, { context: server });
+		const host = document.createElement('div');
+		host.id = 'host';
+		host.innerHTML = markup;
+		document.body.appendChild(host);
+		document.head.innerHTML = server.head.markup();
+
+		const stamped = Array.from(document.head.querySelectorAll('[data-aweft-head]'));
+		hydrate(host, <App />);
+
+		const after = Array.from(document.head.querySelectorAll('[data-aweft-head]'));
+		window.result = {
+			adopted: stamped.length === after.length && stamped.every((node, at) => node === after[at]),
+			stamps: after.map((node) => node.getAttribute('data-aweft-head')),
+			title: document.title,
+			description: document.querySelector('meta[name=description]').getAttribute('content'),
+		};
+		heading.set('Live title');
+		queueMicrotask(() => { window.result.later = document.title; });
+	`);
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForFunction(() => (window as unknown as { result?: { later?: string } }).result?.later !== undefined);
+		const result = await view.evaluate(() => (window as unknown as { result: Record<string, unknown> }).result);
+		assert.equal(result['adopted'], true, 'every stamped tag is the element the server wrote');
+		assert.deepEqual(result['stamps'], ['meta:name=description', 'title', 'link:canonical']);
+		assert.equal(result['title'], 'Server title', 'the adopted <title> is the page title');
+		assert.equal(result['description'], 'what this page is');
+		assert.equal(result['later'], 'Live title', 'a cell rewrote the tag the browser is reading');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
+
+test('an act change scrolls to the element the URL\'s hash names', async () => {
+	const site = await page('stage-hash', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { createRouter } from '@aweftjs/dom/router';
+		import { Stage, StageContext, h, mount } from '@aweftjs/ui';
+
+		const Home = () => <main id="home">home</main>;
+		// Tall on purpose: an element the page has to be scrolled to reach.
+		const Long = () => (
+			<main id="long">
+				<p style="height: 2400px">the long way down</p>
+				<h2 id="target">the target</h2>
+				<p style="height: 1200px">and more below it, so the target can reach the top</p>
+			</main>
+		);
+
+		const router = createRouter();
+		mount(document.body, (
+			<StageContext router={router} acts={{ '': Home, long: Long }}><Stage /></StageContext>
+		));
+		window.go = (url) => { router.push(url); };
+	`);
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage({ viewport: { width: 800, height: 600 } });
+		await view.goto(site.url);
+		await view.waitForSelector('#home');
+
+		// The first act is a page load and not a change, so this is the second one.
+		await view.evaluate(() => (window as unknown as { go(url: string): void }).go('/long#target'));
+		await view.waitForSelector('#target');
+		await view.waitForFunction(() => window.scrollY > 0);
+
+		const where = await view.evaluate(() => ({
+			y: window.scrollY,
+			top: document.querySelector('#target')!.offsetTop,
+		}));
+		assert.ok(where.top > 600, `the target is off the first screen: ${where.top}`);
+		assert.ok(Math.abs(where.y - where.top) < 4,
+			`a new act with a hash goes to the element it names: at ${where.y}, target at ${where.top}`);
 	} finally {
 		await browser.close();
 		await site.close();

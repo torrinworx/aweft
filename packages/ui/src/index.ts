@@ -10,6 +10,14 @@ export type { Render } from './render.ts';
 export type { Ids, Registry } from './registry.ts';
 
 export { dark, light } from './modes.ts';
+export { Head, Link, Meta, Script, Style, Title } from './head.tsx';
+export type { TagProps } from './head.tsx';
+export type { HeadKind, HeadList, HeadTag } from './head-list.ts';
+
+export { Stage, StageContext } from './stage.tsx';
+export type { Act, ActComponent, LazyAct, OpenOptions, StageContextComponent, StageProps, StageValue } from './stage.tsx';
+export type { ActEntries, StageAct, StageEntry } from './stage-entry.ts';
+
 export { Theme } from './theme-api.ts';
 export type { ThemeApi } from './theme-api.ts';
 export { ThemeContext } from './themed.tsx';
