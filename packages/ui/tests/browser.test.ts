@@ -732,3 +732,102 @@ test('a hydrated page is live: a real click, a real keystroke, a real focus and 
 		assert.deepEqual([after.focused, after.hovered], [false, false]);
 	});
 });
+
+test('a stage whose provider above it is replaced still routes afterwards', async () => {
+	// A light and dark switch is the ordinary way a subtree above a stage is rebuilt: the cell
+	// moves, the whole provider is taken down and a new stage is built in its place. What has to
+	// hold is that the new stage reads the router it was given, so the next act change shows an
+	// act rather than blanking the page.
+	await drive('stage-remount', `
+		import { mutable } from '@aweftjs/core';
+		import { createRouter } from '@aweftjs/dom/router';
+		import { Head, PopupContext, Stage, StageContext, Theme, Title, dark, h, light, mount } from '@aweftjs/ui';
+
+		const Layout = (props) => <div id="page">{props.children}</div>;
+		const One = () => <p id="one"><Head><Title>One</Title></Head>one</p>;
+		const Two = () => <p id="two"><Head><Title>Two</Title></Head>two</p>;
+
+		const router = createRouter();
+		const mode = mutable('light');
+		globalThis.mode = mode;
+		globalThis.router = router;
+
+		mount(document.body, mode.map((now) => (
+			<Theme value={now === 'dark' ? dark : light}>
+				<PopupContext>
+					<StageContext router={router} acts={{ '': One, two: Two }} template={Layout} fallback="">
+						<Stage />
+					</StageContext>
+				</PopupContext>
+			</Theme>
+		)));
+	`, async (view) => {
+		const go = (url: string): Promise<void> => view.evaluate((to) => {
+			(globalThis as never as { router: { push(url: string): void } }).router.push(to);
+		}, url);
+
+		await view.waitForSelector('#one');
+		await go('/two');
+		await view.waitForSelector('#two');
+		await go('/');
+		await view.waitForSelector('#one');
+
+		await view.evaluate(() => { (globalThis as never as { mode: { set(v: string): void } }).mode.set('dark'); });
+		await view.waitForSelector('#one');
+
+		await go('/two');
+		await view.waitForSelector('#two');
+		assert.equal(await view.title(), 'Two', 'and the rebuilt stage still writes the act\'s title');
+	});
+});
+
+test('the same stage, taken over from server markup, still routes after the swap', async () => {
+	// The hydrating half of the case above. A page that was rendered and then adopted has the
+	// same provider above the same stage, and the swap has to leave it routing there too.
+	await drive('stage-remount-hydrate', `
+		import { mutable } from '@aweftjs/core';
+		import { createRouter } from '@aweftjs/dom/router';
+		import { Head, PopupContext, Stage, StageContext, Theme, Title, context, dark, h, hydrate, light, render } from '@aweftjs/ui';
+
+		const Layout = (props) => <div id="page">{props.children}</div>;
+		const One = () => <p id="one"><Head><Title>One</Title></Head>one</p>;
+		const Two = () => <p id="two"><Head><Title>Two</Title></Head>two</p>;
+
+		const mode = mutable('light');
+		globalThis.mode = mode;
+
+		const App = (props) => mode.map((now) => (
+			<Theme value={now === 'dark' ? dark : light}>
+				<PopupContext>
+					<StageContext router={props.router} acts={{ '': One, two: Two }} template={Layout} fallback="">
+						<Stage />
+					</StageContext>
+				</PopupContext>
+			</Theme>
+		));
+
+		const server = context();
+		const markup = await render(<App router={createRouter({ url: '/' })} />, { context: server });
+		const host = document.createElement('div');
+		host.id = 'host';
+		host.innerHTML = markup;
+		document.body.appendChild(host);
+
+		const router = createRouter();
+		globalThis.router = router;
+		hydrate(host, <App router={router} />);
+	`, async (view) => {
+		const go = (url: string): Promise<void> => view.evaluate((to) => {
+			(globalThis as never as { router: { push(url: string): void } }).router.push(to);
+		}, url);
+
+		await view.waitForSelector('#one');
+		await go('/two');
+		await view.waitForSelector('#two');
+		await view.evaluate(() => { (globalThis as never as { mode: { set(v: string): void } }).mode.set('dark'); });
+		await view.waitForSelector('#two');
+		await go('/');
+		await view.waitForSelector('#one');
+		assert.equal(await view.title(), 'One');
+	});
+});

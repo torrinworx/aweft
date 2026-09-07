@@ -139,3 +139,108 @@ test('a theme key with an empty segment is refused, and the message says what to
 	// A single underscore is the ordinary case and stays fine.
 	Theme.define({ good_key: { color: 'red' } });
 });
+
+test('a cell in a Theme value keeps the theme live, and a plain object still works', async () => {
+	// `contexts.ts` says a cell keeps a provider's value live: the transform runs again on every
+	// write. The theme transform has to read the cell rather than merge it, or a light and dark
+	// switch merges the cell object's own properties as theme entries and the page stays as it was.
+	Theme.define({ swatch: { color: '$foreground' } });
+	const pale = { swatch: { color: 'rgb(1, 1, 1)' } };
+	const deep = { swatch: { color: 'rgb(9, 9, 9)' } };
+
+	const mode = mutable(pale);
+	const App = (): unknown => h(Theme, { value: mode }, h('p', { id: 'box', theme: 'swatch' }, 'x'));
+
+	const first = context();
+	await render(h(App, {}), { context: first });
+	assert.ok(first.theme.markup().includes('rgb(1, 1, 1)'), 'the cell\'s value is the theme');
+	assert.ok(!first.theme.markup().includes('rgb(9, 9, 9)'));
+
+	mode.set(deep);
+	const second = context();
+	await render(h(App, {}), { context: second });
+	assert.ok(second.theme.markup().includes('rgb(9, 9, 9)'), 'and it follows the cell when it moves');
+	assert.ok(!second.theme.markup().includes('rgb(1, 1, 1)'));
+
+	// A plain object is the ordinary case and is unchanged by any of that.
+	const plain = context();
+	await render(h(Theme, { value: deep }, h('p', { theme: 'swatch' }, 'x')), { context: plain });
+	assert.ok(plain.theme.markup().includes('rgb(9, 9, 9)'));
+});
+
+test('a theme cell that moves under a live page moves the class the page carries', () => {
+	Theme.define({ chip: { color: '$foreground' } });
+	const mode = mutable({ chip: { color: 'rgb(2, 2, 2)' } });
+	const document = createDocument();
+	const own = context();
+	const stop = mount(document.body, h(Theme, { value: mode }, h('p', { id: 'chip', theme: 'chip' }, 'x')), undefined, own);
+
+	const before = /id="chip" class="([^"]+)"/.exec(toHtml(document.body))?.[1];
+	assert.ok(before !== undefined, 'the page carries a generated class');
+
+	mode.set({ chip: { color: 'rgb(3, 3, 3)' } });
+	const after = /id="chip" class="([^"]+)"/.exec(toHtml(document.body))?.[1];
+	assert.notEqual(after, before, 'and a write to the cell moves it to the class for the new theme');
+	assert.ok(own.theme.markup().includes('rgb(3, 3, 3)'));
+	stop();
+});
+
+test('a Theme cell is still followed with a provider nested below it', () => {
+	// A provider resolves against the value above it and caches the answer, so a cell that moves
+	// has to make every provider under it stale too. Without the cascade the inner node answers
+	// what it cached and the page stays on the theme it started with, however many providers deep.
+	Theme.define({ stack: { color: '$foreground' } });
+	const outer = mutable({ stack: { color: 'rgb(4, 4, 4)' } });
+
+	for (const [what, inner] of [
+		['a plain object below', { stack: { fontWeight: 'bold' } }],
+		['nothing below', undefined],
+	] as const) {
+		const document = createDocument();
+		const own = context();
+		const leaf = h('p', { id: 'leaf', theme: 'stack' }, 'x');
+		const tree = inner === undefined
+			? h(Theme, { value: outer }, leaf)
+			: h(Theme, { value: outer }, h(Theme, { value: inner }, leaf));
+		outer.set({ stack: { color: 'rgb(4, 4, 4)' } });
+		const stop = mount(document.body, tree, undefined, own);
+
+		const before = /id="leaf" class="([^"]+)"/.exec(toHtml(document.body))?.[1];
+		outer.set({ stack: { color: 'rgb(5, 5, 5)' } });
+		const after = /id="leaf" class="([^"]+)"/.exec(toHtml(document.body))?.[1];
+
+		assert.notEqual(after, before, `the outer cell moved the class with ${what}`);
+		assert.ok(own.theme.markup().includes('rgb(5, 5, 5)'), `and the new colour is in the sheet with ${what}`);
+		stop();
+	}
+});
+
+test('two Theme cells, one inside the other, each move the page on their own', () => {
+	Theme.define({ pair: { color: '$foreground' } });
+	const outer = mutable<Record<string, unknown> | null>({ pair: { color: 'rgb(6, 6, 6)' } });
+	const inner = mutable<Record<string, unknown> | null>({ pair: { letterSpacing: '1px' } });
+
+	const document = createDocument();
+	const own = context();
+	const stop = mount(document.body,
+		h(Theme, { value: outer }, h(Theme, { value: inner }, h('p', { id: 'leaf', theme: 'pair' }, 'x'))),
+		undefined, own);
+
+	const classNow = (): string => /id="leaf" class="([^"]+)"/.exec(toHtml(document.body))?.[1] ?? '';
+	const first = classNow();
+
+	outer.set({ pair: { color: 'rgb(7, 7, 7)' } });
+	const afterOuter = classNow();
+	assert.notEqual(afterOuter, first, 'the outer cell moved it');
+
+	inner.set({ pair: { letterSpacing: '2px' } });
+	const afterInner = classNow();
+	assert.notEqual(afterInner, afterOuter, 'and so did the inner one');
+	assert.ok(own.theme.markup().includes('letter-spacing: 2px'));
+
+	// A cell that moves to null hands the subtree back to the theme above it.
+	inner.set(null);
+	assert.notEqual(classNow(), afterInner, 'and a cell moving to null moved it again');
+	assert.ok(own.theme.markup().includes('rgb(7, 7, 7)'));
+	stop();
+});

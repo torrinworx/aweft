@@ -10,7 +10,8 @@ import { mutable } from '@aweftjs/core';
 import { assert } from './assert.ts';
 import { use } from './render.ts';
 import { isSource, isWritable } from './source.ts';
-import { themeAt } from './theme.ts';
+import { themeAt, themeRaws } from './theme.ts';
+import type { Definitions } from './sheet.ts';
 import { type Lookup, NO_THEME, cssName, declarationValue, parseValue, resolve } from './values.ts';
 
 const STATE = ['isHovered', 'isFocused', 'isClicked', 'isTouched'] as const;
@@ -286,10 +287,21 @@ export const applyClaimed = (claimed: Claimed, context: unknown): (() => void) =
 
 	if (claimed.theme !== undefined) {
 		const sheet = use(context).theme;
-		const definitions = themeAt(context);
+		// The theme in effect is read inside the pass, following whatever cell a `Theme` above was
+		// given, so a light and dark switch moves the class on an element that is already on the
+		// page (design 117). A provider written with a plain object subscribes to nothing.
+		const themeNow = (deep: Deep): Definitions => {
+			// Resolved first: the chain records what each provider was given while it resolves, and
+			// a provider whose value has never been read has nothing to follow yet.
+			const held = themeAt(context);
+			for (const raw of themeRaws(context)) deep(raw);
+			return held;
+		};
+		let definitions: Definitions = {};
 		let classes: readonly string[] = [];
 		stops.push(track(
 			(deep) => {
+				definitions = themeNow(deep);
 				const list: string[] = [];
 				flatten(claimed.theme, deep, list);
 				classes = list;
@@ -310,7 +322,11 @@ export const applyClaimed = (claimed: Claimed, context: unknown): (() => void) =
 				call: (name) => sheet.call(definitions, classes, name),
 			};
 			stops.push(track(
-				(deep) => cssTextOf(claimed.style, deep, lookup),
+				(deep) => {
+					// Following the same cells, because a theme swap moves what a `$var` resolves to.
+					themeNow(deep);
+					return cssTextOf(claimed.style, deep, lookup);
+				},
 				(css) => { claimed.styleInto?.set(css === '' ? null : css); },
 			));
 		}

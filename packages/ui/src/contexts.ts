@@ -58,6 +58,26 @@ export interface Context<T> {
 
 const inherited = <T>(raw: unknown, parent: T): T => (raw === undefined || raw === null ? parent : raw as T);
 
+// How a node is told its cached value is out of date. Kept beside the tree rather than on
+// `ContextNode`, because a consumer reads a node and never invalidates one: only the provider that
+// made it, and the provider above it, may.
+const forgetters = new WeakMap<object, () => void>();
+
+/**
+ * Drop the cached value of every provider below this one.
+ *
+ * A provider resolves against the value above it, so a value that moves makes every provider under
+ * it stale as well. Without this, a `<Theme value={cell}>` with any provider nested below it stops
+ * following the cell: the outer node recomputes, the inner one answers what it cached, and a
+ * consumer reads the inner one.
+ */
+const forgetBelow = (node: ContextNode<unknown>): void => {
+	for (const child of node.children) {
+		forgetters.get(child)?.();
+		forgetBelow(child as ContextNode<unknown>);
+	}
+};
+
 /**
  * Make a context.
  *
@@ -102,10 +122,15 @@ export const createContext = <T>(def: T, transform: Transform<T> = inherited): C
 				return held as T;
 			},
 		};
+		forgetters.set(made, () => { known = false; });
 
 		// A raw value that is a cell keeps the resolved value live: the next read runs the
-		// transform again. A plain value calls back once, here, and never again.
-		const forget = watch(props.value, () => { known = false; });
+		// transform again, and so does every provider below, because each of them resolved
+		// against the value that just moved. A plain value calls back once, here, and never again.
+		const forget = watch(props.value, () => {
+			known = false;
+			forgetBelow(made);
+		});
 
 		if (parent !== null) parent.children.push(made);
 		const remove = mount(elem, props.children ?? [], before, withSlot(context, KEY, made));
