@@ -39,6 +39,7 @@ dangerForeground
 dangerSubtle
 dangerSubtleForeground
 div
+dotSize
 ease
 easeOut
 fast
@@ -48,6 +49,7 @@ fontMono
 foreground
 hoverTint
 hue
+iconSize
 if
 input
 invert
@@ -90,9 +92,13 @@ space8
 sub
 surface
 surfaceForeground
+switchHeight
+switchThumb
+switchWidth
 target
 text2xl
 text2xlLine
+textAreaMax
 textLg
 textLgLine
 textMd
@@ -103,3 +109,5 @@ textXl
 textXlLine
 textXs
 textXsLine
+thumbSize
+trackHeight

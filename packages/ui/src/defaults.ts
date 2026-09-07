@@ -80,6 +80,17 @@ defineTheme({
 	},
 	button_quiet: { background: 'transparent', color: '$accentSubtleForeground', borderColor: '$border' },
 	button_danger: { background: '$danger', color: '$dangerForeground' },
+	// A circle for an icon on its own. The padding is even so the icon sits in the middle of it.
+	button_round: { borderRadius: '50%', padding: '$space2', aspectRatio: '1' },
+	// A button that sits inside a line of text and takes no room of its own.
+	button_inline: {
+		background: 'transparent',
+		border: 'none',
+		padding: 0,
+		minHeight: 0,
+		color: '$accentSubtleForeground',
+		textDecoration: 'underline',
+	},
 
 	input: {
 		display: 'block',
@@ -97,13 +108,157 @@ defineTheme({
 	},
 	input_invalid: { borderColor: '$danger' },
 
+	// A textarea is an input that grows. `resize: none` because the component sets the height
+	// itself, and a handle that fights it is a handle that loses on the next keystroke.
+	textarea: {
+		$textAreaMax: '16rem',
+		resize: 'none',
+		overflowY: 'auto',
+		minHeight: '$space12',
+		maxHeight: '$textAreaMax',
+	},
+
+	// A tick box and a radio are drawn by the host out of one property, so this says how big and
+	// what colour, and the host draws the tick.
+	checkbox: {
+		width: '$target',
+		height: '$target',
+		margin: 0,
+		flexShrink: 0,
+		accentColor: '$accent',
+		cursor: 'pointer',
+	},
+	radio: { extends: 'checkbox' },
+
+	// A switch is a checkbox the host is told not to draw, so this draws the pill and the thumb.
+	toggle: {
+		$switchWidth: '40px',
+		$switchHeight: '24px',
+		$switchThumb: '18px',
+		appearance: 'none',
+		position: 'relative',
+		flexShrink: 0,
+		margin: 0,
+		width: '$switchWidth',
+		height: '$switchHeight',
+		borderRadius: '$switchHeight',
+		border: '$borderWidth solid $input',
+		background: '$muted',
+		cursor: 'pointer',
+		_cssProp_before: {
+			content: '\'\'',
+			position: 'absolute',
+			top: '50%',
+			left: '$space',
+			transform: 'translateY(-50%)',
+			width: '$switchThumb',
+			height: '$switchThumb',
+			borderRadius: '50%',
+			background: '$background',
+		},
+		_cssProp_checked: { background: '$accent', borderColor: '$accent' },
+		// The thumb's travel is what is left of the pill once the thumb and its two margins are
+		// taken out of it, worked out in the stylesheet so a change of size needs one edit.
+		'_cssProp_:checked::before': { left: 'calc(100% - $space - $switchThumb)' },
+	},
+
+	// A range input is drawn out of two vendor pseudo-elements, which are spelled with their own
+	// colons because they are not in this package's pseudo-element table.
+	slider: {
+		$trackHeight: '6px',
+		$thumbSize: '16px',
+		appearance: 'none',
+		width: '100%',
+		height: '$target',
+		margin: 0,
+		background: 'transparent',
+		cursor: 'pointer',
+		'_cssProp_::-webkit-slider-runnable-track': {
+			height: '$trackHeight',
+			borderRadius: '$radius',
+			background: '$muted',
+		},
+		'_cssProp_::-webkit-slider-thumb': {
+			appearance: 'none',
+			width: '$thumbSize',
+			height: '$thumbSize',
+			marginTop: 'calc(($trackHeight - $thumbSize) / 2)',
+			borderRadius: '50%',
+			border: '$borderWidth solid $background',
+			background: '$accent',
+		},
+		'_cssProp_::-moz-range-track': {
+			height: '$trackHeight',
+			borderRadius: '$radius',
+			background: '$muted',
+		},
+		'_cssProp_::-moz-range-thumb': {
+			width: '$thumbSize',
+			height: '$thumbSize',
+			borderRadius: '50%',
+			border: '$borderWidth solid $background',
+			background: '$accent',
+		},
+	},
+
+	// What a labelled control puts around itself: the label above, the description and the error
+	// below, and the whole thing in a column unless the control sits beside its words.
+	field: {
+		display: 'flex',
+		flexDirection: 'column',
+		gap: '$space',
+		width: '100%',
+	},
+	field_inline: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		flexWrap: 'wrap',
+		gap: '$space2',
+	},
+	field_label: {
+		fontFamily: '$font',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+		fontWeight: 500,
+		color: '$foreground',
+	},
+	field_hint: {
+		fontFamily: '$font',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+		color: '$mutedForeground',
+		flexBasis: '100%',
+	},
+	field_error: {
+		fontFamily: '$font',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+		color: '$dangerSubtleForeground',
+		flexBasis: '100%',
+	},
+
 	// A select is an input that opens: same edge, same fill, room on the right for the arrow the
-	// host draws.
+	// host draws. `base-select` is what puts Chromium 135 and later into the appearance whose open
+	// list is themed; every other host ignores it and draws its own (design 130).
 	select: {
 		extends: 'input',
-		appearance: 'none',
+		appearance: 'base-select',
 		paddingRight: '$space8',
 		cursor: 'pointer',
+		'_cssProp_::picker-icon': { color: '$mutedForeground' },
+		'_cssProp_::picker(select)': {
+			background: '$surface',
+			color: '$surfaceForeground',
+			border: '$borderWidth solid $border',
+			borderRadius: '$radius',
+			padding: '$space',
+		},
+	},
+	option: {
+		padding: '$space $space2',
+		borderRadius: '$radius',
+		background: 'transparent',
+		color: '$surfaceForeground',
 	},
 
 	// Raised things are told apart by a tint and a line, not by a blurred shadow.
@@ -114,6 +269,7 @@ defineTheme({
 		borderRadius: '$radiusLg',
 		padding: '$space4',
 	},
+	card_tight: { padding: 0 },
 
 	popup: {
 		background: '$surface',
@@ -138,4 +294,62 @@ defineTheme({
 	text_mono: { fontFamily: '$fontMono' },
 
 	muted: { color: '$mutedForeground' },
+
+	// An icon is sized in `em`, so it is the size of the text beside it wherever it lands.
+	icon: {
+		$iconSize: '1em',
+		display: 'inline-block',
+		verticalAlign: 'middle',
+		flexShrink: 0,
+		width: '$iconSize',
+		height: '$iconSize',
+	},
+
+	// Three dots, pulsing in turn. The motion is declared only inside the query that asks whether
+	// the person wants any (design 118), so reduced motion leaves three still dots.
+	dots: { display: 'inline-flex', alignItems: 'center', gap: '$space' },
+	dot: {
+		$dotSize: '6px',
+		display: 'inline-block',
+		width: '$dotSize',
+		height: '$dotSize',
+		borderRadius: '50%',
+		background: 'currentColor',
+		_keyframes_pulse: '0%, 80%, 100% { opacity: 0.35 } 40% { opacity: 1 }',
+		'_media_(prefers-reduced-motion: no-preference)': { animation: '$pulse $slow infinite' },
+	},
+	dot_second: { '_media_(prefers-reduced-motion: no-preference)': { animationDelay: '$fast' } },
+	dot_third: { '_media_(prefers-reduced-motion: no-preference)': { animationDelay: '$slow' } },
+
+	// Laying things out in a line is an entry rather than a component (design 132). `center`,
+	// `start` and `end` all mean across the page, which is the main axis of a row and the cross
+	// axis of a column, so each of the three is two entries rather than one.
+	row: { display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '$space2' },
+	column: { display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '$space2' },
+
+	row_fill: { flexGrow: 1, flexBasis: 0, minWidth: 0 },
+	column_fill: { flexGrow: 1, flexBasis: 0, minHeight: 0 },
+
+	row_center: { justifyContent: 'center' },
+	row_start: { justifyContent: 'flex-start' },
+	row_end: { justifyContent: 'flex-end' },
+	column_center: { alignItems: 'center' },
+	column_start: { alignItems: 'flex-start' },
+	column_end: { alignItems: 'flex-end' },
+
+	row_spread: { justifyContent: 'space-between' },
+	column_spread: { justifyContent: 'space-between' },
+	row_wrap: { flexWrap: 'wrap' },
+	column_wrap: { flexWrap: 'wrap' },
+	row_tight: { gap: 0 },
+	column_tight: { gap: 0 },
+
+	divider: {
+		alignSelf: 'stretch',
+		flexShrink: 0,
+		border: 'none',
+		height: '$borderWidth',
+		margin: 0,
+		background: '$border',
+	},
 });

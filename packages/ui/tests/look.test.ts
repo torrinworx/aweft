@@ -137,3 +137,72 @@ test('tokens.txt lists every name the package defines', () => {
 		assert.ok(committed.includes(name), `${name} is in the snapshot`);
 	}
 });
+
+// --- the entries the controls and the layout names compile to (designs 128, 130, 132) ----------
+
+test('row and column lay out in a line, and center means across the page on both', () => {
+	assert.match(rulesFor(['row']), /flex-direction: row/);
+	assert.match(rulesFor(['column']), /flex-direction: column/);
+	// A row lays out along the page, so across it is `justify-content`; a column lays out down it,
+	// so across it is `align-items`. One word, one meaning, two rules.
+	assert.match(rulesFor(['row', 'center']), /justify-content: center/);
+	assert.match(rulesFor(['column', 'center']), /align-items: center/);
+	assert.match(rulesFor(['row', 'start']), /justify-content: flex-start/);
+	assert.match(rulesFor(['column', 'end']), /align-items: flex-end/);
+});
+
+test('the layout modifiers the applications use all exist', () => {
+	for (const modifier of ['fill', 'center', 'start', 'end', 'spread', 'wrap', 'tight']) {
+		for (const base of ['row', 'column']) {
+			const own = rulesFor([base, modifier]);
+			assert.notEqual(own, rulesFor([base]), `${base}_${modifier} says something ${base} does not`);
+		}
+	}
+});
+
+test('the space between things in a row is a named step, and tight takes it away', () => {
+	assert.match(rulesFor(['row']), /gap: 8px/);
+	assert.match(rulesFor(['row', 'tight']), /gap: 0/);
+});
+
+test('a divider is one line the width of the block it is in', () => {
+	const rules = rulesFor(['divider']);
+	assert.match(rules, new RegExp(`height: ${valueOf('borderWidth')}`));
+	assert.match(rules, new RegExp(`background: ${valueOf('border')}`));
+});
+
+test('a select asks for the appearance whose open list can be themed', () => {
+	const rules = rulesFor(['select']);
+	// Chromium 135 and later draws the list from the theme; every other host ignores this and
+	// draws its own, which is the cost design 130 names.
+	assert.match(rules, /appearance: base-select/);
+	assert.match(rules, /::picker\(select\)/, 'and the list itself is styled by name');
+});
+
+test('the switch, the slider and the tick box are drawn out of named values only', () => {
+	for (const entry of ['toggle', 'slider', 'checkbox', 'radio', 'dot', 'icon', 'field_label']) {
+		const rules = rulesFor(entry.split('_'));
+		assert.notEqual(rules, '', `the default theme has a ${entry} entry`);
+	}
+	// The two vendor pseudo-elements a range input is drawn on, spelled with their own colons.
+	assert.match(rulesFor(['slider']), /::-webkit-slider-thumb/);
+	assert.match(rulesFor(['slider']), /::-moz-range-thumb/);
+	// The thumb sits on the middle of the track, worked out in the stylesheet rather than by hand.
+	assert.match(rulesFor(['slider']), /margin-top: calc\(\(6px - 16px\) \/ 2\)/);
+});
+
+test('the dots move only inside the query that asks whether the person wants motion', () => {
+	const rules = rulesFor(['dot']);
+	assert.match(rules, /@keyframes pulse-/, 'the keyframes are named after the entry that owns them');
+	const outside = rules.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/g, '');
+	assert.doesNotMatch(outside, /animation:/, 'nothing animates outside the query');
+	assert.match(rules, /@media \(prefers-reduced-motion: no-preference\) \{[^}]*animation:/);
+});
+
+test('a card drops its padding when it is tight, and nothing else', () => {
+	const plain = rulesFor(['card']);
+	const tight = rulesFor(['card', 'tight']);
+	assert.match(plain, /padding: 16px/);
+	assert.match(tight, /padding: 0/);
+	assert.match(tight, new RegExp(`background: ${valueOf('surface')}`), 'it is still a card');
+});

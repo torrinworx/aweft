@@ -1,4 +1,6 @@
-// The browser globals this recipe names, declared loosely.
+// The browser globals a page driven from Node names, declared loosely. `recipes/ui/main.ts` and
+// `packages/ui/tests/browser.test.ts` both write callbacks that run in Chromium and both compile
+// without the DOM library, so both read this file.
 //
 // `main.ts` runs in Node and its `page.evaluate` callbacks run in Chromium, so the file has to
 // typecheck without the DOM library while the browser supplies the real objects. `entry.tsx` runs
@@ -6,8 +8,14 @@
 
 interface RecipeElement {
 	readonly parentElement: RecipeElement | null;
+	readonly tagName: string;
+	querySelector(selector: string): RecipeElement | null;
 	readonly outerHTML: string;
 	getAttribute(name: string): string | null;
+	hasAttribute(name: string): boolean;
+	readonly id: string;
+	/** On a `<dialog>`: whether it is showing. */
+	readonly open: boolean;
 	getBoundingClientRect(): { left: number; top: number; right: number; bottom: number; width: number; height: number };
 	querySelectorAll(selector: string): ArrayLike<RecipeElement>;
 	matches(selector: string): boolean;
@@ -21,6 +29,7 @@ interface RecipeElement {
 }
 
 declare const document: {
+	title: string;
 	readonly head: RecipeElement & { querySelector(selector: string): RecipeElement | null };
 	readonly body: RecipeElement;
 	readonly activeElement: RecipeElement | null;
@@ -45,4 +54,4 @@ declare const axe: {
 
 declare const window: { scrollTo(x: number, y: number): void; readonly scrollY: number };
 
-declare function getComputedStyle(element: RecipeElement): Record<string, string>;
+declare function getComputedStyle(element: RecipeElement, pseudo?: string): Record<string, string>;

@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { chromium } from 'playwright';
+import { type Page, chromium } from 'playwright';
 import { build } from 'vite';
 
 import { aweft } from '@aweftjs/build';
@@ -40,6 +40,11 @@ const page = async (name: string, html: string, entry: string): Promise<{ url: s
 		// sources by hand.
 		resolve: {
 			alias: {
+				// The four shared behaviours are internal (design 129), so a browser test that drives
+				// one reaches its file by name. Before the package, because an alias matches a
+				// subpath under its own key.
+				'@aweftjs/ui/dialog': join(repo, 'packages/ui/src/dialog.ts'),
+				'@aweftjs/ui/tooltip': join(repo, 'packages/ui/src/tooltip.ts'),
 				'@aweftjs/ui': join(repo, 'packages/ui/src/index.ts'),
 				// Before the package itself, because an alias matches a subpath under its own key.
 				'@aweftjs/dom/router': join(repo, 'packages/dom/src/router.ts'),
@@ -401,4 +406,329 @@ test('an act change scrolls to the element the URL\'s hash names', async () => {
 		await browser.close();
 		await site.close();
 	}
+});
+
+// --- the controls, driven by a real keyboard ----------------------------------------------------
+
+const BLANK = '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>';
+
+/** Build a page, open it, run the checks, and take everything down. */
+const drive = async (name: string, entry: string, check: (view: Page) => Promise<void>): Promise<void> => {
+	const site = await page(name, BLANK, entry);
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		const thrown: string[] = [];
+		view.on('pageerror', (error) => thrown.push(String(error)));
+		await view.goto(site.url);
+		await check(view);
+		assert.deepEqual(thrown, [], 'the page threw nothing');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+};
+
+test('Space on a checkbox toggles it, because the checkbox is the platform\'s', async () => {
+	await drive('checkbox-keys', `
+		import { Checkbox, h, mount } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+		const on = mutable(false);
+		globalThis.read = () => on.get();
+		mount(document.body, <Checkbox id="box" label="Remember me" value={on} />);
+	`, async (view) => {
+		await view.waitForSelector('#box');
+		await view.focus('#box');
+		await view.keyboard.press('Space');
+		assert.equal(await view.evaluate(() => (globalThis as never as { read(): boolean }).read()), true);
+		await view.keyboard.press('Space');
+		assert.equal(await view.evaluate(() => (globalThis as never as { read(): boolean }).read()), false);
+	});
+});
+
+test('the arrow keys move a radio group, because one name is what makes it a group', async () => {
+	await drive('radio-keys', `
+		import { Radio, h, mount } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+		const size = mutable('small');
+		globalThis.read = () => size.get();
+		mount(document.body, [
+			<Radio id="small" label="Small" value={size} option="small" />,
+			<Radio id="medium" label="Medium" value={size} option="medium" />,
+			<Radio id="large" label="Large" value={size} option="large" />,
+		]);
+	`, async (view) => {
+		await view.waitForSelector('#small');
+		const names = await view.evaluate(() => ['small', 'medium', 'large']
+			.map((id) => document.querySelector(`#${id}`)!.getAttribute('name')));
+		assert.equal(new Set(names).size, 1, 'one name across the group');
+
+		await view.focus('#small');
+		await view.keyboard.press('ArrowDown');
+		assert.equal(await view.evaluate(() => (globalThis as never as { read(): string }).read()), 'medium');
+		await view.keyboard.press('ArrowDown');
+		assert.equal(await view.evaluate(() => (globalThis as never as { read(): string }).read()), 'large');
+		// The platform wraps, and Tab steps over the whole group rather than through it.
+		await view.keyboard.press('ArrowDown');
+		assert.equal(await view.evaluate(() => (globalThis as never as { read(): string }).read()), 'small');
+	});
+});
+
+test('Home and End take a slider to its ends', async () => {
+	await drive('slider-keys', `
+		import { Slider, h, mount } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+		const volume = mutable(4);
+		globalThis.read = () => volume.get();
+		mount(document.body, <Slider id="volume" label="Volume" value={volume} min={0} max={10} />);
+	`, async (view) => {
+		await view.waitForSelector('#volume');
+		await view.focus('#volume');
+		await view.keyboard.press('End');
+		assert.equal(await view.evaluate(() => (globalThis as never as { read(): number }).read()), 10);
+		await view.keyboard.press('Home');
+		assert.equal(await view.evaluate(() => (globalThis as never as { read(): number }).read()), 0);
+		await view.keyboard.press('ArrowRight');
+		assert.equal(await view.evaluate(() => (globalThis as never as { read(): number }).read()), 1,
+			'one step, from the platform');
+	});
+});
+
+test('Enter in a text field calls onEnter and does not submit the form it is in', async () => {
+	await drive('enter-key', `
+		import { TextField, h, mount } from '@aweftjs/ui';
+		const seen = [];
+		globalThis.read = () => seen.length;
+		globalThis.submitted = () => document.title;
+		mount(document.body, (
+			<form onSubmit={() => { document.title = 'submitted'; }}>
+				<TextField id="name" label="Name" onEnter={() => seen.push(1)} />
+			</form>
+		));
+	`, async (view) => {
+		await view.waitForSelector('#name');
+		await view.focus('#name');
+		await view.keyboard.press('Enter');
+		assert.equal(await view.evaluate(() => (globalThis as never as { read(): number }).read()), 1);
+		assert.notEqual(await view.title(), 'submitted', 'the key\'s own default was prevented');
+	});
+});
+
+test('a real change on a select hands the caller back the object it put in the list', async () => {
+	await drive('select-change', `
+		import { Select, h, mount } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+		const users = [{ id: 7, name: 'Ada' }, { id: 9, name: 'Grace' }];
+		const chosen = mutable(null);
+		globalThis.read = () => chosen.get();
+		globalThis.pick = (at) => chosen.set(users[at]);
+		mount(document.body, (
+			<Select id="user" label="Owner" value={chosen} options={users}
+				display={(user) => user.name} placeholder="Pick someone" />
+		));
+	`, async (view) => {
+		await view.waitForSelector('#user');
+		assert.deepEqual(await view.evaluate(() => (globalThis as never as { read(): unknown }).read()), null);
+
+		await view.selectOption('#user', { label: 'Grace' });
+		assert.deepEqual(
+			await view.evaluate(() => (globalThis as never as { read(): unknown }).read()),
+			{ id: 9, name: 'Grace' },
+			'the cell holds the object, not the string the element carried',
+		);
+
+		// And the other direction, which only a real select can answer: the cell moves what the
+		// element shows, through the row that says it is the chosen one.
+		const shown = await view.evaluate(() => {
+			(globalThis as never as { pick(at: number): void }).pick(0);
+			const element = document.querySelector('#user') as never as { selectedIndex: number; value: string };
+			return { at: element.selectedIndex, text: document.querySelector('#user option:checked')?.textContent };
+		});
+		assert.deepEqual(shown, { at: 1, text: 'Ada' }, 'the placeholder is row 0, so Ada is row 1');
+
+		// The appearance Chromium draws the open list from, which is what design 130 asks for.
+		const drawn = await view.evaluate(() => getComputedStyle(document.querySelector('#user')!).appearance);
+		assert.equal(drawn, 'base-select', 'the host took the base appearance');
+	});
+});
+
+// --- the dialog behaviour, in a real browser ------------------------------------------------------
+
+test('a modal dialog takes the page out of the reading order and gives the keyboard back', async () => {
+	await drive('dialog', `
+		import { h, mount } from '@aweftjs/ui';
+		import { dialogControl } from '@aweftjs/ui/dialog';
+		const dialog = document.createElement('dialog');
+		dialog.id = 'sheet';
+		dialog.innerHTML = '<button id="inside">close</button>';
+		document.body.appendChild(dialog);
+		mount(document.body, <main id="page"><button id="opener">open</button></main>);
+		const modal = dialogControl(dialog, { onClose: () => { document.title = 'closed'; } });
+		document.querySelector('#opener').addEventListener('click', () => modal.open());
+		document.querySelector('#inside').addEventListener('click', () => modal.close());
+	`, async (view) => {
+		await view.waitForSelector('#opener');
+		await view.click('#opener');
+
+		const open = await view.evaluate(() => ({
+			showing: document.querySelector('#sheet')!.open,
+			modal: document.querySelector('#sheet')!.matches(':modal'),
+			pageInert: document.querySelector('#page')!.hasAttribute('inert'),
+			dialogInert: document.querySelector('#sheet')!.hasAttribute('inert'),
+		}));
+		assert.deepEqual(open, { showing: true, modal: true, pageInert: true, dialogInert: false },
+			'showModal put it in the top layer, and the rest of the page went inert');
+
+		// `showModal` puts the keyboard in the dialog, and the page behind it is inert, so Tab
+		// cannot walk back out into it.
+		assert.equal(await view.evaluate(() => document.activeElement?.id), 'inside');
+		await view.keyboard.press('Tab');
+		assert.notEqual(await view.evaluate(() => document.activeElement?.id), 'opener',
+			'Tab did not walk out into the page behind the dialog');
+
+		// The platform queues the `close` event rather than firing it inside `close()`, so what
+		// undoes the rest of it lands on the next task.
+		await view.click('#inside');
+		await view.waitForFunction(() => document.title === 'closed');
+		assert.equal(await view.evaluate(() => document.querySelector('#page')!.hasAttribute('inert')), false,
+			'the page is reachable again');
+		assert.equal(await view.evaluate(() => document.activeElement?.id), 'opener',
+			'the keyboard went back to the button that opened it');
+	});
+});
+
+test('Escape closes a modal through the element\'s own cancel event', async () => {
+	await drive('dialog-escape', `
+		import { h, mount } from '@aweftjs/ui';
+		import { dialogControl } from '@aweftjs/ui/dialog';
+		const dialog = document.createElement('dialog');
+		dialog.id = 'sheet';
+		dialog.innerHTML = '<p>hello</p>';
+		document.body.appendChild(dialog);
+		mount(document.body, <main id="page"><button id="opener">open</button></main>);
+		const modal = dialogControl(dialog, { onClose: () => { document.title = 'closed'; } });
+		document.querySelector('#opener').addEventListener('click', () => modal.open());
+	`, async (view) => {
+		await view.waitForSelector('#opener');
+		await view.click('#opener');
+		assert.equal(await view.evaluate(() => document.querySelector('#page')!.hasAttribute('inert')), true);
+
+		await view.keyboard.press('Escape');
+		await view.waitForFunction(() => document.title === 'closed');
+		assert.equal(await view.evaluate(() => document.querySelector('#page')!.hasAttribute('inert')), false,
+			'Escape reached the element, and the element told us');
+	});
+});
+
+// --- the tooltip trigger, in a real browser --------------------------------------------------------
+
+test('a tooltip shows on hover and on focus, and asks for the top layer as a hint', async () => {
+	await drive('tooltip', `
+		import { h, mount } from '@aweftjs/ui';
+		import { tooltipTrigger } from '@aweftjs/ui/tooltip';
+		import { mutable } from '@aweftjs/core';
+		const open = mutable(false);
+		globalThis.read = () => open.get();
+		mount(document.body, [
+			<button id="anchor">what is this</button>,
+			<div id="tip" style={{ position: 'fixed', top: 0, left: 0 }}>an explanation</div>,
+		]);
+		const anchor = document.querySelector('#anchor');
+		const tip = document.querySelector('#tip');
+		open.effect((on) => { tip.textContent = on ? 'an explanation' : ''; });
+		tooltipTrigger({ nodes: () => [anchor], panel: () => tip, open, delay: 30 });
+	`, async (view) => {
+		await view.waitForSelector('#anchor');
+		assert.equal(await view.evaluate(() => document.querySelector('#tip')!.getAttribute('popover')), null,
+			'nothing is asked for before it is needed');
+
+		await view.hover('#anchor');
+		await view.waitForFunction(() => (globalThis as never as { read(): boolean }).read());
+		assert.equal(await view.evaluate(() => document.querySelector('#tip')!.getAttribute('popover')), 'hint',
+			'hint, not manual: a tip does not close a menu that is already open');
+		assert.equal(await view.evaluate(() => document.querySelector('#tip')!.matches(':popover-open')), true,
+			'and the host put it in the top layer');
+
+		await view.mouse.move(0, 300);
+		await view.waitForFunction(() => !(globalThis as never as { read(): boolean }).read());
+		assert.equal(await view.evaluate(() => document.querySelector('#tip')!.matches(':popover-open')), false);
+
+		await view.focus('#anchor');
+		await view.waitForFunction(() => (globalThis as never as { read(): boolean }).read());
+		await view.keyboard.press('Escape');
+		await view.waitForFunction(() => !(globalThis as never as { read(): boolean }).read());
+	});
+});
+
+test('a hydrated page is live: a real click, a real keystroke, a real focus and a real hover', async () => {
+	await drive('hydrated-live', `
+		import { Button, TextField, context, h, hydrate, render } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+
+		const clicks = mutable(0);
+		const text = mutable('');
+		const focused = mutable(false);
+		const hovered = mutable(false);
+
+		// The same item on both sides, which is what hydration is: the server's copy runs here
+		// only because this test has no server.
+		const App = () => (
+			<div>
+				<Button id="save" label="Save" onClick={() => clicks.set(clicks.get() + 1)} />
+				<TextField id="email" label="Email" value={text} isFocused={focused} isHovered={hovered} />
+			</div>
+		);
+
+		const server = context();
+		const markup = await render(<App />, { context: server });
+
+		const host = document.createElement('div');
+		host.id = 'host';
+		host.innerHTML = markup;
+		document.body.appendChild(host);
+		const style = document.createElement('style');
+		style.setAttribute('data-aweft', '');
+		style.textContent = server.theme.markup();
+		document.head.appendChild(style);
+
+		globalThis.read = () => ({
+			clicks: clicks.get(), text: text.get(), focused: focused.get(), hovered: hovered.get(),
+		});
+		globalThis.adopted = document.querySelector('#save');
+		hydrate(host, <App />);
+		globalThis.same = globalThis.adopted === document.querySelector('#save');
+	`, async (view) => {
+		await view.waitForSelector('#save');
+		assert.equal(await view.evaluate(() => (globalThis as never as { same: boolean }).same), true,
+			'the button is the one the server wrote');
+
+		const paint = async (): Promise<string> => view.evaluate(() =>
+			getComputedStyle(document.querySelector('#save')!).backgroundImage ?? '');
+		const quiet = await paint();
+
+		await view.click('#save');
+		await view.click('#email');
+		await view.keyboard.type('ada@example.com');
+		await view.hover('#save');
+		// The hovered segment is a class this package writes, not a `:hover` rule, so a change here
+		// is the theme reaching the node the hydration adopted (design 133).
+		assert.notEqual(await paint(), quiet, 'the hovered tint is on the button the server sent');
+		await view.hover('#email');
+		assert.equal(await paint(), quiet, 'and off it again when the pointer leaves');
+
+		const state = await view.evaluate(() => (globalThis as never as {
+			read(): { clicks: number; text: string; focused: boolean; hovered: boolean };
+		}).read());
+		assert.deepEqual(state, {
+			clicks: 1, text: 'ada@example.com', focused: true, hovered: true,
+		}, 'every handler this package owns survived the hydration');
+
+		// And they let go: focus and hover both come back off their cells.
+		await view.evaluate(() => { (document.querySelector('#email') as never as { blur(): void }).blur(); });
+		await view.hover('#save');
+		const after = await view.evaluate(() => (globalThis as never as {
+			read(): { focused: boolean; hovered: boolean };
+		}).read());
+		assert.deepEqual([after.focused, after.hovered], [false, false]);
+	});
 });

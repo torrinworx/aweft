@@ -54,8 +54,8 @@ nothing to resolve those specifiers to, so `recipes/` and the tests live inside 
 | `theme` | a string, a list, a cell, or lists of those; flattened at mount into a class list and matched against the theme |
 | `class` | kept, and joined in front of the classes the theme generated. Without a `theme` it is an ordinary attribute |
 | `style` | an object (or a string); a bare number in a size property gets `px`, and `$var` and `$fn()` resolve against the element's own theme chain |
-| `isHovered`, `isFocused`, `isClicked`, `isTouched` | a cell this package writes from real events |
-| `onClick`, `onInput`, `onKeyDown`, … | `on` and an uppercase letter: a listener, removed when the element unmounts |
+| `isHovered`, `isFocused`, `isClicked`, `isTouched` | a cell this package writes from real events. `isFocused` is the element's own focus, and `isTouched` is a pointer event that says it was a finger |
+| `onClick`, `onInput`, `onKeyDown`, … | `on` and an uppercase letter: a handler, handed to `dom` as `$on<type>` so a hydration replays it, and gone when its element goes. Your own `$onclick` beside it runs first |
 
 Everything else goes to `dom` unchanged: a bare name is an attribute, `$name` is a property.
 
@@ -160,6 +160,20 @@ Two `mount` calls into one page share that page's render, so two widgets on one 
 the same class name for two different themes. Passing a `context()` by name asks for a render of
 your own instead, which is what a static render wants; two named renders in one page each count
 their classes from zero.
+
+**A component hydrates by identity, and the elements it makes on the way are dropped.** `hydrate`
+builds the client's tree and pairs it against the nodes the server wrote, keeping the server's; the
+fresh elements it made to compare against are thrown away. So a hydration is not free of
+`createElement`, and counting those calls counts the client's tree, not a defect.
+`packages/ui/tests/controls.test.ts` pins both halves: every server element is kept by identity, and
+nothing the client made ends up in the page.
+
+**A hydrated page is live.** Nothing this package computes is written onto an element: a handler is
+a `$on<type>` property and the class and the style are cells handed to `dom` as attributes, and
+`dom` carries all three onto the node the hydration adopted (design 133). So a click, a keystroke,
+a focus, a hover, a theme cell and an inline style all reach the page a server sent.
+`browser.test.ts` clicks, types, focuses and hovers for real in Chromium and reads the hovered tint
+back off the button the server wrote.
 
 **A theme mismatch across a hydration is not reported.** `dom` catches a structural mismatch
 loudly, but if the client's theme registry says something different from the server's, the client
@@ -277,6 +291,108 @@ the generic `on` and then `on<Type>`, with the application's `meta` merged in la
 runs `fn` with a fresh `AbortSignal` and hands back the abort. `sizeProperties` is the set of
 property names a bare number is given `px` for.
 
+## Controls
+
+Every control here is one native element with a theme on it. There is nothing in this package that
+draws a control out of `div`s, so the keyboard, the role, the form participation and the autofill
+are the platform's and not ours (design 128).
+
+```tsx
+import { Button, Select, TextField, Toggle } from '@aweftjs/ui';
+import { mutable } from '@aweftjs/core';
+
+const email = mutable('');
+const problem = mutable(null);
+
+<TextField label="Email" value={email} error={problem} description="Work address" />
+<Toggle label="Email me" value={subscribed} />
+<Select label="Owner" value={owner} options={users} display={(user) => user.name} placeholder="Pick someone" />
+<Button label="Save" onClick={() => save(email.get())} />
+```
+
+**Every state prop is a cell, or absent.** Given one, the control writes it and follows it; given
+none, it keeps its own. A display prop takes a value or a cell. `class` appends, `theme` appends
+your own segments to the component's, and `element` hands in the node to decorate instead of
+building one. An `element` of the wrong tag is an assert naming both tags, because a `<div>` wearing
+a checkbox's theme is a checkbox that does nothing. There are no imperative handles.
+
+| component | the element | its own props |
+|---|---|---|
+| `Button` | `<button>`, or `<a>` with an `href` | `label`, `type`, `icon`, `iconPosition`, `disabled`, `loading`, `round`, `inline`, `href`, `hrefNewTab`, `onClick`, `track` |
+| `TextField` | `<input>` | `value`, `label`, `description`, `error`, `placeholder`, `password`, `onEnter`, `onKeyDown`, `disabled`, `type` |
+| `TextArea` | `<textarea>` | the same, plus `maxHeight` |
+| `Checkbox` | `<input type="checkbox">` | `value`, `label`, `invert`, `indeterminate`, `disabled`, `onChange` |
+| `Radio` | `<input type="radio">` | `value` (the group's), `option` (this one's), `label`, `disabled`, `onChange` |
+| `Toggle` | `<input type="checkbox" role="switch">` | `value`, `label`, `disabled`, `onChange`, `type` |
+| `Slider` | `<input type="range">` | `value` (a number), `min`, `max`, `step`, `disabled`, `track` |
+| `Select` | `<select>` | `value`, `options`, `display`, `placeholder`, `disabled`, `onChange` |
+| `Paper` | `<div>` on the `card` entry | `type`, `tight` |
+| `LoadingDots` | three dots | `type`, `size`, `label` |
+| `Icon` | `<svg>` | `name`, `size`, `label`, `rot` |
+
+**A label is what gives a control a name.** Give one and the component renders a `<label for>` next
+to the element, both inside one `<div>`, mints the ids off the render (so a server and its hydration
+agree), and wires `aria-describedby` and `aria-invalid` for you. Give none and you get the bare
+element, and naming it is yours. `packages/ui/tests/controls.test.ts` finds every control by its
+role and its name.
+
+**One document is one render.** The ids come off the render's counter, which starts at zero every
+time (design 109), so two named renders mounted into the same document mint the same ids and their
+labels point at each other's controls. Two `mount` calls into one page share that page's render and
+do not collide; a second `context()` is a second render and belongs in a second document.
+
+**What a control starts with is in the markup.** `Checkbox`, `Radio` and `Toggle` write the state
+they start in as the `checked` attribute; `TextField` writes its text as `value` and `TextArea` as
+its content. So a server page shows a ticked box and a filled field before any script runs. The
+property follows the cell once the page is alive, which is what the platform does with these
+attributes too: they say what the control started as, not what it holds now.
+
+**An `error` cell is announced when it arrives.** While it says something the control carries
+`aria-invalid`, its `aria-describedby` names the message, and the message is a live region.
+
+**A promise makes a button busy.** A promise `onClick` returns disables the button and shows the
+`LoaderContext` loader until it settles, however it settles, so a double click cannot submit twice.
+
+**A radio group is a group because its members share a `name`**, minted once per `value` cell. So
+the arrow keys, the wrapping and the roving focus are the platform's. `browser.test.ts` presses
+the real keys: Space on a checkbox, the arrows in a radio group, Home and End on a slider.
+
+**`Select` holds items, not the text the element carries.** The chosen row is the one that says it
+is chosen, and a change is read back as the position it happened at, so what the cell holds is
+always the item you put in `options` and adding, removing or reordering the list leaves the choice
+on the item it was on. An item that is a string or a number carries itself as the option's `value`,
+so a form the select is in posts something readable. Two things the element cannot do, and this
+component will not fake: outside Chromium the open list is drawn by the host and is not themed, and
+there is no way to know whether it is open. Design 130 has both.
+
+**`Icon` is built from icon data**, in the shape the icon sets publish: `body`, `width`, `height`,
+`left`, `top`, and optional `rotate`, `hFlip` and `vFlip`. `name` is that data, or a name looked up
+through the `Icons` context.
+
+```tsx
+import { Icon, Icons } from '@aweftjs/ui';
+
+<Icons value={myPack}><App /></Icons>
+<Icon name="check" label="done" />
+```
+
+A provider stacks a pack or a resolver in front of what it inherited, newest first; the pack this
+package ships is always at the bottom, and it is eight glyphs, not a set. A resolver is
+`(name) => data | Promise<data> | null`, and a promise is declared `pending` so a static render
+waits for it. An icon with no `label` is `aria-hidden`, because an icon beside the word it means is
+otherwise read out twice. A name nothing answers is an assert.
+
+**Laying things out is a theme entry, not a component** (design 132): `row` and `column`, each with
+`fill`, `center`, `start`, `end`, `spread`, `wrap` and `tight`, and `divider`. `center`, `start`
+and `end` mean across the page on both.
+
+```tsx
+<div theme={['row', 'fill', 'spread']}><span>left</span><span>right</span></div>
+```
+
+`recipes/ui/controls.html` is every control in every state, in both modes, driven in Chromium by
+`recipes/ui/main.ts` with axe-core over it.
+
 ## The look
 
 A default theme ships in light and dark. It is what makes `theme="button"` a button, and it is the
@@ -339,6 +455,17 @@ ask for. Everything else is yours to define.
 | `text_xs`, `text_sm`, `text_lg`, `text_xl`, `text_2xl` | that copy, one size step at a time |
 | `text_mono` | that copy in `$fontMono` |
 | `muted` | text in `$mutedForeground`, readable on any of the three backgrounds |
+| `button_round`, `button_inline` | that control as a circle, and with no fill or padding at all |
+| `textarea` | the text field again, growing to its content up to `$textAreaMax` |
+| `checkbox`, `radio` | a native box and dot at `$target`, tinted with `accent-color` |
+| `toggle` | a switch: a pill and a thumb drawn with `::before` |
+| `slider` | a range input: the track and the thumb on the vendor pseudo-elements |
+| `option` | one row of a select's open list, where the host draws it from the theme |
+| `card_tight` | that card with no padding |
+| `field`, `field_inline`, `field_label`, `field_hint`, `field_error` | what a labelled control puts around itself |
+| `dots`, `dot` | the three pulsing dots of `LoadingDots` |
+| `icon` | an icon, sized in `em` so it follows the text |
+| `row`, `column`, `divider` | laying things out in a line, with the seven modifiers above |
 
 `hovered`, `pressed` and `disabled` are three more entries, and you put them in a class list
 yourself: `theme={['button', hovered.bool('hovered', null)]}`. They match anywhere, so they apply
