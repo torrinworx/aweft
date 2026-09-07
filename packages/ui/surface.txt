@@ -19,7 +19,7 @@ type HeadTag: interface HeadTag { readonly kind: HeadKind; readonly group: strin
 value Icon: (props: IconProps, cleanup: (...fns: (() => void)[]) => void, _mounted: unknown, pending: (promise: Promise<unknown>) => void) => Mounter
 type IconAlias: interface IconAlias { readonly parent: string; readonly rotate?: number; readonly hFlip?: boolean; readonly vFlip?: boolean; }
 type IconData: interface IconData { readonly body: string; readonly width?: number; readonly height?: number; readonly left?: number; readonly top?: number; readonly rotate?: number; readonly hFlip?: boolean; readonly vFlip?: boolean; }
-type IconPack: interface IconPack { readonly prefix?: string; readonly icons: Readonly<Record<string, IconData>>; readonly aliases?: Readonly<Record<string, IconAlias>>; }
+type IconPack: interface IconPack { readonly prefix?: string; readonly icons: Readonly<Record<string, IconData>>; readonly aliases?: Readonly<Record<string, IconAlias>>; readonly width?: number; readonly height?: number; }
 type IconProps: interface IconProps { readonly name?: unknown; readonly size?: unknown; readonly label?: unknown; readonly rot?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type IconResolver: type IconResolver = (name: string) => IconData | Promise<IconData | null> | null;
 type IconSource: type IconSource = IconPack | IconResolver;
@@ -95,9 +95,11 @@ value mark: Mark
 value mount: (target: ParentLike, item: unknown, before?: Remove | undefined, render?: Render | undefined) => Remove
 value render: (item: unknown, options?: { context?: Render | undefined; }) => Promise<string>
 value sizeProperties: ReadonlySet<string>
+value standardIcons: readonly string[]
 value suspend: <P extends Record<string, unknown>>(fallback: Component | null, loader: Loader<P>, failed?: Component<{ error?: unknown; }> | null | undefined) => (props: P & { children?: unknown[] | undefined; }, cleanup: (...fns: (() => void)[]) => void, _mounted: unknown, pending: (promise: Promise<unknown>) => void) => Mounter
 value svg: (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown
 value template: (spec: TemplateElement, edits: readonly TemplateEdit[]) => Template
 value trackedMount: () => [MutableArray<NodeLike>, (props: { children?: unknown[] | undefined; }) => unknown]
 value use: (value: unknown) => Render
 value useAbort: <A extends unknown[]>(fn: (signal: AbortSignal, ...args: A) => void) => (...args: A) => () => void
+./icon-names value standardIcons: readonly string[]

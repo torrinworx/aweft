@@ -37,6 +37,7 @@ export type { CheckboxProps } from './checkbox.tsx';
 export { Icon, Icons } from './icon.tsx';
 export type { IconProps } from './icon.tsx';
 export type { IconAlias, IconData, IconPack, IconResolver, IconSource } from './icon-data.ts';
+export { standardIcons } from './icon-names.ts';
 export { LoadingDots } from './loading-dots.tsx';
 export type { LoadingDotsProps } from './loading-dots.tsx';
 export { Paper } from './paper.tsx';

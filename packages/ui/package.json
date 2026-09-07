@@ -6,7 +6,8 @@
 	"license": "MIT",
 	"description": "Components and theming: a wrapping h, the theme engine, contexts, popups, suspend and marks.",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./icon-names": "./src/icon-names.ts"
 	},
 	"scripts": {
 		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
