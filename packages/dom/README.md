@@ -243,11 +243,55 @@ The light tree's classes are exported as types (`LightDocument`, `LightElement`,
 `TextLike`, `CommentLike`, `ParentLike` and `DocumentLike`, and `H` for the `h` that `htm`
 binds.
 
+## The router
+
+```ts
+import { createRouter } from '@aweftjs/dom/router';
+
+const router = createRouter({ base: '/docs' });
+const stop = router.links(document.body);
+
+router.url.effect((url) => console.log('now at', url));
+router.push('/guide/install');
+```
+
+A subpath export, so a page that never routes never loads it. `createRouter({ url, base })`
+gives you:
+
+| name | what it is |
+|---|---|
+| `url` | a read-only cell: the path, query and hash showing now, relative to `base` |
+| `key` | a read-only cell naming the history entry. The same key comes back with back and forward |
+| `push(url)`, `replace(url)`, `back()` | the three ways to move. Both take a path relative to `base`; a whole URL, or a path that already carries `base`, is a loud assert |
+| `links(root)` | takes over same-origin anchor clicks under `root`, and returns its unsubscribe |
+| `saved()`, `restore()` | the scroll position kept for the entry showing now, and putting the page back on it |
+| `stop()` | stop listening for entry changes |
+
+One history path: `popstate`, `pushState` and `replaceState`. `history.scrollRestoration` is
+`manual` and positions are kept per entry key in `sessionStorage`, saved before a navigation
+leaves an entry. The router restores nothing on its own: it answers `saved()` and does what
+`restore()` says, and when to use them is the component layer's decision.
+
+`links` leaves a click alone when a modifier key is held, when it is not the primary button, when
+something already prevented it, when the anchor has `target` (other than `_self`), `download` or
+**`data-no-route`**, when the href is cross-origin, another scheme, or outside `base`, and when the
+href is this same page with a different hash on it. That last one is the browser's work: it scrolls
+to the target and writes the entry, and the router picks the new URL up like any other entry change.
+
+**One router per page.** A second one over the same history mints keys from the same counter and
+writes into the same scroll slots, so the two would trade entry keys and restore each other's
+positions. Make one and hand it to whatever needs it.
+
+**With no `window` it is the same router over a stack in memory.** `push`, `replace` and `back` all
+still move `url`, which is what lets a static render open the page a URL names and a headless test
+drive a whole navigation. `links` returns a working unsubscribe that removed nothing, `saved()`
+answers null and `restore()` answers false.
+
 ## What it never decides
 
-What a component renders, how a site walks its pages, routing, head tags, themes. Storage
-and transport are not here: a document array on the page is the same document array a
-store persists or a link shares.
+What a component renders, how a site walks its pages, head tags, themes, and what any of the
+router's URLs mean. Storage and transport are not here: a document array on the page is the same
+document array a store persists or a link shares.
 
 ## Boundaries
 

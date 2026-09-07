@@ -6,7 +6,8 @@
 	"license": "MIT",
 	"description": "The DOM binding: mount, static render and hydration as modes of one path.",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./router": "./src/router.ts"
 	},
 	"scripts": {
 		"test": "node --test tests/*.test.ts"
