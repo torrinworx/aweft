@@ -14,6 +14,29 @@
 // crossed by whoever needs something at the time, and the crossing is invisible until it
 // breaks. A rule the build enforces cannot be crossed by accident.
 
+const { existsSync, readdirSync, readFileSync } = require('node:fs');
+const { join } = require('node:path');
+
+// Every file a package's `exports` map names, as a path pattern. The deep-import rule below used
+// to allow one file per package, `src/index.ts`, so a legitimate subpath entry
+// (`@aweftjs/dom/router`, `@aweftjs/build/loader`) read as a reach into another package's
+// internals. The rule's own comment always said "through its exports map"; this reads the maps
+// rather than restating them, so a file that is not on one is still refused.
+const entryFiles = () => {
+	const here = join(__dirname, 'packages');
+	const found = [];
+	for (const name of readdirSync(here)) {
+		const manifest = join(here, name, 'package.json');
+		if (!existsSync(manifest)) continue;
+		const map = JSON.parse(readFileSync(manifest, 'utf8')).exports ?? {};
+		for (const file of Object.values(map)) {
+			if (typeof file !== 'string') continue;
+			found.push(`^packages/${name}/${file.replace(/^\.\//, '').replace(/\./g, '\\.')}$`);
+		}
+	}
+	return found;
+};
+
 module.exports = {
 	forbidden: [
 		{
@@ -41,7 +64,7 @@ module.exports = {
 			from: { path: '^packages/([^/]+)/' },
 			to: {
 				path: '^packages/([^/]+)/',
-				pathNot: ['^packages/$1/', '^packages/[^/]+/src/index\\.ts$'],
+				pathNot: ['^packages/$1/', ...entryFiles()],
 			},
 		},
 	],
