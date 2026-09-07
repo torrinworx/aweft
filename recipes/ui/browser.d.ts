@@ -22,9 +22,24 @@ interface RecipeElement {
 declare const document: {
 	readonly head: RecipeElement & { querySelector(selector: string): RecipeElement | null };
 	readonly body: RecipeElement;
+	readonly activeElement: RecipeElement | null;
 	querySelector(selector: string): RecipeElement | null;
 	querySelectorAll(selector: string): ArrayLike<RecipeElement>;
 	elementFromPoint(x: number, y: number): RecipeElement | null;
+};
+
+/** axe-core, as the preview page reaches it once the script tag is in. */
+interface AxeViolation {
+	readonly id: string;
+	readonly help: string;
+	readonly nodes: readonly { readonly html: string }[];
+}
+
+declare const axe: {
+	run(target: unknown, options: { runOnly: { type: string; values: string[] } }): Promise<{
+		readonly violations: readonly AxeViolation[];
+		readonly passes: readonly unknown[];
+	}>;
 };
 
 declare const window: { scrollTo(x: number, y: number): void };

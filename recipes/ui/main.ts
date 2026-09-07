@@ -6,6 +6,10 @@
 // a real keystroke reach the handlers, that focus moves, that a popup is measured against its
 // anchor and placed, and that it asks for the top layer with `popover` rather than a z-index.
 //
+// It drives two pages. The gallery is every system the package ships. The preview is the look
+// itself, light and dark side by side, and it is where the look is judged; the assertions
+// there are about the contract rather than about the systems, and axe-core runs over it.
+//
 // Run: node recipes/ui/main.ts
 // Serve it instead, to click around: npx vite recipes/ui
 
@@ -17,6 +21,8 @@ import { fileURLToPath } from 'node:url';
 
 import { build } from 'vite';
 import { chromium } from 'playwright';
+
+import { context, dark, light } from '@aweftjs/ui';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const dist = join(here, 'dist');
@@ -193,6 +199,107 @@ try {
 	assert.match(await page.textContent('#failed') ?? '', /the loader said no/,
 		'a rejected loader shows the failure rather than the spinner forever');
 	assert.equal(await page.locator('#spinner').count(), 0, 'no spinner was left behind');
+
+	// --- the preview page: the look, in both modes -----------------------------------------------
+
+	// The roles as the theme holds them. What is checked below is that the browser is showing the
+	// value the theme says, in the mode the pane asked for.
+	const roles = context().theme;
+	const roleOf = (values: typeof light, name: string): string => {
+		const held = roles.variable(values, [], name);
+		assert.ok(held !== null, `the theme defines $${name}`);
+		return held;
+	};
+	const rgb = (hex: string): string => {
+		const value = parseInt(hex.slice(1), 16);
+		return `rgb(${String((value >> 16) & 255)}, ${String((value >> 8) & 255)}, ${String(value & 255)})`;
+	};
+
+	await page.goto(site.url + 'preview.html');
+	await page.waitForSelector('#preview');
+
+	const previewSheet = await page.evaluate(() =>
+		document.head.querySelector('style[data-aweft]')?.textContent ?? '');
+	assert.ok(previewSheet.includes('@layer aweft'), 'the preview page carries the theme sheet');
+	assert.ok(!previewSheet.includes('!important'), 'and still no !important');
+
+	const paint = async (selector: string): Promise<Record<string, string | undefined>> =>
+		page.evaluate((query: string) => {
+			const style = getComputedStyle(document.querySelector(query)!);
+			return {
+				background: style.backgroundColor,
+				backgroundImage: style.backgroundImage,
+				color: style.color,
+				borderColor: style.borderTopColor,
+				outlineWidth: style.outlineWidth,
+				outlineStyle: style.outlineStyle,
+				outlineColor: style.outlineColor,
+				transitionDuration: style.transitionDuration,
+				fontSize: style.fontSize,
+				lineHeight: style.lineHeight,
+				minHeight: style.minHeight,
+			};
+		}, selector);
+
+	const lightButton = await paint('#button-light');
+	const darkButton = await paint('#button-dark');
+
+	assert.equal(lightButton.background, rgb(roleOf(light, 'accent')), 'the light button is the light $accent');
+	assert.equal(lightButton.color, rgb(roleOf(light, 'accentForeground')), 'on the light $accentForeground');
+	assert.equal(darkButton.background, rgb(roleOf(dark, 'accent')), 'the dark button is the dark $accent');
+	assert.equal(darkButton.color, rgb(roleOf(dark, 'accentForeground')), 'on the dark $accentForeground');
+	assert.notEqual(lightButton.background, darkButton.background,
+		'the two modes nested on one page resolve their own roles');
+
+	const lightCard = await paint('#card-light');
+	const darkCard = await paint('#card-dark');
+	assert.equal(lightCard.background, rgb(roleOf(light, 'surface')));
+	assert.equal(darkCard.background, rgb(roleOf(dark, 'surface')));
+	assert.notEqual(lightCard.borderColor, darkCard.borderColor, 'and so does the border');
+
+	// The smallest pointer target, and type in rem, both come out of the contract.
+	assert.equal(lightButton.minHeight, '24px', '$target is 24px');
+	const body = await paint('#body-light');
+	assert.equal(body.fontSize, '16px', '$textMd is one rem');
+	assert.equal(body.lineHeight, '24px', 'and it has its line height');
+
+	// Hover is a tint of the element's own foreground, laid over whatever background it has.
+	assert.equal(lightButton.backgroundImage, 'none', 'no tint before the pointer arrives');
+	await page.hover('#button-light');
+	const hoveredButton = await paint('#button-light');
+	assert.notEqual(hoveredButton.backgroundImage, 'none', 'a real hover lays the tint on');
+	assert.equal(hoveredButton.background, lightButton.background, 'and leaves the role underneath it');
+	await page.mouse.move(0, 0);
+
+	// A real Tab shows the ring. `:focus-visible` is what the rule is written against, so a
+	// keyboard has to be what moves the focus.
+	await page.keyboard.press('Tab');
+	const focused = await page.evaluate(() => document.activeElement?.getAttribute('id') ?? '');
+	assert.equal(focused, 'button-light', 'the first Tab reaches the first control');
+	const ringed = await paint('#button-light');
+	assert.equal(ringed.outlineStyle, 'solid', 'the focus ring is drawn');
+	assert.equal(ringed.outlineWidth, '2px', 'at $ringWidth');
+	assert.equal(ringed.outlineColor, rgb(roleOf(light, 'ring')), 'in $ring');
+
+	// Motion is declared once, inside the query that asks whether the person wants any.
+	assert.equal(ringed.transitionDuration, '0.12s', '$fast, when motion is welcome');
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	const still = await paint('#button-light');
+	assert.equal(still.transitionDuration, '0s', 'and nothing at all when it is not');
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+	// --- axe over the preview page ----------------------------------------------------------------
+
+	await page.addScriptTag({ path: fileURLToPath(import.meta.resolve('axe-core/axe.min.js')) });
+	const audit = await page.evaluate(async () => axe.run(document, {
+		runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
+	}));
+	for (const violation of audit.violations) {
+		console.error(`axe ${violation.id}: ${violation.help} (${String(violation.nodes.length)} node(s))`);
+		for (const node of violation.nodes) console.error(`  ${node.html}`);
+	}
+	assert.equal(audit.violations.length, 0, 'axe found nothing to fix on the preview page');
+	console.log(`recipes/ui: axe passed ${String(audit.passes.length)} rules with no violation`);
 
 	assert.deepEqual(problems, [], 'the page threw nothing');
 	console.log('recipes/ui: ok');

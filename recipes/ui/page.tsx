@@ -11,36 +11,55 @@ import {
 } from '@aweftjs/ui';
 
 Theme.define({
-	'*': { $brand: '#1b6ef3', $paper: '#ffffff', $edge: '#d8dbe2' },
+	// This page's own values. The gallery keeps its own look rather than the library's default
+	// one, because what it is here to exercise is the engine: functions, nesting, `$var`. Every
+	// value it uses has a name, which is the rule `check-theme.ts` enforces over `recipes/` too.
+	'*': {
+		$brand: '#1b6ef3',
+		$paper: '#ffffff',
+		$edge: '#d8dbe2',
+		$pageWidth: '720px',
+		$pageMargin: '40px',
+		$line: '1px',
+		$corner: '6px',
+		$menuWidth: '160px',
+		$demoRing: '3px',
+	},
 
 	page: {
-		fontFamily: 'system-ui, sans-serif',
-		maxWidth: 720,
-		margin: '40px auto',
-		padding: 24,
+		fontFamily: '$font',
+		maxWidth: '$pageWidth',
+		margin: '$pageMargin auto',
+		padding: '$space6',
 		display: 'flex',
 		flexDirection: 'column',
-		gap: 24,
+		gap: '$space6',
 	},
-	section: { display: 'flex', flexDirection: 'column', gap: 8 },
-	heading: { fontSize: 18, margin: 0 },
+	section: { display: 'flex', flexDirection: 'column', gap: '$space2' },
+	heading: { fontSize: '$textLg', lineHeight: '$textLgLine', margin: 0 },
 
 	// One entry, three states, and the states are written where they belong rather than in the
 	// component. `demo_hovered` reaches an element themed `demo primary hovered` too.
 	demo: {
-		padding: '8px 14px',
-		borderRadius: 6,
-		border: '1px solid $edge',
+		padding: '$space2 $space4',
+		borderRadius: '$corner',
+		border: '$line solid $edge',
 		background: '$brand',
 		color: '$contrast_text($brand)',
 		cursor: 'pointer',
-		_cssProp_focusVisible: { outline: '3px solid $hue($brand, 180)', outlineOffset: 2 },
+		'_cssProp_focus-visible': { outline: '$demoRing solid $hue($brand, 180)', outlineOffset: '$ringOffset' },
 	},
 	demo_hovered: { background: '$shiftBrightness($brand, -0.12)' },
 	demo_quiet: { background: 'transparent', color: '$brand' },
 
-	tile: { background: '$paper', border: '1px solid $edge', borderRadius: 6, padding: 12 },
-	menu: { background: '$paper', border: '1px solid $edge', borderRadius: 6, padding: 8, minWidth: 160 },
+	tile: { background: '$paper', border: '$line solid $edge', borderRadius: '$corner', padding: '$space3' },
+	menu: {
+		background: '$paper',
+		border: '$line solid $edge',
+		borderRadius: '$corner',
+		padding: '$space2',
+		minWidth: '$menuWidth',
+	},
 
 	// A function defined by this page, used by the entry below it. Theme functions are theme data,
 	// so a page can add one and a nested theme can replace it.
