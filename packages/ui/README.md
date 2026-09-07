@@ -369,18 +369,33 @@ there is no way to know whether it is open. Design 130 has both.
 `left`, `top`, and optional `rotate`, `hFlip` and `vFlip`. `name` is that data, or a name looked up
 through the `Icons` context.
 
+**This package ships no drawings** (design 144). `Icons` starts empty, and an application supplies
+a pack, a resolver, or both. `@aweftjs/icons` turns an installed icon set into exactly that:
+
 ```tsx
 import { Icon, Icons } from '@aweftjs/ui';
+import standard from '@aweftjs/icons/lucide/+standard';
 
-<Icons value={myPack}><App /></Icons>
+<Icons value={standard}><App /></Icons>
 <Icon name="check" label="done" />
 ```
 
-A provider stacks a pack or a resolver in front of what it inherited, newest first; the pack this
-package ships is always at the bottom, and it is eight glyphs, not a set. A resolver is
-`(name) => data | Promise<data> | null`, and a promise is declared `pending` so a static render
-waits for it. An icon with no `label` is `aria-hidden`, because an icon beside the word it means is
-otherwise read out twice. A name nothing answers is an assert.
+A provider stacks a pack or a resolver in front of what it inherited, newest first, so a pack an
+application puts up answers before anything under it. A pack is
+`{ prefix, icons, aliases?, width?, height? }`, where the root `width` and `height` are the box
+every icon in it that states none is drawn in; the sets state it once at the root, so without it a
+real set renders clipped. A resolver is `(name) => data | Promise<data> | null`, and a promise is
+declared `pending` so a static render waits for it. A resolver that answers null passes the name on
+to the next source, and so does one that answers a promise of null, so a resolver in front of a
+pack does not stop the pack behind it being asked. An icon with no `label` is `aria-hidden`,
+because an icon beside the word it means is otherwise read out twice. A name nothing answers is an
+assert naming the icon, how many sources were asked, and how to answer it: wrap the page in `Icons`
+with a pack or resolver that has it.
+
+**The components here ask for names, never for drawings.** `standardIcons` is that list, in the
+spelling the sets publish: `chevron-down`, `chevron-up`, `chevron-left`, `chevron-right`, `check`,
+`x`, `triangle-alert`, `search`. Give one of them a drawing of your own by putting a pack of your
+own in front, which is what `Icons` is for.
 
 **Laying things out is a theme entry, not a component** (design 132): `row` and `column`, each with
 `fill`, `center`, `start`, `end`, `spread`, `wrap` and `tight`, and `divider`. `center`, `start`

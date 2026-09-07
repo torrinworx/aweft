@@ -10,9 +10,8 @@ import { mutable } from '@aweftjs/core';
 
 import { applyClaimed } from './wrapper.ts';
 import { assert } from './assert.ts';
-import { type IconData, type IconSource, lookupIcon, transformOf } from './icon-data.ts';
+import { type IconData, type IconSource, isPromise, lookupIcon, transformOf } from './icon-data.ts';
 import { createContext } from './contexts.ts';
-import { defaultPack } from './icon-pack.ts';
 import { elementFor } from './control.ts';
 import { svg } from './h.ts';
 import { isSource } from './source.ts';
@@ -27,22 +26,20 @@ const listOf = (raw: unknown): IconSource[] => {
 /**
  * The icon packs and resolvers everything below can look a name up in.
  *
- * A provider stacks what it names in front of what it inherited, so the nearest one wins and the
- * pack this package ships is always at the bottom. A pack is `{ prefix, icons, aliases? }`; a
- * resolver is `(name) => data | Promise<data> | null`, and answering null passes the question on
- * to the next source.
+ * The stack starts empty: this package ships no drawings (design 144). A provider stacks what it
+ * names in front of what it inherited, so the nearest one wins. A pack is
+ * `{ prefix, icons, aliases?, width?, height? }`, where the root size covers every icon in it
+ * that declares none; a resolver is `(name) => data | Promise<data> | null`, and answering null
+ * passes the question on to the next source.
  *
  * Example:
  *   <Icons value={myPack}><App /></Icons>
  *   <Icons value={(name) => fetch(`/icons/${name}.json`).then((r) => r.json())}><App /></Icons>
  */
-export const Icons = createContext<IconSource[]>([defaultPack], (raw, parent) => {
+export const Icons = createContext<IconSource[]>([], (raw, parent) => {
 	const own = listOf(raw);
 	return own.length === 0 ? parent : [...own, ...parent];
 });
-
-const isPromise = (value: unknown): value is Promise<IconData | null> =>
-	typeof (value as Promise<unknown> | null)?.then === 'function';
 
 const isData = (value: unknown): value is IconData =>
 	typeof value === 'object' && value !== null && typeof (value as IconData).body === 'string';
@@ -124,8 +121,13 @@ export const Icon = (
 	const { name, size, label, rot, theme, element, class: own, ...rest } = props;
 	const stack = Icons.read(context);
 	const held = mutable<IconData | null>(null);
+	// A name nothing answers is a typo, not a state, so the message says how to answer it. One
+	// sentence for every name: this package knows nothing about where a name comes from, and a
+	// command built out of the name would be an install for a package that need not exist.
 	const missing = (value: string): string =>
-		`no icon named ${value}: ${String(stack.length)} source(s) were asked`;
+		`no icon named ${value}: ${String(stack.length)} source(s) were asked. `
+		+ 'Wrap the page in <Icons value={pack}> with a pack or resolver that has it; '
+		+ '@aweftjs/icons gives you one from an installed set.';
 
 	// Which lookup is the current one. A name that changes while a lookup is out makes the answer
 	// still coming back the wrong answer, however fast it arrives.
