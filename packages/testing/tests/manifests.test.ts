@@ -31,3 +31,47 @@ test('a per-package allowance covers that package alone', () => {
 	assert.equal(violations.length, 1);
 	assert.match(violations[0]!, /core declares typescript/);
 });
+
+test('a third-party peer is a violation unless the allowlist names it', () => {
+	const violations = checkManifests([{
+		name: '@aweftjs/icons',
+		peerDependencies: { '@iconify-json/lucide': '^1.0.0' },
+		peerDependenciesMeta: { '@iconify-json/lucide': { optional: true } },
+	}], []);
+	assert.equal(violations.length, 1);
+	assert.match(violations[0]!, /icons declares @iconify-json\/lucide/);
+});
+
+test('a peer the allowlist names still has to be optional', () => {
+	// The probe the rule exists for: an allowed peer that installs itself with the package is a
+	// dependency wearing another name, and nothing else in the gate would see it.
+	const required = checkManifests([{
+		name: '@aweftjs/icons',
+		peerDependencies: { '@iconify-json/lucide': '^1.0.0' },
+	}], ['@iconify-json/*']);
+	assert.equal(required.length, 1);
+	assert.match(required[0]!, /without peerDependenciesMeta\.optional/);
+
+	const marked = checkManifests([{
+		name: '@aweftjs/icons',
+		peerDependencies: { '@iconify-json/lucide': '^1.0.0' },
+		peerDependenciesMeta: { '@iconify-json/lucide': { optional: false } },
+	}], ['@iconify-json/*']);
+	assert.equal(marked.length, 1, 'optional: false is not optional');
+
+	const optional = checkManifests([{
+		name: '@aweftjs/icons',
+		peerDependencies: { '@iconify-json/lucide': '^1.0.0' },
+		peerDependenciesMeta: { '@iconify-json/lucide': { optional: true } },
+	}], ['@iconify-json/*']);
+	assert.deepEqual(optional, []);
+});
+
+test('a family pattern covers the family and nothing outside it', () => {
+	const violations = checkManifests([{
+		name: '@aweftjs/icons',
+		devDependencies: { '@iconify-json/lucide': '^1.0.0', '@iconify-icons/lucide': '^1.0.0' },
+	}], ['@iconify-json/*']);
+	assert.equal(violations.length, 1);
+	assert.match(violations[0]!, /@iconify-icons\/lucide/);
+});

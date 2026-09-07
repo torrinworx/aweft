@@ -36,6 +36,11 @@ const violations = checkManifests(manifests, [], {
 	// and `acorn` cannot read TypeScript at all. `magic-string` edits the source in place so an
 	// untouched line comes out byte for byte (design 088). This package only.
 	'@aweftjs/build': ['@babel/parser', 'magic-string'],
+	// The icon sets an application installs, as one family rather than one entry per set
+	// (design 140). They are optional peers, so nothing here installs one, and the
+	// check refuses a peer that is not marked optional. `@iconify-json/lucide` is a devDependency
+	// as well, because the suite and the recipe read a real set.
+	'@aweftjs/icons': ['@iconify-json/*'],
 });
 
 if (violations.length > 0) {

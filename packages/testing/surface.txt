@@ -11,7 +11,7 @@ type MadeListener: interface MadeListener { readonly listener: Listener; url(): 
 type MakeDriver: type MakeDriver = () => Promise<StoreDriver> | StoreDriver;
 type MakeListener: type MakeListener = () => Promise<MadeListener> | MadeListener;
 type MakeRunner: type MakeRunner = () => Runner;
-type Manifest: interface Manifest { readonly name: string; readonly dependencies?: Readonly<Record<string, string>> | undefined; readonly devDependencies?: Readonly<Record<string, string>> | undefined; }
+type Manifest: interface Manifest { readonly name: string; readonly dependencies?: Readonly<Record<string, string>> | undefined; readonly devDependencies?: Readonly<Record<string, string>> | undefined; readonly peerDependencies?: Readonly<Record<string, string>> | undefined; readonly peerDependenciesMeta?: Readonly<Record<string, { readonly optional?: boolean; }>> | undefined; }
 type ModuleUnderTest: interface ModuleUnderTest { readonly exports: ModuleExports; readonly imports?: Readonly<Record<string, unknown>>; readonly config?: Readonly<Record<string, unknown>>; readonly props?: Readonly<Record<string, unknown>>; }
 type ObservableJson: interface ObservableJson { readonly kind: ObservableKind; readonly slots: Readonly<Record<string, ValueJson>>; }
 type PackageInfo: interface PackageInfo { readonly tier: number | 'integrator'; readonly plane: Plane; readonly imports: readonly string[] | '*'; }
