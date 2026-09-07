@@ -1,0 +1,8 @@
+type PageResult: interface PageResult { readonly html: string; readonly title: string | null; readonly noindex: boolean; }
+type Site: interface Site { walk(): Promise<WalkResult>; page(url: string): Promise<PageResult>; write(urls?: readonly string[]): Promise<WriteResult>; }
+type SiteOptions: interface SiteOptions { page(router: Router): unknown; readonly shell: string; readonly out: string; readonly base?: string; }
+type Unenumerated: interface Unenumerated { readonly prefix: string; readonly name: string; }
+type WalkResult: interface WalkResult { readonly urls: readonly string[]; readonly unenumerated: readonly Unenumerated[]; }
+type WriteResult: interface WriteResult { readonly files: readonly string[]; readonly urls: readonly string[]; readonly unenumerated: readonly Unenumerated[]; readonly sitemap: string | null; }
+value createSite: (options: SiteOptions) => Site
+./client value attach: (target: ParentLike, item: unknown, render?: Render | undefined) => Remove

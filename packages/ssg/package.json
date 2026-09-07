@@ -1,0 +1,29 @@
+{
+	"name": "@aweftjs/ssg",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"description": "Pages from a routed site, at build time and at run time: walk the acts, write the files, take the markup over in the browser.",
+	"exports": {
+		".": "./src/index.ts",
+		"./client": "./src/client.ts"
+	},
+	"scripts": {
+		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/codec": "*",
+		"@aweftjs/dom": "*",
+		"@aweftjs/ui": "*"
+	},
+	"devDependencies": {
+		"@aweftjs/build": "*",
+		"@aweftjs/core": "*",
+		"@aweftjs/testing": "*"
+	},
+	"aweft": {
+		"tier": "integrator",
+		"branchCoverage": 80
+	}
+}
