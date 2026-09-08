@@ -77,3 +77,27 @@ test('what a mount renders is what the page it hydrates was rendered from', asyn
 	const document = await opened('/docs/install', true);
 	assert.equal(toHtml(document.body.childNodes), markup);
 });
+
+test('a maker is wrapped the same way whichever page it lands on', async () => {
+	// One entry file has to work on both, so `attach` makes a component call of a bare function
+	// before it picks a mode: `hydrate` would wrap it and `mount` would read it as a mounter.
+	const Greeting = () => h('p', {}, 'hello');
+	const maker = (): unknown => h(Greeting, {});
+	const markup = await render(h(maker));
+
+	const generated = createDocument();
+	generated.body.setAttribute(STAMP, '');
+	for (const node of parseHtml(markup, generated)) generated.body.appendChild(node);
+	const sent = elementsIn(generated.body.firstChild as never);
+	assert.equal(sent.length, 1, 'the server wrote the paragraph');
+
+	const stopGenerated = attach(generated.body as never, maker);
+	assert.deepEqual(elementsIn(generated.body.firstChild as never), sent, 'adopted in place, not rebuilt');
+	stopGenerated();
+
+	const live = createDocument();
+	const stopLive = attach(live.body as never, maker);
+	assert.equal(toHtml(live.body.childNodes), '<p>hello</p>', 'the same maker renders on a live page');
+	stopLive();
+	assert.equal(toHtml(live.body.childNodes), '', 'and the removal takes back what it mounted');
+});

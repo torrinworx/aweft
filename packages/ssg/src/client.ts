@@ -1,9 +1,10 @@
 // The browser half: one function, and nothing that reads a disk (design 151).
 //
-// Its own subpath, and the only values it imports are `ui`'s `mount` and `hydrate`, so a page
-// bundle that reaches for it carries the walk, the document builder and `node:fs` nowhere.
+// Its own subpath, and the only values it imports are `ui`'s `mount` and `hydrate` and the two
+// `dom` needs to read an item, so a page bundle that reaches for it carries the walk, the
+// document builder and `node:fs` nowhere.
 
-import type { ParentLike, Remove } from '@aweftjs/dom';
+import { type ParentLike, type Remove, h, isComponentCall } from '@aweftjs/dom';
 import { type Render, hydrate, mount } from '@aweftjs/ui';
 
 // The only file this half imports besides `ui`, and it holds one string. Nothing in it reads a
@@ -15,7 +16,8 @@ import { STAMP } from './stamp.ts';
  *
  * Params:
  *   target: the element the page lives in, `document.body` for a page `ssg` wrote
- *   item: the same item the site was rendered from
+ *   item: the same item the site was rendered from. A component call, `h(Site, props)`, or a
+ *         function that makes it, which is mounted as a component with no props either way
  *   render: the `ui` systems to use. Omitted, the document's shared render is used, as
  *           `mount` and `hydrate` do
  *
@@ -36,5 +38,9 @@ export const attach = (target: ParentLike, item: unknown, render?: Render): Remo
 	// attribute, so a target that is not one is the mounting case by construction.
 	const element = target as { hasAttribute?(name: string): boolean };
 	const generated = typeof element.hasAttribute === 'function' && element.hasAttribute(STAMP);
-	return generated ? hydrate(target, item, render) : mount(target, item, undefined, render);
+	// A bare function means the same thing on both branches, so it is wrapped here rather than
+	// left to `hydrate`, which does its own wrapping, and to `mount`, which would read it as a
+	// mounter and render nothing. `mount`'s own contract is untouched.
+	const mounted = typeof item === 'function' && !isComponentCall(item) ? h(item) : item;
+	return generated ? hydrate(target, mounted, render) : mount(target, mounted, undefined, render);
 };
