@@ -375,7 +375,9 @@ const specimens = (): unknown => h('div', {},
 
 test('typography renders to markup and hydrates onto the nodes the server wrote', async () => {
 	const server = context();
-	const markup = await render(specimens(), { context: server });
+	// Both sides go through a maker, so the server writes the regions the hydration claims
+	// (design 157).
+	const markup = await render(h(specimens as never), { context: server });
 	assert.match(markup, /<h1 class="aw\d+">A heading<\/h1>/, 'the server wrote the heading itself');
 	assert.match(markup, /<b>TODO<\/b>/, 'and the modifier ran on the server');
 
@@ -386,7 +388,7 @@ test('typography renders to markup and hydrates onto the nodes the server wrote'
 	}
 
 	const before = elements(document.body.firstChild);
-	const stop = hydrate(document.body, specimens());
+	const stop = hydrate(document.body, specimens);
 	const after = elements(document.body.firstChild);
 
 	assert.equal(after.length, before.length, 'the page has the elements it had');
