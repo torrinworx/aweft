@@ -894,6 +894,85 @@ test('a modal opened with history: true closes on Escape, on its button and on b
 	});
 });
 
+/** One tip's rectangles, its attributes, and what the browser finds in the middle of it. */
+interface Tip {
+	anchor: Record<string, number>;
+	box: Record<string, number>;
+	panel: Record<string, number>;
+	popover: string | null;
+	role: string | null;
+	hitsPanel: boolean;
+}
+
+/**
+ * Read the tip off the page once the solver has placed the box.
+ *
+ * `Detached` holds the box `visibility: hidden` for the one frame between opening it and knowing
+ * where it goes, so a visible box is a placed box. Waiting on `:popover-open` alone is too early:
+ * the box is opened with a placeholder placement on the frame before the first measurement.
+ */
+const tipOf = async (view: Page): Promise<Tip> => {
+	await view.waitForFunction(() => {
+		const holder = document.querySelector('[role="tooltip"]')?.parentElement ?? null;
+		return holder !== null && holder.matches(':popover-open')
+			&& getComputedStyle(holder)['visibility'] !== 'hidden';
+	});
+	return view.evaluate(() => {
+		const box = (element: RecipeElement): Record<string, number> => {
+			const rect = element.getBoundingClientRect();
+			return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+		};
+		const panel = document.querySelector('[role="tooltip"]')!;
+		const holder = panel.parentElement!;
+		const rect = panel.getBoundingClientRect();
+		const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+		return {
+			anchor: box(document.querySelector('#anchor')!),
+			box: box(holder),
+			panel: box(panel),
+			popover: panel.getAttribute('popover'),
+			role: panel.getAttribute('role'),
+			hitsPanel: hit !== null && (hit === panel || panel.contains(hit)),
+		};
+	});
+};
+
+/**
+ * What a placed tip has to be true of: the panel inside the box the solver placed, the box against
+ * one side of the anchor, and the middle of the panel belonging to the panel.
+ *
+ * The panel wears no `popover` of its own, which is what keeps the first of those true: the box is
+ * already a popover, and a popover inside a popover is put in the top layer and laid out by the
+ * browser, which lands it in the middle of the screen (design 135).
+ */
+const assertPlaced = (tip: Tip): void => {
+	const a = tip.anchor;
+	const b = tip.box;
+	const p = tip.panel;
+	assert.equal(tip.role, 'tooltip', 'the panel is still the thing a screen reader reads');
+	// The rectangles first, so a tip that got away says where it went rather than only why.
+	assert.ok(
+		p['left']! >= b['left']! - 2 && p['top']! >= b['top']! - 2
+			&& p['left']! + p['width']! <= b['left']! + b['width']! + 2
+			&& p['top']! + p['height']! <= b['top']! + b['height']! + 2,
+		`the panel left the box the solver placed: box ${JSON.stringify(b)}, panel ${JSON.stringify(p)}`);
+	assert.equal(tip.popover, null, 'the panel wears no popover of its own');
+
+	// Beside the anchor, on one of the four sides: touching on one axis and centred on the other.
+	const near = (one: number, other: number): boolean => Math.abs(one - other) <= 2;
+	const acrossX = near(a['left']! + a['width']! / 2, b['left']! + b['width']! / 2);
+	const acrossY = near(a['top']! + a['height']! / 2, b['top']! + b['height']! / 2);
+	const sides = [
+		near(b['top']!, a['top']! + a['height']!) && acrossX,
+		near(b['top']! + b['height']!, a['top']!) && acrossX,
+		near(b['left']!, a['left']! + a['width']!) && acrossY,
+		near(b['left']! + b['width']!, a['left']!) && acrossY,
+	];
+	assert.ok(sides.some(Boolean),
+		`the box is on none of the four sides of the anchor: anchor ${JSON.stringify(a)}, box ${JSON.stringify(b)}`);
+	assert.ok(tip.hitsPanel, 'the point in the middle of the tip is not the tip: something is over it');
+};
+
 test('a real hover shows a Tooltip after the pause, and a real focus shows it at once', async () => {
 	await drive('tooltip-component', `
 		import { PopupContext, Tooltip, h, mount } from '@aweftjs/ui';
@@ -921,8 +1000,7 @@ test('a real hover shows a Tooltip after the pause, and a real focus shows it at
 
 		await view.hover('#anchor');
 		await view.waitForFunction(() => (globalThis as never as { read(): boolean }).read());
-		assert.equal(await view.getAttribute(panel, 'popover'), 'hint',
-			'hint, not manual: a tip does not close a menu that is already open');
+		assertPlaced(await tipOf(view));
 
 		await view.mouse.move(0, 400);
 		await view.waitForFunction(() => !(globalThis as never as { read(): boolean }).read());
@@ -972,40 +1050,10 @@ test('a Tooltip taken over from server markup places its tip against the server\
 		assert.equal(await view.evaluate(() => (globalThis as never as { sameAnchor: boolean }).sameAnchor), true,
 			'the anchor on the page is the node the server sent');
 
-		const panel = '[role="tooltip"]';
+		// The rectangle everything here is measured against is the server's node's, which is the
+		// whole point of the case.
 		await view.hover('#anchor');
-		await view.waitForFunction((query: string) =>
-			document.querySelector(query)!.matches(':popover-open'), panel);
-		assert.equal(await view.getAttribute(panel, 'popover'), 'hint',
-			'the tip asked for the top layer as a hint, with no z-index anywhere');
-
-		// The box `Detached` places, which is the panel's parent. What the placement is measured
-		// against is the anchor's rectangle, and the anchor is the node the server sent.
-		const boxes = await view.evaluate((query: string) => {
-			const box = (element: { getBoundingClientRect(): { left: number; top: number; width: number; height: number } }): Record<string, number> => {
-				const rect = element.getBoundingClientRect();
-				return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
-			};
-			return {
-				anchor: box(document.querySelector('#anchor')!),
-				tip: box(document.querySelector(query)!.parentElement!),
-			};
-		}, panel);
-		// Beside the anchor, on one of the four sides: touching on one axis and centred on the other.
-		// The anchor's rectangle is the server's node's, which is the whole point of the case.
-		const near = (one: number, other: number): boolean => Math.abs(one - other) <= 1;
-		const a = boxes.anchor;
-		const t = boxes.tip;
-		const acrossX = near(a['left']! + a['width']! / 2, t['left']! + t['width']! / 2);
-		const acrossY = near(a['top']! + a['height']! / 2, t['top']! + t['height']! / 2);
-		const sides = [
-			near(t['top']!, a['top']! + a['height']!) && acrossX,
-			near(t['top']! + t['height']!, a['top']!) && acrossX,
-			near(t['left']!, a['left']! + a['width']!) && acrossY,
-			near(t['left']! + t['width']!, a['left']!) && acrossY,
-		];
-		assert.ok(sides.some(Boolean),
-			`the tip is on none of the four sides of the anchor: anchor ${JSON.stringify(a)}, tip ${JSON.stringify(t)}`);
+		assertPlaced(await tipOf(view));
 	});
 });
 

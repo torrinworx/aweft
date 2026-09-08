@@ -432,16 +432,22 @@ try {
 	await page.click('#modal-light button[aria-label="Close"]');
 	await page.waitForFunction(() => document.querySelector('#editing-light') === null);
 
-	// A tip on a real hover, and the anchor points at the panel.
+	// A tip on a real hover, and the anchor points at the panel. The box the solver placed is what
+	// reaches the top layer; the panel stays inside it and wears no popover of its own (design 135).
 	const tipId = await page.getAttribute('#tip-anchor-light', 'aria-describedby') ?? '';
 	assert.notEqual(tipId, '', 'the anchor names its tip');
 	assert.equal(await page.getAttribute(`#${tipId}`, 'role'), 'tooltip');
 	await page.hover('#tip-anchor-light');
-	await page.waitForFunction((id: string) => document.querySelector(`#${id}`)!.matches(':popover-open'), tipId);
-	assert.equal(await page.getAttribute(`#${tipId}`, 'popover'), 'hint',
-		'the tip asked for the top layer as a hint, with no z-index anywhere');
+	await page.waitForFunction((id: string) =>
+		document.querySelector(`#${id}`)!.parentElement!.matches(':popover-open'), tipId);
+	assert.equal(await page.getAttribute(`#${tipId}`, 'popover'), null,
+		'the panel is not a popover: one inside the box would be laid out by the browser and leave it');
+	assert.equal(await page.evaluate((id: string) =>
+		document.querySelector(`#${id}`)!.parentElement!.getAttribute('popover'), tipId), 'manual',
+		'the box asked for the top layer, with no z-index anywhere');
 	await page.mouse.move(0, 0);
-	await page.waitForFunction((id: string) => !document.querySelector(`#${id}`)!.matches(':popover-open'), tipId);
+	await page.waitForFunction((id: string) =>
+		!document.querySelector(`#${id}`)!.parentElement!.matches(':popover-open'), tipId);
 
 	// A disclosure opens in the page's flow, and the platform's own keyboard does it.
 	assert.equal(await page.evaluate(() => document.querySelector('#dropdown-light')!

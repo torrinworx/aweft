@@ -3,11 +3,15 @@
 // Two pieces this package already has: `Detached` places the panel and closes it when the page
 // scrolls, and `tooltipTrigger` in `tooltip-trigger.ts` decides when it shows. Nothing here measures
 // anything or holds a timer.
+//
+// The panel is inside the box `Detached` places and wears no `popover` attribute of its own. The box
+// is already a popover, and a popover inside a popover is put in the top layer and laid out by the
+// browser rather than by the solver, which lands the panel in the middle of the screen.
 
 import { type ElementLike, type Mounter, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';
 
-import { Detached, mountedElement, runOf } from './popup.tsx';
+import { Detached, runOf } from './popup.tsx';
 import { SIDES } from './placement.ts';
 import { assert } from './assert.ts';
 import { categories, mark } from './mark.ts';
@@ -39,8 +43,11 @@ export interface TooltipProps {
  *   props: `label`, `enabled`, `locations`, `type`, and anything else, which goes to the panel
  *   children: the anchor, with an optional `<mark.popup>` holding markup instead of the label
  *
- * Returns: the anchor where it was written, and the panel at the popup sink. The panel is
- * `role="tooltip"` and every element in the anchor carries `aria-describedby` naming it.
+ * Returns: the anchor where it was written, and the panel at the popup sink, inside the box
+ * `Detached` places. The panel is `role="tooltip"` and every element in the anchor carries
+ * `aria-describedby` naming it. The box is what reaches the top layer, so the panel carries no
+ * `popover` attribute: a popover inside a popover is laid out by the browser and leaves the box the
+ * solver placed.
  *
  * The pause before a hover shows it belongs to the behaviour, so every tip on a page waits the same
  * amount of time and there is no prop for it. Focus shows it at once.
@@ -85,20 +92,14 @@ export const Tooltip = (
 
 		const inside = popup!.items.length > 0 ? popup!.items : [label];
 
-		// The panel, once it is in the document: a hydration keeps the server's element and drops the
-		// one the client built, so the element the trigger asks for the top layer comes back out of
-		// its own mount rather than being remembered (design 153).
-		let panel: () => ElementLike | null = () => null;
-		const Panel: Mounter = (parent, _item, at, inner) => {
-			const put = mount(parent, h('div', {
-				...rest,
-				id,
-				role: 'tooltip',
-				theme: ['tooltip', type, theme],
-			}, ...inside), at, inner);
-			panel = mountedElement(put, at);
-			return put;
-		};
+		// A plain node, and no `panel` for the trigger: the box is the popover, and see above for what
+		// a second one inside it does (design 135).
+		const panel = h('div', {
+			...rest,
+			id,
+			role: 'tooltip',
+			theme: ['tooltip', type, theme],
+		}, ...inside);
 
 		// The end of the anchor's run, one level out from the one `Detached` makes for itself
 		// (design 153). It goes in first and everything else goes in against it, so what follows
@@ -107,7 +108,7 @@ export const Tooltip = (
 		const tail = mount(elem, '', before, context);
 		const remove = mount(elem, h(Detached, { enabled: open, locations: locations ?? SIDES },
 			...anchor!.items,
-			mark('popup', null, Panel)), tail, context);
+			mark('popup', null, panel)), tail, context);
 
 		const anchorNodes = (): ElementLike[] =>
 			runOf(remove, tail).filter((node) => node.nodeType === 1) as unknown as ElementLike[];
@@ -125,7 +126,6 @@ export const Tooltip = (
 			}
 			stops.push(tooltipTrigger({
 				nodes: anchorNodes,
-				panel: () => panel(),
 				open: open as { get(): unknown; set(value: unknown): void },
 			}));
 		};

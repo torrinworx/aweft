@@ -457,7 +457,10 @@ above it is an assert naming the call that shows one. The popup sink stays outsi
 the modal's children in a `PopupContext` of their own to keep its popups inside it.
 
 **A tip is on hover and on focus, and the anchor names it.** The children are the anchor, and a
-`<mark.popup>` replaces the label with markup. The pause before a hover shows it belongs to the
+`<mark.popup>` replaces the label with markup. The panel sits inside the box `Detached` placed and
+wears no `popover` of its own: the box is already a popover, and a popover inside a popover is put in
+the top layer and laid out by the browser, which takes the panel out of the box and lands it in the
+middle of the screen (design 135). The pause before a hover shows it belongs to the
 behaviour, so every tip on a page waits the same time and there is no prop for it; focus shows it at
 once. Each element in the anchor gets `aria-describedby` naming the panel, written when the page
 comes alive. A static render leaves it out, because nothing on the client can write it before the
