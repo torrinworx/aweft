@@ -19,7 +19,7 @@ boundary in the system.
         |                                                               |
    CLIENT PLANE                                                   SERVER PLANE
    ui, icons                                                      server, jobs
-   dom (+ dom/router)                                                   |
+   dom (+ dom/router), client                                           |
         +-------------------------------+-------------------------------+
                                         |
                                   ORGANIZATION
@@ -115,10 +115,11 @@ version in lockstep.
 | `modules` | Reading module definitions from a directory, a bundle map or a document; dependency order; injection; load and unload | Whether it runs on a client or a server; storage, transport, history; who may load or run anything; which modules load or when |
 | `sandbox` | The window: a loader on the far end of a link, the grants, calls as rows, and the runners that make a room | What the code it runs is for; what wall is around the room; who may load, grant or call; how many rooms and for how long |
 | `dom` | Mounting, hydration, static render, URL and history, and the prototype a hoisted template is instanced from | Storage, transport, components |
+| `client` | One connection to a server for the life of a page: the socket, the link and the requests attached before it opens, asks, share handles that keep one document object across reconnects, the retry | Who is on the connection, what a document means, which documents a page shares; users, sessions, cookies; components |
 | `ui` | Components, theming | Storage, transport, server |
 | `icons` | Turning an installed icon set into modules a page imports: one icon, a whole set, the standard names, and a resolver for a name known only at run time | Which sets an application installs, whether a page fetches, what an icon looks like; any icon data of its own |
 | `server` | Accepting connections and requests through a listener; one socket as a link and a call channel; running the modules' `connection`, `call` and `routes` hooks behind the gate the application supplies | Who is on a connection, who may reach a module, who may write a commit, which modules load; users, sessions, storage; component internals |
-| `auth` | The gate that reads `public`, sessions as documents, sign-in and sign-up, the per-user state document, as server modules | Which application loads it; the client, this round |
+| `auth` | The gate that reads `public`, sessions as documents, sign-in and sign-up, the per-user state document, as server modules; and the client half over a `client` connection: `user` as a cell, `enter`, `leave`, `state` and `check` | Which application loads it; how a page renders any of it |
 | `jobs` | When a row runs, over an observable array the application hands in: the timers, the cron arithmetic, `last` written onto the row | What a job does; who may add, edit or remove a row; storage; queues, retries, catch-up; modules; component internals |
 | `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom |
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
@@ -206,6 +207,9 @@ superseded it.
 | The mounting model | One mounter with a host seam: `mount` creates through the page, `render` through the light tree with markers around every dynamic part, `hydrate` claims the server's nodes in place at insert time; user code runs from a queue per root | 077, 078 |
 | A component's hooks | `(props, cleanup, mounted, pending)`; `pending` is what `render` waits for; the context is one opaque value threaded through `mount` and never read by the binding | 079, 080 |
 | The binding's corpus | Every requirement lands but the cases only a compile step can meet and the build-only internals, which have nothing here to apply to | 083 |
+| One connection to a server | `client`, on the client plane beside `dom`: an instance, never a singleton; the socket made and the link and the requests attached before it opens; `url` the page's own origin and never sniffed; `open(url)` the one seam a Node program hands in | 183 |
+| Coming back after a drop | The handle keeps one document object for its whole life, every new socket re-shares that object and resyncs it, and the server's state wins over edits made while there was no socket; 500 ms doubling to 10 s, and at once on `online` or the tab becoming visible | 184 |
+| Who a page is | `auth/client` hands identity as a cell: `undefined`, `null`, or the id, asked over the socket the page opens anyway, and `auth/Session` gains the `call` that answers it. `enter` and `leave` reconnect, because identity is fixed per connection, and `state()` refuses an anonymous connection instead of waiting | 185 |
 
 ---
 
@@ -314,7 +318,8 @@ indexed by the job rather than the package, are not in this table.
 | ui | an interactive page composed from components, driven and asserted against the mock (plus a manual browser page, outside CI) |
 | icons | a page naming icons three ways (written out, a standard name, a name fetched when the page runs), with the bundle weighed: the icons it named and not the one it looked up |
 | server | a full-stack app: an authenticated connection syncs state through the application's rules to store and back; an anonymous one reaches only what the gate allows; `gate: open` reaches everything; a gate with no session in it works in its place |
-| auth | inside the server recipe: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous |
+| client | a page against a real listener: a share and an ask made before the socket opens both arrive, the server is restarted underneath it, and the page comes back on its own with the same state document object holding what the server wrote while it was down, with an ask made while it was down answered on the new socket |
+| auth | inside the server recipe: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous; and, in the client recipe, the client half signs in, reads `user`, opens `state` and signs out |
 | jobs | a scheduled job runs, persists an effect, and survives a restart |
 | ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM |
 | build | the transforms build a real page; assert stripping is verified in the output |
@@ -337,9 +342,9 @@ defined in `AGENTS.md`.
 5b. `sandbox` (design 070).
 6. `dom` + `build`, with hydration and route data designed in rather than bolted on.
 7. `ui`, `icons`, `ssg`.
-8. `server`, `jobs`, the batteries. **`server` and the `auth` battery were built 2026-09-04,
-   ahead of 6 and 7, after a phase-boundary re-read over the eight packages then built**
-  ; `jobs` followed on 2026-09-04. The other batteries wait their turn here.
+8. `server`, `jobs`, `client`, the batteries. `server`, `auth` and `jobs` were built ahead of 6
+   and 7, after a re-read of the eight packages then built; `client` and the `auth` client half
+   followed. The other batteries wait their turn here.
 
 ---
 
@@ -421,8 +426,9 @@ crosses the plane boundary, so these are integrators, not members of either plan
 ```
 
 `aweft`, the meta-package, bundles the common set, so `npm i aweft` gets auth, users, email
-and files working. `auth`'s server half is built (design 074); its client views wait for
-the client runtime.
+and files working. `auth`'s server half is built (design 074) and its client half is built on
+`@aweftjs/client` (designs 183, 185); its sign-in and sign-up views wait for a components
+step.
 
 They split per area rather than shipping as one package because an application that wants
 auth and not posts should not carry posts, and an agent reading `@aweftjs/auth` should find
