@@ -27,6 +27,9 @@ export interface Source {
 /** Both surfaces carry their source here, so combinators can accept either (design 023). */
 export const SOURCE = Symbol('aweft.source');
 
+/** Where a chain step keeps its source. Internal to core; `Scope` is the only other reader. */
+export const SLOT: unique symbol = Symbol('aweft.chain.slot');
+
 /** The source behind a scope, cell or derived value, or undefined for a plain value. */
 export const sourceOf = (value: unknown): Source | undefined =>
 	(typeof value === 'object' && value !== null) || typeof value === 'function'
@@ -506,98 +509,157 @@ const selectorFrom = (
 const derive = <U>(node: DNode): Derived<U> => chain<U>(nodeSource(node));
 
 /**
- * Build the value surface over a source. Everything here is a description until something
- * watches it: chains are immutable, and each combinator returns a new one.
+ * The value surface over a source. Everything here is a description until something watches
+ * it: chains are immutable, and each combinator returns a new one.
+ *
+ * The combinators sit on the prototype and a step holds only its source, so a step is one
+ * small object rather than a bag of nineteen closures. This is the one place the stack builds
+ * an object surface with a class rather than a factory (`AGENTS.md`, CODING STANDARDS): a
+ * list binds a chain per row per field, and the closure bags were the largest single
+ * allocation site in a ten thousand row profile (design 154). Not exported from the package
+ * index; `chain` below is how the rest of core builds one.
  */
-export const chain = <T>(source: Source): Derived<T> => {
-	const derived: Derived<T> = {
-		get: () => source.read() as T,
+export class Chain<T> implements Derived<T> {
+	/** Null only while a subclass has not built its source yet. `source()` is the reader. */
+	#src: Source | null;
 
-		set: (value) => {
-			if (source.write === undefined) {
-				throw codecError('read-only', 'this chain declares no write path; see setter',
-					'Give the chain a write path with setter before calling set.');
-			}
-			source.write(value);
-		},
+	constructor(src: Source | null) {
+		this.#src = src;
+	}
 
-		isImmutable: () => source.immutable?.() ?? source.write === undefined,
+	/**
+	 * The slot the source lives in, for a subclass that builds its own on first need. A subclass
+	 * cannot reach a parent's private field, and an internal surface another file needs goes
+	 * behind a Symbol rather than a naming convention, so a step keeps no own enumerable key and
+	 * `JSON.stringify` of one is still `{}`.
+	 */
+	get [SLOT](): Source | null {
+		return this.#src;
+	}
 
-		watch: (fn) => {
-			let node = dnodeOf(source);
-			if (node === undefined) {
-				// A bare source (a scope or cell watched directly) has no node of its own; a
-				// transparent one gives it the same settle, dedup and flush path as everything else.
-				node = createDNode([source], (inputs) => inputs[0], false, (input) => input);
-			}
-			goLive(node);
-			// This watcher starts caught up to the settled present; anything an earlier watcher
-			// is still owed stays owed to it, because each entry keeps its own version.
-			node.watchers.set(fn as (value: unknown) => void, node.version);
-			let on = true;
-			return () => {
-				if (!on) return;
-				on = false;
-				node.watchers.delete(fn as (value: unknown) => void);
-				goIdle(node);
-			};
-		},
+	set [SLOT](source: Source | null) {
+		this.#src = source;
+	}
 
-		effect: (fn) => {
-			// Subscribe first and read after, so no change lands in the gap between the two.
-			const stop = derived.watch(fn);
-			try {
-				fn(derived.get());
-			} catch (error) {
-				// A throwing first call must not leak a subscription nobody holds a handle to.
-				stop();
-				throw error;
-			}
-			return stop;
-		},
+	/** The source this step reads. A scope overrides it to build its own on first need. */
+	source(): Source {
+		return this.#src!;
+	}
 
-		map: (fn) => derive(createDNode([source], (inputs) => fn(inputs[0] as T), false, fn as (input: unknown) => unknown)),
+	get [SOURCE](): Source {
+		return this.source();
+	}
 
-		setter: (fn) => {
-			// A chain that declares itself immutable by construction (an immutable wrapper, a
-			// wildcard scope) stays that way; setter replaces a write path, it does not mint the
-			// right to have one (design 028).
-			if (source.immutable?.() === true) {
-				throw codecError('read-only', 'this chain is immutable by construction; setter cannot reopen it',
-					'Build the chain over a writable source rather than an immutable one.');
-			}
-			return chain({
-				...source,
-				write: fn as (value: unknown) => void,
-				immutable: () => false,
-			});
-		},
+	get(): T {
+		return this.source().read() as T;
+	}
 
-		unwrap: () => derive(createDNode([source], (inputs) => inputs[0], true, (input) => input)),
+	set(value: T): void {
+		const source = this.source();
+		if (source.write === undefined) {
+			throw codecError('read-only', 'this chain declares no write path; see setter',
+				'Give the chain a write path with setter before calling set.');
+		}
+		source.write(value);
+	}
 
-		bool: (truthy, falsy) => derive(createDNode(
-			[source], (inputs) => (inputs[0] ? truthy : falsy), false, (input) => (input ? truthy : falsy))),
+	isImmutable(): boolean {
+		const source = this.source();
+		return source.immutable?.() ?? source.write === undefined;
+	}
 
-		def: (fallback) => derive(createDNode(
-			[source], (inputs) => inputs[0] ?? fallback, false, (input) => input ?? fallback)),
+	watch(fn: (value: T) => void): () => void {
+		const source = this.source();
+		// A bare source (a scope or cell watched directly) has no node of its own; a
+		// transparent one gives it the same settle, dedup and flush path as everything else.
+		const node = dnodeOf(source)
+			?? createDNode([source], (inputs) => inputs[0], false, (input) => input);
+		goLive(node);
+		// This watcher starts caught up to the settled present; anything an earlier watcher
+		// is still owed stays owed to it, because each entry keeps its own version.
+		node.watchers.set(fn as (value: unknown) => void, node.version);
+		let on = true;
+		return () => {
+			if (!on) return;
+			on = false;
+			node.watchers.delete(fn as (value: unknown) => void);
+			goIdle(node);
+		};
+	}
 
-		defined: () => derive(createDNode(
-			[source],
+	effect(fn: (value: T) => void): () => void {
+		// Subscribe first and read after, so no change lands in the gap between the two.
+		const stop = this.watch(fn);
+		try {
+			fn(this.get());
+		} catch (error) {
+			// A throwing first call must not leak a subscription nobody holds a handle to.
+			stop();
+			throw error;
+		}
+		return stop;
+	}
+
+	map<U>(fn: (value: T) => U): Derived<U> {
+		return derive(createDNode(
+			[this.source()], (inputs) => fn(inputs[0] as T), false, fn as (input: unknown) => unknown));
+	}
+
+	setter(fn: (value: T) => void): Derived<T> {
+		const source = this.source();
+		// A chain that declares itself immutable by construction (an immutable wrapper, a
+		// wildcard scope) stays that way; setter replaces a write path, it does not mint the
+		// right to have one (design 028).
+		if (source.immutable?.() === true) {
+			throw codecError('read-only', 'this chain is immutable by construction; setter cannot reopen it',
+				'Build the chain over a writable source rather than an immutable one.');
+		}
+		return chain({
+			...source,
+			write: fn as (value: unknown) => void,
+			immutable: () => false,
+		});
+	}
+
+	unwrap(): Derived<unknown> {
+		return derive(createDNode([this.source()], (inputs) => inputs[0], true, (input) => input));
+	}
+
+	bool<U, V>(truthy: U, falsy: V): Derived<U | V> {
+		return derive(createDNode(
+			[this.source()], (inputs) => (inputs[0] ? truthy : falsy), false,
+			(input) => (input ? truthy : falsy)));
+	}
+
+	def<U>(fallback: U): Derived<NonNullable<T> | U> {
+		return derive(createDNode(
+			[this.source()], (inputs) => inputs[0] ?? fallback, false, (input) => input ?? fallback));
+	}
+
+	defined(): Derived<boolean> {
+		return derive(createDNode(
+			[this.source()],
 			(inputs) => inputs[0] !== null && inputs[0] !== undefined,
 			false,
-			(input) => input !== null && input !== undefined)),
+			(input) => input !== null && input !== undefined));
+	}
 
-		selector: (compare) =>
-			selectorFrom(source, (compare as (value: unknown, key: unknown) => boolean) ?? Object.is),
+	selector(compare?: (value: T, key: unknown) => boolean): (key: unknown) => Derived<boolean> {
+		return selectorFrom(
+			this.source(), (compare as (value: unknown, key: unknown) => boolean) ?? Object.is);
+	}
 
-		throttle: (ms) => chain(gate(source, ms, 'throttle')),
+	throttle(ms: number): Derived<T> {
+		return chain(gate(this.source(), ms, 'throttle'));
+	}
 
-		wait: (ms) => chain(gate(source, ms, 'wait')),
-	};
+	wait(ms: number): Derived<T> {
+		return chain(gate(this.source(), ms, 'wait'));
+	}
+}
 
-	(derived as unknown as { [SOURCE]?: Source })[SOURCE] = source;
-	return derived;
-};
+/** Build the value surface over a source. */
+export const chain = <T>(source: Source): Derived<T> => new Chain<T>(source);
 
 /**
  * Combine several inputs into one derived value of their current values, in order.

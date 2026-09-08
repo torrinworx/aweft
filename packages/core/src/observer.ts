@@ -10,7 +10,7 @@ import type { Change, Listener, Node, Step, WildStep } from './types.ts';
 import { addListener, removeListener, resolveKey, userValue } from './node.ts';
 import { changeOf, write } from './transaction.ts';
 import { nodeOf, toCell } from './value.ts';
-import { SOURCE, chain, type Derived, type Source } from './derived.ts';
+import { Chain, type Derived, SLOT, type Source } from './derived.ts';
 
 /** A step in a path: an object or map slot by name, or an array position by index. */
 export type ScopeKey = string | number;
@@ -69,8 +69,17 @@ export interface Observer extends Omit<Derived<unknown>, 'get' | 'set' | 'watch'
 	 * is what matters. Commits landed with `apply` arrive here too, indistinguishable from
 	 * local mutation. Unsubscribing during a delivery does not recall the delivery already
 	 * in flight.
+	 *
+	 * Pass `{ inverse: true }` to use `change.inverse()`, which is what an undo stack and a
+	 * replication seam that can roll a write back need. It is off by default because building
+	 * it costs the commit the prior value of every slot it touched and a copy of every subtree
+	 * it dropped, and most watchers never undo anything (design 156). `inverse()` on a change
+	 * delivered to a watcher that did not ask refuses with `inverse-not-asked`.
+	 *
+	 * Example:
+	 *   observer(doc).watch((change) => undos.push(change.inverse()), { inverse: true });
 	 */
-	watch(fn: (change: Change) => void): () => void;
+	watch(fn: (change: Change) => void, options?: { readonly inverse?: boolean }): () => void;
 	/** Call `fn` with the value now, and again after every change in scope. */
 	effect(fn: (value: unknown) => void): () => void;
 }
@@ -106,99 +115,123 @@ const locate = (base: Node, keys: readonly Step[]): Resolved => {
 	return { holder, slot: resolveKey(holder, last) };
 };
 
-const build = (
-	base: Node,
-	keys: readonly Step[],
-	ignored: readonly ScopeKey[],
-	shallow: boolean,
-): Observer => {
-	const wild = keys.some(isWild);
+/**
+ * A scope over a path. It inherits the value combinators from `Chain`, which is what makes
+ * `map`, `bool`, `def`, `selector` and the rest available on a scope (design 023).
+ *
+ * The source those combinators read is built on first use, because most scopes are only
+ * narrowed and watched and never asked for a value, and a list builds one per row per binding
+ * (design 154). `path`, `ignore`, `shallow`, `skip`, `tree`, `get`, `set`, `watch` and
+ * `effect` never build one.
+ */
+class Scope extends Chain<unknown> implements Observer {
+	// Private, so a step carries no own enumerable key: an observer spreads and serializes as
+	// the empty object it is, and its state is not something a caller can read off it.
+	readonly #base: Node;
+	readonly #keys: readonly Step[];
+	readonly #ignored: readonly ScopeKey[];
+	/** `shallow()` is a method on this object, so the flag it sets carries the other name. */
+	readonly #narrow: boolean;
+	readonly #wild: boolean;
 
-	const subscribe = (deliver: Listener['deliver']): (() => void) => {
-		const listener: Listener = { base, keys, ignore: ignored, shallow, wild, deliver };
-		addListener(base, listener);
-		return () => removeListener(base, listener);
-	};
+	constructor(base: Node, keys: readonly Step[], ignored: readonly ScopeKey[], narrow: boolean) {
+		super(null);
+		this.#base = base;
+		this.#keys = keys;
+		this.#ignored = ignored;
+		this.#narrow = narrow;
+		this.#wild = keys.some(isWild);
+	}
 
-	const get = (): unknown => {
-		if (wild) return undefined;
-		const { holder, slot } = locate(base, keys);
+	// The bridge to the value surface (design 023): this scope seen as a source. The slot is
+	// `Chain`'s, reached through its Symbol, because a subclass cannot see a private field.
+	override source(): Source {
+		let source = this[SLOT];
+		if (source === null) {
+			source = {
+				read: () => this.get(),
+				attach: (mark) => this.subscribe(mark),
+				write: this.#wild ? undefined : (value) => this.set(value),
+				immutable: () => this.#wild,
+			};
+			this[SLOT] = source;
+		}
+		return source;
+	}
+
+	subscribe(deliver: Listener['deliver'], inverse = false): () => void {
+		const listener: Listener = {
+			base: this.#base,
+			keys: this.#keys,
+			ignore: this.#ignored,
+			shallow: this.#narrow,
+			wild: this.#wild,
+			inverse,
+			deliver,
+		};
+		addListener(this.#base, listener);
+		return () => removeListener(this.#base, listener);
+	}
+
+	override get(): unknown {
+		if (this.#wild) return undefined;
+		const { holder, slot } = locate(this.#base, this.#keys);
 		if (holder === undefined) return undefined;
 		if (slot === undefined) return holder.proxy;
 		return userValue(holder.slots.get(slot));
-	};
+	}
 
-	const set = (value: unknown): void => {
-		if (wild) {
+	override set(value: unknown): void {
+		if (this.#wild) {
 			throw codecError('multi-target', 'a wildcard scope names many places and cannot be written as one',
 				'Narrow the scope with path until it names one slot, then set that.');
 		}
-		const { holder, slot } = locate(base, keys);
+		const { holder, slot } = locate(this.#base, this.#keys);
 		if (holder === undefined || slot === undefined) {
 			throw codecError('slot-missing', 'nothing holds the slot this path names',
 				'Create the observables along the path first, or check get() before setting.');
 		}
 		write(holder, slot, toCell(value));
-	};
+	}
 
-	// The bridge to the value surface (design 023): this scope as a source, and the value
-	// combinators borrowed from a chain built over it. The methods close over the source
-	// rather than `this`, which is what makes borrowing them sound.
-	const source: Source = {
-		read: get,
-		attach: (mark) => subscribe(mark),
-		write: wild ? undefined : set,
-		immutable: () => wild,
-	};
-	const value = chain<unknown>(source);
+	path(...more: ScopeKey[]): Observer {
+		return new Scope(this.#base, [...this.#keys, ...more], this.#ignored, this.#narrow);
+	}
 
-	const observer: Observer = {
-		get,
-		set,
+	ignore(...more: ScopeKey[]): Observer {
+		return new Scope(this.#base, this.#keys, [...this.#ignored, ...more], this.#narrow);
+	}
 
-		path: (...more) => build(base, [...keys, ...more], ignored, shallow),
+	shallow(): Observer {
+		return new Scope(this.#base, this.#keys, this.#ignored, true);
+	}
 
-		ignore: (...more) => build(base, keys, [...ignored, ...more], shallow),
+	skip(count = 1): Observer {
+		const steps: WildStep[] = [];
+		for (let i = 0; i < count; i++) steps.push({ any: true });
+		return new Scope(this.#base, [...this.#keys, ...steps], this.#ignored, this.#narrow);
+	}
 
-		shallow: () => build(base, keys, ignored, true),
+	tree(key: ScopeKey): Observer {
+		return new Scope(this.#base, [...this.#keys, { deep: key }], this.#ignored, this.#narrow);
+	}
 
-		skip: (count = 1) => {
-			const steps: WildStep[] = [];
-			for (let i = 0; i < count; i++) steps.push({ any: true });
-			return build(base, [...keys, ...steps], ignored, shallow);
-		},
+	override watch(fn: (change: Change) => void, options?: { readonly inverse?: boolean }): () => void {
+		return this.subscribe((deltas, inverse) => fn(changeOf(deltas, inverse)), options?.inverse === true);
+	}
 
-		tree: (key) => build(base, [...keys, { deep: key }], ignored, shallow),
-
-		watch: (fn) => subscribe((deltas, inverse) => fn(changeOf(deltas, inverse))),
-
-		effect: (fn) => {
-			const stop = subscribe(() => fn(get()));
-			try {
-				fn(get());
-			} catch (error) {
-				// A throwing first call must not leak a listener nobody holds a handle to.
-				stop();
-				throw error;
-			}
-			return stop;
-		},
-
-		isImmutable: value.isImmutable,
-		map: value.map,
-		setter: value.setter,
-		unwrap: value.unwrap,
-		bool: value.bool,
-		def: value.def,
-		defined: value.defined,
-		selector: value.selector,
-		throttle: value.throttle,
-		wait: value.wait,
-	};
-
-	(observer as unknown as { [SOURCE]?: Source })[SOURCE] = source;
-	return observer;
-};
+	override effect(fn: (value: unknown) => void): () => void {
+		const stop = this.subscribe(() => fn(this.get()));
+		try {
+			fn(this.get());
+		} catch (error) {
+			// A throwing first call must not leak a listener nobody holds a handle to.
+			stop();
+			throw error;
+		}
+		return stop;
+	}
+}
 
 /**
  * Start a scope at an observable.
@@ -222,5 +255,5 @@ export const observer = (observable: unknown): Observer => {
 		throw codecError('not-observable', 'observer takes an observable',
 			'Pass what createObject, createArray or createMap returned.');
 	}
-	return build(node, [], [], false);
+	return new Scope(node, [], [], false);
 };

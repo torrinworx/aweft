@@ -9,7 +9,7 @@ type Interceptor: type Interceptor = (commit: Commit) => readonly Refusal[];
 type MutableArray: interface MutableArray<T> extends Array<T> { watch(fn: (changes: readonly ArrayChange<T>[]) => void): () => void; }
 type ObservableKind: type ObservableKind = 'object' | 'array' | 'map'; (from @aweftjs/codec)
 type ObservableMap: interface ObservableMap<T> { get(key: unknown): T | undefined; has(key: unknown): boolean; set(key: unknown, value: T): void; add(observable: T & object): void; delete(key: unknown): boolean; readonly size: number; keys(): string[]; values(): T[]; entries(): Generator<[ string, T ]>; [Symbol.iterator](): Generator<[ string, T ]>; }
-type Observer: interface Observer extends Omit<Derived<unknown>, 'get' | 'set' | 'watch' | 'effect'> { get(): unknown; set(value: unknown): void; path(...keys: ScopeKey[]): Observer; ignore(...keys: ScopeKey[]): Observer; shallow(): Observer; skip(count?: number): Observer; tree(key: ScopeKey): Observer; watch(fn: (change: Change) => void): () => void; effect(fn: (value: unknown) => void): () => void; }
+type Observer: interface Observer extends Omit<Derived<unknown>, 'get' | 'set' | 'watch' | 'effect'> { get(): unknown; set(value: unknown): void; path(...keys: ScopeKey[]): Observer; ignore(...keys: ScopeKey[]): Observer; shallow(): Observer; skip(count?: number): Observer; tree(key: ScopeKey): Observer; watch(fn: (change: Change) => void, options?: { readonly inverse?: boolean; }): () => void; effect(fn: (value: unknown) => void): () => void; }
 type Primitive: type Primitive = null | boolean | number | string | Uint8Array;
 type Refusal: interface Refusal { readonly code: string; readonly message: string; readonly path?: readonly string[]; }
 value RefusedError: typeof RefusedError

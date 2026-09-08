@@ -397,3 +397,46 @@ test('a listener that leaves does not narrow what the others hear', () => {
 	assert.equal(seen.length, 1, 'the deep scope still hears the commit');
 	assert.equal(seen[0]!.length, 2, 'the attach edge and the slot under it');
 });
+
+// A chain step is one small object with its combinators on a shared prototype (design 154).
+// A test that reads the heap is flaky, so what is pinned here is the structure the size follows
+// from: a step carries state and no methods, and every combinator answers a new step.
+
+test('a chain step keeps its state to itself and its methods on the prototype', () => {
+	const doc = createObject<Record<string, unknown>>({ label: 'x' });
+	const scope = observer(doc).path('label');
+	const derived = scope.map((value) => String(value));
+
+	for (const step of [observer(doc), scope, derived]) {
+		assert.deepEqual(Object.keys(step), [], 'nothing a spread would copy or a caller would read off');
+		assert.equal(JSON.stringify(step), '{}', 'and serializing one answers the empty object');
+		assert.equal(Object.hasOwn(step, 'map'), false,
+			'a combinator on a step is on its prototype, not a closure the step holds');
+		assert.equal(typeof (step as { map: unknown }).map, 'function', 'and it is still reachable');
+	}
+});
+
+test('a step is the same size however many are built', () => {
+	const doc = createObject<Record<string, unknown>>({ label: 'x' });
+	const proto = Object.getPrototypeOf(observer(doc).path('label')) as object;
+	for (let i = 0; i < 10000; i++) {
+		const step = observer(doc).path('label');
+		assert.deepEqual(Object.getOwnPropertyNames(step), [],
+			'every step of the same shape holds the same state, and it is private');
+		assert.equal(Object.getPrototypeOf(step), proto, 'and shares one set of combinators');
+	}
+});
+
+test('every narrowing and every combinator answers a new step, leaving this one alone', () => {
+	const doc = createObject<Record<string, unknown>>({ label: 'x', other: 1 });
+	const scope = observer(doc).path('label');
+
+	const derivedFrom: unknown[] = [
+		scope.path('deeper'), scope.ignore('other'), scope.shallow(), scope.skip(), scope.tree('label'),
+		scope.map((value) => value), scope.bool(1, 0), scope.def('fallback'), scope.defined(),
+		scope.unwrap(), scope.throttle(1), scope.wait(1),
+	];
+	for (const made of derivedFrom) assert.notEqual(made, scope, 'a combinator never returns this step');
+	assert.equal(new Set(derivedFrom).size, derivedFrom.length, 'and never the same step twice');
+	assert.equal(scope.get(), 'x', 'the step it was built from is untouched');
+});
