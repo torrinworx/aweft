@@ -126,13 +126,70 @@ test('the nested blocks of an entry are read, and extends is not', () => {
 	);
 });
 
+test('a value written inside a list is a value written where it stands', () => {
+	// A list is the declaration written once per item (design 190), so every item sits in a CSS
+	// position. Read as one value the whole list was skipped, and `padding: ['13px', '13px']`
+	// passed a check that refuses `padding: '13px'`.
+	assert.deepEqual(
+		found("defineTheme({\n\tplain: { padding: '13px', color: '#ff0000' },\n"
+			+ "\tlisted: { padding: ['13px', '13px'], color: ['#ff0000', 'red'] },\n"
+			+ "\tnumbered: { padding: [13, 13] },\n});", 'page.ts'),
+		[
+			'page.ts:2: plain sets padding to 13px; use $space',
+			'page.ts:2: plain sets color to #ff0000; use $foreground',
+			'page.ts:3: listed sets padding to 13px; use $space',
+			'page.ts:3: listed sets padding to 13px; use $space',
+			'page.ts:3: listed sets color to #ff0000; use $foreground',
+			'page.ts:3: listed sets color to red; use $foreground',
+			'page.ts:4: numbered sets padding to 13; use $space',
+			'page.ts:4: numbered sets padding to 13; use $space',
+		],
+	);
+	// And the named values in a list are still definitions, so the fallback idiom itself passes.
+	assert.deepEqual(found("defineTheme({ select: { appearance: ['none', 'base-select'] } });"), []);
+});
+
+test('a segment of an entry may not be the name of an entry that lays an element out', () => {
+	// A class list is matched segment by segment, so `['button', 'icon']` reaches `button_icon`
+	// and the bare `icon` entry as well: the button took `display: inline-block; width: 1em` and
+	// stopped centring its label (measured in Chromium).
+	assert.deepEqual(
+		found("defineTheme({\n\ticon: { display: 'inline-block', width: '$iconSize' },\n"
+			+ "\tbutton: { display: 'inline-flex' },\n\tbutton_icon: { width: '$control' },\n});", 'page.ts'),
+		['page.ts:4: button_icon sets the segment icon to the name of the entry icon; '
+			+ 'use a segment no entry names'],
+	);
+	// The segment the square button uses instead names nothing.
+	assert.deepEqual(
+		found("defineTheme({\n\ticon: { display: 'inline-block' },\n"
+			+ "\tbutton_square: { width: '$control' },\n});", 'page.ts'),
+		[],
+	);
+	// A state entry paints and lays nothing out, which is what a modifier is meant to compose
+	// with: `disclosure_summary_disabled` rides on `disabled` on purpose.
+	assert.deepEqual(
+		found("defineTheme({\n\tdisabled: { opacity: 0.5, cursor: 'not-allowed' },\n"
+			+ "\tdisclosure_summary_disabled: { pointerEvents: 'none' },\n});", 'page.ts'),
+		[],
+	);
+	// One file at a time: two pages of one tree are two themes, and neither knows the other's
+	// entry names (limit 4).
+	assert.deepEqual(
+		checkTheme([
+			{ path: 'a.ts', text: "defineTheme({ group: { display: 'flex' } });" },
+			{ path: 'b.ts', text: "defineTheme({ field_group: { display: 'flex' } });" },
+		]),
+		[],
+	);
+});
+
 test('the fix names the role the property calls for', () => {
 	const suggestions = (text: string): string[] =>
 		checkTheme(source(text)).map((violation) => violation.fix);
 
 	assert.deepEqual(
-		suggestions("Theme.define({ a: { outlineWidth: '3px', outlineOffset: '4px', fontSize: '2rem', lineHeight: '3rem', minHeight: '40px', borderWidth: '2px', outline: 'red' } });"),
-		['$ringWidth', '$ringOffset', '$textMd', '$textMdLine', '$target', '$borderWidth', '$ring'],
+		suggestions("Theme.define({ a: { outlineWidth: '3px', minWidth: '4px', fontSize: '2rem', lineHeight: '3rem', minHeight: '40px', borderWidth: '2px', outline: 'red' } });"),
+		['$ringWidth', '$target', '$textMd', '$textMdLine', '$control', '$borderWidth', '$ring'],
 	);
 });
 

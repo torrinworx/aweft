@@ -15,7 +15,7 @@
 // The `value` given to a `Theme` provider is skipped whole, in either spelling. That is what keeps
 // the check off a page's own theme and off a nested theme.
 //
-// Three limits, written down because a checker whose gaps are unknown is worse than one whose gaps
+// Four limits, written down because a checker whose gaps are unknown is worse than one whose gaps
 // are written down.
 //
 // 1. Only an object literal written where it is used is read. A style object built by a helper and
@@ -25,6 +25,19 @@
 //    can drift; what drifting costs is a bare number that goes unchecked.
 // 3. A `$name` may hold anything, so a component that gives a literal a name has got past this.
 //    That is the intended escape hatch, and it is one word in review.
+// 4. The segment rule below reads one file at a time. A theme spread over two files does not have
+//    its segments checked across them; what that buys is that two pages of one tree, which are two
+//    themes, are not read as one.
+//
+// **The second rule: a segment is never an entry name.** A class list is matched segment by
+// segment, so a modifier written `button_icon` is reached by the segments `button` and `icon`, and
+// the bare `icon` in that list also reaches the top-level `icon` entry. Where that entry lays an
+// element out, its box lands on the button: measured in Chromium, the square button
+// took `display: inline-block; width: 1em; height: 1em` from the `icon` entry and its svg sat
+// 12.25px from the top of a 36px box and 9.75px from the bottom. So a key's segments after the
+// first may not name a top-level entry that writes a box declaration. An entry that only paints
+// (`hovered`, `pressed`, `disabled`) is what a modifier is meant to compose with and is left
+// alone.
 
 import ts from 'typescript';
 
@@ -75,6 +88,24 @@ const SIZE_PROPERTIES = new Set([
 	'flexBasis', 'translate', 'textIndent',
 ]);
 
+// What makes an entry one a modifier may not silently drag in: it puts the element in a box or
+// lays its children out. An entry that only paints is safe to compose onto anything, which is why
+// `disabled` may be the last segment of `disclosure_summary_disabled` and `icon` may not be the
+// last segment of `button_icon`.
+const BOX_PROPERTIES = new Set([
+	'display', 'position', 'boxSizing', 'float', 'clear', 'overflow', 'overflowX', 'overflowY',
+	'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'aspectRatio',
+	'inset', 'top', 'right', 'bottom', 'left',
+	'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
+	'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+	'border', 'borderWidth', 'borderStyle', 'borderRadius',
+	'flex', 'flexDirection', 'flexWrap', 'flexGrow', 'flexShrink', 'flexBasis',
+	'alignItems', 'alignContent', 'alignSelf', 'justifyContent', 'justifyItems', 'justifySelf',
+	'placeContent', 'placeItems', 'gap', 'rowGap', 'columnGap',
+	'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'gridArea',
+	'verticalAlign', 'appearance', 'transform', 'translate', 'scale',
+]);
+
 /** The role a colour in this property should have come from. */
 const colourRole = (property: string): string => {
 	const name = property.toLowerCase();
@@ -91,9 +122,9 @@ const sizeRole = (property: string): string => {
 	if (name === 'fontsize') return '$textMd';
 	if (name === 'lineheight') return '$textMdLine';
 	if (name === 'outline' || name === 'outlinewidth') return '$ringWidth';
-	if (name === 'outlineoffset') return '$ringOffset';
 	if (name === 'borderwidth' || name === 'border') return '$borderWidth';
-	if (name === 'minwidth' || name === 'minheight') return '$target';
+	if (name === 'height' || name === 'minheight') return '$control';
+	if (name === 'minwidth') return '$target';
 	return '$space';
 };
 
@@ -129,6 +160,14 @@ const flatten = (block: ts.ObjectLiteralExpression, out: Declaration[]): void =>
 			// A directive block holds declarations of its own; anything else keyed to an object is
 			// not CSS this check knows how to read.
 			if (isDirective(key)) flatten(value, out);
+			continue;
+		}
+		if (ts.isArrayLiteralExpression(value)) {
+			// A list is the property written once per item (design 190), so every item is a value
+			// in a CSS position and every one of them is checked. Read as a single value it was
+			// skipped whole, and `padding: ['13px', '13px']` passed a check that refuses
+			// `padding: '13px'`.
+			for (const item of value.elements) out.push({ property: key, value: item, text: textOf(item) });
 			continue;
 		}
 		out.push({ property: key, value, text: textOf(value) });
@@ -232,6 +271,11 @@ export const checkTheme = (files: readonly ThemeSource[]): ThemeViolation[] => {
 	for (const file of files) {
 		const source = parse(file);
 		const skip = new Set<ts.Node>();
+		// The entries this file defines, in the order it writes them. One file at a time, because a
+		// scan is pointed at a whole tree and two pages of that tree are two themes: `recipes/ui`'s
+		// preview page names an entry `group` and the library names one `field_group`, and neither
+		// knows about the other. A theme's own vocabulary is what this rule is about.
+		const entries = new Map<string, { line: number; box: boolean }>();
 
 		const walk = (node: ts.Node): void => {
 			if (skip.has(node)) return;
@@ -265,6 +309,19 @@ export const checkTheme = (files: readonly ThemeSource[]): ThemeViolation[] => {
 							const name = keyOf(member.name);
 							if (name === undefined || !ts.isObjectLiteralExpression(member.initializer)) continue;
 							violationsIn(source, file.path, name, member.initializer, out);
+
+							const declarations: Declaration[] = [];
+							flatten(member.initializer, declarations);
+							const box = declarations.some((held) => BOX_PROPERTIES.has(held.property));
+							const before = entries.get(name);
+							if (before === undefined) {
+								entries.set(name, {
+									line: source.getLineAndCharacterOfPosition(member.getStart(source)).line + 1,
+									box,
+								});
+							} else if (box) {
+								entries.set(name, { ...before, box: true });
+							}
 						}
 					}
 				}
@@ -289,6 +346,26 @@ export const checkTheme = (files: readonly ThemeSource[]): ThemeViolation[] => {
 		};
 
 		walk(source);
+
+		// A segment is never an entry name (design 193, amended). See the second rule at the top of
+		// this file: the first segment is the component the entry belongs to and is meant to be
+		// reached; every segment after it is a part or a modifier name, and naming a top-level entry
+		// there compiles that entry onto the same element.
+		for (const [name, where] of entries) {
+			const segments = name.split('_');
+			for (let at = 1; at < segments.length; at += 1) {
+				const segment = segments[at]!;
+				if (entries.get(segment)?.box !== true) continue;
+				out.push({
+					path: file.path,
+					line: where.line,
+					where: name,
+					property: `the segment ${segment}`,
+					literal: `the name of the entry ${segment}`,
+					fix: 'a segment no entry names',
+				});
+			}
+		}
 	}
 
 	return out;

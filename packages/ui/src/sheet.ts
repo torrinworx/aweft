@@ -33,7 +33,25 @@ const PSEUDO_ELEMENTS: ReadonlySet<string> = new Set([
 	'view-transition-old', 'view-transition-new',
 ]);
 
+// A key of the shape `_name_rest`. The name says what to do with the block and the rest is that
+// directive's argument: `_elem_`, `_children_` and `_cssProp_` build a selector, `_media_` and
+// `_container_` wrap the rule in a query, `_starting_` wraps it in `@starting-style` and takes no
+// argument, and `_keyframes_`, `_fontFace_` and `_import_` leave the entry body altogether
+// (designs 111, 190). A directive block holds declarations and one more directive: two levels of
+// wrapping, so a query can hold a pseudo-element and a pseudo-element can hold a starting style.
 const DIRECTIVE = /^_([A-Za-z]+)_([\s\S]*)$/;
+
+// Every directive there is. A key of that shape naming anything else is a typo, and a typo used to
+// emit nothing at all: `_medai_(min-width: 10px)` compiled to no rule and said nothing, so the
+// query simply never applied and the entry looked correct in the source.
+const DIRECTIVES: ReadonlySet<string> = new Set([
+	'elem', 'children', 'cssProp', 'media', 'container', 'starting', 'keyframes', 'fontFace', 'import',
+]);
+const DIRECTIVE_NAMES = [...DIRECTIVES].join(', ');
+
+// How many directives deep a block may go: the entry's own keys, then one level under those.
+// Deeper than that emits nothing at all (design 190, amended).
+const NESTING = 2;
 
 // --- the registry ------------------------------------------------------------------------
 
@@ -172,17 +190,41 @@ export const mergeTheme = (base: Definitions, over: Definitions): Definitions =>
 
 // --- matching ----------------------------------------------------------------------------
 
-/** Whether `segments` appear inside `classes` in order, and where the last one sits. */
+/**
+ * Whether `segments` appear inside `classes` in order, and where the last one sits.
+ *
+ * A class token without `_` is a segment: it matches one segment of the entry, and the entry's
+ * segments have to appear in order with gaps allowed. A class token holding `_` names a part, and
+ * a part is all or nothing: it matches that whole run of the entry's segments or none of it, so
+ * `filedrop_entry` reaches the entry of that name and no longer reaches the bare `filedrop`
+ * (design 193).
+ */
 const matchAt = (segments: readonly string[], classes: readonly string[]): number => {
-	let at = 0;
-	let last = -1;
-	for (const segment of segments) {
-		while (at < classes.length && classes[at] !== segment) at += 1;
-		if (at >= classes.length) return -1;
-		last = at;
-		at += 1;
+	const need = segments.length;
+	// Where each count of consumed segments was first reached, or -2 for nowhere yet. Taking the
+	// first arrival keeps the answer the earliest match, which is what the old walk gave and what
+	// the chain's ordering is read from. A part consumes several segments at once, so a plain
+	// token that took one of them early can leave the part with nothing to match; the whole row is
+	// carried rather than one position, so that path is not the only one tried.
+	const reached: number[] = new Array<number>(need + 1).fill(-2);
+	reached[0] = -1;
+
+	for (let at = 0; at < classes.length; at += 1) {
+		const token = classes[at]!;
+		const parts = token.includes('_') ? token.split('_') : null;
+		const width = parts === null ? 1 : parts.length;
+		// Walked from the far end, so a token cannot feed a state it has just reached and match
+		// itself twice.
+		for (let k = need - width; k >= 0; k -= 1) {
+			if (reached[k] === -2 || reached[k + width] !== -2) continue;
+			let same = true;
+			if (parts === null) same = segments[k] === token;
+			else for (let i = 0; i < width; i += 1) if (segments[k + i] !== parts[i]) { same = false; break; }
+			if (same) reached[k + width] = at;
+		}
+		if (reached[need] !== -2) return reached[need]!;
 	}
-	return last;
+	return -1;
 };
 
 /**
@@ -246,8 +288,13 @@ const declarations = (block: Record<string, unknown>, lookup: Lookup): string =>
 		if (key === 'extends' || key[0] === '$' || DIRECTIVE.test(key)) continue;
 		const value = block[key];
 		if (value === null || value === undefined) continue;
-		const text = resolve(parseValue(declarationValue(key, value)), lookup);
-		out.push(`${cssName(key)}: ${text};`);
+		// A list is the property said once per item, in order. A host that cannot read the later
+		// value drops that declaration and keeps the one before it, which is how CSS has always
+		// spelled a fallback and is the only way an object with one value per key can say it.
+		for (const item of Array.isArray(value) ? value : [value]) {
+			if (item === null || item === undefined) continue;
+			out.push(`${cssName(key)}: ${resolve(parseValue(declarationValue(key, item)), lookup)};`);
+		}
 	}
 	return out.join(' ');
 };
@@ -256,6 +303,65 @@ const pseudo = (rest: string): string => {
 	if (rest.startsWith(':')) return rest;
 	const bare = rest.split('(')[0]!;
 	return `${PSEUDO_ELEMENTS.has(bare) ? '::' : ':'}${rest}`;
+};
+
+/** Where a rule is written: the selector, and the at-rules wrapped around it, outermost first. */
+interface Frame {
+	readonly selector: string;
+	readonly at: readonly string[];
+}
+
+/** The frame a directive puts its block in, or null when the directive is not one that wraps. */
+const framed = (frame: Frame, kind: string, rest: string): Frame | null => {
+	if (kind === 'elem') return { selector: `${rest} ${frame.selector}`, at: frame.at };
+	if (kind === 'children') return { selector: `${frame.selector} > ${rest}`, at: frame.at };
+	if (kind === 'cssProp') return { selector: `${frame.selector}${pseudo(rest)}`, at: frame.at };
+	if (kind === 'media') return { selector: frame.selector, at: [...frame.at, `@media ${rest}`] };
+	if (kind === 'container') return { selector: frame.selector, at: [...frame.at, `@container ${rest}`] };
+	// The style an element is transitioned from on the frame it is first rendered. There is nothing
+	// to write after the name, so anything after it is ignored.
+	if (kind === 'starting') return { selector: frame.selector, at: [...frame.at, '@starting-style'] };
+	return null;
+};
+
+/** One rule body inside its frame, at-rules wrapped from the inside out. */
+const wrapped = (frame: Frame, body: string): string => {
+	let out = `${frame.selector} { ${body} }`;
+	for (let i = frame.at.length - 1; i >= 0; i -= 1) out = `${frame.at[i]!} { ${out} }`;
+	return out;
+};
+
+/**
+ * Write one block's rules: its own declarations, then whatever a directive inside it wraps.
+ *
+ * `depth` is how many more directives deep this may go. A block at depth zero is declarations
+ * only, so nothing nests past the level design 190 allows and a fourth level emits nothing.
+ */
+const emitBlock = (
+	rules: string[],
+	frame: Frame,
+	block: Record<string, unknown>,
+	lookup: Lookup,
+	depth: number,
+): void => {
+	const body = declarations(block, lookup);
+	if (body !== '') rules.push(wrapped(frame, body));
+	if (depth <= 0) return;
+
+	for (const key of Object.keys(block)) {
+		const found = DIRECTIVE.exec(key);
+		if (found === null) continue;
+		if (!DIRECTIVES.has(found[1]!)) {
+			assert(false, `unknown directive \`${found[1]!}\` in the theme key ${key}; `
+				+ `the directives are ${DIRECTIVE_NAMES}`);
+			continue;
+		}
+		const value = block[key];
+		if (!isBlock(value)) continue;
+		const inner = framed(frame, found[1]!, found[2]!);
+		if (inner === null) continue;
+		emitBlock(rules, inner, value, lookup, depth - 1);
+	}
 };
 
 // A definition's keyframes and fonts are named after the definition, not after the chain that
@@ -329,9 +435,8 @@ export const compileChain = (
 		const entry = definitions[name];
 		if (entry === undefined) continue;
 
-		const body = declarations(entry, lookup);
-		if (body !== '') rules.push(`${selector} { ${body} }`);
-
+		// The three that leave the entry body altogether. They are not a frame around this rule, so
+		// they are taken out here and the rest of the entry goes through the nesting walk.
 		for (const key of Object.keys(entry)) {
 			const found = DIRECTIVE.exec(key);
 			if (found === null) continue;
@@ -348,15 +453,10 @@ export const compileChain = (
 			} else if (kind === 'import') {
 				const url = isBlock(value) ? String(value['url'] ?? '') : String(value);
 				if (url !== '') imports.push(`@import url(${JSON.stringify(url)}) layer(${LAYER});`);
-			} else if (isBlock(value)) {
-				const inner = declarations(value, lookup);
-				if (inner === '') continue;
-				if (kind === 'elem') rules.push(`${rest} ${selector} { ${inner} }`);
-				else if (kind === 'children') rules.push(`${selector} > ${rest} { ${inner} }`);
-				else if (kind === 'cssProp') rules.push(`${selector}${pseudo(rest)} { ${inner} }`);
-				else if (kind === 'media') rules.push(`@media ${rest} { ${selector} { ${inner} } }`);
 			}
 		}
+
+		emitBlock(rules, { selector, at: [] }, entry as Record<string, unknown>, lookup, NESTING);
 	}
 
 	// Dev-only bookkeeping: the whole statement leaves a release build (designs 097, 120), so a
