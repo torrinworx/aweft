@@ -185,6 +185,10 @@ superseded it.
 | Queries | A query names a declared path and an undeclared one is refused rather than scanned | 049 |
 | Giving up | "In a row" is measured in time, not in commits taken | 052 |
 | Paging | Every hit carries a cursor the driver minted, naming a position in the order asked for; `after` takes it, so a page after a document that was removed or re-ranked carries on from where it was | 060 |
+| Persistence on Postgres | The application hands in a pool, the driver owns its tables in that pool's schema behind a version row, and it tells nobody a document changed | 160, 163 |
+| A durable write | One transaction under the document's row lock: the sequence, the slots merged one by one, the edges, the tail entry and the projection, or none of it | 161 |
+| Declaring over stored data | `declare` carries the paths, and a driver fills in the projection for every document it already holds that lacks a declared field before it resolves; `projectionOf` ships so a driver outside the package computes the same one | 162 |
+| Bytes in a slot | A slot may hold bytes and every driver hands them back as bytes; one that keeps slots as JSON tags them | 163 |
 | The module contract | A module exports `deps`, `defaults`, optional `config` and `extensions`, and a default factory; an instance may return `stop`; `imports` is keyed by the last segment of a dependency's name | 061 |
 | Where modules come from | Directories, a bundle map, or a document keyed by module name whose entries carry `source`; a source yields candidates and evaluates nothing until `load`; `compile` turns source into exports, plain ES module import by default | 062 |
 | What `modules` does and decides | `load`, `unload`, `dependents`, `dependencies`, and `follow` as an opt-in helper; a loader is an instance; nothing decides which modules load, when, how many, or for how long | 063 |
