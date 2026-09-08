@@ -276,8 +276,11 @@ attribute where the host has one, and falls back to DOM order where it does not.
 layer a page with its own stacking context can put something over a popup, and that is the page's
 decision to make.
 
-`trackedMount()` is how `Detached` measures children it does not own: it returns the array the
-real nodes appear in and a mounter to render where they belong.
+`Detached` mounts its anchor where the anchor was written and reads the anchor's nodes back out of
+the document, so a page taken over from a server adopts the anchor the server sent (design 153).
+`trackedMount()` is the other way of reaching children a component does not own: it returns the
+array the real nodes appear in and a mounter to render where they belong, and children mounted
+that way are built fresh rather than adopted.
 
 **`Detached` needs a real browser to open.** It places its popup from the anchor's measured
 rectangle and asks for the next animation frame, and the light tree has neither layout nor frames.
@@ -456,14 +459,13 @@ the modal's children in a `PopupContext` of their own to keep its popups inside 
 **A tip is on hover and on focus, and the anchor names it.** The children are the anchor, and a
 `<mark.popup>` replaces the label with markup. The pause before a hover shows it belongs to the
 behaviour, so every tip on a page waits the same time and there is no prop for it; focus shows it at
-once. Each element in the anchor gets `aria-describedby` naming the panel, written when the
-component mounts, which a static render does too, so it is in the server's markup as well. It is
+once. Each element in the anchor gets `aria-describedby` naming the panel, written when the page
+comes alive. A static render leaves it out, because nothing on the client can write it before the
+pairing walk reaches the anchor, so markup carrying it could not be taken over (design 153). It is
 taken off again when the component unmounts.
 
-**Two things a `Tooltip` cannot do today**, both inherited from `Detached` and both measured on the
-commit this work started from: it does not take over server markup, and it cannot sit inside an act
-that a stage swaps away. Both are known limits, with what would settle them. Put a tip beside a
-stage rather than inside it, which is what the composites page does.
+A `Tooltip` takes over server markup and can sit inside an act a stage swaps away, both since
+design 153.
 
 **A drop down is a disclosure, not a floating menu.** The content is the children, in the page's
 flow. The `open` cell goes both ways: writing it opens and closes the element, and a person opening

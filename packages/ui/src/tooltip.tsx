@@ -4,17 +4,17 @@
 // scrolls, and `tooltipTrigger` in `tooltip-trigger.ts` decides when it shows. Nothing here measures
 // anything or holds a timer.
 
-import { type ElementLike, type Mounter, createElement, mount } from '@aweftjs/dom';
+import { type ElementLike, type Mounter, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';
 
-import { Detached, trackedMount } from './popup.tsx';
+import { Detached, mountedElement, runOf } from './popup.tsx';
 import { SIDES } from './placement.ts';
 import { assert } from './assert.ts';
 import { categories, mark } from './mark.ts';
 import { h } from './h.ts';
 import { isWritable } from './source.ts';
 import { tooltipTrigger } from './tooltip-trigger.ts';
-import { use } from './render.ts';
+import { isStatic, use } from './render.ts';
 
 /** What `Tooltip` takes. Everything not named here goes to the panel. */
 export interface TooltipProps {
@@ -45,9 +45,10 @@ export interface TooltipProps {
  * The pause before a hover shows it belongs to the behaviour, so every tip on a page waits the same
  * amount of time and there is no prop for it. Focus shows it at once.
  *
- * `aria-describedby` is written onto the anchor's nodes when this mounts, rather than built into the
- * markup, because those nodes are the caller's. A static render mounts too, so the attribute is in
- * the server's markup as well. It is taken off again when this unmounts.
+ * `aria-describedby` is written onto the anchor's nodes when the page comes alive, rather than built
+ * into the markup, because those nodes are the caller's. A static render leaves it out, so markup a
+ * page is taken over from carries the anchor and the panel with no link between them and the link
+ * appears on the first live mount. It is taken off again when this unmounts.
  *
  * Throws: the asserts `Popup` makes for a missing `PopupContext`, and the one `categories` makes for
  * a slot this component does not know.
@@ -74,29 +75,57 @@ export const Tooltip = (
 			'Tooltip enabled takes a cell, not a value; pass enabled={cell}, or leave it out and the '
 			+ 'component keeps its own');
 		const open = isWritable(enabled) ? enabled : mutable(false);
-		const id = use(context).ids.next('tip');
-
-		const [nodes, virtual] = trackedMount();
-		const panel = createElement('div') as ElementLike;
+		const render = use(context);
+		const id = render.ids.next('tip');
 
 		const stops: (() => void)[] = [];
-		// Held by this component rather than read back off `nodes` at the end: the array empties as
-		// the anchor unmounts, and the attribute would be left on an element nobody could reach.
+		// Held by this component rather than read back off the run at the end: the run empties as the
+		// anchor unmounts, and the attribute would be left on an element nobody could reach.
 		const described: ElementLike[] = [];
+
+		const inside = popup!.items.length > 0 ? popup!.items : [label];
+
+		// The panel, once it is in the document: a hydration keeps the server's element and drops the
+		// one the client built, so the element the trigger asks for the top layer comes back out of
+		// its own mount rather than being remembered (design 153).
+		let panel: () => ElementLike | null = () => null;
+		const Panel: Mounter = (parent, _item, at, inner) => {
+			const put = mount(parent, h('div', {
+				...rest,
+				id,
+				role: 'tooltip',
+				theme: ['tooltip', type, theme],
+			}, ...inside), at, inner);
+			panel = mountedElement(put, at);
+			return put;
+		};
+
+		// The end of the anchor's run, one level out from the one `Detached` makes for itself
+		// (design 153). It goes in first and everything else goes in against it, so what follows
+		// stays in front of it however late it arrives. `Detached` renders the anchor where it was
+		// written and its panel at the sink, so the elements between the two are the anchor alone.
+		const tail = mount(elem, '', before, context);
+		const remove = mount(elem, h(Detached, { enabled: open, locations: locations ?? SIDES },
+			...anchor!.items,
+			mark('popup', null, Panel)), tail, context);
+
+		const anchorNodes = (): ElementLike[] =>
+			runOf(remove, tail).filter((node) => node.nodeType === 1) as unknown as ElementLike[];
 
 		// The anchor is the caller's markup, so the link to the panel is written on it once it exists
 		// rather than built into it. Every element in the anchor, because an anchor may be more than
-		// one. This runs at mount, which a static render also does, so it is in that markup too.
+		// one. Not in a static render: nothing on the client can write it before the pairing walk
+		// reaches the anchor, so markup carrying it is markup that cannot be taken over (design 153).
 		start = () => {
-			for (const node of nodes) {
-				if (node.nodeType !== 1) continue;
-				const element = node as unknown as ElementLike;
-				element.setAttribute('aria-describedby', id);
-				described.push(element);
+			if (!isStatic(render)) {
+				for (const element of anchorNodes()) {
+					element.setAttribute('aria-describedby', id);
+					described.push(element);
+				}
 			}
 			stops.push(tooltipTrigger({
-				nodes: () => [...nodes],
-				panel: () => panel,
+				nodes: anchorNodes,
+				panel: () => panel(),
 				open: open as { get(): unknown; set(value: unknown): void },
 			}));
 		};
@@ -107,22 +136,10 @@ export const Tooltip = (
 			described.length = 0;
 		});
 
-		const inside = popup!.items.length > 0 ? popup!.items : [label];
-
-		const item = [
-			// Mounted into the recorder, so the anchor's real nodes are in hand; `Detached` is what puts
-			// them in the document, as its own anchor.
-			h(virtual, {}, ...anchor!.items),
-			h(Detached, { enabled: open, locations: locations ?? SIDES },
-				nodes,
-				mark('popup', null, h(panel, {
-					...rest,
-					id,
-					role: 'tooltip',
-					theme: ['tooltip', type, theme],
-				}, ...inside))),
-		];
-
-		return mount(elem, item, before, context);
+		return (arg) => {
+			if (arg !== undefined) return remove(arg);
+			tail();
+			return remove();
+		};
 	};
 };

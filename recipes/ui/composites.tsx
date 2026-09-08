@@ -80,29 +80,31 @@ const paneFor = (mode: string): { Panel: () => unknown } => {
 			onClick: () => { stage?.open({ name: 'edit', template: Titled }); },
 		}));
 
+	// The stage is around the tip rather than beside it: a `Detached` mounts its anchor where it was
+	// written, so a stage that holds one can still swap acts (design 153).
 	const Panel = (): unknown => {
 		return (
 			<section theme={['composites', 'pane']} id={at('pane')}>
 				<h2 theme={['text', 'xl']}>{`${mode} mode`}</h2>
 
-				<div theme={['composites', 'group']}>
-					<p theme={['text', 'sm', 'muted']}>A modal, on the stage</p>
-					<StageContext acts={{ '': Nothing, edit: Editor }} initial="" template={Default}>
+				<StageContext acts={{ '': Nothing, edit: Editor }} initial="" template={Default}>
+					<div theme={['composites', 'group']}>
+						<p theme={['text', 'sm', 'muted']}>A modal, on the stage</p>
 						<Opener />
 						<Stage />
-					</StageContext>
-				</div>
-
-				<div theme={['composites', 'group']}>
-					<p theme={['text', 'sm', 'muted']}>A tip, on hover and on focus</p>
-					<div theme="row">
-						<Tooltip label="This cannot be undone." enabled={tipShown}>
-							<Button label="Delete" type="danger" id={at('tip-anchor')} />
-						</Tooltip>
-						<Button label="Show the tip" type="quiet" id={at('tip-toggle')}
-							onClick={() => { tipShown.set(!tipShown.get()); }} />
 					</div>
-				</div>
+
+					<div theme={['composites', 'group']}>
+						<p theme={['text', 'sm', 'muted']}>A tip, on hover and on focus</p>
+						<div theme="row">
+							<Tooltip label="This cannot be undone." enabled={tipShown}>
+								<Button label="Delete" type="danger" id={at('tip-anchor')} />
+							</Tooltip>
+							<Button label="Show the tip" type="quiet" id={at('tip-toggle')}
+								onClick={() => { tipShown.set(!tipShown.get()); }} />
+						</div>
+					</div>
+				</StageContext>
 
 				<div theme={['composites', 'group']}>
 					<p theme={['text', 'sm', 'muted']}>A disclosure</p>

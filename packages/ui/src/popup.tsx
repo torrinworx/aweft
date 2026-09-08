@@ -6,7 +6,10 @@
 // where the host has one. There is no z-index in this file, or anywhere in this package.
 
 import { type MutableArray, mutable, mutableArray } from '@aweftjs/core';
-import { type Mounter, type NodeLike, type ParentLike, createElement, mount } from '@aweftjs/dom';
+import {
+	type ElementLike, type Mounter, type NodeLike, type ParentLike, type Remove,
+	createElement, getFirst, mount,
+} from '@aweftjs/dom';
 
 import { assert } from './assert.ts';
 import { dismiss } from './dismiss.ts';
@@ -64,6 +67,38 @@ export const trackedMount = (): [MutableArray<NodeLike>, (props: { children?: un
 	return [nodes, virtual];
 };
 
+/**
+ * The nodes one mount put in its element: from its first node up to the node that ends its run.
+ *
+ * A mount answers `getFirst` with its own first node, or with the anchor it was given when it made
+ * none, so a mount that rendered nothing gives an empty run rather than an unbounded one.
+ */
+export const runOf = (from: Remove, to: Remove): NodeLike[] => {
+	const end = to(getFirst) ?? null;
+	const found: NodeLike[] = [];
+	for (let node = from(getFirst) ?? null; node !== null && node !== end; node = node.nextSibling) {
+		found.push(node);
+	}
+	return found;
+};
+
+/**
+ * The element one mount put in the document, worked out on first use and then kept.
+ *
+ * Not when the mount returns: a component's body is queued, so a mount of one has no node yet at
+ * that point. Under a hydration the answer is the server's element and not the one this package
+ * built, which is why it is asked for at all (designs 133, 153).
+ */
+export const mountedElement = (from: Remove, to: Remove): (() => ElementLike | null) => {
+	let found: ElementLike | null = null;
+	return () => {
+		if (found === null) {
+			found = (runOf(from, to).find((node) => node.nodeType === 1) as ElementLike | undefined) ?? null;
+		}
+		return found;
+	};
+};
+
 // --- the sink ---------------------------------------------------------------------------------
 
 const SINK: unique symbol = Symbol('aweft.ui.popups');
@@ -101,12 +136,24 @@ export const PopupContext = (props: { popups?: Registry; children?: unknown[] })
 		// order they appear, and a hydration hands out the server's marker regions in the order
 		// the mounts ask for them: the sink took the region belonging to the first popup written
 		// beside the page, and the page's popup then found none left.
-		const page = mount(elem, props.children ?? [], before, inner);
+		//
+		// The page ends at a node of its own rather than at this component's anchor, so something it
+		// renders long after the first mount still lands in front of the popups. Sharing the anchor
+		// put it after them, and the sink's list then took it for one of its own when a popup left,
+		// which is how opening one act over another that held a popup rendered nothing at all.
+		let tail: Remove | null = null;
+		const end: Remove = (arg) => (arg === getFirst ? (tail ?? before)(getFirst) : undefined);
+		const page = mount(elem, props.children ?? [], end, inner);
 		const popups = mount(elem, sink.items, before, inner);
+		// `''` renders to no characters, so no markup carries it, and a hydration inserts it rather
+		// than pairing it (design 146). Against the popups' mount, which is what puts it directly
+		// after the page in a mount, a static render and a hydration alike.
+		tail = mount(elem, '', popups, inner);
 
 		return (arg) => {
 			if (arg !== undefined) return page(arg);
 			popups();
+			tail!();
 			page();
 			return undefined;
 		};
@@ -169,14 +216,37 @@ export const Popup = (props: {
 
 	const element = createElement('div');
 	const style = mutable<Record<string, unknown>>({ display: 'none' });
-	const node = h(element, { style }, ...(props.children ?? []));
+	// Handed to `dom` rather than written here, as design 133 says everything on an element is. A
+	// host with no Popover API writes no attribute, so markup from one and a browser that has it
+	// disagree, and a reactive attribute is the one kind a pairing walk tolerates that from.
+	const popover = mutable<string | null>(supportsPopover(element) ? 'manual' : null);
+	const node = h(element, { style, popover }, ...(props.children ?? []));
+
+	// The box on the page, which under a hydration is the server's element and not this one: `dom`
+	// keeps the server's node and drops the fresh one, so a component that drives an element reads
+	// it back out of the mount rather than remembering what it made (designs 133, 153).
+	let live: () => ElementLike | null = () => null;
+	let reported: ElementLike | null = null;
+	const box = (): ElementLike => {
+		const found = live();
+		if (found !== null && found !== reported) {
+			reported = found;
+			props.ref?.(found);
+		}
+		return found ?? element;
+	};
+	const item: Mounter = (parent, _item, at, inner) => {
+		const remove = mount(parent, node, at, inner);
+		live = mountedElement(remove, at);
+		return remove;
+	};
 	props.ref?.(element);
 
 	// The top layer, asked for on the element rather than won with a number. It can only be asked
 	// for once the element is in the document, and a popup that is already open when it mounts is
 	// asked before the sink has put it there, so this waits for the frame that does.
 	const toggle = (open: boolean): void => {
-		const target = element as unknown as Popoverish;
+		const target = box() as unknown as Popoverish;
 		if (typeof target.togglePopover !== 'function') return;
 		if (target.isConnected === false) {
 			const request = (globalThis as { requestAnimationFrame?: (fn: () => void) => number }).requestAnimationFrame;
@@ -197,7 +267,6 @@ export const Popup = (props: {
 		toggle(true);
 	};
 
-	if (supportsPopover(element)) element.setAttribute('popover', 'manual');
 	const stops: (() => void)[] = [];
 	if (isSource(held)) stops.push(held.effect(() => apply()));
 	else apply();
@@ -208,14 +277,14 @@ export const Popup = (props: {
 	// light tree install nothing.
 	if (isSource(held)) {
 		stops.push(dismiss({
-			inside: () => [element],
+			inside: () => [box()],
 			active: () => at() !== null,
 			canClose: props.canClose,
 			onDismiss: () => { held.set?.(null); },
 		}));
 	}
 
-	const drop = sink.add(node);
+	const drop = sink.add(item);
 	return (arg) => {
 		// Asked for its first node rather than told to go: it has none here, because it renders
 		// nothing where it was written. Answering without checking would unmount it every time
@@ -261,7 +330,8 @@ const sameRect = (a: Rect | null, b: Rect | null): boolean =>
  *   style: merged onto the popup's box
  *   children: the anchor, with `<mark.popup>` for what floats
  *
- * Returns: the anchor where it was written, and the popup at the sink.
+ * Returns: the anchor where it was written, and the popup at the sink. The anchor is an ordinary
+ * mount, so a page taken over from a server adopts the nodes the server sent (design 153).
  *
  * Throws: the asserts `Popup` makes, and the one `categories` makes for a slot it does not know.
  *
@@ -281,7 +351,11 @@ export const Detached = (props: {
 	const [popup, anchor] = categories(props.children ?? [], ['popup', 'anchor'], 'anchor');
 	const open = props.enabled;
 	const placement = mutable<PopupPlacement>(null);
-	const [nodes, virtual] = trackedMount();
+
+	// The anchor's nodes, read from the document rather than recorded as they mount, so an anchor
+	// that changes is measured as it is now. The mounter below fills this in, and only a frame ever
+	// asks, so nothing reads it before there is something to read.
+	let nodes: () => readonly NodeLike[] = () => [];
 
 	let floating: Measurable | null = null;
 	let frame: number | null = null;
@@ -314,7 +388,7 @@ export const Detached = (props: {
 	};
 
 	const step = (): void => {
-		const rect = measure(nodes);
+		const rect = measure(nodes());
 		if (rect === null) return;
 		if (last !== null && !sameRect(last, rect)) {
 			if (last.width === rect.width && last.height === rect.height) {
@@ -361,14 +435,35 @@ export const Detached = (props: {
 	else track(open);
 	cleanup(stop);
 
-	return [
-		h(virtual, {}, ...anchor!.items),
-		nodes,
-		h(Popup, {
+	const mounter: Mounter = (elem, _item, before, context) => {
+		let tail: Remove | null = null;
+		// The anchor goes in against the node below rather than against this component's own anchor,
+		// so an anchor that renders nothing answers with that node and its run is empty.
+		const end: Remove = (arg) => (arg === getFirst ? (tail ?? before)(getFirst) : undefined);
+
+		const items = mount(elem, anchor!.items, end, context);
+		const floater = mount(elem, h(Popup, {
 			placement,
 			style: { visibility: hidden, ...props.style },
 			ref: (element: unknown) => { floating = element as Measurable; },
 			...popup!.props,
-		}, ...popup!.items),
-	];
+		}, ...popup!.items), before, context);
+		// What ends the anchor's run. Stopping at this component's own anchor would be wrong: the
+		// popup sink mounts into the same element as the page, so a `Detached` written last has the
+		// popup it is placing as its next sibling. `''` renders to no characters, so it is in no
+		// markup, and a hydration inserts it rather than pairing it (design 146). Against the popup's
+		// mount, because that is what puts it directly after the anchor in all three modes.
+		tail = mount(elem, '', floater, context);
+
+		nodes = () => runOf(items, tail!);
+
+		return (arg) => {
+			if (arg !== undefined) return items(arg);
+			floater();
+			tail!();
+			items();
+			return undefined;
+		};
+	};
+	return mounter;
 };

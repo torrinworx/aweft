@@ -934,6 +934,81 @@ test('a real hover shows a Tooltip after the pause, and a real focus shows it at
 	});
 });
 
+test('a Tooltip taken over from server markup places its tip against the server\'s own anchor', async () => {
+	await drive('tooltip-hydrated', `
+		import { PopupContext, Tooltip, context, h, hydrate, render } from '@aweftjs/ui';
+
+		const App = () => (
+			<PopupContext>
+				<main id="page">
+					<Tooltip label="an explanation">
+						<button id="anchor" style={{ position: 'absolute', left: '300px', top: '200px', width: '120px', height: '40px' }}>
+							what is this
+						</button>
+					</Tooltip>
+				</main>
+			</PopupContext>
+		);
+
+		const server = context();
+		const markup = await render(<App />, { context: server });
+		const host = document.createElement('div');
+		host.id = 'host';
+		host.innerHTML = markup;
+		document.body.appendChild(host);
+		const style = document.createElement('style');
+		style.setAttribute('data-aweft', '');
+		style.textContent = server.theme.markup();
+		document.head.appendChild(style);
+
+		// The node the server sent, held before the client touches it. A hydration that rebuilt the
+		// anchor instead of adopting it would leave a different node here.
+		const sent = document.querySelector('#anchor');
+		hydrate(host, <App />);
+		globalThis.sameAnchor = sent === document.querySelector('#anchor');
+		globalThis.ready = true;
+	`, async (view) => {
+		await view.waitForFunction(() => (globalThis as never as { ready?: boolean }).ready === true);
+		assert.equal(await view.evaluate(() => (globalThis as never as { sameAnchor: boolean }).sameAnchor), true,
+			'the anchor on the page is the node the server sent');
+
+		const panel = '[role="tooltip"]';
+		await view.hover('#anchor');
+		await view.waitForFunction((query: string) =>
+			document.querySelector(query)!.matches(':popover-open'), panel);
+		assert.equal(await view.getAttribute(panel, 'popover'), 'hint',
+			'the tip asked for the top layer as a hint, with no z-index anywhere');
+
+		// The box `Detached` places, which is the panel's parent. What the placement is measured
+		// against is the anchor's rectangle, and the anchor is the node the server sent.
+		const boxes = await view.evaluate((query: string) => {
+			const box = (element: { getBoundingClientRect(): { left: number; top: number; width: number; height: number } }): Record<string, number> => {
+				const rect = element.getBoundingClientRect();
+				return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+			};
+			return {
+				anchor: box(document.querySelector('#anchor')!),
+				tip: box(document.querySelector(query)!.parentElement!),
+			};
+		}, panel);
+		// Beside the anchor, on one of the four sides: touching on one axis and centred on the other.
+		// The anchor's rectangle is the server's node's, which is the whole point of the case.
+		const near = (one: number, other: number): boolean => Math.abs(one - other) <= 1;
+		const a = boxes.anchor;
+		const t = boxes.tip;
+		const acrossX = near(a['left']! + a['width']! / 2, t['left']! + t['width']! / 2);
+		const acrossY = near(a['top']! + a['height']! / 2, t['top']! + t['height']! / 2);
+		const sides = [
+			near(t['top']!, a['top']! + a['height']!) && acrossX,
+			near(t['top']! + t['height']!, a['top']!) && acrossX,
+			near(t['left']!, a['left']! + a['width']!) && acrossY,
+			near(t['left']! + t['width']!, a['left']!) && acrossY,
+		];
+		assert.ok(sides.some(Boolean),
+			`the tip is on none of the four sides of the anchor: anchor ${JSON.stringify(a)}, tip ${JSON.stringify(t)}`);
+	});
+});
+
 test('Space on a drop down summary toggles it, and the cell follows', async () => {
 	await drive('dropdown-keys', `
 		import { DropDown, Icons, h, mount } from '@aweftjs/ui';

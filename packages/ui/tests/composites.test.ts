@@ -251,6 +251,29 @@ test('the enabled cell drives the tooltip, and unmounting takes the link off the
 		'an anchor a caller handed in goes back the way it came');
 });
 
+test('a stage whose act holds a tooltip renders the act opened over it', () => {
+	// The tip's panel is at the popup sink, which mounts into the same element as the page, and the
+	// act that replaces this one mounts there too. Before design 153 the act that was opened
+	// rendered nothing at all.
+	let held: StageHandle | null = null;
+	const Home = (props: { stage?: unknown }): unknown => {
+		held = props.stage as StageHandle;
+		return h(Tooltip as never, { label: 'This cannot be undone.' }, h('button', {}, 'Delete'));
+	};
+	const { body, stop } = page(h(PopupContext as never, {}, h(StageContext as never, {
+		acts: { '': Home, other: () => h('p', {}, 'the other act') },
+		initial: '',
+	}, h(Stage as never, {}))));
+
+	assert.ok(elements(body.firstChild).some((element) => roleOf(element) === 'tooltip'),
+		'the first act put a tip on the page');
+	held!.open({ name: 'other' });
+	assert.match(body.textContent ?? '', /the other act/, 'the act that was opened is on the page');
+	assert.ok(!elements(body.firstChild).some((element) => roleOf(element) === 'tooltip'),
+		'and the tip went with the act that held it');
+	stop();
+});
+
 test('a mark.popup replaces the tooltip\'s label with markup', () => {
 	const { body, stop } = page(h(PopupContext as never, {},
 		h(Tooltip as never, { label: 'ignored' },
@@ -579,14 +602,16 @@ const countingMade = (document: ReturnType<typeof createDocument>): NodeLike[] =
 	return made;
 };
 
-// `Modal` and `Tooltip` are not here, and cannot be: neither survives a hydration today, for the
-// two known reasons, and neither is in a page's markup in practice.
-const everything = (): unknown => answered(h('div', {},
+// `Modal` is not here and cannot be: it drives the `<dialog>` it made, and a hydration keeps the
+// server's element and drops that one, which is still open.
+// `Tooltip` is here, because `Detached` mounts its anchor in place now (design 153).
+const everything = (): unknown => answered(h(PopupContext as never, {}, h('div', {},
 	h(DropDown as never, { label: 'Filters' }, h('p', {}, 'inside')),
 	h(FileDrop as never, { extensions: ['.png'] }),
 	h(Validate as never, { value: mutable(''), validate: 'email' },
 		h(TextField as never, { label: 'Email' })),
-	h(ColorPicker as never, { value: mutable('#1b6ef3') })));
+	h(Tooltip as never, { label: 'This cannot be undone.' }, h('button', {}, 'Delete')),
+	h(ColorPicker as never, { value: mutable('#1b6ef3') }))));
 
 test('every composite a page can hold renders to markup and hydrates onto the server\'s nodes', async () => {
 	const server = context();
@@ -603,18 +628,26 @@ test('every composite a page can hold renders to markup and hydrates onto the se
 	const made = countingMade(document);
 	const stop = hydrate(document.body, everything());
 
-	// One fresh element per element on the page, less the two this test wrote with `h` itself: the
-	// wrapper `<div>` and the `<p>` inside the drop down. `h` at the call site runs before `hydrate`
-	// does and makes its nodes in the fallback document rather than in this one, which is the
-	// measurement the README's known limits explain. Everything a component body makes is made here, and
-	// then dropped. Not zero: nothing in this package can make it zero.
-	const written = 2;
+	// One fresh element per element on the page, less the three this test wrote with `h` itself: the
+	// wrapper `<div>`, the `<p>` inside the drop down and the tooltip's `<button>`. `h` at the call
+	// site runs before `hydrate` does and makes its nodes in the fallback document rather than in
+	// this one, which is the measurement the README's known limits explain. Everything a component body
+	// makes is made here, and then dropped. Not zero: nothing in this package can make it zero.
+	const written = 3;
 	assert.equal(made.length, before.length - written,
 		'a hydration makes the client\'s tree and keeps the server\'s: one made and dropped per element');
 
 	const after = elements(document.body.firstChild);
 	assert.equal(after.length, before.length);
-	assert.equal(toHtml(document.body.childNodes), markup, 'and the page is the page the server sent');
+	// The one thing a live page has that the markup does not is the tooltip's link to its panel,
+	// which design 135 says appears on the first live mount and no static render writes. The id is
+	// the one the server put on the panel, read off the markup this test is comparing against.
+	const tip = byRole(document.body.firstChild, 'tooltip').getAttribute('id') ?? '';
+	assert.notEqual(tip, '', 'the server gave the panel an id');
+	assert.equal(toHtml(document.body.childNodes).replaceAll(` aria-describedby="${tip}"`, ''), markup,
+		'and the page is the page the server sent');
+	assert.equal(byRoleName(document.body.firstChild, 'button', 'Delete').getAttribute('aria-describedby'), tip,
+		'the tip\'s anchor names its panel once the page is alive');
 	assert.equal(document.head.childNodes.length, 1, 'the server stylesheet was adopted, not doubled');
 	stop();
 });

@@ -61,6 +61,19 @@ export const context = (): Render => ({
 /** The context value a fresh render starts from. */
 const rooted = (render: Render): Context => ({ [UI]: render });
 
+const STATIC: unique symbol = Symbol('aweft.ui.static');
+
+/**
+ * Whether this render only writes markup: the page is serialized and taken down, never touched.
+ *
+ * A component that decorates a node it did not build asks, because a static render runs its
+ * `mounted` callbacks too and what they write ends up in the markup, while a hydration cannot write
+ * the same thing before the pairing walk reaches that node (design 153). A symbol rather than a
+ * field on `Render`, because only this package's own components may ask.
+ */
+export const isStatic = (render: Render): boolean =>
+	(render as unknown as Record<symbol, boolean | undefined>)[STATIC] === true;
+
 /**
  * The render a mount belongs to.
  *
@@ -289,6 +302,7 @@ export const render = async (item: unknown, options: { context?: Render } = {}):
 	hold(own.stage);
 	assert(!again,
 		'this render object has already rendered a page, so its head tags and stages are still in it; make one context() per page');
+	(own as unknown as Record<symbol, boolean>)[STATIC] = true;
 	return domRender(item, { context: rooted(own) });
 };
 

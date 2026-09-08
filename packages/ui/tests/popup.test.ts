@@ -7,8 +7,12 @@ import assert from 'node:assert/strict';
 
 import { mutable } from '@aweftjs/core';
 import { createDocument, parseHtml, toHtml } from '@aweftjs/dom';
-import type { LightElement } from '@aweftjs/dom';
-import { Detached, Popup, PopupContext, context, h, hydrate, mark, mount, render, trackedMount } from '@aweftjs/ui';
+import type { LightElement, NodeLike } from '@aweftjs/dom';
+import {
+	Detached, Popup, PopupContext, Stage, StageContext,
+	context, h, hydrate, mark, mount, render, trackedMount,
+} from '@aweftjs/ui';
+import type { Rect } from '@aweftjs/ui';
 
 const somewhere = { mode: 'below-start' as const, left: 10, top: 20, maxWidth: 100, maxHeight: 60, transformOrigin: 'top left' };
 
@@ -138,6 +142,187 @@ test('a registry is claimed once, so two renderers cannot both take it', () => {
 	const own = context();
 	assert.equal(own.popups.claim(), true);
 	assert.equal(own.popups.claim(), false);
+});
+
+// --- taking over the anchor's markup ----------------------------------------------------------
+
+/** Render an item to markup and parse it back into a document, the way a page loads. */
+const served = async (item: () => unknown): Promise<{ document: ReturnType<typeof createDocument>; markup: string }> => {
+	const markup = await render(item(), { context: context() });
+	const document = createDocument();
+	for (const node of parseHtml(markup, document)) document.body.appendChild(node);
+	return { document, markup };
+};
+
+const byId = (node: NodeLike | null, id: string): LightElement | null => {
+	for (let n = node; n !== null; n = n.nextSibling) {
+		if (n.nodeType === 1 && (n as unknown as LightElement).getAttribute('id') === id) return n as unknown as LightElement;
+		const inside = byId(n.firstChild, id);
+		if (inside !== null) return inside;
+	}
+	return null;
+};
+
+test('a Detached whose anchor has a handler on it takes over the server\'s node', async () => {
+	const app = (): unknown => {
+		const open = mutable(false);
+		return h(PopupContext, {},
+			h('div', { id: 'page' },
+				h(Detached as never, { enabled: open },
+					h('button', { id: 'anchor', onClick: () => open.set(!open.get()) }, '?'),
+					h(mark.popup, {}, h('div', { id: 'tip' }, 'help')))));
+	};
+
+	const { document, markup } = await served(app);
+	const sent = byId(document.body.firstChild, 'anchor');
+	assert.ok(sent !== null, 'the server wrote the anchor');
+
+	const stop = hydrate(document.body, app());
+	assert.equal(toHtml(document.body.childNodes), markup, 'the hydration changed the page');
+	assert.equal(byId(document.body.firstChild, 'anchor'), sent,
+		'the anchor on the page is the node the server sent, not one the client built in its place');
+
+	// And the handler the client gave it reaches that node, which is what a dropped anchor loses.
+	const box = byId(document.body.firstChild, 'tip')!.parentNode as unknown as LightElement;
+	assert.match(box.getAttribute('style') ?? '', /display: none/, 'closed to begin with');
+	(sent as unknown as { dispatchEvent(event: unknown): boolean }).dispatchEvent({ type: 'click', target: sent });
+	assert.doesNotMatch(box.getAttribute('style') ?? '', /display: none/,
+		'a click on the server\'s own node opened the popup');
+	stop();
+});
+
+/** A fake browser: rectangles for the nodes an anchor is made of, and frames on demand. */
+const laidOut = (rects: Map<unknown, Rect>): { frame(): void; stop(): void } => {
+	const global = globalThis as Record<string, unknown>;
+	const kept = { raf: global['requestAnimationFrame'], caf: global['cancelAnimationFrame'] };
+	let queued: (() => void) | null = null;
+	global['requestAnimationFrame'] = (fn: () => void): number => { queued = fn; return 1; };
+	global['cancelAnimationFrame'] = (): void => { queued = null; };
+	global['innerWidth'] = 1000;
+	global['innerHeight'] = 800;
+	for (const [node, rect] of rects) {
+		(node as Record<string, unknown>)['getBoundingClientRect'] = (): Rect => rect;
+	}
+	return {
+		frame: () => { const fn = queued; queued = null; fn?.(); },
+		stop: () => { global['requestAnimationFrame'] = kept.raf; global['cancelAnimationFrame'] = kept.caf; },
+	};
+};
+
+test('the anchor\'s rectangle is the union of every node between it and the popup', () => {
+	const open = mutable(false);
+	const document = createDocument();
+	const stop = mount(document.body, h(PopupContext, {},
+		h('div', { id: 'page' },
+			h(Detached as never, { enabled: open, locations: ['below-start'] },
+				h('b', { id: 'one' }, 'one'),
+				' and ',
+				h('i', { id: 'two' }, 'two'),
+				h(mark.popup, {}, h('div', { id: 'tip' }, 'help'))))));
+
+	const one = byId(document.body.firstChild, 'one')!;
+	const two = byId(document.body.firstChild, 'two')!;
+	const box = byId(document.body.firstChild, 'tip')!.parentNode as unknown as LightElement;
+	const view = laidOut(new Map<unknown, Rect>([
+		[one, { left: 10, top: 20, width: 30, height: 10 }],
+		[two, { left: 60, top: 40, width: 20, height: 10 }],
+	]));
+	try {
+		open.set(true);
+		view.frame();
+		// Worked out by hand: the union of the two rectangles is left 10, top 20, 70 by 30, and
+		// `below-start` puts the popup at its left edge and its bottom. The text between them has no
+		// rectangle to contribute, and the popup's own markers have none either.
+		assert.match(box.getAttribute('style') ?? '', /left: 10px/);
+		assert.match(box.getAttribute('style') ?? '', /top: 50px/);
+	} finally {
+		view.stop();
+		stop();
+	}
+});
+
+test('an anchor that is swapped for another element is measured again on the next frame', () => {
+	const open = mutable(false);
+	const which = mutable('one');
+	const document = createDocument();
+	const stop = mount(document.body, h(PopupContext, {},
+		h('div', { id: 'page' },
+			h(Detached as never, { enabled: open, locations: ['below-start'] },
+				which.map((name: unknown) => (name === 'one'
+					? h('b', { id: 'one' }, 'one')
+					: h('i', { id: 'two' }, 'two'))),
+				h(mark.popup, {}, h('div', { id: 'tip' }, 'help'))))));
+
+	const box = byId(document.body.firstChild, 'tip')!.parentNode as unknown as LightElement;
+	const view = laidOut(new Map<unknown, Rect>([
+		[byId(document.body.firstChild, 'one')!, { left: 10, top: 20, width: 30, height: 10 }],
+	]));
+	try {
+		open.set(true);
+		view.frame();
+		assert.match(box.getAttribute('style') ?? '', /left: 10px/, 'the first anchor');
+
+		which.set('two');
+		const two = byId(document.body.firstChild, 'two')!;
+		(two as unknown as Record<string, unknown>)['getBoundingClientRect'] =
+			(): Rect => ({ left: 200, top: 100, width: 40, height: 10 });
+		view.frame();
+		assert.match(box.getAttribute('style') ?? '', /left: 200px/,
+			'the cell swapped the anchor and the next frame measured the element that is there now');
+	} finally {
+		view.stop();
+		stop();
+	}
+});
+
+test('a Detached with nothing written after it measures its anchor and not its own popup', () => {
+	const open = mutable(false);
+	const document = createDocument();
+	// No element after it and no wrapper around it, so the popup sink's own nodes are the anchor's
+	// next siblings. Walking to the end of the parent would measure the popup being placed.
+	const stop = mount(document.body, h(PopupContext, {},
+		h(Detached as never, { enabled: open, locations: ['below-start'] },
+			h('b', { id: 'one' }, 'one'),
+			h(mark.popup, {}, h('div', { id: 'tip' }, 'help')))));
+
+	const one = byId(document.body.firstChild, 'one')!;
+	const box = byId(document.body.firstChild, 'tip')!.parentNode as unknown as LightElement;
+	const view = laidOut(new Map<unknown, Rect>([
+		[one, { left: 10, top: 20, width: 30, height: 10 }],
+		[box, { left: 0, top: 300, width: 500, height: 200 }],
+	]));
+	try {
+		open.set(true);
+		view.frame();
+		assert.match(box.getAttribute('style') ?? '', /left: 10px/);
+		assert.match(box.getAttribute('style') ?? '', /top: 30px/,
+			'the anchor alone: taking the popup in as well would put this at 500');
+	} finally {
+		view.stop();
+		stop();
+	}
+});
+
+test('opening an act over one that held a popup renders the act that was opened', () => {
+	// The page and the popups share one element, so the page needs an end of its own: without one
+	// the act mounted after the swap landed behind the popups, and the sink's list took it for one
+	// of its own as the popup left.
+	let held: { open(options: Record<string, unknown>): void } | null = null;
+	const Home = (props: { stage?: unknown }): unknown => {
+		held = props.stage as { open(options: Record<string, unknown>): void };
+		return h(Popup as never, { placement: mutable(somewhere) }, 'inside');
+	};
+	const document = createDocument();
+	const stop = mount(document.body, h(PopupContext, {}, h(StageContext as never, {
+		acts: { '': Home, other: () => h('p', { id: 'other' }, 'the other act') },
+		initial: '',
+	}, h(Stage as never, {}))));
+
+	assert.match(toHtml(document.body.childNodes), /inside/, 'the first act put a popup up');
+	held!.open({ name: 'other' });
+	assert.ok(byId(document.body.firstChild, 'other') !== null, 'the act that was opened is on the page');
+	assert.doesNotMatch(toHtml(document.body.childNodes), /inside/, 'and the popup went with the act that held it');
+	stop();
 });
 
 test('every shape of popup under a PopupContext renders, parses and hydrates', async () => {
