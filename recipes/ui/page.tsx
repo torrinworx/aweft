@@ -6,8 +6,8 @@
 
 import { mutable, mutableArray } from '@aweftjs/core';
 import {
-	Detached, LoaderContext, PopupContext, Shown, Switch, Theme, ThemeContext,
-	h, mark, suspend,
+	Detached, LoaderContext, PopupContext, Shown, Switch, TextField, TextModifiers, Theme,
+	ThemeContext, Typography, h, mark, suspend,
 } from '@aweftjs/ui';
 
 Theme.define({
@@ -94,6 +94,7 @@ export const App = (): unknown => {
 	const shown = mutable(true);
 	const stage = mutable<'one' | 'two'>('one');
 	const rows = mutableArray(['first', 'second']);
+	const note = mutable('nothing to do yet');
 
 	return (
 		<PopupContext>
@@ -165,6 +166,19 @@ export const App = (): unknown => {
 							</div>
 						</mark.popup>
 					</Detached>
+				</section>
+
+				<section theme="section">
+					<h2 theme="heading">Text modifiers</h2>
+					<TextField label="A note" value={note} id="note-field" />
+					<TextModifiers
+						value={[
+							{ check: 'TODO', return: (word: string) => <b theme="demo_quiet">{word}</b> },
+							{ check: /@\w+/g, return: (who: string) => <i theme="demo_quiet">{who}</i> },
+						]}
+					>
+						<Typography type="p1" id="note" label={note} />
+					</TextModifiers>
 				</section>
 
 				<section theme="section">

@@ -194,6 +194,19 @@ try {
 		return popup !== null && popup !== undefined && getComputedStyle(popup).display === 'none';
 	});
 
+	// --- text modifiers --------------------------------------------------------------------------
+
+	assert.equal(await page.evaluate(() => document.querySelectorAll('#note b').length), 0,
+		'nothing in the note matches yet');
+	await page.click('#note-field');
+	await page.keyboard.press('End');
+	await page.keyboard.type(', TODO ask @rita');
+	await page.waitForFunction(() => document.querySelectorAll('#note b').length === 1);
+	assert.equal(await page.evaluate(() => document.querySelectorAll('#note i').length), 1,
+		'the second modifier found the mention in the same pass');
+	assert.match(await page.textContent('#note') ?? '', /nothing to do yet, TODO ask @rita/,
+		'and the gaps between the matches are the text that was typed');
+
 	// --- loading -------------------------------------------------------------------------------
 
 	await page.waitForSelector('#arrived');
@@ -266,6 +279,34 @@ try {
 	const body = await paint('#body-light');
 	assert.equal(body.fontSize, '16px', '$textMd is one rem');
 	assert.equal(body.lineHeight, '24px', 'and it has its line height');
+
+	// The type section, which is `Typography` rather than hand-written markup. The sizes are the
+	// scale in rem read back in the pixels a 16px root makes of them (design 182).
+	const type = await page.evaluate(() => {
+		const style = (id: string): Record<string, string> => getComputedStyle(document.querySelector(id)!);
+		return {
+			h1Size: style('#type-h1-light')['fontSize'],
+			h1Tag: document.querySelector('#type-h1-light')!.tagName.toLowerCase(),
+			h3Tag: document.querySelector('#type-h3-light')!.tagName.toLowerCase(),
+			boldWeight: style('#type-h2-bold-light')['fontWeight'],
+			p1Size: style('#type-p1-light')['fontSize'],
+			p2Size: style('#type-p2-light')['fontSize'],
+			darkH1: style('#type-h1-dark')['color'],
+			lightH1: style('#type-h1-light')['color'],
+			inlineTag: document.querySelector('#type-inline-light')!.tagName,
+			inlineParent: document.querySelector('#type-inline-light')!.parentElement!.tagName,
+		};
+	});
+	assert.equal(type.h1Size, '36px', '$text4xl is 2.25rem of the 16px root');
+	assert.equal(type.p1Size, '16px', 'a paragraph is body size');
+	assert.equal(type.p2Size, '14px', 'and the smaller one is $textSm');
+	assert.equal(type.boldWeight, '600', 'text_bold after text_h2 is what the browser computes');
+	assert.equal(type.h3Tag, 'h3', 'the first segment picked the element');
+	assert.equal(type.h1Tag, 'p', 'and element put the h1 look on the level the outline wanted');
+	assert.notEqual(type.lightH1, type.darkH1, 'the type section resolves the mode of its pane');
+	assert.equal(type.inlineTag, 'SPAN', 'a run inside a line of text is a span');
+	assert.equal(type.inlineParent, 'P',
+		'and it is still inside the paragraph: a <p> here would have closed the outer one early');
 
 	// Hover is a tint of the element's own foreground, laid over whatever background it has.
 	assert.equal(lightButton.backgroundImage, 'none', 'no tint before the pointer arrives');
