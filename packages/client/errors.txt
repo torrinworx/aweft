@@ -1,0 +1,3 @@
+closed: Make a new client with createClient; a closed one opens no socket.
+no-url: Pass url to createClient; outside a page there is no origin to read one from.
+timeout: Raise the timeout, or wait for status to read open before asking.
