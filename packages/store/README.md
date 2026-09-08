@@ -6,7 +6,7 @@ Open a document and mutate it. Every commit it produces is written when it is pr
 granularity of the slots that changed. There is no save interval, no flush, and no reload.
 
 ```ts
-import { atomic } from '@aweftjs/core';
+import { atomic, createObject } from '@aweftjs/core';
 import { createStore, memoryDriver } from '@aweftjs/store';
 
 const store = createStore({ driver: memoryDriver() });
@@ -14,12 +14,21 @@ const store = createStore({ driver: memoryDriver() });
 const board = await store.open('board:42');
 const root = board.root as Record<string, unknown>;
 
-atomic(() => { root.title = 'a board'; root.owner = 'u_7'; });
+atomic(() => {
+	root.title = 'a board';
+	root.owner = 'u_7';
+	root.meta = createObject({ authorId: 'u_7' });     // a slot holds one of these, not a plain object
+});
 
 await store.settled(board);        // wait for the writes already in flight
 ```
 
 Reopen it anywhere over the same driver and it is what you left.
+
+**A slot holds a primitive, bytes, or an observable**, and an observable is one core made:
+`createObject`, `createArray` or `createMap`. Assigning a plain object or array is refused
+(`inline-container`), because a document is a graph of observables and a bare object has no
+identity to give a row.
 
 **Reach for `atomic` from the start.** Every assignment outside it is its own commit, and its
 own entry in the history. Two bare assignments are two commits, so a watcher sees the document
@@ -84,6 +93,9 @@ you already saw.
 what it returned. So put the most selective condition first, and that is the whole of the
 tuning advice.
 
+**There is no query for every document ordered by a field.** A condition is required and it is
+what selects; reading everything is `scan`, which orders by name.
+
 **An undeclared path is refused.** Not scanned:
 
 ```
@@ -122,9 +134,18 @@ const missed = await store.since('board:42', session.seq);
 for (const { seq, commit } of missed) send(seq, commit);
 ```
 
-A sequence older than the tail reaches back to is answered with what the tail still holds, so
-compare the first sequence you get with the one you asked for and resynchronize when there is
-a gap.
+A sequence the tail no longer reaches back to throws `truncated` rather than answering with what
+is left, because a short answer reads exactly like a complete one. Catch it and take the
+document whole:
+
+```ts
+try {
+	for (const { seq, commit } of await store.since('board:42', session.seq)) send(seq, commit);
+} catch (e) {
+	if ((e as { reason?: string }).reason !== 'truncated') throw e;
+	await sendWholeDocument('board:42');
+}
+```
 
 `truncate(doc, keep)` drops everything but the most recent `keep` commits. How much history
 to keep is yours; nothing in the stack reads the tail on its own.
@@ -164,13 +185,109 @@ and stays one delta. Across a restart it is refused with `detached-elsewhere`, e
 commit that re-attaches an observable carries everything it holds (design 084): the refusal is
 stricter than the rule requires, loses nothing, and stays until there is a reason to relax it.
 
+## On Postgres
+
+```ts
+import { Pool } from 'pg';
+import { createStore } from '@aweftjs/store';
+import { postgresDriver } from '@aweftjs/store/postgres';
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const store = createStore({ driver: postgresDriver(pool), declare: { owner: ['ownerId'] } });
+```
+
+**You hand in the pool.** Anything whose `connect()` answers a client with `query(text, values)`
+and `release()` will do, which is what `pg`'s `Pool` is, so nothing is installed by this package
+and nothing is imported by the subpath. How many connections it has, how it authenticates and
+when it ends are yours. `close()` finishes the driver and leaves the pool alone.
+
+**The driver makes its own tables** (`aweft_documents`, `aweft_rows`, `aweft_tail`,
+`aweft_projection`, `aweft_declared` and `aweft_version`), in whatever schema the pool's `search_path` names, on
+the first call, which is `declare`. Two applications on one database keep apart by schema, which
+the pool already decides, so there is no option for a prefix. The role the pool connects as needs
+the right to create them.
+
+**A version row guards the tables.** A shape this driver does not know is refused before anything
+is read:
+
+```
+unknown-version: these tables are version 9 and this driver writes version 1.
+Point the pool at a schema this driver made, or run the driver whose version matches the tables.
+```
+
+**Declaring a new path reads every stored document once**, at startup, inside `declare`, before
+the store answers anything. That is what fills in the projection for documents written before
+the path existed, and it happens again when a field keeps its name and changes its path, which
+`aweft_declared` is what makes visible. It is proportional to the collection, so a large one
+pays it at boot, and only when the declaration actually changed. Finish one deployment before
+starting the next: a process still writing under the old declaration while a new one declares
+can have a write projected from the rows just before it.
+
+**The declaration is what the index holds.** A field you stop declaring leaves the projection,
+so two stores over one schema declare the same paths, or the one that declares fewer drops the
+rest and the other pays the walk to put them back.
+
+**Nothing is told that a document changed.** No notification, no `LISTEN`. Live updates go
+through `sync`, and one end decides a document's commits.
+
+**Two things Postgres will not hold.** A string containing a zero byte (`\u0000`) is one, in a
+document name, a slot name, a slot value or a projected value alike. The driver refuses it
+itself, before the transaction opens, with `zero-byte` and the place it found it, rather than
+letting a bare database error out of a half written commit. And string ordering is by code point
+(the projection's text column is collated `C`), which matches every other driver for text inside
+the basic plane.
+
+Tested against Postgres 18, started per run by `embedded-postgres`; both it and `pg` are
+development dependencies of this package and neither ships. Measured by `bench/store-postgres.ts`
+on one machine, editing one field of one record over and over, two runs back to back:
+
+| Document | Per write | Write-ahead log per write |
+|---|---|---|
+| 151 KB | 0.310 and 0.335 ms | 0.71 KB |
+| 624 KB | 0.257 and 0.169 ms | 0.70 KB |
+
+Flat in the size of the document, which is the whole point of design 047: the two document
+sizes differ by four times and the numbers do not separate. A declared read against 20,000
+documents is 0.29 to 0.36 ms through the index, and the same script prints the `EXPLAIN` showing
+the index-only scan it takes.
+
 ## Writing a driver
 
-A driver is twelve methods: take the list of declared paths, claim a name, write a commit's
+A driver is twelve methods: take the declaration, claim a name, write a commit's
 slots and its tail entry and its projection together, read the rows back, read a range of the
 tail, say where the head is, answer one indexed condition, read documents for `scan`, truncate
 the tail, forget swept rows, forget a whole document, and close. Nothing else. The interface stays this narrow on purpose, because widening it until the
 weakest target fits is how the weakest target ends up deciding what the strongest may offer.
+
+Three obligations are easy to miss, and each one is a check in the suite:
+
+**`declare` carries the paths, and a driver that already holds documents brings their
+projection into line with it inside it**, before it resolves (design 162). A document lacks a
+field when it has no value for it and equally when it holds one computed from a path that has
+since changed, so record the paths you projected under and compute a changed field again for
+every document; a field the declaration no longer names leaves the projection, so `Found.fields`
+carries the declared fields and nothing else. Read those documents' rows and compute each
+projection with `projectionOf`:
+
+```ts
+async declare(declaration) {
+	for (const doc of await documentsMissingAField(declaration)) {
+		const held = await myRead(doc);
+		await writeMissingFields(doc, projectionOf(held.rows, held.root, declaration));
+	}
+}
+```
+
+It is the same function `store` runs on every write, so a backfill and a write cannot disagree
+about what a path names.
+
+**A slot may hold bytes, and they have to come back as bytes.** A driver that keeps slots as
+JSON writes a `Uint8Array` as an object keyed by index and reads back that object, silently. So
+store a byte value as `{ bytes: <base64> }` and turn it back into a `Uint8Array` on read
+(design 163). No reference carries that key and no primitive is an object, so the shape is
+unambiguous.
+
+**An absent `edge` on a patch means unchanged**, never detached.
 
 Prove it rather than claim it:
 
@@ -185,9 +302,9 @@ for (const check of driverChecks()) {
 The check that matters most runs four writers concurrently against slots that do not overlap
 and asserts every one of them survives. Two more exist for the same mistake from other angles:
 a row nothing attaches keeps its slots, and an unset slot stays unset. A driver that writes rows
-whole rather than slot by slot fails all three, which is what they are there to catch. Thirty
-checks in all, a count the proof program pins, and the example driver below passes every one
-there.
+whole rather than slot by slot fails all three, which is what they are there to catch.
+Thirty-three checks in all, a count the proof program pins, and the example driver below passes
+every one there.
 
 `recipes/store/driver-file.ts` is a complete driver written outside the package, and the proof
 program runs the real thing: it writes a document, sends the writing

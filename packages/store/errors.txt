@@ -11,4 +11,6 @@ not-open: Open the document again and use the handle that call hands back.
 root-conflict: Write to a name nothing holds, or remove the stored document first.
 truncated: Open the document and take it whole, rather than asking for the commits it missed.
 undeclared: Declare the path in createStore, or call scan to read without an index.
+unknown-version: Point the pool at a schema this driver made, or run the driver whose version matches the tables.
 wildcard-path: Declare one literal path per field, and one field per path.
+zero-byte: Strip the zero byte from the string before writing it.

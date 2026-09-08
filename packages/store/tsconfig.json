@@ -1,4 +1,4 @@
 {
 	"extends": "../../tsconfig.base.json",
-	"include": ["src", "tests", "../../recipes/store"]
+	"include": ["src", "tests", "../../recipes/store", "../../recipes/documents-on-postgres", "../../bench/store-postgres.ts"]
 }

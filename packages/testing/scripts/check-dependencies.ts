@@ -41,6 +41,10 @@ const violations = checkManifests(manifests, [], {
 	// check refuses a peer that is not marked optional. `@iconify-json/lucide` is a devDependency
 	// as well, because the suite and the recipe read a real set.
 	'@aweftjs/icons': ['@iconify-json/*'],
+	// The Postgres driver's obligations are transactional, and nothing but a real server
+	// enforces a row lock (design 160). Dev only, this package only: the driver
+	// takes a pool the application made and imports none of these.
+	'@aweftjs/store': ['pg', '@types/pg', 'embedded-postgres'],
 });
 
 if (violations.length > 0) {
