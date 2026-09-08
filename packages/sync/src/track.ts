@@ -59,11 +59,13 @@ export const track = (document: unknown, on: (event: Tracked) => void): Tracker 
 	// has been delivered, which is the only delivery it covers.
 	let landing = 0;
 
+	// Asks for inverses, because every event carries `undo` (design 156). It is the only
+	// watcher in the stack that does.
 	const stopWatch = observer(document).watch((change: Change) => {
 		const landed = landing > 0;
 		if (landed) landing = 0;
 		on({ commit: { deltas: [...change.deltas] }, undo: change.inverse(), landed });
-	});
+	}, { inverse: true });
 
 	return {
 		receive: (commit) => {

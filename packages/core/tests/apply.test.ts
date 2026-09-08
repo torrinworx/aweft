@@ -92,7 +92,7 @@ test('applying tells watchers once, with the deltas in their scope', () => {
 test('a change hands back the commit that undoes it', () => {
 	const doc = createObject<Doc>({ title: 'a' });
 	const seen: Change[] = [];
-	observer(doc).watch((change) => seen.push(change));
+	observer(doc).watch((change) => seen.push(change), { inverse: true });
 
 	const before = snapshot(doc);
 	atomic(() => {
@@ -108,7 +108,7 @@ test('a change hands back the commit that undoes it', () => {
 test('undo is a commit, so undoing it again is redo', () => {
 	const doc = createObject<Doc>({ title: 'a' });
 	const seen: Change[] = [];
-	observer(doc).watch((change) => seen.push(change));
+	observer(doc).watch((change) => seen.push(change), { inverse: true });
 
 	doc.title = 'b';
 	const after = snapshot(doc);
@@ -124,7 +124,7 @@ test('undo is a commit, so undoing it again is redo', () => {
 test('a removal inverts to the value that was there', () => {
 	const doc = createObject<Doc>({ title: 'a', count: 2 });
 	const seen: Change[] = [];
-	observer(doc).watch((change) => seen.push(change));
+	observer(doc).watch((change) => seen.push(change), { inverse: true });
 
 	delete doc.count;
 	apply(doc, seen[0]!.inverse());

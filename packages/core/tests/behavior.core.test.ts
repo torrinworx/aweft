@@ -122,7 +122,7 @@ test('a watcher hears the removal of the subtree it was watching', () => {
 test('a delta written into a subtree being detached still reaches the root', () => {
 	const doc = createObject<Doc>({ held: createObject<Record<string, unknown>>({ x: 1 }) });
 	const seen: Change[] = [];
-	observer(doc).watch((change) => seen.push(change));
+	observer(doc).watch((change) => seen.push(change), { inverse: true });
 	const held = doc.held!;
 
 	// The format allows writing into a subtree in the same commit that detaches it, so a

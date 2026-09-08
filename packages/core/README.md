@@ -33,9 +33,10 @@ atomic(() => {          // also one commit, and the title watcher never fires fo
 	doc.height = 4;
 });
 
-// Undo: every change carries the commit that undoes it.
+// Undo: a watcher that asks for it gets the commit that undoes each change.
 const undos: Commit[] = [];
-const stopRecording = observer(doc).watch((change) => undos.push(change.inverse()));
+const stopRecording = observer(doc).watch(
+	(change) => undos.push(change.inverse()), { inverse: true });
 doc.title = 'oops';
 stopRecording();          // stop before undoing, or the undo records itself
 apply(doc, undos.pop()!); // title is 'plan b' again

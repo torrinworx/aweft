@@ -33,6 +33,7 @@ export const createNode = (kind: ObservableKind, id: Id = createId()): Node => {
 		root: undefined as unknown as Node,
 		index: null,
 		watchers: 0,
+		inverses: 0,
 		reach: 0,
 	};
 
@@ -225,6 +226,7 @@ export const reroot = (child: Node, root: Node): void => {
 	if (old === root && index.get(child.key) === child) return;
 
 	let moved = 0;
+	let asked = 0;
 
 	walk(child, (node) => {
 		const taken = index.get(node.key);
@@ -237,11 +239,15 @@ export const reroot = (child: Node, root: Node): void => {
 		index.set(node.key, node);
 		if (node !== root) node.index = null;
 		node.root = root;
-		moved += node.listeners === null ? 0 : node.listeners.size;
+		if (node.listeners === null) return;
+		moved += node.listeners.size;
+		for (const listener of node.listeners) if (listener.inverse) asked += 1;
 	});
 
 	old.watchers -= moved;
 	root.watchers += moved;
+	old.inverses -= asked;
+	root.inverses += asked;
 	// A listener arriving with the subtree can want a delta as deep as its old document allowed.
 	if (moved > 0 && old.reach > root.reach) root.reach = old.reach;
 };
@@ -276,6 +282,7 @@ export const addListener = (node: Node, listener: Listener): void => {
 
 	const root = node.root;
 	root.watchers += 1;
+	if (listener.inverse) root.inverses += 1;
 
 	// Only a shallow scope with no wildcard bounds how deep a delta it will take. Anything
 	// else can match at any depth below the observable it was built from (design 085).
@@ -286,6 +293,7 @@ export const addListener = (node: Node, listener: Listener): void => {
 export const removeListener = (node: Node, listener: Listener): void => {
 	if (node.listeners === null || !node.listeners.delete(listener)) return;
 	node.root.watchers -= 1;
+	if (listener.inverse) node.root.inverses -= 1;
 };
 
 /** Find an observable of this document by id. */

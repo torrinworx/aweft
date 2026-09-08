@@ -156,7 +156,7 @@ observer(board).watch((change) => {
 	} else {
 		undoable.push(inverse);
 	}
-});
+}, { inverse: true });
 
 const replay = (from: Commit[], mode: 'undo' | 'redo'): boolean => {
 	const commit = from.pop();

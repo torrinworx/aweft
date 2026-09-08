@@ -288,7 +288,7 @@ test('re-attaching a dropped observable re-sends what it holds, and a replica ap
 
 const undoOf = (doc: object, edit: () => void): Commit => {
 	let taken: Commit | undefined;
-	const stop = observer(doc).watch((change) => { taken = change.inverse(); });
+	const stop = observer(doc).watch((change) => { taken = change.inverse(); }, { inverse: true });
 	edit();
 	stop();
 	return taken!;
@@ -346,7 +346,7 @@ test('the inverse of a dropped subtree names what it held then, not what it hold
 	observer(doc).watch((change) => {
 		commits.push({ deltas: [...change.deltas] });
 		changes.push(change);
-	});
+	}, { inverse: true });
 
 	const rows = createArray<Record<string, unknown>>();
 	doc['rows'] = rows;
@@ -381,4 +381,105 @@ test('an observable that came and went inside one block is not in the commit', (
 
 	assert.equal(seen.length, 1);
 	assert.deepEqual(seen[0]!.deltas.map((d) => d.type), ['replace']);
+});
+
+// A watcher says at registration whether it wants inverses, and a commit builds them only for a
+// document some watcher asked on (design 156).
+
+test('a watcher that did not ask is refused an inverse, and told what to pass', () => {
+	const doc = createObject<Doc>({ title: 'a' });
+	const seen: Change[] = [];
+	const stop = observer(doc).watch((change) => seen.push(change));
+
+	doc.title = 'b';
+	stop();
+
+	assert.equal(seen.length, 1);
+	assert.throws(() => seen[0]!.inverse(), (error: Error & { reason?: string; fix?: string }) => {
+		assert.equal(error.reason, 'inverse-not-asked');
+		assert.match(error.fix ?? '', /\{ inverse: true \}/);
+		return true;
+	});
+});
+
+test('two watchers on one document, one asking: the asker undoes and the other is refused', () => {
+	const doc = createObject<Doc>({ title: 'a', count: 1 });
+	const asked: Change[] = [];
+	const not: Change[] = [];
+	const stopAsked = observer(doc).watch((change) => asked.push(change), { inverse: true });
+	const stopNot = observer(doc).watch((change) => not.push(change));
+
+	atomic(() => {
+		doc.title = 'b';
+		doc.count = 2;
+	});
+	stopAsked();
+	stopNot();
+
+	assert.equal(asked.length, 1);
+	assert.equal(not.length, 1);
+	assert.throws(() => not[0]!.inverse(), /inverse-not-asked/);
+
+	apply(doc, asked[0]!.inverse());
+	assert.equal(doc.title, 'a');
+	assert.equal(doc.count, 1);
+});
+
+test('the last asking watcher leaving takes the capture with it', () => {
+	const doc = createObject<Record<string, unknown>>();
+	const rows = createArray<Record<string, unknown>>();
+	doc['rows'] = rows;
+	rows.push(createObject<Record<string, unknown>>({ label: 'a' }));
+
+	const stopAsked = observer(doc).watch(() => undefined, { inverse: true });
+	const seen: Change[] = [];
+	const stopSeen = observer(doc).watch((change) => seen.push(change));
+	stopAsked();
+
+	// Nobody is asking now, so the commit that drops the row captures nothing for an inverse.
+	rows.splice(0, 1);
+	stopSeen();
+
+	assert.equal(seen.length, 1);
+	assert.throws(() => seen[0]!.inverse(), /inverse-not-asked/);
+});
+
+test('a dropping commit an asking watcher heard describes the whole subtree it dropped', () => {
+	const doc = createObject<Record<string, unknown>>();
+	const rows = createArray<Record<string, unknown>>();
+	doc['rows'] = rows;
+	const row = createObject<Record<string, unknown>>({ label: 'a', note: 'n' });
+	rows.push(row);
+
+	let dropped: Commit | undefined;
+	const stop = observer(doc).watch((change) => { dropped = change.inverse(); }, { inverse: true });
+	rows.splice(0, 1);
+	stop();
+
+	// The edge back, and one delta per slot the subtree held when the commit closed.
+	assert.equal(dropped!.deltas.length, 3);
+	apply(doc, dropped!);
+	const back = (doc['rows'] as Record<string, unknown>[])[0]!;
+	assert.equal(back['label'], 'a');
+	assert.equal(back['note'], 'n');
+});
+
+test('an asking watcher inside a subtree keeps the capture when the subtree moves document', () => {
+	const from = createObject<Record<string, unknown>>();
+	const to = createObject<Record<string, unknown>>();
+	const held = createObject<Record<string, unknown>>({ x: 1 });
+	from['held'] = held;
+
+	// Registered on `held`, so the count follows it into the other document.
+	const seen: Change[] = [];
+	const stop = observer(held).watch((change) => seen.push(change), { inverse: true });
+
+	delete from['held'];
+	to['held'] = held;
+	held['x'] = 2;
+	stop();
+
+	const last = seen[seen.length - 1]!;
+	apply(to, last.inverse());
+	assert.equal(held['x'], 1, 'the inverse still works in the document the subtree moved to');
 });

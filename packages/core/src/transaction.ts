@@ -258,16 +258,20 @@ export const atomic = <T>(run: () => T): T => {
 
 interface Entry {
 	readonly delta: Delta;
-	readonly inverse: Delta;
 	readonly node: Node;
 	readonly slot: string;
+	/**
+	 * The three fields an inverse is built from, filled only when a listener on this entry's
+	 * document asked for inverses (design 156). Null everywhere else, and never read there.
+	 */
+	readonly inverse: Delta | null;
 	/** What the slot held before this commit, or undefined when it held nothing. */
 	readonly prior: Cell | undefined;
 	/** The top of a subtree this delta took out of the document, for the inverse to put back. */
 	readonly dropped: Node | null;
 }
 
-const entryFor = (touch: Touch): Entry | null => {
+const entryFor = (touch: Touch, undoable: boolean): Entry | null => {
 	const node = touch.node;
 	const current = node.slots.get(touch.slot);
 	const existed = !touch.fresh && touch.prior !== undefined;
@@ -280,6 +284,16 @@ const entryFor = (touch: Touch): Entry | null => {
 	const id = node.id;
 	const was = existed ? touch.prior : undefined;
 
+	const now = (): Value => cellValue(current!);
+
+	// Nobody on this document can ask what this commit undid, so nothing here describes it.
+	if (!undoable) {
+		const bare = { node, slot: touch.slot, inverse: null, prior: undefined, dropped: null };
+		if (!existed) return { ...bare, delta: { type: 'add', id, ref, value: now() } };
+		if (!exists) return { ...bare, delta: { type: 'remove', id, ref } };
+		return { ...bare, delta: { type: 'replace', id, ref, value: now() } };
+	}
+
 	// A slot that let go of the observable living in it, where nothing re-homed it, is what
 	// takes a subtree out of the document (design 084). The inverse has to describe it.
 	const dropped = was !== undefined && was.kind === 'ref' && was.edge === 'attach'
@@ -290,7 +304,6 @@ const entryFor = (touch: Touch): Entry | null => {
 	const shared = { node, slot: touch.slot, prior: was, dropped };
 
 	const before = (): Value => cellValue(touch.prior!);
-	const now = (): Value => cellValue(current!);
 
 	if (!existed) {
 		return {
@@ -520,9 +533,10 @@ const grouped = (unwatched: boolean): Map<Node, Entry[]> => {
 		// A rule is handed the whole commit, so nothing is pruned on a document that has one.
 		if (!ruled && !wanted(node, root.reach)) continue;
 
+		const undoable = root.inverses > 0;
 		let list = byRoot.get(root);
 		for (const touch of bySlot.values()) {
-			const entry = entryFor(touch);
+			const entry = entryFor(touch, undoable);
 			if (entry === null) continue;
 
 			if (list === undefined) byRoot.set(root, list = [entry]);
@@ -586,7 +600,9 @@ const inverseOf = (matched: readonly Entry[], kept: ReadonlyMap<Node, Kept>): De
 	const tops = new Set<Node>();
 	for (const entry of matched) if (entry.dropped !== null) tops.add(entry.dropped);
 	if (tops.size === 0) {
-		for (const entry of matched) out.push(entry.inverse);
+		// Every entry handed to a listener that asked carries its inverse: the gate is per
+		// document, so one listener asking builds them for the whole commit.
+		for (const entry of matched) out.push(entry.inverse!);
 		return out;
 	}
 
@@ -608,7 +624,7 @@ const inverseOf = (matched: readonly Entry[], kept: ReadonlyMap<Node, Kept>): De
 
 	for (const entry of matched) {
 		if (gone.has(entry.node)) mark(entry.node, entry.slot, entry.prior);
-		else out.push(entry.inverse);
+		else out.push(entry.inverse!);
 	}
 
 	for (const [node, slots] of gone) {
@@ -625,6 +641,18 @@ const inverseOf = (matched: readonly Entry[], kept: ReadonlyMap<Node, Kept>): De
 	return out;
 };
 
+/**
+ * What `inverse()` answers a watcher that did not ask for one (design 156).
+ *
+ * The values it would need were never captured, and taking them from the tree now reads a
+ * state a later commit is free to have edited, so there is nothing to hand back and nothing
+ * to reconstruct. The question is answered once, when the watcher registers.
+ */
+const refuseInverse = (): Delta[] => {
+	throw codecError('inverse-not-asked', 'this watcher did not ask for inverses, so the commit captured none',
+		'Register the watcher as watch(fn, { inverse: true }).');
+};
+
 const deliveries = (byRoot: Map<Node, Entry[]>, kept: ReadonlyMap<Node, Kept>): Array<() => void> => {
 	const jobs: Array<() => void> = [];
 
@@ -636,7 +664,8 @@ const deliveries = (byRoot: Map<Node, Entry[]>, kept: ReadonlyMap<Node, Kept>): 
 
 		for (const [listener, matched] of perListener) {
 			const deltas = matched.map((e) => e.delta);
-			jobs.push(() => listener.deliver(deltas, () => inverseOf(matched, kept)));
+			const inverse = listener.inverse ? (): Delta[] => inverseOf(matched, kept) : refuseInverse;
+			jobs.push(() => listener.deliver(deltas, inverse));
 		}
 	}
 
@@ -660,6 +689,13 @@ const forget = (kept: Map<Node, Kept>): void => {
 		if (top.parent !== null) continue;
 
 		const index = top.root.index;
+		// Nobody on this document asked what the commit undid, so the walk only takes the
+		// subtree out of the index and copies none of its slots (design 156).
+		if (top.root.inverses === 0) {
+			if (index !== null) walk(top, (node) => { if (index.get(node.key) === node) index.delete(node.key); });
+			continue;
+		}
+
 		const nodes: Array<readonly [Node, Map<string, Cell>]> = [];
 		walk(top, (node) => {
 			nodes.push([node, new Map(node.slots)]);

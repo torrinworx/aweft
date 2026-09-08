@@ -50,6 +50,11 @@ export interface Node {
 	/** Listeners anywhere in this document. Held by the root, so a close can skip the work. */
 	watchers: number;
 	/**
+	 * How many of those asked for inverses. Held by the root. Zero is the common case and means
+	 * a commit captures nothing an inverse would need (design 156).
+	 */
+	inverses: number;
+	/**
 	 * How far below a listener's own observable a delta can sit and still fall in its scope,
 	 * over every listener this document has ever had. Held by the root, only ever raised, and
 	 * what lets a close skip a slot no listener could reach (design 085).
@@ -71,6 +76,8 @@ export interface Listener {
 	readonly shallow: boolean;
 	/** Any wildcard in the keys, so delivery knows to take the matcher instead of the walk. */
 	readonly wild: boolean;
+	/** Whether this listener asked for `change.inverse()` when it registered (design 156). */
+	readonly inverse: boolean;
 	/** The inverse is a thunk: most changes are never undone, so it is built when asked. */
 	readonly deliver: (deltas: Delta[], inverse: () => Delta[]) => void;
 }
@@ -83,6 +90,10 @@ export interface Listener {
  * to an encoder unchanged. `inverse` is built from the values the slots held before, captured
  * while the change was applied and, for a subtree the commit took out of the document, as the
  * commit closed. It is never transmitted (design 016).
+ *
+ * A commit captures those values only for a watcher that asked, so `inverse()` refuses with
+ * `inverse-not-asked` on a change delivered to a watcher registered without the option
+ * (design 156).
  */
 export interface Change extends Commit {
 	readonly deltas: readonly Delta[];

@@ -17,6 +17,7 @@ invalid-write: Assign the property instead of calling Object.defineProperty.
 invalid-write: Call push or splice to grow it; assign a smaller length to shorten it.
 invalid-write: Call splice to take the element out and close the gap.
 invalid-write: Push the value on the end, or splice it in where you want it.
+inverse-not-asked: Register the watcher as watch(fn, { inverse: true }).
 kind-conflict: Give the ref the kind the observable it names declares.
 kind-conflict: Keep one kind per id; make a new observable rather than reusing the id.
 kind-conflict: Set kind to 'object', 'array' or 'map'.
