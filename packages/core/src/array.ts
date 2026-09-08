@@ -10,7 +10,7 @@ import { type Id, type Position, assertPosition, bytesFromHex, bytesToHex, codec
 
 import type { Node } from './types.ts';
 import { createNode, indexOfSlot, plantCell } from './node.ts';
-import { between } from './position.ts';
+import { between, run } from './position.ts';
 import { atomic, write } from './transaction.ts';
 import { nodeOf, register, toCell } from './value.ts';
 
@@ -36,8 +36,18 @@ const removeAt = (node: Node, at: number): unknown => {
 
 /** Insert a run of values between two positions, keeping them in the order they were given. */
 const insertRun = (node: Node, at: number, items: readonly unknown[]): void => {
+	if (items.length === 0) return;
+
 	let before = positionAt(node, at - 1);
 	const after = positionAt(node, at);
+
+	// Appending is counting up, so a run onto the end is minted in one pass rather than taking
+	// the key it just wrote back apart once per value (design 155).
+	if (after === null) {
+		const keys = run(before, items.length);
+		for (let i = 0; i < items.length; i++) write(node, bytesToHex(keys[i]!), toCell(items[i]));
+		return;
+	}
 
 	for (const item of items) before = place(node, before, after, item);
 };
@@ -144,8 +154,7 @@ export const createArray = <T = unknown>(items?: Iterable<T>, id?: Id): T[] => {
 	const methods: Record<string, unknown> = {
 		push: (...values: unknown[]): number =>
 			atomic(() => {
-				let before = positionAt(node, node.order.length - 1);
-				for (const value of values) before = place(node, before, null, value);
+				insertRun(node, node.order.length, values);
 				return node.order.length;
 			}),
 

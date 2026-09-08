@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { compareBytes } from '@aweftjs/codec';
+import { assertPosition, compareBytes } from '@aweftjs/codec';
 import { randomFrom } from '@aweftjs/testing';
 
 import { createArray, insertAt, positionsOf } from '../src/index.ts';
@@ -269,4 +269,84 @@ test('an insert between two adjacent integers goes under the lower one', () => {
 	assert.deepEqual([...mid!.slice(0, a!.length)], [...a!]);
 	assert.equal(compareBytes(a!, mid!), -1);
 	assert.equal(compareBytes(mid!, b!), -1);
+});
+
+// A run of tail positions is minted in one pass (design 155). It must produce the keys the
+// one-at-a-time path produced: distinct, in order, and the same width.
+
+const widths = (list: object): number[] => positionsOf(list).map((key) => key.length);
+
+test('a pushed run gives keys that are distinct, ordered, and valid', () => {
+	const run = createArray<number>();
+	run.push(...Array.from({ length: 2000 }, (_, i) => i));
+
+	const keys = positionsOf(run);
+	assert.equal(keys.length, 2000);
+	assert.equal(new Set(keys.map(hex)).size, 2000, 'every key in the run is its own slot');
+	for (let i = 1; i < keys.length; i++) {
+		assert.ok(compareBytes(keys[i - 1]!, keys[i]!) < 0, `key ${i} sorts after the one before it`);
+	}
+	// Read back through the codec's own judgment, which is what a receiver applies.
+	for (const key of keys) assert.doesNotThrow(() => insertAt(createArray(), key, 1));
+});
+
+test('a run of tail keys is the width the one-at-a-time path produced', () => {
+	const one = createArray<number>();
+	for (let i = 0; i < 2000; i++) one.push(i);
+
+	const run = createArray<number>();
+	run.push(...Array.from({ length: 2000 }, (_, i) => i));
+
+	assert.deepEqual(widths(run), widths(one), 'the run counts up exactly as the loop did');
+});
+
+test('a run onto a filled array carries on above what is there', () => {
+	const list = createArray<number>();
+	list.push(1, 2, 3);
+	const before = positionsOf(list);
+	list.push(4, 5, 6);
+	const after = positionsOf(list);
+
+	assert.deepEqual(after.slice(0, 3).map(hex), before.map(hex), 'the keys already there are untouched');
+	for (let i = 1; i < after.length; i++) {
+		assert.ok(compareBytes(after[i - 1]!, after[i]!) < 0, 'the second run sits above the first');
+	}
+	assert.deepEqual([...list], [1, 2, 3, 4, 5, 6]);
+});
+
+test('a run after a tail key nobody minted is refused, not minted underneath it', () => {
+	// A valid key with a wider count byte sorts above every one-digit key, and its digits still
+	// decode to a small integer, so counting up from it lands below it. `between` is where that
+	// case is decided and it refuses; the run has to give the same answer rather than a key in
+	// the wrong place.
+	const list = createArray<number>();
+	list.push(1);
+	const hand = assertPosition(Uint8Array.from([2, 1, 1, 255, 255, 255]));
+	assert.ok(compareBytes(positionsOf(list)[0]!, hand) < 0, 'the hand-written key is the tail');
+	insertAt(list, hand, 99);
+
+	assert.throws(() => list.push(7), (e: Error & { reason?: string }) => e.reason === 'invalid-position');
+	assert.deepEqual([...list], [1, 99], 'and nothing was added');
+
+	// A run after a key the array minted is what it always was.
+	const ordinary = createArray<number>();
+	ordinary.push(1, 2, 3);
+	ordinary.push(4, 5);
+	const keys = positionsOf(ordinary);
+	assert.deepEqual([...ordinary], [1, 2, 3, 4, 5]);
+	for (let i = 1; i < keys.length; i++) {
+		assert.ok(compareBytes(keys[i - 1]!, keys[i]!) < 0, `key ${i} sorts after the one before it`);
+	}
+});
+
+test('a splice in the middle still places one key at a time, between its neighbours', () => {
+	const list = createArray<number>();
+	list.push(1, 2, 3, 4);
+	list.splice(2, 0, 10, 11);
+
+	assert.deepEqual([...list], [1, 2, 10, 11, 3, 4]);
+	const keys = positionsOf(list);
+	for (let i = 1; i < keys.length; i++) {
+		assert.ok(compareBytes(keys[i - 1]!, keys[i]!) < 0, `key ${i} sorts after the one before it`);
+	}
 });

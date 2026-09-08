@@ -37,8 +37,19 @@ const START = 128;
 // An integer digit is its value plus one, so a digit byte is never zero and a key with no
 // fractional part still ends in its random bytes. The first element of an array gets this
 // integer, so a prepend has as much room as an append before the integer runs out.
-const BASE = 254n;
-const FIRST = 128n;
+const BASE = 254;
+const FIRST = 128;
+const BASE_WIDE = 254n;
+
+// The arithmetic runs on Numbers, and reaches for BigInt only where a Number cannot hold the
+// answer exactly (design 155). Six digits in base 254 is 2.7e14, well inside 2^53; seven is
+// 6.8e16, past it. So a key with six digits or fewer is read, compared and counted as a
+// Number, and everything a run of them produces stays inside 2^53 as well, because the widest
+// answer six digits can lead to is 254^6.
+const NUMBER_DIGITS = 6;
+
+/** Is this key's integer part too wide to do exact arithmetic on as a Number? */
+const wide = (key: Uint8Array | null): boolean => key !== null && (key[0] ?? 0) > NUMBER_DIGITS;
 
 /**
  * The fractional digit to choose between two bounds, or undefined when none fits.
@@ -55,8 +66,16 @@ const digitFor = (da: number | undefined, db: number | undefined): number | unde
 };
 
 /** The integer to choose between two bounds, or undefined when none fits. */
-const integerFor = (va: bigint | undefined, vb: bigint | undefined): bigint | undefined => {
+const integerFor = (va: number | undefined, vb: number | undefined): number | undefined => {
 	if (va === undefined && vb === undefined) return FIRST;
+	if (vb === undefined) return va! + 1;
+	if (va === undefined) return vb > 0 ? vb - 1 : undefined;
+	return vb - va >= 2 ? va + Math.floor((vb - va) / 2) : undefined;
+};
+
+/** The same choice where a Number would lose digits. */
+const wideIntegerFor = (va: bigint | undefined, vb: bigint | undefined): bigint | undefined => {
+	if (va === undefined && vb === undefined) return BigInt(FIRST);
 	if (vb === undefined) return va! + 1n;
 	if (va === undefined) return vb > 0n ? vb - 1n : undefined;
 	return vb - va >= 2n ? va + (vb - va) / 2n : undefined;
@@ -85,12 +104,23 @@ const jitter = (): number[] => {
 };
 
 /** The count byte and digits of an integer, without its random bytes. */
-const integerBytes = (value: bigint): number[] => {
+const integerBytes = (value: number): number[] => {
 	const digits: number[] = [];
 	let rest = value;
 	do {
-		digits.unshift(Number(rest % BASE) + 1);
-		rest /= BASE;
+		digits.unshift((rest % BASE) + 1);
+		rest = Math.floor(rest / BASE);
+	} while (rest > 0);
+	return [digits.length, ...digits];
+};
+
+/** The same bytes for an integer past 2^53. */
+const wideIntegerBytes = (value: bigint): number[] => {
+	const digits: number[] = [];
+	let rest = value;
+	do {
+		digits.unshift(Number(rest % BASE_WIDE) + 1);
+		rest /= BASE_WIDE;
 	} while (rest > 0n);
 	return [digits.length, ...digits];
 };
@@ -99,12 +129,36 @@ const integerBytes = (value: bigint): number[] => {
 const integerWidth = (key: Uint8Array): number => 1 + (key[0] ?? 0) + JITTER;
 
 /** The integer a key starts with. A key cut short by hand reads as the digits it has. */
-const integerOf = (key: Uint8Array | null): bigint | undefined => {
+const integerOf = (key: Uint8Array | null): number | undefined => {
+	if (key === null) return undefined;
+	const count = key[0] ?? 0;
+	let value = 0;
+	for (let i = 1; i <= count && i < key.length; i++) value = value * BASE + (key[i]! - 1);
+	return value;
+};
+
+/** The same read for a key past 2^53. */
+const wideIntegerOf = (key: Uint8Array | null): bigint | undefined => {
 	if (key === null) return undefined;
 	const count = key[0] ?? 0;
 	let value = 0n;
-	for (let i = 1; i <= count && i < key.length; i++) value = value * BASE + BigInt(key[i]! - 1);
+	for (let i = 1; i <= count && i < key.length; i++) value = value * BASE_WIDE + BigInt(key[i]! - 1);
 	return value;
+};
+
+/**
+ * The count byte and digits of the integer strictly between two keys, or null when none fits.
+ *
+ * One place decides which arithmetic answers, so every caller gets the Number path unless a
+ * key on either side is too wide for it.
+ */
+const integerBetween = (a: Uint8Array | null, b: Uint8Array | null): number[] | null => {
+	if (wide(a) || wide(b)) {
+		const value = wideIntegerFor(wideIntegerOf(a), wideIntegerOf(b));
+		return value === undefined ? null : wideIntegerBytes(value);
+	}
+	const value = integerFor(integerOf(a), integerOf(b));
+	return value === undefined ? null : integerBytes(value);
 };
 
 /** Where level `i` of `key` starts. Level 0 is the integer part; the rest are fixed width. */
@@ -200,9 +254,9 @@ export const between = (a: Position | null, b: Position | null): Position => {
 	if (a !== null && above !== null && sameLevel(a, above, 0)) {
 		copyLevel(out, a, 0);
 	} else {
-		const value = integerFor(integerOf(a), integerOf(above));
-		if (value !== undefined) {
-			out.push(...integerBytes(value), ...jitter());
+		const bytes = integerBetween(a, above);
+		if (bytes !== null) {
+			out.push(...bytes, ...jitter());
 			return finish();
 		}
 
@@ -259,4 +313,94 @@ export const between = (a: Position | null, b: Position | null): Position => {
 		copyLevelUnder(out, above!, i);
 		above = null;
 	}
+};
+
+/**
+ * A run of positions after `a`, in order, each above the one before.
+ *
+ * Params:
+ *   a: the position the run starts after, or null for an empty array
+ *   count: how many positions to mint
+ *
+ * Returns: `count` valid positions. Every one is above `a` and above the one before it, and
+ * each carries its own randomness, so two replicas appending at the same moment still name
+ * different slots.
+ *
+ * Appending is counting up (design 082), so this is what `between(a, null)` does in a loop
+ * with the decoding taken out: the integer part of `a` is read once and the run takes the next
+ * integers from there, rather than taking apart the key it wrote a moment ago. The keys are
+ * the ones the one-at-a-time path produced. Internal to core; nothing exports it.
+ */
+/**
+ * The same run, one key at a time. Taken when the fast path's first key does not sort above
+ * `a`, which an `a` nobody minted can produce: `between` is the one place that decides where to
+ * go when nothing fits, and its refusal is the one the caller should see.
+ */
+const oneAtATime = (a: Position | null, count: number, out: Position[]): Position[] => {
+	let previous = a;
+	for (let i = 0; i < count; i++) {
+		previous = between(previous, null);
+		out[i] = previous;
+	}
+	return out;
+};
+
+export const run = (a: Position | null, count: number): Position[] => {
+	const out: Position[] = new Array<Position>(count);
+	if (count === 0) return out;
+
+	// The tail of an array is the one shape where the answer is decided at level zero every
+	// time: `between` with an open upper end takes the next integer and returns, whatever
+	// fractional levels `a` carries below it.
+	// `wide` is only ever true of a key, so there is a key to read here.
+	if (wide(a)) {
+		let value = wideIntegerOf(a)!;
+		for (let i = 0; i < count; i++) {
+			value += 1n;
+			const key = Uint8Array.from([...wideIntegerBytes(value), ...jitter()]);
+			if (i === 0 && a !== null && compareBytes(key, a) <= 0) return oneAtATime(a, count, out);
+			out[i] = assertPosition(key);
+		}
+		return out;
+	}
+
+	// Six digits is 2.7e14 and a run adds one per value, so the count stays exact as a Number
+	// however long the run is; a seventh digit only appears on the next call, which reads the
+	// key it produced and takes the wide path above.
+	//
+	// The bytes go straight into the key. A run of ten thousand is the one place where the
+	// lists `between` passes its bytes through cost more than the arithmetic does: writing
+	// them in place took the run from 2.4 ms to 0.8 ms against 3.3 ms for the same ten
+	// thousand keys one at a time.
+	const digits: number[] = [];
+	let value = integerOf(a) ?? FIRST - 1;
+	for (let i = 0; i < count; i++) {
+		value += 1;
+
+		digits.length = 0;
+		let rest = value;
+		do {
+			digits.push((rest % BASE) + 1);
+			rest = Math.floor(rest / BASE);
+		} while (rest > 0);
+
+		const key = new Uint8Array(1 + digits.length + JITTER);
+		key[0] = digits.length;
+		// `digits` came out least significant first, and a key reads most significant first.
+		for (let j = 0; j < digits.length; j++) key[1 + j] = digits[digits.length - 1 - j]!;
+
+		const bytes = draw();
+		// A position may not end in a zero byte, and the jitter is the end of this key.
+		if (bytes[JITTER - 1] === 0) bytes[JITTER - 1] = 1;
+		key.set(bytes, 1 + digits.length);
+
+		// The run promises every key is above `a`, and only the first one can break it: a key
+		// nobody minted, cut short or grown by hand, can read as an integer whose successor is
+		// shorter than the key itself and so sorts below it. The whole run then goes back
+		// through `between`, which is where that case is decided.
+		if (i === 0 && a !== null && compareBytes(key, a) <= 0) return oneAtATime(a, count, out);
+
+		out[i] = assertPosition(key);
+	}
+	return out;
 };
