@@ -16,8 +16,11 @@ import { type TransformOptions, transform } from './transform.ts';
 const HANDLED = /\.(?:jsx?|tsx?)$/;
 
 // A generated module's id. The leading NUL is what tells rollup and vite that nothing on disk
-// answers it; the second one separates the request from the directory to resolve the set in.
+// answers it. The directory to resolve the set in follows as a query, encoded, because vite turns
+// the id into a URL for the dev server and encodes only that first NUL: a second one reached
+// Firefox raw, which cuts the URL there and asks for a module nothing answers.
 const VIRTUAL = '\0aweft-icons:';
+const FROM = '?from=';
 
 /** What a bundler asks of a plugin, and all this one answers. */
 export interface Plugin {
@@ -74,12 +77,12 @@ export const aweft = (options: Omit<TransformOptions, 'filename'> = {}): Plugin 
 			// Claimed, so `load` asks again and refuses there.
 		}
 		if (!known) return null;
-		return `${VIRTUAL}${request}\0${from}`;
+		return `${VIRTUAL}${request}${FROM}${encodeURIComponent(from)}`;
 	},
 	async load(id) {
 		if (!id.startsWith(VIRTUAL)) return null;
-		const at = id.lastIndexOf('\0');
+		const at = id.lastIndexOf(FROM);
 		const { moduleFor } = await import('@aweftjs/icons/node');
-		return moduleFor(id.slice(VIRTUAL.length, at), id.slice(at + 1));
+		return moduleFor(id.slice(VIRTUAL.length, at), decodeURIComponent(id.slice(at + FROM.length)));
 	},
 });
