@@ -421,13 +421,37 @@ defineTheme({
 		lineHeight: '$textMdLine',
 		color: '$foreground',
 		margin: 0,
+		// A newline in a label is a line break on the page (design 182). A page that wants the
+		// other behaviour writes `normal` on its own entry.
+		whiteSpace: 'pre-wrap',
 	},
 	text_xs: { fontSize: '$textXs', lineHeight: '$textXsLine' },
 	text_sm: { fontSize: '$textSm', lineHeight: '$textSmLine' },
 	text_lg: { fontSize: '$textLg', lineHeight: '$textLgLine' },
 	text_xl: { fontSize: '$textXl', lineHeight: '$textXlLine' },
 	text_2xl: { fontSize: '$text2xl', lineHeight: '$text2xlLine' },
+	text_3xl: { fontSize: '$text3xl', lineHeight: '$text3xlLine' },
+	text_4xl: { fontSize: '$text4xl', lineHeight: '$text4xlLine' },
 	text_mono: { fontFamily: '$fontMono' },
+
+	// The six headings, on the six steps from the top down, all at one weight. `balance` evens the
+	// lines of a short block and the browser stops applying it past a handful, which is why it is
+	// here and not on a paragraph. No maximum width anywhere: a measure is the page's (design 182).
+	text_h1: { fontSize: '$text4xl', lineHeight: '$text4xlLine', fontWeight: 600, textWrap: 'balance' },
+	text_h2: { fontSize: '$text3xl', lineHeight: '$text3xlLine', fontWeight: 600, textWrap: 'balance' },
+	text_h3: { fontSize: '$text2xl', lineHeight: '$text2xlLine', fontWeight: 600, textWrap: 'balance' },
+	text_h4: { fontSize: '$textXl', lineHeight: '$textXlLine', fontWeight: 600, textWrap: 'balance' },
+	text_h5: { fontSize: '$textLg', lineHeight: '$textLgLine', fontWeight: 600, textWrap: 'balance' },
+	text_h6: { fontSize: '$textMd', lineHeight: '$textMdLine', fontWeight: 600, textWrap: 'balance' },
+
+	text_p1: { fontSize: '$textMd', lineHeight: '$textMdLine', textWrap: 'pretty' },
+	text_p2: { fontSize: '$textSm', lineHeight: '$textSmLine', textWrap: 'pretty' },
+
+	text_bold: { fontWeight: 600 },
+	text_regular: { fontWeight: 400 },
+	text_italic: { fontStyle: 'italic' },
+	text_center: { textAlign: 'center' },
+	text_inline: { display: 'inline' },
 
 	muted: { color: '$mutedForeground' },
 

@@ -5,7 +5,7 @@
 // providers, so anything that differs between them comes from the roles.
 
 import { mutable } from '@aweftjs/core';
-import { Theme, dark, h, light } from '@aweftjs/ui';
+import { Theme, Typography, dark, h, light } from '@aweftjs/ui';
 import type { Definitions } from '@aweftjs/ui';
 
 Theme.define({
@@ -142,6 +142,32 @@ const Specimens = (props: { mode?: unknown }): unknown => {
 				<p theme={['text', 'sm']}>Small</p>
 				<p theme={['text', 'xs', 'muted']}>Extra small, quiet</p>
 				<p theme={['text', 'sm', 'mono']}>monospace 0123456789</p>
+			</div>
+
+			<div theme="group">
+				<p theme={['text', 'sm', 'muted']}>Type, as a component</p>
+				{/* The pane's own title is the `h2` above, so the specimens start at `h3` and the two
+				    levels over them wear their look on a paragraph. That is what `element` is for:
+				    the look of a heading where the page's outline wants a different level. */}
+				<Typography type="h1" element={<p />} id={`type-h1-${mode}`} label="Heading one" />
+				<Typography type="h2" element={<p />} id={`type-h2-${mode}`} label="Heading two" />
+				<Typography type="h2_bold" element={<p />} id={`type-h2-bold-${mode}`} label="Heading two, bold" />
+				<Typography type="h3" id={`type-h3-${mode}`} label="Heading three" />
+				<Typography type="h4" id={`type-h4-${mode}`} label="Heading four" />
+				<Typography type="h5" id={`type-h5-${mode}`} label="Heading five" />
+				<Typography type="h6" id={`type-h6-${mode}`} label="Heading six" />
+				<Typography type="p1" id={`type-p1-${mode}`} label="Body copy at one rem, with the line height that belongs to it." />
+				<Typography type="p2" id={`type-p2-${mode}`} label="The smaller body size." />
+				<Typography type="p1_bold" label="Bold" />
+				<Typography type="p1_italic" label="Italic" />
+				<Typography type="p1_center" label="Centred" />
+				<Typography type="p1_muted" label="Quiet" />
+				<Typography type="p2">
+					{/* `sm` is a span at the paragraph's size. A `p2` here would put a paragraph
+					    inside a paragraph, which a browser closes early and a hydration then
+					    pairs against a different tree. */}
+					An <Typography type="sm_inline_bold" id={`type-inline-${mode}`} label="inline run" /> inside a line of text.
+				</Typography>
 			</div>
 		</section>
 	);

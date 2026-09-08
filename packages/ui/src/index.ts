@@ -58,6 +58,8 @@ export { TextField } from './text-field.tsx';
 export type { TextFieldProps } from './text-field.tsx';
 export { Toggle } from './toggle.tsx';
 export type { ToggleProps } from './toggle.tsx';
+export { TextModifiers, Typography } from './typography.tsx';
+export type { TextModifier, TypographyProps } from './typography.tsx';
 
 export { ColorPicker } from './color-picker.tsx';
 export type { ColorPickerProps } from './color-picker.tsx';

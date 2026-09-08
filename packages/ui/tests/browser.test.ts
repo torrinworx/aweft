@@ -1172,3 +1172,41 @@ test('End on a colour picker slider writes the cell', async () => {
 			`a hue of 360 is a red, and the cell says ${ended}`);
 	});
 });
+
+test('a Typography heading computes the theme\'s weight and the wrap the host reads', async () => {
+	const site = await page('typography', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { Typography, h, mount } from '@aweftjs/ui';
+		mount(document.body, <div>
+			<Typography type="h2_bold" id="heading" label="A heading that runs on for a little while" />
+			<Typography type="p1" id="body" label="A paragraph." />
+		</div>);
+	`);
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForSelector('#heading');
+		const seen = await view.evaluate(() => {
+			const style = (id: string): Record<string, string> =>
+				getComputedStyle(document.querySelector(`#${id}`)!);
+			return {
+				tag: document.querySelector('#heading')!.tagName.toLowerCase(),
+				weight: style('heading')['fontWeight'],
+				size: style('heading')['fontSize'],
+				headingWrap: style('heading')['textWrap'],
+				bodyWrap: style('body')['textWrap'],
+			};
+		});
+		assert.equal(seen.tag, 'h2', 'the first segment picked the element');
+		// A browser draws an `<h2>` bold on its own, so 600 here is the theme's weight beating the
+		// host's, which is the whole reason `text_h2` states one.
+		assert.equal(seen.weight, '600');
+		assert.equal(seen.size, '30px', '$text3xl, which is 1.875rem of the 16px root');
+		assert.equal(seen.headingWrap, 'balance', 'a heading asks the browser to even its lines');
+		assert.equal(seen.bodyWrap, 'pretty', 'and a paragraph asks it not to leave a word alone');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});

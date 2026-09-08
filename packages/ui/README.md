@@ -136,7 +136,10 @@ is different: it sets a prefix that `ThemeContext.use(h => component)` puts in f
 `theme` an element below asks for. An element with no `theme` prop stays plain; write `theme=""`
 to take the cascade and nothing else.
 
-Values in a generated class are literals, not custom properties.
+Values in a generated class are literals, not custom properties. The element's `class` attribute
+holds one minted name per distinct list, not the segments themselves, and that name's rules are
+written one block per matched entry, so a stylesheet has as many blocks for `.aw1` as entries
+matched it.
 
 ## The per-render object
 
@@ -568,6 +571,63 @@ yours to use: it takes an element off the screen and leaves it in the reading or
 `recipes/ui/composites.html` is every composite in both modes, driven in Chromium by
 `recipes/ui/main.ts` with axe-core over it.
 
+## Text
+
+```tsx
+import { TextModifiers, Typography } from '@aweftjs/ui';
+```
+
+| export | what it is | its own props |
+|---|---|---|
+| `Typography` | one run of themed text: one element on the `text` entry | `type`, `label`, `element`, `theme` |
+| `TextModifiers` | a context holding the list `Typography` runs over its label | `value` |
+| `TypographyProps` | what `Typography` takes | |
+| `TextModifier` | one entry of that list: `{ check, return }` | |
+
+**`type` is theme segments joined by `_`, and the first segment also picks the element.**
+`<Typography type="h2_bold" label="Today" />` is an `<h2>` themed `text h2 bold`, so `text_h2` and
+`text_bold` both apply and the later segment wins where they disagree. `h1` to `h6` give that
+heading, `p`, `p1` and `p2` give a `<p>`, and everything else gives a `<span>`, so a word this
+package never defined is a segment like any other and your own `text_eyebrow` needs nothing from
+here. With no `type` it is a `<span>` on `text` alone. `type` may be a cell: the theme follows it,
+and the element does not, because an element lasts as long as the component.
+
+**`label` and `children` both render, label first**, and neither is required. `label` may be a
+cell. `element` hands in the node to decorate instead of building one, which is how a heading's
+look goes on a level the document outline wanted instead.
+
+**`TextModifiers` turns parts of a label into something else.** A modifier is
+`{ check, return }`: `check` is a plain string, matched everywhere and case-insensitively, or a
+global regex, and `return(match)` answers whatever that piece becomes. Matches are collected in the
+order the modifiers are written, sorted by where they start, and an overlap goes to the one that
+started first, a tie to the one written first. A gap between matches is text.
+
+```tsx
+<TextModifiers value={[{ check: /@\w+/g, return: (name) => <Tooltip label={who(name)}>{name}</Tooltip> }]}>
+	<Typography type="p1" label={note} />
+</TextModifiers>
+```
+
+Keys beyond those two are ignored, so a list written for something else passes through. A provider
+replaces the list above it rather than adding to it; a subtree that wants both writes both. A list
+held in a cell is read when each `Typography` below it mounts, as `Icons` is; a later write reaches
+what mounts after it. The
+list runs over `label` only, because a child is already markup and has nothing for a pattern to run
+over, and a label that is neither a string nor a number renders as given. A regex without the `g`
+flag is a loud assert naming the flag, because a pattern that finds one match is almost never what
+was meant. A cell label runs the pass again when it changes.
+
+**The label goes through one internal resolve step first.** Today it answers the string it was
+given. It is the seam translation would fill, and nothing about it is exported.
+
+**What it never does.** No editing: nothing swaps an input in on a click and nothing measures text
+with a span, because editing is `TextField`'s job and a page composes the two. No width cap: a
+measure is yours, as `maxWidth` on `text_p1`. No fonts: the theme engine already emits `@font-face`
+and `@import` from your own theme's directives.
+
+`recipes/ui/preview.html` shows the whole family in both modes, and the gallery's modifier demo is
+`recipes/ui/page.tsx`, both driven by `recipes/ui/main.ts`.
+
 ## The look
 
 A default theme ships in light and dark. It is what makes `theme="button"` a button, and it is the
@@ -595,8 +655,9 @@ fills by state, 6 to 8 lines, 9 and 10 solids, 11 and 12 text.
 Every pair meets WCAG 2 AA in both modes, 4.5:1 for text and 3:1 for a line, asserted in
 `packages/ui/tests/contrast.test.ts` with a ratio the test computes itself.
 
-**Type** is `$textXs`, `$textSm`, `$textMd`, `$textLg`, `$textXl` and `$text2xl`, in `rem`, each
-with `$textXsLine` and so on beside it. `$font` and `$fontMono` are the families.
+**Type** is `$textXs`, `$textSm`, `$textMd`, `$textLg`, `$textXl`, `$text2xl`, `$text3xl` and
+`$text4xl`, in `rem`, each with `$textXsLine` and so on beside it. `$font` and `$fontMono` are the
+families.
 
 **Sizes** are `$space` (4px) and its six multiples, `$space2`, `$space3`, `$space4`, `$space6`,
 `$space8` and `$space12`, with no step between them; `$radius` and `$radiusLg`; `$target` (24px,
@@ -626,8 +687,11 @@ ask for. Everything else is yours to define.
 | `select` | `input` again, with room on the right for the arrow the host draws |
 | `card` | a raised block: the surface fill, a border, the larger radius, `$space4` of padding |
 | `popup` | the same block at popup size: the smaller radius, tighter padding |
-| `text` | body copy at `$textMd`, with no margin |
-| `text_xs`, `text_sm`, `text_lg`, `text_xl`, `text_2xl` | that copy, one size step at a time |
+| `text` | body copy at `$textMd`, with no margin, and a newline kept as a line break |
+| `text_xs`, `text_sm`, `text_lg`, `text_xl`, `text_2xl`, `text_3xl`, `text_4xl` | that copy, one size step at a time |
+| `text_h1` to `text_h6` | a heading: one step of the scale from `$text4xl` down to `$textMd`, at weight 600, with balanced lines |
+| `text_p1`, `text_p2` | a paragraph at `$textMd` and at `$textSm`, with no lone last word and no width cap |
+| `text_bold`, `text_regular`, `text_italic`, `text_center`, `text_inline` | one declaration each, to put after any of the above |
 | `text_mono` | that copy in `$fontMono` |
 | `muted` | text in `$mutedForeground`, readable on any of the three backgrounds |
 | `button_round`, `button_inline` | that control as a circle, and with no fill or padding at all |
@@ -829,7 +893,8 @@ listens. What your application looks like: a default theme ships so a bare `them
 as something readable, and every value in it is yours to replace. What your own components name
 their own values, and whether you run the theme check. Which acts a site has, what a template looks
 like, and whether links outside the routed root are intercepted. Writing pages to disk, which is
-`ssg`.
+`ssg`. Your faces, your sizes and your measure, and what a text modifier renders. Whether text is
+editable: `Typography` never becomes an input.
 
 ## Boundaries
 
