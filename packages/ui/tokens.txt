@@ -107,6 +107,10 @@ switchWidth
 target
 text2xl
 text2xlLine
+text3xl
+text3xlLine
+text4xl
+text4xlLine
 textAreaMax
 textLg
 textLgLine

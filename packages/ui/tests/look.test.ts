@@ -41,7 +41,7 @@ test('the spacing step is four pixels and everything else made of space is a mul
 });
 
 test('every type size is in rem and has a line height beside it', () => {
-	for (const size of ['textXs', 'textSm', 'textMd', 'textLg', 'textXl', 'text2xl']) {
+	for (const size of ['textXs', 'textSm', 'textMd', 'textLg', 'textXl', 'text2xl', 'text3xl', 'text4xl']) {
 		assert.match(valueOf(size), /^\d+(\.\d+)?rem$/, `$${size} is in rem`);
 		assert.match(valueOf(`${size}Line`), /^\d+(\.\d+)?rem$/, `$${size}Line is in rem`);
 	}
@@ -217,4 +217,78 @@ test('a card drops its padding when it is tight, and nothing else', () => {
 	assert.match(plain, /padding: 16px/);
 	assert.match(tight, /padding: 0/);
 	assert.match(tight, new RegExp(`background: ${valueOf('surface')}`), 'it is still a card');
+});
+
+// --- the text family (designs 180, 182) ---------------------------------------------------------
+
+test('a newline in a run of text is a line break, and no paragraph has a width cap', () => {
+	assert.match(rulesFor(['text']), /white-space: pre-wrap/);
+	for (const size of ['p1', 'p2']) {
+		assert.doesNotMatch(rulesFor(['text', size]), /max-width/,
+			'a measure is the application\'s, on its own entry');
+	}
+});
+
+test('each size entry is that step of the scale and its line height', () => {
+	// The words are the scale's own, written from design 182, so `text_3xl` and `text_4xl` are
+	// reachable as sizes rather than only through `h1` and `h2`.
+	const steps = [
+		['xs', 'textXs'], ['sm', 'textSm'], ['lg', 'textLg'], ['xl', 'textXl'],
+		['2xl', 'text2xl'], ['3xl', 'text3xl'], ['4xl', 'text4xl'],
+	] as const;
+	for (const [word, size] of steps) {
+		const rules = rulesFor(['text', word]);
+		assert.ok(rules.includes(`font-size: ${valueOf(size)};`), `text_${word} is $${size}`);
+		assert.ok(rules.includes(`line-height: ${valueOf(`${size}Line`)};`), `and its line height`);
+	}
+});
+
+test('each heading is one step of the scale, at one weight, with balanced lines', () => {
+	// h1 at the top of the scale down to h6 at body size, written from design 182.
+	const steps = [
+		['h1', 'text4xl'], ['h2', 'text3xl'], ['h3', 'text2xl'],
+		['h4', 'textXl'], ['h5', 'textLg'], ['h6', 'textMd'],
+	] as const;
+	for (const [heading, size] of steps) {
+		const rules = rulesFor(['text', heading]);
+		assert.ok(rules.includes(`font-size: ${valueOf(size)};`), `text_${heading} is $${size}`);
+		assert.ok(rules.includes(`line-height: ${valueOf(`${size}Line`)};`), `and its line height`);
+		assert.match(rules, /font-weight: 600/, `text_${heading} is one weight with the rest`);
+		assert.match(rules, /text-wrap: balance/, 'a heading is short enough for the browser to even it out');
+	}
+	// A paragraph is the other hint: no lone last word, and no balancing a block too long for it.
+	assert.match(rulesFor(['text', 'p1']), /text-wrap: pretty/);
+	assert.match(rulesFor(['text', 'p2']), /text-wrap: pretty/);
+	assert.doesNotMatch(rulesFor(['text', 'p1']), /text-wrap: balance/);
+});
+
+test('a modifier written after a heading is the one that lands', () => {
+	const rules = rulesFor(['text', 'h2', 'bold']);
+	// One block per entry in the chain, in the order the chain applies them.
+	const blocks = [...rules.matchAll(/\.aw\d+ \{ ([^}]*)\}/g)].map((found) => found[1]!.trim());
+	const heading = blocks.findIndex((block) => block.includes(`font-size: ${valueOf('text3xl')};`));
+	const bold = blocks.findIndex((block) => block === 'font-weight: 600;');
+	assert.ok(heading >= 0, 'text_h2 compiled a block of its own');
+	assert.ok(bold >= 0, 'and so did text_bold');
+	assert.ok(bold > heading, 'text_bold sits later in the class list, so it is written later');
+
+	// The same order with two values that differ, which is what makes "wins" something to see.
+	const weights = [...rulesFor(['text', 'h2', 'regular']).matchAll(/font-weight: (\d+);/g)]
+		.map((found) => found[1]);
+	assert.deepEqual(weights, ['600', '400'], 'text_regular after text_h2 takes the weight back down');
+});
+
+test('the modifiers say one thing each and nothing about size', () => {
+	assert.match(rulesFor(['text', 'italic']), /font-style: italic/);
+	assert.match(rulesFor(['text', 'center']), /text-align: center/);
+	assert.match(rulesFor(['text', 'inline']), /display: inline/);
+	for (const modifier of ['bold', 'regular', 'italic', 'center', 'inline']) {
+		// The chain is `*`, `text`, then the modifier, so the modifier's own block is the last one.
+		const blocks = [...rulesFor(['text', modifier]).matchAll(/\.aw\d+ \{ ([^}]*)\}/g)]
+			.map((found) => found[1]!.trim());
+		const own = blocks[blocks.length - 1]!;
+		assert.doesNotMatch(own, /font-size/, `text_${modifier} sets no size of its own`);
+		assert.equal(own.split(';').filter((part) => part.trim() !== '').length, 1,
+			`text_${modifier} says one thing`);
+	}
 });

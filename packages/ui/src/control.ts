@@ -67,25 +67,43 @@ export const controlStates = (disabled: unknown, given?: StateProps): ControlSta
 	};
 };
 
+/** What was handed in, for a message that has to say why it is not an element. */
+const describe = (value: unknown): string => {
+	if (typeof value === 'function') return 'a function, which is a component or a themed element';
+	const type = (value as { nodeType?: unknown }).nodeType;
+	if (typeof type === 'number') return `a node of type ${String(type)}`;
+	return `a ${typeof value}`;
+};
+
 /**
  * The node a control decorates: the one it was handed, or the name of the one to build.
  *
  * Params:
  *   element: the caller's `element` prop, or nothing
- *   tags: the element names this control wraps, the one it builds for itself first
+ *   tags: the element names this control wraps, the one it builds for itself first. None means
+ *         any element will do, and the check is only that it is one
  *
  * Returns: the handed element, or the first tag name.
  *
  * Throws: an assert, loud in development and stripped in a release build, when the handed
- * element is not one of those tags. Taken silently it would wear the theme and the ARIA and
- * behave like nothing at all, which is the failure that costs an afternoon.
+ * element is not one of those tags, or is not an element at all. Taken silently it would wear
+ * the theme and the ARIA and behave like nothing at all, which is the failure that costs an
+ * afternoon.
  *
  * Example:
  *   const node = elementFor(props.element, 'input');
  */
 export const elementFor = (element: unknown, ...tags: string[]): unknown => {
 	if (element === undefined || element === null) return tags[0]!;
-	const got = String((element as { localName?: unknown }).localName ?? '').toLowerCase();
+	const name = (element as { localName?: unknown }).localName;
+	if (tags.length === 0) {
+		// A component function reaches `h` as a component and a text node reaches it as a tag
+		// name, and both render nothing where an element was meant.
+		assert(typeof name === 'string' && name !== '',
+			`element must be an element and this one is ${describe(element)}`);
+		return element;
+	}
+	const got = String(name ?? '').toLowerCase();
 	assert(tags.includes(got),
 		`element must be <${tags.join('> or <')}> and this one is <${got}>`);
 	return element;

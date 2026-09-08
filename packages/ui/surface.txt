@@ -84,6 +84,8 @@ value TextArea: (props: TextAreaProps) => Mounter
 type TextAreaProps: interface TextAreaProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly maxHeight?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value TextField: (props: TextFieldProps) => Mounter
 type TextFieldProps: interface TextFieldProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly password?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type TextModifier: interface TextModifier { readonly check: string | RegExp; readonly return: (match: string) => unknown; readonly [key: string]: unknown; }
+value TextModifiers: Context<TextModifier[]>
 value Theme: ThemeApi
 type ThemeApi: interface ThemeApi extends Context<Definitions> { define(entries: Definitions): void; }
 type ThemeCascade: interface ThemeCascade { (props: ProviderProps): unknown; readonly def: string[]; read(context: unknown): string[]; node(context: unknown): ContextNode<string[]> | null; use<P extends Record<string, unknown>>(build: (h: Themed) => Component<P>): Component<P>; }
@@ -96,6 +98,8 @@ type ToggleProps: interface ToggleProps { readonly value?: unknown; readonly lab
 value Tooltip: (props: TooltipProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
 type TooltipProps: interface TooltipProps { readonly label?: unknown; readonly enabled?: unknown; readonly locations?: unknown; readonly type?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type Transform: type Transform<T> = (raw: unknown, parent: T, children: MutableArray<ContextNode<T>>) => T;
+value Typography: (props: TypographyProps) => Mounter
+type TypographyProps: interface TypographyProps { readonly type?: unknown; readonly label?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Validate: (props: ValidateProps, cleanup: (...fns: (() => void)[]) => void) => Mounter
 value ValidateContext: (props: ValidateContextProps) => Mounter
 type ValidateContextProps: interface ValidateContextProps { readonly value?: unknown; readonly children?: unknown[]; }
