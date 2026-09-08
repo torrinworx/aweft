@@ -148,6 +148,9 @@ export interface Store {
 	 * what it returned. So order the conditions with the most selective one first, which is the
 	 * whole of the tuning advice.
 	 *
+	 * There is no query for every document ordered by a field: a condition is required, and it
+	 * is what selects. Reading everything is `scan`, which orders by name.
+	 *
 	 * Paging is by `after`, which takes the `cursor` of the last hit of the previous page. A
 	 * cursor names a position in the order asked for, not a document, so a page after a hit
 	 * that has since been removed or re-ranked carries on from where it was. A cursor is only
@@ -190,16 +193,18 @@ export interface Store {
 	 *
 	 * Returns: what it missed, oldest first, each with the sequence it was written under.
 	 *
-	 * Throws: `truncated` when the tail no longer reaches back to the sequence asked for, so
-	 * there is a hole the caller has to resynchronize over.
-	 *
-	 * This is what a resuming session asks for (design 045). A sequence older than the tail
-	 * reaches back to is answered with what the tail still holds, so a caller compares the
-	 * first sequence it gets against the one it asked for and resynchronizes when there is a
-	 * hole.
+	 * Throws: `truncated` when the tail no longer reaches back to the sequence asked for. It is
+	 * thrown rather than answered with what the tail still holds, because a short answer reads
+	 * exactly like a complete one and a caller that missed everything would be told it missed
+	 * nothing (design 051). Catch it and take the document whole:
 	 *
 	 * Example:
-	 *   const missed = await store.since('board:42', session.seq);
+	 *   try {
+	 *     for (const { seq, commit } of await store.since('board:42', session.seq)) send(seq, commit);
+	 *   } catch (e) {
+	 *     if ((e as { reason?: string }).reason !== 'truncated') throw e;
+	 *     await sendWholeDocument('board:42');
+	 *   }
 	 */
 	since(doc: string, seq: number): Promise<Held[]>;
 
@@ -308,7 +313,7 @@ export const createStore = (
 	// invisible to the other, and the loser's observer still writing to the driver after its
 	// handle is closed. `Promise.all([open(d), open(d)])` is the ordinary shape in a server.
 	const opening_ = new Map<string, Promise<State>>();
-	const declared = driver.declare(Object.keys(declare));
+	const declared = driver.declare(declare);
 
 	/** Write one commit: rows and tail together, and move the sequence. */
 	// Recompute the declared fields and send only what moved. Reading them is a walk of the
@@ -541,9 +546,19 @@ export const createStore = (
 		return out;
 	};
 
+	const checkLimit = (limit: number): void => {
+		if (Number.isInteger(limit) && limit > 0) return;
+		throw codecError('invalid-limit', `${String(limit)} is not a positive limit`,
+			'Pass a whole number of at least 1 as the limit.');
+	};
+
 	const find = async (query: Query): Promise<Found[]> => {
 		await declared;
 		checkQuery(query, declare);
+		// A driver reads a limit as a number it can pass to storage. A negative one is a
+		// question nobody meant to ask, and it arrives at the driver as whatever that storage
+		// makes of it, which on SQL is an error from inside the driver naming nothing.
+		if (query.limit !== undefined) checkLimit(query.limit);
 
 		const [first, ...rest] = query.where;
 		const sort = query.sort === undefined
@@ -568,10 +583,7 @@ export const createStore = (
 
 	const scan = async (limit: number, after?: string): Promise<Found[]> => {
 		await declared;
-		if (!Number.isInteger(limit) || limit <= 0) {
-			throw codecError('invalid-limit', `${String(limit)} is not a positive limit`,
-				'Pass a whole number of at least 1 as the limit.');
-		}
+		checkLimit(limit);
 		return after === undefined ? driver.scan(limit) : driver.scan(limit, after);
 	};
 

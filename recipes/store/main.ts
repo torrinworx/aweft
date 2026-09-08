@@ -22,6 +22,11 @@ import { fileDriver } from './driver-file.ts';
 type Doc = Record<string, unknown>;
 const here = fileURLToPath(import.meta.url);
 
+// Every store over this directory declares the same paths, because the declaration is what the
+// index is built from: one that named fewer would drop the projection rows for the rest
+// (design 162).
+const DECLARE = { title: ['title'], author: ['meta', 'authorId'] };
+
 const check = (ok: boolean, what: string): void => {
 	console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${what}`);
 	if (!ok) process.exitCode = 1;
@@ -31,7 +36,7 @@ const check = (ok: boolean, what: string): void => {
 if (process.argv[2] === 'write') {
 	const store = createStore({
 		driver: fileDriver(process.argv[3]!),
-		declare: { title: ['title'], author: ['meta', 'authorId'] },
+		declare: DECLARE,
 	});
 	const board = await store.open('board');
 	const root = board.root as Doc;
@@ -58,7 +63,7 @@ try {
 
 	const store = createStore({
 		driver: fileDriver(dir),
-		declare: { title: ['title'], author: ['meta', 'authorId'] },
+		declare: DECLARE,
 	});
 	const board = await store.open('board');
 	const root = board.root as Doc;
@@ -76,7 +81,7 @@ try {
 	// the reopened document is live: it keeps writing where the dead one left off
 	(tasks[0] as Doc).done = true;
 	await store.settled(board);
-	const after = await createStore({ driver: fileDriver(dir) }).open('board');
+	const after = await createStore({ driver: fileDriver(dir), declare: DECLARE }).open('board');
 	check(((after.root as Doc).tasks as Doc[])[0]!.done === true, 'and it carries on being written to');
 
 	console.log('\nqueries survive the kill too');
@@ -100,10 +105,10 @@ try {
 		catch (e) { red++; console.log(`  FAIL ${c.name}\n       ${(e as Error).message.split('\n')[0]}`); }
 	}
 	check(red === 0, `a driver written outside the package meets the contract (${driverChecks().length} checks)`);
-	check(driverChecks().length === 30, 'thirty checks, the number the README states');
+	check(driverChecks().length === 33, 'thirty-three checks, the number the README states');
 
 	console.log('\nfind-or-create under concurrent open');
-	const racers = Array.from({ length: 8 }, () => createStore({ driver: fileDriver(dir) }));
+	const racers = Array.from({ length: 8 }, () => createStore({ driver: fileDriver(dir), declare: DECLARE }));
 	const opened = await Promise.all(racers.map((s) => s.open('contended')));
 	const roots = new Set<string>();
 	for (const [i, handle] of opened.entries()) {
@@ -111,10 +116,10 @@ try {
 		await racers[i]!.settled(handle);
 		roots.add(JSON.stringify((await racers[i]!.since('contended', 0)).length > 0));
 	}
-	const settled = await createStore({ driver: fileDriver(dir) }).open('contended');
+	const settled = await createStore({ driver: fileDriver(dir), declare: DECLARE }).open('contended');
 	const held = settled.root as Doc;
 
-	check((await createStore({ driver: fileDriver(dir) }).open('contended')) !== undefined, 'the name resolves');
+	check((await createStore({ driver: fileDriver(dir), declare: DECLARE }).open('contended')) !== undefined, 'the name resolves');
 	let survived = 0;
 	for (let i = 0; i < 8; i++) if (held[`w${i}`] === i) survived++;
 	check(survived === 8, `every opener's write survived (${survived} of 8), so they all got one document`);

@@ -1,6 +1,6 @@
 type Commit: interface Commit { readonly deltas: readonly Delta[]; readonly tag?: Tag; } (from @aweftjs/codec)
 type Declaration: type Declaration = Readonly<Record<string, readonly string[]>>;
-type Driver: interface Driver { declare(fields: readonly string[]): Promise<void>; find(lookup: Lookup): Promise<Found[]>; scan(limit: number, after?: string): Promise<Found[]>; write(write: Write): Promise<number>; create(doc: string, root: string, rootKind: ObservableKind): Promise<boolean>; read(doc: string): Promise<{ root: string; rootKind: ObservableKind; rows: Row[]; } | null>; since(doc: string, seq: number): Promise<Entry[]>; head(doc: string): Promise<number>; truncate(doc: string, seq: number): Promise<void>; forget(doc: string, ids: readonly string[]): Promise<void>; remove(doc: string): Promise<void>; close(): Promise<void>; }
+type Driver: interface Driver { declare(declaration: Declaration): Promise<void>; find(lookup: Lookup): Promise<Found[]>; scan(limit: number, after?: string): Promise<Found[]>; write(write: Write): Promise<number>; create(doc: string, root: string, rootKind: ObservableKind): Promise<boolean>; read(doc: string): Promise<{ root: string; rootKind: ObservableKind; rows: Row[]; } | null>; since(doc: string, seq: number): Promise<Entry[]>; head(doc: string): Promise<number>; truncate(doc: string, seq: number): Promise<void>; forget(doc: string, ids: readonly string[]): Promise<void>; remove(doc: string): Promise<void>; close(): Promise<void>; }
 type Entry: interface Entry { readonly seq: number; readonly body: Uint8Array; readonly project?: Readonly<Record<string, Indexable>>; }
 type Found: interface Found { readonly doc: string; readonly fields: Readonly<Record<string, Indexable>>; readonly cursor: string; }
 type Handle: interface Handle { readonly doc: string; readonly root: object; readonly seq: number; }
@@ -19,3 +19,7 @@ value decodeCommit: (bytes: Uint8Array<ArrayBufferLike>) => Commit (from @aweftj
 value encodeCommit: (commit: Commit) => Uint8Array<ArrayBufferLike> (from @aweftjs/codec)
 value holds: (where: Where, value: Indexable) => boolean
 value memoryDriver: () => Driver
+value projectionOf: (rows: readonly Row[], root: string, declaration: Readonly<Record<string, readonly string[]>>) => Readonly<Record<string, Indexable>>
+./postgres type Pool: interface Pool { connect(): Promise<PoolClient>; }
+./postgres type PoolClient: interface PoolClient { query(text: string, values?: readonly unknown[]): Promise<{ rows: unknown[]; rowCount: number | null; }>; release(): void; }
+./postgres value postgresDriver: (pool: Pool) => Driver

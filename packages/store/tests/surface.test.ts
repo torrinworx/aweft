@@ -8,6 +8,7 @@ import * as store from '../src/index.ts';
 test('the entry file exports exactly what was decided', () => {
 	assert.deepEqual(Object.keys(store).sort(), [
 		'compare', 'createStore', 'decodeCommit', 'encodeCommit', 'holds', 'memoryDriver',
+		'projectionOf',
 	]);
 });
 

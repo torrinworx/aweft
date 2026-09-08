@@ -5,13 +5,14 @@
 // did not design it. One JSON file per document, replaced by rename so a kill lands either on
 // the old file or the new one and never on half of either.
 
-import { closeSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeSync } from 'node:fs';
+import { closeSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { Driver, Entry, Found, Lookup, Patch, Row, Write } from '@aweftjs/store';
+import type { Declaration, Driver, Entry, Found, Lookup, Patch, Row, Write } from '@aweftjs/store';
 import type { Indexable } from '@aweftjs/store';
 import type { ObservableKind } from '@aweftjs/codec';
-import { compare, holds } from '@aweftjs/store';
+import type { SnapshotValue } from '@aweftjs/core';
+import { compare, holds, projectionOf } from '@aweftjs/store';
 
 interface Held {
 	root: string;
@@ -22,10 +23,29 @@ interface Held {
 	fields: Record<string, Indexable>;
 }
 
+// A slot holding bytes, on its way through JSON. `JSON.stringify` writes a Uint8Array as an
+// object keyed by index and reads it back as that object, so a driver that keeps slots as JSON
+// tags them instead (design 163). No reference carries this key and no primitive is an
+// object, so the shape says what it is.
+const packed = (value: SnapshotValue): unknown =>
+	value instanceof Uint8Array ? { bytes: Buffer.from(value).toString('base64') } : value;
+
+const unpacked = (value: unknown): SnapshotValue => {
+	if (value !== null && typeof value === 'object' && 'bytes' in value) {
+		return new Uint8Array(Buffer.from((value as { bytes: string }).bytes, 'base64'));
+	}
+	return value as SnapshotValue;
+};
+
+const rowIn = (row: Row): Row => ({
+	...row,
+	slots: Object.fromEntries(Object.entries(row.slots).map(([slot, v]) => [slot, unpacked(v)])),
+});
+
 export const fileDriver = (dir: string): Driver => {
 	mkdirSync(dir, { recursive: true });
 	const path = (doc: string): string => join(dir, `${encodeURIComponent(doc)}.json`);
-	let declared: readonly string[] = [];
+	let declared: Declaration = {};
 
 	// One file per document means the index is the directory, so a lookup reads every
 	// document's projection. That is honest for a driver this small, and it is why the real
@@ -35,6 +55,14 @@ export const fileDriver = (dir: string): Driver => {
 		.map((f) => decodeURIComponent(f.slice(0, -5)))
 		.sort()
 		.flatMap((doc) => { const held = load(doc); return held === null ? [] : [{ doc, held }]; });
+
+	// The paths this directory's projections were built from. Not a `.json` file, so `all()`
+	// reads documents and never this.
+	const projected = join(dir, 'declared');
+	const projectedUnder = (): Declaration => {
+		try { return JSON.parse(readFileSync(projected, 'utf8')) as Declaration; }
+		catch { return {}; }
+	};
 
 	const load = (doc: string): Held | null => {
 		try { return JSON.parse(readFileSync(path(doc), 'utf8')) as Held; }
@@ -66,10 +94,33 @@ export const fileDriver = (dir: string): Driver => {
 	};
 
 	return {
-		async declare(fields) { declared = fields; },
+		// What design 162 asks of a driver that already holds documents. A path declared today
+		// is invisible to `find` for every document written before it and never written since,
+		// because nothing put a value in the index; a path that changed is worse, because the
+		// index keeps answering from the old one and nothing says so. So a driver records the
+		// paths it projected under, computes a changed field again from the rows, and drops a
+		// field the declaration no longer names.
+		async declare(declaration) {
+			declared = declaration;
+			const was = projectedUnder();
+			const behind: Record<string, readonly string[]> = {};
+			for (const [field, path] of Object.entries(declaration)) {
+				if (JSON.stringify(was[field]) !== JSON.stringify(path)) behind[field] = path;
+			}
+
+			for (const { doc, held } of all()) {
+				const fields = projectionOf(Object.values(held.rows).map(rowIn), held.root, behind);
+				for (const [field, value] of Object.entries(fields)) held.fields[field] = value;
+				for (const field of Object.keys(held.fields)) {
+					if (!(field in declaration)) delete held.fields[field];
+				}
+				save(doc, held);
+			}
+			writeFileSync(projected, JSON.stringify(declaration));
+		},
 
 		async find(lookup: Lookup): Promise<Found[]> {
-			if (!declared.includes(lookup.where.field)) {
+			if (!(lookup.where.field in declared)) {
 				throw new Error(`store: ${lookup.where.field} was not declared`);
 			}
 			const everything = all();
@@ -106,7 +157,12 @@ export const fileDriver = (dir: string): Driver => {
 
 		async create(doc, root, rootKind) {
 			if (load(doc) !== null) return false;
-			save(doc, { root, rootKind, rows: {}, tail: [], head: 0, fields: {} });
+			// A document created and never written holds nothing, and nothing is what every
+			// declared path reads out of it. Leaving these out would keep it out of `find` on
+			// every declared field until somebody wrote to it.
+			const fields: Record<string, Indexable> = {};
+			for (const field of Object.keys(declared)) fields[field] = null;
+			save(doc, { root, rootKind, rows: {}, tail: [], head: 0, fields });
 			return true;
 		},
 
@@ -116,7 +172,7 @@ export const fileDriver = (dir: string): Driver => {
 			for (const patch of w.rows) {
 				const was = held.rows[patch.id];
 				const slots = { ...(was?.slots ?? {}) };
-				for (const [slot, value] of Object.entries(patch.set)) slots[slot] = value;
+				for (const [slot, value] of Object.entries(patch.set)) slots[slot] = packed(value) as SnapshotValue;
 				for (const slot of patch.unset) delete slots[slot];
 				const edge = patch.edge === undefined
 					? { parent: was?.parent ?? null, slot: was?.slot ?? null }
@@ -133,7 +189,7 @@ export const fileDriver = (dir: string): Driver => {
 		async read(doc) {
 			const held = load(doc);
 			if (held === null) return null;
-			return { root: held.root, rootKind: held.rootKind, rows: Object.values(held.rows) };
+			return { root: held.root, rootKind: held.rootKind, rows: Object.values(held.rows).map(rowIn) };
 		},
 
 		async since(doc, seq): Promise<Entry[]> {

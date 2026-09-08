@@ -9,7 +9,7 @@
 import { codecError, type ObservableKind } from '@aweftjs/codec';
 
 import type { Driver, Entry, Found, Lookup, Patch, Row, Write } from './driver.ts';
-import { compare, holds, type Indexable } from './query.ts';
+import { compare, holds, type Declaration, type Indexable } from './query.ts';
 
 interface Stored {
 	root: string;
@@ -93,9 +93,11 @@ export const memoryDriver = (): Driver => {
 	};
 
 	return {
-		async declare(fields: readonly string[]): Promise<void> {
+		// Nothing is stored when this is called, so there is nothing to backfill: the driver is
+		// made empty and the store declares before it opens anything (design 162).
+		async declare(declaration: Declaration): Promise<void> {
 			open();
-			for (const field of fields) { declared.add(field); index(field); }
+			for (const field of Object.keys(declaration)) { declared.add(field); index(field); }
 		},
 
 		async find(lookup: Lookup): Promise<Found[]> {
@@ -173,7 +175,12 @@ export const memoryDriver = (): Driver => {
 		async create(doc: string, root: string, rootKind: ObservableKind): Promise<boolean> {
 			open();
 			if (docs.has(doc)) return false;
-			docs.set(doc, { root, rootKind, rows: new Map(), tail: [], head: 0, fields: {} });
+			// A document created and never written holds nothing, and nothing is what every
+			// declared path reads out of it. Without these it would be missing from `find` on
+			// every one of them, `field eq null` included, until somebody wrote to it.
+			const fields: Record<string, Indexable> = {};
+			for (const field of declared) { fields[field] = null; index(field).set(doc, null); }
+			docs.set(doc, { root, rootKind, rows: new Map(), tail: [], head: 0, fields });
 			return true;
 		},
 

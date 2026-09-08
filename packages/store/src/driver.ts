@@ -13,7 +13,7 @@
 import type { ObservableKind } from '@aweftjs/codec';
 import type { SnapshotValue } from '@aweftjs/core';
 
-import type { Indexable, Where } from './query.ts';
+import type { Declaration, Indexable, Where } from './query.ts';
 
 /**
  * One observable, as a store holds it.
@@ -21,6 +21,11 @@ import type { Indexable, Where } from './query.ts';
  * `parent` and `slot` are null together, and mean the observable has no attach edge. Its
  * slots are kept anyway: detaching is not deleting (design 048), and what collects an
  * orphan is a sweep the application runs rather than the act of writing.
+ *
+ * A slot holds a primitive, bytes, or a reference to another observable. A driver that keeps
+ * slots as JSON writes a byte value as `{ bytes: <base64> }` and turns that object back into a
+ * `Uint8Array` on read, because JSON has no other way to carry one and the obvious way loses it
+ * in silence (design 163). No reference carries that key and no primitive is an object.
  */
 export interface Row {
 	readonly id: string;
@@ -123,8 +128,20 @@ export interface Driver {
 	 * Called once, when the store is made. A driver that has to build its indexes up front
 	 * does it here; one that can add them later still may not, because the store's behaviour
 	 * must not depend on which driver it is running on.
+	 *
+	 * The declaration carries each field's path, not its name alone, because a driver that
+	 * already holds documents has to bring their projection into line with it, here, before
+	 * this resolves (design 162). A document lacks a field when it has no value for it and
+	 * equally when it holds one computed from another path, so a driver records the paths it
+	 * projected under and computes again from the rows, with `projectionOf`, whenever one
+	 * changes. A field the declaration no longer names leaves the projection, so `Found.fields`
+	 * carries the declared fields and nothing else.
+	 *
+	 * Skip that and a document written under an older declaration and never written again is
+	 * missing from `find` on the new field, including `field eq null`, while its rows hold the
+	 * value, or worse, answers from a path nobody declares any more.
 	 */
-	declare(fields: readonly string[]): Promise<void>;
+	declare(declaration: Declaration): Promise<void>;
 
 	/** Answer one indexed condition. Only fields passed to `declare` are ever asked for. */
 	find(lookup: Lookup): Promise<Found[]>;

@@ -178,3 +178,22 @@ test('a query survives a reopen, because the projection is stored beside the row
 	assert.deepEqual(names(await second.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_kept' }] })), ['kept']);
 	assert.deepEqual(names(await second.find({ where: [{ field: 'weight', op: 'gt', value: 40 }] })), ['kept']);
 });
+
+test('a limit that is not a positive whole number is refused, by find as well as by scan', async () => {
+	const store = createStore({ driver: memoryDriver(), declare: DECLARE });
+	const h = await store.open('one');
+	(h.root as Doc).ownerId = 'u_1';
+	await store.settled(h);
+
+	// A driver reads a limit as a number to hand to storage, so an impossible one arrives there
+	// rather than here, and comes back as whatever that storage makes of it.
+	const refused = (e: Error): boolean => (e as { reason?: string }).reason === 'invalid-limit';
+	for (const limit of [-1, 0, 1.5, Number.NaN]) {
+		await assert.rejects(
+			() => store.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_1' }], limit }),
+			refused, `find took a limit of ${String(limit)}`);
+		await assert.rejects(() => store.scan(limit), refused, `scan took a limit of ${String(limit)}`);
+	}
+	assert.deepEqual(names(await store.find({ where: [{ field: 'ownerId', op: 'eq', value: 'u_1' }], limit: 1 })),
+		['one']);
+});

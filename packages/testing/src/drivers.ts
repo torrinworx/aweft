@@ -29,7 +29,7 @@ export interface StoreDriver {
 		dropped: readonly string[]; body: Uint8Array;
 		project?: Record<string, unknown>;
 	}): Promise<number>;
-	declare(fields: readonly string[]): Promise<void>;
+	declare(declaration: Readonly<Record<string, readonly string[]>>): Promise<void>;
 	find(lookup: {
 		where: { field: string; op: string; value: unknown };
 		sort?: { field: string; direction: 'asc' | 'desc' };
@@ -53,6 +53,10 @@ export interface DriverCheck {
 }
 
 const ROOT = 'AAAAAAAAAAAAAAAA';
+// The two fields most of these checks index. Every check makes its driver empty, so no path
+// here is ever walked: the projections arrive on the writes below. A driver that backfills
+// (design 162) still has to leave an empty store alone.
+const DECLARED = { owner: ['owner'], weight: ['weight'] };
 const row = (id: string, set: Record<string, unknown> = {}, parent: string | null = ROOT) => ({
 	id, kind: 'object', set, unset: [] as string[],
 	...(id === ROOT ? {} : { edge: parent === null ? null : { parent, slot: id } }),
@@ -252,7 +256,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare(['owner', 'weight']);
+				await d.declare(DECLARED);
 				for (let i = 0; i < 12; i++) {
 					await d.create(`d${i}`, `${ROOT}${i}`, 'object');
 					await d.write({
@@ -278,7 +282,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare(['owner']);
+				await d.declare({ owner: ['owner'] });
 				await d.create('a', ROOT, 'object');
 				await d.write({ ...write('a', [row(ROOT)], 1), project: { owner: 'first' } });
 				assert.equal((await d.find({ where: { field: 'owner', op: 'eq', value: 'first' } })).length, 1);
@@ -299,7 +303,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare(['owner', 'weight']);
+				await d.declare(DECLARED);
 				for (let i = 0; i < 20; i++) {
 					await d.create(`d${i}`, `${ROOT}${i}`, 'object');
 					await d.write({
@@ -336,7 +340,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare(['owner']);
+				await d.declare({ owner: ['owner'] });
 				await d.create('a', ROOT, 'object');
 				await d.write({ ...write('a', [row(ROOT)], 1), project: { owner: 'u' } });
 				await assert.rejects(() => d.find({ where: { field: 'title', op: 'eq', value: 'x' } }),
@@ -349,7 +353,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare([]);
+				await d.declare({});
 				for (let i = 0; i < 10; i++) await d.create(`d${i}`, `${ROOT}${i}`, 'object');
 				const first = await d.scan(4);
 				assert.equal(first.length, 4);
@@ -364,7 +368,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare([]);
+				await d.declare({});
 				await d.create('a', ROOT, 'object');
 				await d.write(write('a', [row(ROOT, { secret: 'gone', keep: 1 })], 1));
 				await d.write(write('a', [{ id: ROOT, kind: 'object', set: {}, unset: ['secret'] }], 2));
@@ -381,7 +385,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare(['owner']);
+				await d.declare({ owner: ['owner'] });
 				await d.create('a', ROOT, 'object');
 				await d.write({ ...write('a', [row(ROOT)], 1), project: { owner: null } });
 				const hits = await d.find({ where: { field: 'owner', op: 'eq', value: null } });
@@ -395,7 +399,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare([]);
+				await d.declare({});
 				await d.create('a', ROOT, 'object');
 				await d.write(write('a', [row(ROOT, { title: 'original' })], 1));
 
@@ -413,7 +417,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare([]);
+				await d.declare({});
 				await d.create('a', ROOT, 'object');
 				await d.write(write('a', [row(ROOT), row('x', { title: 'kept' })], 1));
 
@@ -435,7 +439,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare(['owner', 'weight']);
+				await d.declare(DECLARED);
 				for (let i = 0; i < 6; i++) {
 					await d.create(`d${i}`, `${ROOT}${i}`, 'object');
 					await d.write({
@@ -471,7 +475,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare(['owner', 'weight']);
+				await d.declare(DECLARED);
 				for (let i = 0; i < 6; i++) {
 					await d.create(`d${i}`, `${ROOT}${i}`, 'object');
 					await d.write({
@@ -515,7 +519,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare(['owner', 'weight']);
+				await d.declare(DECLARED);
 				for (let i = 0; i < 3; i++) {
 					await d.create(`d${i}`, `${ROOT}${i}`, 'object');
 					await d.write({
@@ -627,7 +631,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare(['weight']);
+				await d.declare({ weight: ['weight'] });
 				await d.write({ ...write('a', [row(ROOT)], 1), project: { weight: 1 } });
 
 				for (const found of await d.find({ where: { field: 'weight', op: 'eq', value: 1 } })) {
@@ -669,7 +673,7 @@ export const driverChecks = (): DriverCheck[] => [
 		async run(make) {
 			const d = await make();
 			try {
-				await d.declare(['weight']);
+				await d.declare({ weight: ['weight'] });
 				await d.write({ ...write('a', [row(ROOT)], 1), project: { weight: 1 } });
 				await d.write({ ...write('b', [row(ROOT)], 1), project: { weight: 2 } });
 
@@ -680,6 +684,67 @@ export const driverChecks = (): DriverCheck[] => [
 				assert.deepEqual(
 					(await d.find({ where: { field: 'weight', op: 'eq', value: 1 } })).map((f) => f.doc), [],
 				);
+			} finally { await d.close(); }
+		},
+	},
+	{
+		// A slot may hold bytes, and a driver that keeps slots as JSON loses them in silence:
+		// `JSON.stringify` writes a Uint8Array as an object keyed by index, and reading that
+		// back gives the object. The second write is what catches a driver that re-encodes the
+		// whole slots value on a merge rather than on the way in (design 163).
+		name: 'bytes in a slot come back as bytes, after a later write to another slot',
+		async run(make) {
+			const d = await make();
+			try {
+				const held = new Uint8Array([0, 1, 127, 128, 200, 255]);
+				await d.write(write('a', [row(ROOT, { blob: held, keep: 'here' })], 1));
+				await d.write(write('a', [{ id: ROOT, kind: 'object', set: { keep: 'moved' }, unset: [] }], 2));
+
+				const rows = (await d.read('a'))!.rows as { id: string; slots: Record<string, unknown> }[];
+				const back = rows.find((r) => r.id === ROOT)!.slots.blob;
+				assert.ok(back instanceof Uint8Array,
+					`a slot written as bytes came back as ${Object.prototype.toString.call(back)}`);
+				assert.deepEqual([...back], [...held], 'the bytes changed on the way through storage');
+			} finally { await d.close(); }
+		},
+	},
+	{
+		// A hole in the index answers nothing, not even a query for null, so a document the
+		// index has no row for is invisible until somebody writes to it. `create` is where a
+		// document with no writes at all comes from, which is every document a store opened and
+		// did not change.
+		name: 'a document created and never written is in the index under every declared field',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.declare(DECLARED);
+				assert.equal(await d.create('fresh', ROOT, 'object'), true);
+
+				assert.deepEqual(
+					(await d.find({ where: { field: 'owner', op: 'eq', value: null } })).map((f) => f.doc),
+					['fresh'],
+					'a document that was created and never written cannot be found by an empty path');
+				const [found] = await d.scan(10);
+				assert.deepEqual(Object.keys(found!.fields).sort(), ['owner', 'weight'],
+					'and a hit has to carry every declared field, whatever the document holds');
+			} finally { await d.close(); }
+		},
+	},
+	{
+		// The unset list is easy to apply on the merge and forget on the insert, which loses a
+		// slot only for the observable a commit introduces and removes from in one go.
+		name: 'a patch that creates a row honours its unset list',
+		async run(make) {
+			const d = await make();
+			try {
+				await d.write(write('a', [
+					row(ROOT),
+					{ id: 'x', kind: 'object', edge: { parent: ROOT, slot: 'x' }, set: { keep: 1, gone: 2 }, unset: ['gone'] },
+				], 1));
+
+				const rows = (await d.read('a'))!.rows as { id: string; slots: Record<string, unknown> }[];
+				assert.deepEqual(rows.find((r) => r.id === 'x')?.slots, { keep: 1 },
+					'a slot the patch unset was stored anyway, because the row was new');
 			} finally { await d.close(); }
 		},
 	},

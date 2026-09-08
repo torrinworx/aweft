@@ -5,6 +5,8 @@ export { memoryDriver } from './memory.ts';
 
 export type { Driver, Entry, Found, Lookup, Patch, Row, Write } from './driver.ts';
 
+export { projectionOf } from './projection.ts';
+
 export { compare, holds } from './query.ts';
 export type { Declaration, Indexable, Query, Where } from './query.ts';
 
