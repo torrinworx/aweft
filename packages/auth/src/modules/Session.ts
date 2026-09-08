@@ -5,7 +5,7 @@ import { atomic } from '@aweftjs/core';
 import type { ModuleProps } from '@aweftjs/modules';
 import type { Identified } from '@aweftjs/server';
 
-import { ANONYMOUS, type AuthContext } from '../context.ts';
+import { ANONYMOUS, type AuthContext, userOf } from '../context.ts';
 import { cookiesOf, setCookie } from '../cookie.ts';
 import { json, storeOf } from '../props.ts';
 
@@ -30,6 +30,8 @@ export interface Session {
 	whoIs(request: Request): Promise<Identified<AuthContext>>;
 	/** The `Set-Cookie` value that sets the cookie to a token, or clears it for null. */
 	setCookie(token: string | null, request: Request): string;
+	/** Who the asking connection is. The module is public, so an anonymous one hears `{ user: null }`. */
+	call(args: unknown, context: unknown): { user: string | null };
 	readonly routes: Record<string, (request: Request, context: AuthContext) => Promise<Response>>;
 }
 
@@ -109,6 +111,9 @@ export default ({ config, ...props }: ModuleProps): Session => {
 		revoke,
 		whoIs,
 		setCookie: (token, request) => setCookie(cookie, token, request, sessionMs),
+		// The only moment a page can learn who it is comes after its socket opens, because
+		// identity is fixed at the handshake (design 185).
+		call: (_args, context) => ({ user: userOf(context) }),
 		routes: {
 			'DELETE /api/session': async (request, context) => {
 				if (context.session !== null) await revoke(context.session);

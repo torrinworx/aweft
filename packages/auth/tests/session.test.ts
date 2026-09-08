@@ -123,6 +123,16 @@ test('DELETE /api/session revokes the session and clears the cookie, and an anon
 	await store.stop();
 });
 
+test('call answers who the asking connection is, and anonymous hears null', async () => {
+	const store = newStore();
+	const { instance: session, stop } = await module<Session>('Session', store);
+	assert.deepEqual(session.call({}, { user: 'u_ada', session: 'AAAAAAAAAAAAAAAA' }), { user: 'u_ada' });
+	assert.deepEqual(session.call({}, { user: null, session: null }), { user: null });
+	assert.deepEqual(session.call({}, undefined), { user: null }, 'a context from another gate names nobody');
+	await stop();
+	await store.stop();
+});
+
 test('a module without a store in the loader props is refused loudly', async () => {
 	const exports = await import('../src/modules/Session.ts');
 	assert.throws(() => exports.default({ imports: {}, config: { cookie: 'session' }, extensions: {} }), /needs a store/);

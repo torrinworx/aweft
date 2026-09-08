@@ -2,7 +2,8 @@
 
 The first battery: server modules for who is on a connection. A gate that reads `public`,
 sessions as documents in your store, sign-in and sign-up by email and password, and a
-per-user state document shared on every connection of theirs. No client half yet.
+per-user state document shared on every connection of theirs. `@aweftjs/auth/client` is the
+browser half: who the page is, signing in and out, and that state document.
 
 ## Quickstart
 
@@ -33,7 +34,7 @@ replaces one of these.
 | module | public | what it does |
 |---|---|---|
 | `auth/Gate` | | `identify` reads the session cookie; `access` allows a module that declares `public: true` to anyone and any other module only to a signed-in user |
-| `auth/Session` | yes | `issue(user)`, `revoke(token)`, `whoIs(request)`, `setCookie(token, request)`, and `DELETE /api/session` |
+| `auth/Session` | yes | `issue(user)`, `revoke(token)`, `whoIs(request)`, `setCookie(token, request)`, a `call` answering `{ user }` for the asking connection, and `DELETE /api/session` |
 | `auth/Enter` | yes | `enter(email, password)` signs in, or signs up when nobody has the email; `POST /api/session` does that and sets the cookie |
 | `auth/Check` | yes | `exists(email)`, and a `call` answering `{ exists }` for `{ email }` |
 | `auth/State` | | shares `state:<user>` from the store on the connection, under the topic `state` |
@@ -81,6 +82,62 @@ the cookie whenever the request came over TLS as the listener sees it; behind a 
 terminates TLS, start the Node listener with `forwarded: true` so the scheme comes from
 `x-forwarded-proto`.
 
+## The client half
+
+```ts
+import { createClient } from '@aweftjs/client';
+import { createAuth } from '@aweftjs/auth/client';
+
+const client = createClient();                        // the page's own origin
+const auth = createAuth(client);                      // the page's own origin, and global fetch
+
+auth.user.effect((who) => header.textContent = who ?? 'signed out');
+
+const outcome = await auth.enter('ada@example.com', 'correct horse battery staple');
+if ('refused' in outcome) show(outcome.refused);
+
+const state = await auth.state<State>().ready;
+state.theme = 'dark';                                 // applies here, and goes
+```
+
+`createAuth(client, { origin?, fetch? })` adds identity to a connection. It never opens or
+closes the connection for good; `@aweftjs/client` owns the socket. After sign-in and sign-out it
+asks the client to reconnect, because identity is fixed per socket.
+
+**`user` has three states.** `undefined` until the server has answered, `null` for an anonymous
+connection, and the user's id otherwise. It is a read-only cell, so a page renders all three and
+follows the value through sign-in and sign-out. It is asked again on every socket that opens,
+because identity is read from the cookie at the handshake and is fixed for the connection's
+life. A drop leaves the last value alone; the socket after it refreshes.
+
+**`enter` and `leave` reconnect.** A browser cannot set a cookie on an open socket, so after
+either route the client drops that socket and opens a new one, and the call resolves once `user`
+is known again. `enter` answers `{ user, created }` on 200 or 201 and `{ refused }` on 400 or
+401, in the same shape `auth/Enter` uses on the server. `leave` resolves once the page is
+anonymous again.
+
+**`state()` is the signed-in user's own document.** Its `ready` rejects with `anonymous` when
+there is no user, at once rather than waiting for a topic the server will never offer, and waits
+for the answer when nobody has said yet. One connection carries one state document: the server
+offers the topic once per socket, so asking twice hands back the same handle until `stop()`,
+after which it refuses `stopped`, and only the socket `enter` or `leave` opens brings a new one.
+`check(email)` asks `auth/Check`. `stop()` stops following the connection and leaves the client
+running; every call after it refuses `stopped`.
+
+**When `user` changes underneath the page, the handle it holds is stopped.** The server forgets
+the session, or another user's cookie replaces it, and the client comes back on its own as
+somebody else. The handle the page is still holding was made for the old user, so it is stopped
+and follows the server no further; the next `state()` answers for whoever the connection is now,
+and a page follows `user` to notice. `enter` and `leave` refuse with `closed` when their route
+answered but the client has since been closed.
+
+**Two seams outside a browser**, and a page needs neither. `origin` is where the session routes
+are, the page's own by default and required where there is no `location`. `fetch` makes the two
+HTTP calls, the global by default; a Node program hands in one that carries the cookie, because
+Node's `fetch` keeps no cookie jar. The client's own `open` seam is the third, and it is
+`@aweftjs/client`'s: a Node program hands in a socket carrying the same cookie header.
+`recipes/client` runs all three.
+
 ## What is stored
 
 Three kinds of document in your store, named by prefix:
@@ -94,10 +151,11 @@ Three kinds of document in your store, named by prefix:
   every commit, because it is theirs.
 
 The state document is an `@aweftjs/core` observable, as every document in the store is: put
-a list in it with `createArray`, an object with `createObject`, and group writes with
-`atomic`. **Keep its root an object.** `paths` declares `email` and `user` for every document
-in the store, and the store refuses a declared path that meets an array, so a document whose
-root is an array cannot be written to a store that declares them; a list goes in a field.
+a list in it with `createArray` from `@aweftjs/core`, an object with `createObject`, and group
+writes with `atomic`; that package's README shows the shapes. **Keep its root an object.**
+`paths` declares `email` and `user` for every document in the store, and the store refuses a
+declared path that meets an array, so a document whose root is an array cannot be written to a
+store that declares them; a list goes in a field.
 
 Ids and tokens are the stack's ids: twelve random bytes from the platform's secure source,
 sixteen characters. Passwords are hashed with Node's own `scrypt` and compared with Node's
@@ -109,8 +167,7 @@ that is what one module for both means, and `auth/Check` exists so a form can as
 
 ## What waits
 
-Email verification and password reset wait for the email battery. Client views, the
-reconnect after sign-in, and cookie helpers wait for the client runtime. Nothing here runs in
-a browser.
+Email verification and password reset wait for the email battery. The client half ships no sign-in
+or sign-up view, so a page writes its own form and calls `enter`.
 
-The decisions are in `docs/design/` 071 and 074.
+The design notes are in `docs/design/` 071 and 074, and 185 for the client half.

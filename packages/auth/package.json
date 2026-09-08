@@ -6,12 +6,14 @@
 	"license": "MIT",
 	"description": "The first battery: a gate that reads public, sessions as documents, sign-in and sign-up by email and password, and a per-user state document, as server modules.",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./client": "./src/client.ts"
 	},
 	"scripts": {
 		"test": "node --test tests/*.test.ts"
 	},
 	"dependencies": {
+		"@aweftjs/client": "*",
 		"@aweftjs/codec": "*",
 		"@aweftjs/core": "*",
 		"@aweftjs/modules": "*",

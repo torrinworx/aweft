@@ -4,7 +4,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import * as client from '../src/client.ts';
 import * as auth from '../src/index.ts';
+
+test('the client subpath hands out one function, and nothing else', () => {
+	assert.deepEqual(Object.keys(client).sort(), ['createAuth']);
+});
 
 test('the entry hands out the source and the paths, and nothing else', () => {
 	assert.deepEqual(Object.keys(auth).sort(), ['auth', 'paths']);

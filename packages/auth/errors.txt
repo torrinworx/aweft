@@ -1,4 +1,10 @@
+anonymous: Wait for user to read a string, or call enter first; an anonymous connection has no state.
+closed: Make a new client with createClient, and a new auth over it.
+enter-failed: Check the server is running and that auth/Enter is loaded, then try again.
 invalid-config: Set sessionMs to a positive number of milliseconds, or leave it out.
+leave-failed: Check the server is running and that auth/Session is loaded, then try again.
 malformed: Call it as { email: "someone@example.com" }.
+no-origin: Pass origin to createAuth; outside a page there is no origin to read one from.
 no-store: Build it as createLoader({ sources, props: { store } }).
 not-gated: Put auth/Gate in front of the server, or make the module public.
+stopped: Make a new auth with createAuth; a stopped one follows no connection.

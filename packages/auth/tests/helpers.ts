@@ -10,6 +10,7 @@ import { connect, fromWebSocket, requests } from '@aweftjs/sync';
 import type { Link, Requests, SocketLike } from '@aweftjs/sync';
 import { loadModule } from '@aweftjs/testing';
 
+import type { Fetcher } from '../src/client.ts';
 import { auth, paths } from '../src/index.ts';
 
 export const tick = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
@@ -48,15 +49,15 @@ export const gateOf = async (loader: Loader): Promise<Gate> =>
 
 // --- a connection with no port, for the integration cases -------------------------------------
 
-interface Fake extends SocketLike {
+export interface Fake extends SocketLike {
 	peer: Fake | undefined;
 	fire(type: string, event: { data?: unknown }): void;
 }
 
-const fake = (): Fake => {
+const fake = (readyState = 1): Fake => {
 	const listeners: Record<string, ((event: { data?: unknown }) => void)[]> = {};
 	const it: Fake = {
-		binaryType: 'blob', readyState: 1, peer: undefined,
+		binaryType: 'blob', readyState, peer: undefined,
 		send: (data) => { const peer = it.peer; if (peer !== undefined) queueMicrotask(() => peer.fire('message', { data })); },
 		close: () => {
 			if (it.readyState === 3) return;
@@ -97,4 +98,53 @@ export const connectTo = async (handlers: ListenerHandlers, cookie?: string): Pr
 export const asClient = (opened: Client | Response): Client => {
 	if (opened instanceof Response) throw new Error(`the handshake was refused with ${opened.status}`);
 	return opened;
+};
+
+// --- the two seams a page hands the client half, wired to a server with no port ----------------
+
+/** What a page gives `createClient` and `createAuth`, with the browser's cookie jar in a variable. */
+export interface Page {
+	open(url: string): SocketLike;
+	fetch: Fetcher;
+	/** Every socket the client has made, newest last. */
+	readonly sockets: Fake[];
+	/** What the jar holds, so a test can connect beside the page or check it was cleared. */
+	cookie(): string;
+}
+
+export const page = (handlers: () => ListenerHandlers): Page => {
+	const sockets: Fake[] = [];
+	let jar = '';
+	return {
+		sockets,
+		cookie: () => jar,
+		// The order this package's client half depends on: the far end is handed to the server
+		// and answers before the near end ever fires `open`.
+		open: () => {
+			const near = fake(0);
+			const far = fake();
+			near.peer = far;
+			far.peer = near;
+			sockets.push(near);
+			void handlers().socket(jar === '' ? request('/ws') : withCookie('/ws', jar), peer).then((answer) => {
+				if (typeof answer !== 'function' || near.readyState === 3) return;
+				answer(far);
+				near.readyState = 1;
+				near.fire('open', {});
+			});
+			return near;
+		},
+		fetch: async (url, init) => {
+			const answer = await handlers().request(new Request(url, {
+				method: init.method,
+				headers: { ...init.headers, ...(jar === '' ? {} : { cookie: jar }) },
+				...(init.body === undefined ? {} : { body: init.body }),
+			}), peer);
+			// Node's fetch keeps no cookie jar, and neither does this: the browser's half is a
+			// variable the socket seam reads on its way out.
+			const set = answer.headers.getSetCookie()[0];
+			if (set !== undefined) jar = set.split(';')[0]!;
+			return answer;
+		},
+	};
 };

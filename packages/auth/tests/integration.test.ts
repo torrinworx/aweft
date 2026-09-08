@@ -44,6 +44,7 @@ test('sign up over HTTP, connect with the cookie, share the state, sign out, and
 	assert.deepEqual(seen, ['private saw ' + user]);
 	assert.equal(await ada.asks.ask('app/Private'), 'private');
 	assert.equal(await ada.asks.ask('app/Public'), 'public');
+	assert.equal(JSON.stringify(await ada.asks.ask('auth/Session')), `{"user":"${user}"}`, 'the connection can ask who it is');
 	ada.socket.close();
 	await settle();
 	const kept = await store.open(`state:${user}`);
@@ -53,6 +54,7 @@ test('sign up over HTTP, connect with the cookie, share the state, sign out, and
 	const anonymous = asClient(await connectTo(handlers));
 	assert.equal(await anonymous.asks.ask('app/Public'), 'public');
 	assert.equal(await anonymous.asks.ask('app/Private').catch(reasonOf), 'refused');
+	assert.equal(JSON.stringify(await anonymous.asks.ask('auth/Session')), '{"user":null}', 'and an anonymous one hears null');
 	assert.equal(await anonymous.asks.ask('auth/Check', { email: 'ada@example.com' }).then((r) => JSON.stringify(r)), '{"exists":true}');
 	anonymous.socket.close();
 

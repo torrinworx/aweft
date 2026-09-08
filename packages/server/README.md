@@ -118,26 +118,28 @@ anything else is 500 and reported as `not-a-response`.
 
 ## The client
 
-One socket carries both the link (binary) and the requests (text), from `@aweftjs/sync`:
+One socket carries both the link (binary) and the requests (text). `@aweftjs/client` opens it
+and holds both:
 
 ```ts
-import { connect, fromWebSocket, requests } from '@aweftjs/sync';
+import { createClient } from '@aweftjs/client';
 
-const socket = new WebSocket('wss://app.example/');
-const link = connect(fromWebSocket(socket));      // attach BEFORE the socket opens
-const asks = requests(socket);                    // the server speaks first
+const client = createClient({ url: 'wss://app.example/' });
 
-const board = await link.share('board').ready;
-const report = await asks.ask('notes/Export', { month: '2026-09' }, { progress: (p) => bar.set(p) });
+const board = await client.share('board').ready;
+const report = await client.ask('notes/Export', { month: '2026-09' }, { progress: (p) => bar.set(p) });
 ```
 
-Attach both the moment the socket is made. The server's hooks run at the handshake and its
-first frames are on the wire before the client's `open` event fires; a message that arrives
-before anything listens is lost, on every WebSocket implementation there is.
+That package attaches the link and the request channel the moment the socket is made, so the
+share and the ask above reach the server even though they are written while the socket is
+still connecting. It has to, for the reason this section already gives: the server's hooks run
+at the handshake and its first frames are on the wire before the client's `open` event fires,
+and a message that arrives before anything listens is lost, on every WebSocket implementation
+there is.
 
 Identity is fixed for a connection's life: it is what `identify` said at the handshake.
 After signing in or out over HTTP, the client reconnects. A browser cannot set a cookie on an
-open socket, and the client runtime will own the reconnect.
+open socket, and `@aweftjs/auth/client` does that reconnect for the page.
 
 ## The listener
 

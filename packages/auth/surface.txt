@@ -1,3 +1,10 @@
 type AuthContext: interface AuthContext { readonly user: string | null; readonly session: string | null; }
 value auth: Source
 value paths: Readonly<Record<string, readonly string[]>>
+./client type Auth: interface Auth { readonly user: Derived<string | null | undefined>; enter(email: string, password: string): Promise<Entered>; leave(): Promise<void>; state<T extends object>(): Handle<T>; check(email: string): Promise<boolean>; stop(): void; }
+./client type AuthOptions: interface AuthOptions { readonly origin?: string | undefined; readonly fetch?: Fetcher | undefined; }
+./client type Entered: type Entered = { readonly user: string; readonly created: boolean; } | { readonly refused: readonly Refusal[]; };
+./client type FetchInit: interface FetchInit { method: string; headers: Record<string, string>; body?: string; credentials: 'same-origin'; }
+./client type FetchResponse: interface FetchResponse { status: number; ok: boolean; json(): Promise<unknown>; }
+./client type Fetcher: type Fetcher = (url: string, init: FetchInit) => Promise<FetchResponse>;
+./client value createAuth: (client: Client, options?: AuthOptions) => Auth
