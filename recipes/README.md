@@ -26,6 +26,7 @@ Start here if you know what you are trying to build.
 | `icons/` | Icons named three ways, and what each way puts in the bundle | ui, icons, build |
 | `routed-site/` | A site with real URLs: nested pages, a page with a parameter, a page that arrives later, a dialog the back button dismisses, and a title per page | core, dom, ui, build |
 | `ssg/` | A routed site written out as files, served by anything, and taken over in place when the browser gets to it | dom, ui, build, ssg |
+| `documents-on-postgres/` | Documents kept in Postgres: a writer killed mid-edit, eight processes opening one name at once, and a path declared after the data was there | store |
 | `posts-to-pages/` | Pages written while the application runs: a post published over a socket becomes a page, and a scheduled full write refreshes the sitemap | store, modules, server, jobs, ui, ssg |
 
 ## By package

@@ -32,6 +32,7 @@ Follow it in order. A step skipped is how a change that did nothing gets kept.
 |---|---|---|
 | `derived.ts` | What derived value propagation costs, on four graph shapes | `node bench/derived.ts` |
 | `write.ts` | What a write costs before anything derived from it runs | `node bench/write.ts` |
+| `store-postgres.ts` | What a write costs on the Postgres driver, in milliseconds and write-ahead log bytes, and what a declared read costs through its index at 20,000 documents | `node bench/store-postgres.ts` |
 | `replicate.ts` | What replication costs: position bytes, commit bytes, distinctness | `node bench/replicate.ts` |
 | `guard.ts` | What a guard costs per commit as the document grows | `node bench/guard.ts` |
 | `compile.ts` | What loading a module costs per distinct source | `node --expose-gc bench/compile.ts` |
