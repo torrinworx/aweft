@@ -184,17 +184,27 @@ them in.
 
 ```ts
 hydrate(document.body, h(App, { url: location.pathname }));
+hydrate(document.body, () => h('main', {}, 'ready'));
 ```
 
-`hydrate` mounts the same item over markup `render` wrote and adopts the server's nodes in
+`hydrate` takes what makes the item: a component call, `h(App, props)`, or a function that
+makes it, which is mounted as a component with no props. It cannot take the element itself.
+Only a mount records which nodes the binding made, so an element built before the call was
+made outside every mount and has nothing recorded about it; handed straight in, or returned by
+the maker, it is refused, and the refusal names the maker form as the fix.
+
+`hydrate` mounts that item over markup `render` wrote and adopts the server's nodes in
 place: a matching element keeps its identity and gains the properties and listeners the
 client gives it, text is adopted, lists keep working. Nothing is wiped and nothing flashes.
 
 A mismatch between the markup and what the client renders is a defect: it asserts in
 development, and in a release build the region that differs is replaced with what the
-client built while the rest is kept. A node the application made itself (rather than through
-`h` or `createElement`) is inserted as it is. Markup must parse back into the tree `render`
-wrote: write `tbody` yourself, and avoid whitespace-only text where the browser drops it.
+client built while the rest is kept. Only the top-level item is refused for being built
+outside the mount. Deeper in the tree a node the application made outside the mount, by `h`
+or by the page, is inserted as it is and stands in for the server's node of the same tag,
+which is how a component keeps a canvas or a map it owns. Markup must parse back into the
+tree `render` wrote: write `tbody` yourself, and avoid whitespace-only text where the browser
+drops it.
 
 A component that waits with `pending` runs again on the client, and starting its wait again
 would render the loading state over the server's finished one, which is a mismatch. Give it

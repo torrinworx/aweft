@@ -630,6 +630,24 @@ export const componentHandle = (ctx: Ctx, component: Component, props: Record<st
 	});
 
 export type { Handle };
+/**
+ * Is this already the mounter `h` makes of a component, rather than a bare function?
+ *
+ * Params:
+ *   value: anything an application would hand `mount`, `render`, `hydrate` or `attach`
+ *
+ * Returns: true for what `h(Component, props)` answers, false for everything else, a bare
+ * function included.
+ *
+ * Whoever wants a bare function mounted as a component with no props asks first, because
+ * wrapping a component call a second time would call it with a component's arguments.
+ * `hydrate` asks (design 157), and so does `ssg`'s `attach`.
+ *
+ * Example:
+ *   const mounted = typeof item === 'function' && !isComponentCall(item) ? h(item) : item;
+ */
+export const isComponentCall = (value: unknown): boolean =>
+	typeof value === 'function' && (value as Partial<Direct>)[DIRECT] !== undefined;
 export const pendingOf = (root: Root): Set<Promise<unknown>> => root.pending;
 export const drainRoot = drain;
 export const hydrationOf = (root: Root): Hydration | null => root.hydration;

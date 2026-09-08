@@ -489,7 +489,7 @@ test('a ticked box says so in the markup, and the cell still drives it once it i
 
 	for (const [name, make, on] of cases) {
 		const server = context();
-		const markup = await render(make(mutable<unknown>(on)), { context: server });
+		const markup = await render(h(() => make(mutable<unknown>(on))), { context: server });
 		assert.match(markup, /<input [^>]*checked/,
 			`${name} writes the state a server page shows, not one only a browser learns`);
 
@@ -499,7 +499,7 @@ test('a ticked box says so in the markup, and the cell still drives it once it i
 			document.head.appendChild(node);
 		}
 		const cell = mutable<unknown>(on);
-		const stop = hydrate(document.body, make(cell));
+		const stop = hydrate(document.body, () => make(cell));
 		const box = elements(document.body.firstChild).find((element) => element.localName === 'input')!;
 		assert.equal(propOf(box, 'checked'), true, `${name} is ticked on the element itself`);
 
@@ -608,7 +608,7 @@ const everything = (): unknown => h('div', {},
 
 test('every control renders to markup and hydrates onto the nodes the server wrote', async () => {
 	const server = context();
-	const markup = await render(everything(), { context: server });
+	const markup = await render(h(everything), { context: server });
 	const css = server.theme.markup();
 
 	const document = createDocument();
@@ -619,14 +619,13 @@ test('every control renders to markup and hydrates onto the nodes the server wro
 	assert.ok(before.length > 20, 'the server wrote the whole page');
 
 	const made = countingMade(document);
-	const stop = hydrate(document.body, everything());
+	const stop = hydrate(document.body, everything);
 
 	// One fresh element per element on the page, because the client builds the same tree and
 	// then pairs it against the server's. Not zero: nothing in this package can make it zero.
-	// The exception is a list row after the first, which is cloned from the recorded row rather
-	// than built (design 099), and a clone is not a make. The one list here is the select's.
-	const rows = before.filter((element) => element.localName === 'option').length - 1;
-	assert.equal(made.length, before.length - (rows - 1),
+	// Every one is made in this document, because `hydrate` takes what makes the item and runs
+	// it inside the hydration (design 157); nothing is built at the call site any more.
+	assert.equal(made.length, before.length,
 		'a hydration makes the client\'s tree and keeps the server\'s: one made and dropped per element');
 
 	const after = elements(document.body.firstChild);
@@ -640,7 +639,7 @@ test('every control renders to markup and hydrates onto the nodes the server wro
 
 test('hydration keeps every server element, by identity', async () => {
 	const server = context();
-	const markup = await render(everything(), { context: server });
+	const markup = await render(h(everything), { context: server });
 	const css = server.theme.markup();
 
 	const document = createDocument();
@@ -649,7 +648,7 @@ test('hydration keeps every server element, by identity', async () => {
 
 	const before = elements(document.body.firstChild);
 	const made = countingMade(document);
-	const stop = hydrate(document.body, everything());
+	const stop = hydrate(document.body, everything);
 	const after = elements(document.body.firstChild);
 
 	// By identity, one for one. A deep comparison passes for a clone the client built and put

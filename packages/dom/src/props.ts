@@ -4,11 +4,12 @@
 const applied = new WeakMap<object, [string, unknown][]>();
 const made = new WeakSet<object>();
 
-// Only a hydration reads any of this, so only a hydration pays for it (design 098). The flag
-// is on outside every mount, because `h` runs before anything has said what will happen to
-// the node: `hydrate(target, h('main', ...))` builds the element first. Inside a mount the
-// root knows, and `withRoot` sets the flag from it.
-let recording = true;
+// Only a hydration reads any of this, so only a hydration pays for it (designs 098 and 157).
+// The flag is off outside every mount: `hydrate` takes what makes the item and builds it
+// inside the hydrating mount, so nothing a hydration will read is ever made out there. An
+// element an application builds eagerly used to pay for a hydration that never came. Inside a
+// mount the root knows, and `withRoot` sets the flag from it.
+let recording = false;
 
 /** Set whether to record, and answer what it was, so the caller can put it back. */
 export const setRecording = (on: boolean): boolean => {
@@ -16,12 +17,6 @@ export const setRecording = (on: boolean): boolean => {
 	recording = on;
 	return was;
 };
-
-/**
- * Whether anything below will be read. A caller that would walk a tree only to call `markMade`
- * on every node asks first and skips the walk, rather than walking to call a no-op.
- */
-export const isRecording = (): boolean => recording;
 
 /** Nodes the binding made are the ones hydration may claim; a node the application made is
  * inserted as it is (design 078). */

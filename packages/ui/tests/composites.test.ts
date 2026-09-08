@@ -615,7 +615,7 @@ const everything = (): unknown => answered(h(PopupContext as never, {}, h('div',
 
 test('every composite a page can hold renders to markup and hydrates onto the server\'s nodes', async () => {
 	const server = context();
-	const markup = await render(everything(), { context: server });
+	const markup = await render(h(everything), { context: server });
 	const css = server.theme.markup();
 
 	const document = createDocument();
@@ -626,15 +626,13 @@ test('every composite a page can hold renders to markup and hydrates onto the se
 	assert.ok(before.length > 20, 'the server wrote the whole page');
 
 	const made = countingMade(document);
-	const stop = hydrate(document.body, everything());
+	const stop = hydrate(document.body, everything);
 
-	// One fresh element per element on the page, less the three this test wrote with `h` itself: the
-	// wrapper `<div>`, the `<p>` inside the drop down and the tooltip's `<button>`. `h` at the call
-	// site runs before `hydrate` does and makes its nodes in the fallback document rather than in
-	// this one, which is the measurement the README's known limits explain. Everything a component body
-	// makes is made here, and then dropped. Not zero: nothing in this package can make it zero.
-	const written = 3;
-	assert.equal(made.length, before.length - written,
+	// One fresh element per element on the page, this test's own `h` calls included: `hydrate`
+	// takes what makes the item and runs it inside the hydration, so nothing is built at the call
+	// site in a fallback document any more (design 157). Not zero: nothing in this package can
+	// make it zero, which `dom`'s README states under its known limits.
+	assert.equal(made.length, before.length,
 		'a hydration makes the client\'s tree and keeps the server\'s: one made and dropped per element');
 
 	const after = elements(document.body.firstChild);
@@ -654,7 +652,7 @@ test('every composite a page can hold renders to markup and hydrates onto the se
 
 test('hydration keeps every server element of a composite page, by identity', async () => {
 	const server = context();
-	const markup = await render(everything(), { context: server });
+	const markup = await render(h(everything), { context: server });
 	const document = createDocument();
 	for (const node of parseHtml(markup, document)) document.body.appendChild(node);
 	for (const node of parseHtml(`<style data-aweft>${server.theme.markup()}</style>`, document)) {
@@ -662,7 +660,7 @@ test('hydration keeps every server element of a composite page, by identity', as
 	}
 
 	const before = elements(document.body.firstChild);
-	const stop = hydrate(document.body, everything());
+	const stop = hydrate(document.body, everything);
 	const after = elements(document.body.firstChild);
 
 	// By identity, one for one. A deep comparison passes for a clone the client built and put where

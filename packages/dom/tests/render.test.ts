@@ -110,28 +110,32 @@ test('hydrate sets properties and listeners, and splits a server text that seria
 });
 
 test('hydrate refuses a structural mismatch and heals an attribute or text difference loudly', async () => {
-	const markup = await render(h('main', {}, h('p', { class: 'x' }, 'hi')));
+	// The server renders the same maker the client hydrates, so both sides bracket the same
+	// region (design 157).
+	const Page = (): unknown => h('main', {}, h('p', { class: 'x' }, 'hi'));
+	const markup = await render(h(Page));
 	const doc = createDocument();
 	doc.body.innerHTML = markup;
-	assert.throws(() => hydrate(doc.body, h('main', {}, h('div', {}, 'hi'))), /expected a <div> and found a <p>/);
+	assert.throws(() => hydrate(doc.body, () => h('main', {}, h('div', {}, 'hi'))), /expected a <div> and found a <p>/);
 
 	doc.body.innerHTML = markup;
-	assert.throws(() => hydrate(doc.body, h('main', {}, h('p', { class: 'y' }, 'hi'))), /attribute mismatch/);
+	assert.throws(() => hydrate(doc.body, () => h('main', {}, h('p', { class: 'y' }, 'hi'))), /attribute mismatch/);
 
 	doc.body.innerHTML = markup;
-	assert.throws(() => hydrate(doc.body, h('main', {}, h('p', { class: 'x' }, 'bye'))), /text mismatch/);
+	assert.throws(() => hydrate(doc.body, () => h('main', {}, h('p', { class: 'x' }, 'bye'))), /text mismatch/);
 
 	doc.body.innerHTML = markup;
-	assert.throws(() => hydrate(doc.body, h('main', {}, h('p', { class: 'x' }, 'hi'), h('i'))), /ran out/);
+	assert.throws(() => hydrate(doc.body, () => h('main', {}, h('p', { class: 'x' }, 'hi'), h('i'))), /ran out/);
 
 	doc.body.innerHTML = markup;
-	assert.throws(() => hydrate(doc.body, h('main', {}, h('p', { class: 'x' }))), /did not render/);
+	assert.throws(() => hydrate(doc.body, () => h('main', {}, h('p', { class: 'x' }))), /did not render/);
 
 	doc.body.innerHTML = markup;
-	assert.throws(() => hydrate(doc.body, h('main', {}, mutable('hi'))), /no marker region/);
+	assert.throws(() => hydrate(doc.body, () => h('main', {}, mutable('hi'))), /no marker region/);
 
-	doc.body.innerHTML = `<main>${markup}</main>`;
-	assert.throws(() => hydrate(doc.body, h('main', {}, h('p', { class: 'x' }, 'hi'))), /expected a <p> and found a <main>/);
+	// The server nested one more element than the client builds, so the client's `p` meets it.
+	doc.body.innerHTML = await render(h(() => h('main', {}, h('main', {}, h('p', { class: 'x' }, 'hi')))));
+	assert.throws(() => hydrate(doc.body, Page), /expected a <p> and found a <main>/);
 });
 
 test('an attribute a cell drives is set on the adopted node, not read as a mismatch', async () => {
@@ -163,16 +167,17 @@ test('a $style object survives render and hydrate: the markup has the attribute,
 });
 
 test('a second hydrate over a live one is refused, and works again once the first is removed', async () => {
-	const markup = await render(h('p', {}, 'x'));
+	const Page = (): unknown => h('p', {}, 'x');
+	const markup = await render(h(Page));
 	const doc = createDocument();
 	doc.body.innerHTML = markup;
-	const stop = hydrate(doc.body, h('p', {}, 'x'));
-	assert.throws(() => hydrate(doc.body, h('p', {}, 'x')), /already holds a live hydration/);
-	assert.equal(toHtml(doc.body), '<body><p>x</p></body>', 'the first hydration still holds its nodes');
+	const stop = hydrate(doc.body, Page);
+	assert.throws(() => hydrate(doc.body, Page), /already holds a live hydration/);
+	assert.equal(toHtml(doc.body), '<body><!--[--><p>x</p><!--]--></body>', 'the first hydration still holds its nodes');
 	stop();
 	doc.body.innerHTML = markup;
-	const again = hydrate(doc.body, h('p', {}, 'x'));
-	assert.equal(toHtml(doc.body), '<body><p>x</p></body>');
+	const again = hydrate(doc.body, Page);
+	assert.equal(toHtml(doc.body), '<body><!--[--><p>x</p><!--]--></body>');
 	again();
 });
 
@@ -185,6 +190,38 @@ test('a node the application made is inserted, never claimed', async () => {
 	doc.body.innerHTML = markup;
 	hydrate(doc.body, h(App));
 	assert.equal(doc.body.children[0]!.children[0], own, 'the application node itself is in the tree');
+});
+
+test('hydrate refuses a top-level node built before the call, in either shape', async () => {
+	const Page = (): unknown => h('p', { class: 'x' }, 'hi');
+	const markup = await render(h(Page));
+	const doc = createDocument();
+	doc.body.innerHTML = markup;
+	const sent = doc.body.children[0]!;
+
+	// Built outside every mount, so nothing recorded it and there is nothing to claim with.
+	const built = doc.createElement('p');
+	built.setAttribute('class', 'x');
+	built.appendChild(doc.createTextNode('hi'));
+	const refused = /cannot claim the server markup with a node it did not make/;
+
+	assert.throws(() => hydrate(doc.body, built), refused, 'handed straight in');
+	assert.equal(toHtml(doc.body), `<body>${markup}</body>`, 'nothing was inserted');
+	assert.equal(doc.body.children[0], sent, 'the server node is still the one in the page');
+
+	assert.throws(() => hydrate(doc.body, () => built), refused, 'returned by the maker');
+	assert.equal(toHtml(doc.body), `<body>${markup}</body>`, 'nothing was inserted');
+	assert.equal(doc.body.children[0], sent, 'the server node is still the one in the page');
+
+	const stop = hydrate(doc.body, h(Page));
+	assert.equal(doc.body.children[0], sent, 'a component call still claims');
+	stop();
+
+	doc.body.innerHTML = markup;
+	const second = doc.body.children[0]!;
+	const again = hydrate(doc.body, () => h('p', { class: 'x' }, 'hi'));
+	assert.equal(doc.body.children[0], second, 'a maker that builds inside the call still claims');
+	again();
 });
 
 test('hydrate needs a document, and answers getFirst', async () => {

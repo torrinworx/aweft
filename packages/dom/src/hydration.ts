@@ -11,6 +11,14 @@ import type { ElementLike, NodeLike, ParentLike, TextLike } from './types.ts';
 import { COMMENT, ELEMENT, TEXT } from './types.ts';
 import { isMade, isReactiveAttribute, isRecordedProperty, propertiesOf } from './props.ts';
 
+/**
+ * The remedy every mismatch carries, and the one `hydrate` gives when the top-level item is a
+ * node it did not make: that node was built outside every mount, so nothing recorded it and
+ * there is nothing to claim the server's markup with (design 157).
+ */
+export const REMEDY = '; render the same item on the server and the client, and hand hydrate what makes '
+	+ 'the item, a component call or a function returning it, rather than an element built first';
+
 export interface Scope {
 	readonly parent: ParentLike;
 	/** The next unclaimed server node, or null at the end of the run. */
@@ -176,7 +184,7 @@ export class Hydration {
 			return;
 		}
 		assert(false, `hydration text mismatch: server ${JSON.stringify(server.data)}, client ${JSON.stringify(fresh.data)}`
-			+ '; render the same item on the server and the client');
+			+ REMEDY);
 		server.data = fresh.data;
 	}
 
@@ -184,7 +192,7 @@ export class Hydration {
 		for (const name of fresh.getAttributeNames()) {
 			const value = fresh.getAttribute(name) ?? '';
 			if (server.getAttribute(name) !== value) {
-				assert(false, `hydration attribute mismatch on <${fresh.localName} ${name}>; render the same item on the server and the client`);
+				assert(false, `hydration attribute mismatch on <${fresh.localName} ${name}>` + REMEDY);
 				server.setAttribute(name, value);
 			}
 		}
@@ -193,7 +201,7 @@ export class Hydration {
 			// replay below sets it on the claimed node.
 			if (!fresh.hasAttribute(name) && !isReactiveAttribute(fresh, name) && !isRecordedProperty(fresh, name)) {
 				assert(false, `hydration attribute mismatch: the server has <${fresh.localName} ${name}> and the client does not`
-					+ '; render the same item on the server and the client');
+					+ REMEDY);
 				server.removeAttribute(name);
 			}
 		}
@@ -210,7 +218,7 @@ export class Hydration {
 	}
 
 	private fail(scope: Scope, message: string): void {
-		assert(false, `hydration mismatch: ${message}; render the same item on the server and the client`);
+		assert(false, `hydration mismatch: ${message}` + REMEDY);
 		scope.failed = true;
 		// Production: what the client builds replaces what the server sent, from here to the
 		// end of this run. Claimed nodes before it stay.
@@ -258,7 +266,7 @@ export class Hydration {
 			const surplus = this.surplusOf(scope);
 			if (surplus.nodes.length > 0) {
 				assert(false, `hydration mismatch: the server sent ${surplus.nodes.length} node(s), ${surplus.regions} region(s) among them, `
-					+ `that the client did not render; render the same item on the server and the client`);
+					+ `that the client did not render` + REMEDY);
 				this.dropUnclaimed(scope);
 			}
 		}

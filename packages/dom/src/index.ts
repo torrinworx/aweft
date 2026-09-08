@@ -1,4 +1,4 @@
-export { mount, getFirst } from './mount.ts';
+export { mount, getFirst, isComponentCall } from './mount.ts';
 export type { Cleanup, Component, Mounted, Mounter, Pending, Remove } from './mount.ts';
 export { h } from './h.ts';
 export { htm, joined } from './htm.ts';

@@ -155,7 +155,7 @@ test('hydration of a rendered page makes no element and adopts every one', async
 	);
 
 	const server = context();
-	const markup = await render(item(), { context: server });
+	const markup = await render(h(item), { context: server });
 	const css = server.theme.markup();
 
 	const document = createDocument();
@@ -174,13 +174,16 @@ test('hydration of a rendered page makes no element and adopts every one', async
 	assert.equal(elements.length, 3, 'the server wrote a main, a span and a p');
 
 	const counted = counting(document);
-	const stop = hydrate(document.body, item());
+	const stop = hydrate(document.body, item);
 
-	assert.equal(counted.made['createElement'], 0, 'hydration made an element instead of adopting one');
-	// One text node, for the one reactive child. `dom` builds the client tree and pairs it
-	// (design 077), so a dynamic text child is made and then claims the server's text; the
-	// elements are adopted whole and never remade.
-	assert.equal(counted.made['createTextNode'], 1);
+	// `dom` builds the client tree inside the hydration and pairs it with the server's
+	// (designs 077 and 157), so the three elements are built and then claim the server's three.
+	// What matters is that the server's nodes are the ones left standing, which the walk below
+	// checks by identity.
+	assert.equal(counted.made['createElement'], 3, 'the client built its own tree to pair with');
+	// The 'hi' inside the span and the reactive child's text: both are built with the tree and
+	// then claim the server's.
+	assert.equal(counted.made['createTextNode'], 2);
 
 	const after: unknown[] = [];
 	const collect = (node: { nodeType: number; firstChild: unknown; nextSibling: unknown } | null): void => {

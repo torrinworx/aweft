@@ -148,7 +148,7 @@ test('a registry is claimed once, so two renderers cannot both take it', () => {
 
 /** Render an item to markup and parse it back into a document, the way a page loads. */
 const served = async (item: () => unknown): Promise<{ document: ReturnType<typeof createDocument>; markup: string }> => {
-	const markup = await render(item(), { context: context() });
+	const markup = await render(h(item), { context: context() });
 	const document = createDocument();
 	for (const node of parseHtml(markup, document)) document.body.appendChild(node);
 	return { document, markup };
@@ -177,7 +177,7 @@ test('a Detached whose anchor has a handler on it takes over the server\'s node'
 	const sent = byId(document.body.firstChild, 'anchor');
 	assert.ok(sent !== null, 'the server wrote the anchor');
 
-	const stop = hydrate(document.body, app());
+	const stop = hydrate(document.body, app);
 	assert.equal(toHtml(document.body.childNodes), markup, 'the hydration changed the page');
 	assert.equal(byId(document.body.firstChild, 'anchor'), sent,
 		'the anchor on the page is the node the server sent, not one the client built in its place');
@@ -365,10 +365,10 @@ test('every shape of popup under a PopupContext renders, parses and hydrates', a
 	};
 
 	for (const [name, page] of Object.entries(shapes)) {
-		const markup = await render(page(), { context: context() });
+		const markup = await render(h(page), { context: context() });
 		const document = createDocument();
 		for (const node of parseHtml(markup, document)) document.body.appendChild(node);
-		const stop = hydrate(document.body, page());
+		const stop = hydrate(document.body, page);
 		assert.equal(toHtml(document.body.childNodes), markup, `${name}: hydration changed the page`);
 		stop();
 	}

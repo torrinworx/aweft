@@ -39,8 +39,8 @@ before(() => undefined);
 after(() => space.done());
 
 const compare = async (name: string, plain: () => Page, other: () => Page): Promise<void> => {
-	const markupA = await rendered(plain());
-	const markupB = await rendered(other());
+	const markupA = await rendered(plain);
+	const markupB = await rendered(other);
 	assert.equal(markupB, markupA, `${name}: the rendered markup differs`);
 
 	for (const [where, make] of documents) {

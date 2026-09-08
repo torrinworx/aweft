@@ -193,10 +193,10 @@ test('a path is resolved against the untouched instance, before anything is put 
 	}
 });
 
-test('hydration adopts the server nodes whether the instance was cloned or built', async () => {
-	// `hydrating()` is only true while a mount runs, and a page builds the item it hands to
-	// `hydrate` before that. So the clone path is a hydration path too, and an instance it makes
-	// has to be claimable: otherwise hydrating a hoisted page detaches the markup and rebuilds it.
+test('hydration adopts the server nodes, and an instance made outside the mount is inserted instead', async () => {
+	// `hydrate` takes what makes the item, so a template instance a hydration will claim is
+	// always built inside the hydrating mount, where `template` takes its build path and marks
+	// every node (design 157). One made outside is the application's and is inserted whole.
 	const plain = template(['p', { class: 'c' }, ['b', null, 'fixed']], []);
 	const written = (): unknown => h('p', { class: 'c' }, h('b', {}, 'fixed'));
 
@@ -210,21 +210,27 @@ test('hydration adopts the server nodes whether the instance was cloned or built
 		}
 	};
 
-	// Each way hydrates over the markup the same shape rendered, so the only difference between
-	// them is which path inside `template` made the instance.
-	const ways: readonly [where: string, server: () => unknown, client: (document: LightDocument) => unknown][] = [
-		['made outside a mount, so cloned', written, outsideAMount],
-		['made inside one, so built', () => h(written), () => h(() => plain([]))],
-	];
-
-	for (const [where, server, client] of ways) {
-		const markup = await render(server());
+	for (const [where, maker] of [
+		['written with h', written],
+		['made from a template', (): unknown => plain([])],
+	] as const) {
+		const markup = await render(h(maker));
 		const document = countingDocument();
-		const item = client(document);
 		for (const node of parseHtml(markup, document)) document.body.appendChild(node as LightElement);
 		const sent = document.body.children[0]!;
-		hydrate(document.body, item);
+		hydrate(document.body, maker);
 		assert.equal(document.body.children[0], sent, `${where}: the server node was not adopted`);
 		assert.match(toHtml(document.body), /<p class="c"><b>fixed<\/b><\/p>/, where);
 	}
+
+	// An instance made before the call could claim nothing, so it is refused before anything is
+	// inserted and the refusal says which form to hand `hydrate` instead.
+	const markup = await render(h(written));
+	const document = countingDocument();
+	for (const node of parseHtml(markup, document)) document.body.appendChild(node as LightElement);
+	const sent = document.body.children[0]!;
+	const built = outsideAMount(document);
+	assert.throws(() => hydrate(document.body, built), /hand hydrate what makes the item/);
+	assert.equal(document.body.children.length, 1, 'nothing was inserted beside the server markup');
+	assert.equal(document.body.children[0], sent, 'and the server node is the one still there');
 });

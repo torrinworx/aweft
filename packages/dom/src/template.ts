@@ -14,10 +14,10 @@ import { activeDocument } from './ambient.ts';
 import { bindProps } from './h.ts';
 import { type Bound, BOUND, type ChildSignal, type Signal, isBound } from './bound.ts';
 import { hydrating } from './mount.ts';
-import { isRecording, markMade } from './props.ts';
+import { markMade } from './props.ts';
 import { setAttribute } from './host.ts';
 import type { DocumentLike, ElementLike, NodeLike } from './types.ts';
-import { ELEMENT, isNodeLike } from './types.ts';
+import { isNodeLike } from './types.ts';
 
 /** The attributes of one element in a template: only values that were literal in the source. */
 export type TemplateAttributes = Readonly<Record<string, string | number | boolean>>;
@@ -60,24 +60,6 @@ const nodeAt = (root: ElementLike, path: readonly number[]): ElementLike => {
 		node = child!;
 	}
 	return node as ElementLike;
-};
-
-/**
- * Mark every node of a clone as the binding's own.
- *
- * `claim` adopts a server node only where the fresh node is one the binding made, and `cloneNode`
- * carries none of that: the copies are new objects the marking never reached. A page builds its
- * top-level item before it hands it to `hydrate`, so an instance cannot know whether it is about
- * to be hydrated, and marks either way, as `h` does.
- *
- * The caller asks `isRecording` first (design 098). Inside a mount that is not hydrating nothing
- * ever reads the marks, and walking every node of every clone to call a no-op is the whole cost
- * of the walk for none of its value.
- */
-const markTree = (node: NodeLike): void => {
-	markMade(node);
-	if (node.nodeType !== ELEMENT) return;
-	for (let child = node.firstChild; child !== null; child = child.nextSibling) markTree(child);
 };
 
 const build = (spec: TemplateElement, document: DocumentLike, mark: boolean): ElementLike => {
@@ -176,12 +158,10 @@ export const template = (spec: TemplateElement, edits: readonly TemplateEdit[]):
 				prototypes.set(document, prototype);
 			}
 			const clone = (prototype as { cloneNode?: (deep: boolean) => ElementLike }).cloneNode;
-			if (typeof clone === 'function') {
-				root = clone.call(prototype, true);
-				if (isRecording()) markTree(root);
-			} else {
-				root = build(spec, document, true);
-			}
+			// A clone carries none of the marking, and it never needs to: an instance a hydration
+			// will claim is built above, and `hydrate` takes what makes the item so that an
+			// instance is never made outside the mount that claims it (design 157).
+			root = typeof clone === 'function' ? clone.call(prototype, true) : build(spec, document, true);
 		}
 
 		// Every path is resolved against the instance before anything is put into it. A varying

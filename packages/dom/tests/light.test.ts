@@ -13,6 +13,7 @@ test('a document starts with html, head and body', () => {
 	assert.equal(doc.body.isConnected, true);
 	assert.equal(doc.createElement('DIV').localName, 'div');
 	assert.equal(doc.createElement('div').tagName, 'DIV');
+	assert.equal(doc.createElement('div').nodeName, 'DIV', 'the two names agree, as they do in a browser');
 });
 
 test('children link both ways through insert, remove and replace', () => {

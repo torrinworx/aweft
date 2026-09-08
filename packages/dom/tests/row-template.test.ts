@@ -102,7 +102,7 @@ test('a list of components renders statically and hydrates in place', async () =
 	assert.equal(server[1]!.textContent, 'B', 'and the adopted rows are live');
 });
 
-test('a node built under a mount is not claimed by a later hydrate; one built outside still is', async () => {
+test('an element built before the call is refused, wherever it was built; a maker is claimed', async () => {
 	const document = createDocument();
 	let inside: unknown;
 	const Grab = (): unknown => {
@@ -112,21 +112,30 @@ test('a node built under a mount is not claimed by a later hydrate; one built ou
 	const kept = mount(document.createElement('div'), h(Grab, {}));
 	kept();
 	const markup = await render(h('p', {}, 'x'));
+	const refused = /cannot claim the server markup with a node it did not make/;
 
-	// The cost design 098 names: the binding no longer knows it made this node, so hydration
-	// treats it as the application's and inserts it over the server's.
+	// Neither element is one the hydration made: the first was made under a mount that was not
+	// hydrating, the second outside every mount, where nothing records what the binding made
+	// any more (design 157). Neither can claim, so both are refused before anything is inserted.
 	const target = document.createElement('div');
 	target.innerHTML = markup;
-	hydrate(target, inside);
-	assert.equal(target.firstChild, inside, 'a node built under a mount is inserted, not claimed');
+	const first = target.firstChild;
+	assert.throws(() => hydrate(target, inside), refused, 'a node built under a mount that was not hydrating');
+	assert.equal(target.firstChild, first, 'and the server markup is untouched');
 
 	const outside = h('p', {}, 'x');
 	const other = document.createElement('div');
 	other.innerHTML = markup;
 	const rendered = other.firstChild;
-	hydrate(other, outside);
-	assert.equal(other.firstChild, rendered, 'a node built outside every mount is still claimed');
-	assert.notEqual(other.firstChild, outside);
+	assert.throws(() => hydrate(other, outside), refused, 'a node built outside every mount');
+	assert.equal(other.firstChild, rendered, 'and the server markup is untouched');
+
+	// The maker form is the one that claims: the element is made inside the hydrating mount.
+	const claimed = document.createElement('div');
+	claimed.innerHTML = await render(h(() => h('p', {}, 'x')));
+	const sent = claimed.children[0]!;
+	hydrate(claimed, () => h('p', {}, 'x'));
+	assert.equal(claimed.children[0], sent, 'the server node is adopted');
 });
 
 test('a reactive child in a cloned row lands before its static neighbour', () => {

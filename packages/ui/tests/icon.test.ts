@@ -265,7 +265,7 @@ test('an icon renders to markup, and the element is adopted while the drawing is
 	const item = (): unknown =>
 		h(Icons as never, { value: set }, h('div', {}, h(Icon as never, { name: 'check', label: 'done' })));
 	const server = context();
-	const markup = await render(item(), { context: server });
+	const markup = await render(h(item), { context: server });
 
 	const document = createDocument();
 	for (const node of parseHtml(markup, document)) document.body.appendChild(node);
@@ -275,7 +275,7 @@ test('an icon renders to markup, and the element is adopted while the drawing is
 
 	const before = elements(document.body.firstChild);
 	const svg = before.find((element) => element.localName === 'svg')!;
-	const stop = hydrate(document.body, item());
+	const stop = hydrate(document.body, item);
 	const after = elements(document.body.firstChild);
 
 	assert.equal(after.find((element) => element.localName === 'svg'), svg,

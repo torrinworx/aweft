@@ -198,7 +198,7 @@ test('a themed element with a handler and a state cell still works after a hydra
 		}, 'go'));
 
 	const rendered = context();
-	const markup = await render(item(), { context: rendered });
+	const markup = await render(h(item), { context: rendered });
 	const document = createDocument();
 	for (const node of parseHtml(markup, document)) document.body.appendChild(node);
 
@@ -213,7 +213,7 @@ test('a themed element with a handler and a state cell still works after a hydra
 	};
 	const server = buttons(document.body.firstChild)[0]!;
 
-	const stop = hydrate(document.body, item());
+	const stop = hydrate(document.body, item);
 	const button = buttons(document.body.firstChild)[0]!;
 	assert.equal(button, server, 'the server\'s button, adopted');
 

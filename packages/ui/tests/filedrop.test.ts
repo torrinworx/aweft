@@ -338,14 +338,14 @@ const hydrated = async (...children: unknown[]): Promise<{
 }> => {
 	const build = (): unknown => answered(h(FileDrop as never, {}, ...children));
 	const server = context();
-	const markup = await render(build(), { context: server });
+	const markup = await render(h(build), { context: server });
 
 	const document = createDocument();
 	for (const node of parseHtml(markup, document)) document.body.appendChild(node);
 	for (const node of parseHtml(`<style data-aweft>${server.theme.markup()}</style>`, document)) {
 		document.head.appendChild(node);
 	}
-	const off = hydrate(document.body, build());
+	const off = hydrate(document.body, build);
 
 	const input = byTag(document.body.firstChild, 'input');
 	let count = 0;

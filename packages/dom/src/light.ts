@@ -329,6 +329,11 @@ export class LightClassList {
 	}
 }
 
+/**
+ * An element in the light tree, named the way a browser names one: `tagName` and `nodeName` are
+ * the uppercase name for an HTML element and `localName` is the lowercase one, while an element
+ * in another namespace keeps the case it was made with in all three. Match on `localName`.
+ */
 export class LightElement extends LightNode implements ElementLike {
 	readonly localName: string;
 	readonly tagName: string;

@@ -60,16 +60,16 @@ test('a clone made inside a mount that is not hydrating is never walked to be ma
 	assert.equal(isMade(li.firstChild!), false, 'and the walk down its children never ran');
 });
 
-test('an instance made outside a mount is marked, because a hydration may still claim it', () => {
-	// A page builds its top-level item before it hands it to `hydrate`, so an instance made there
-	// cannot know what is about to happen to it and pays for the walk.
+test('an instance made outside a mount is not marked, so nothing pays for a hydration that cannot come', () => {
+	// `hydrate` takes what makes the item and builds it inside the hydrating mount, so an
+	// instance made out here is never one a hydration will claim (design 157).
 	const global = globalThis as { document?: unknown };
 	global.document = createDocument();
 	try {
 		const line = template(['li', { class: 'row' }, ['span', null, 'x']], []);
 		const instance = line([]) as LightElement;
-		assert.ok(isMade(instance), 'the clone is marked');
-		assert.ok(isMade(instance.firstChild!), 'and so is every node below it');
+		assert.equal(isMade(instance), false, 'the clone is not marked');
+		assert.equal(isMade(instance.firstChild!), false, 'and the walk down its children never ran');
 	} finally {
 		delete global.document;
 	}

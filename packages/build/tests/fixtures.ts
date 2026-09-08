@@ -13,7 +13,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { createDocument, hydrate, mount, parseHtml, render, toHtml } from '@aweftjs/dom';
+import { createDocument, h, hydrate, mount, parseHtml, render, toHtml } from '@aweftjs/dom';
 import type { LightDocument, LightElement, LightNode, LightText } from '@aweftjs/dom';
 
 /** What a fixture module hands back: the item to mount, and a change to make to it. */
@@ -130,9 +130,10 @@ export const plainDocument = (): LightDocument => {
  * Run `fn` with `document` as the page's document, which is where `h` and a hoisted template
  * make nodes outside any mount.
  *
- * A page builds its top-level item before it hands it to `mount` or `hydrate`, so the document
- * that is active then is the page's, not the one the mount later runs in. Without this a fixture
- * is built in the no-page fallback, whose nodes never clone, and the clone path is never reached.
+ * A page builds its top-level item before it hands it to `mount`, so the document that is active
+ * then is the page's, not the one the mount later runs in. Without this a fixture is built in the
+ * no-page fallback, whose nodes never clone, and the clone path is never reached. `hydrate` is
+ * the exception: it takes what makes the item and builds it inside the hydration (design 157).
  */
 export const asThePage = <T>(document: LightDocument, fn: () => T): T => {
 	const global = globalThis as { document?: unknown };
@@ -159,7 +160,13 @@ export const mounted = (create: () => Page, make: () => LightDocument = createDo
 	});
 };
 
-export const rendered = async (page: Page): Promise<string> => await render(page.item);
+/**
+ * The markup a page renders to.
+ *
+ * The item is made inside the render rather than before it, so the server writes the same
+ * bracketed regions the hydration below claims: `hydrate` takes what makes the item (design 157).
+ */
+export const rendered = async (create: () => Page): Promise<string> => await render(h(() => create().item));
 
 /** What hydration leaves behind, and how many of the server's nodes it kept. */
 export const hydrated = async (
@@ -169,10 +176,9 @@ export const hydrated = async (
 ): Promise<{ markup: string; kept: number }> => {
 	const document = make();
 	return asThePage(document, () => {
-		const page = create();
 		for (const node of parseHtml(markup, document)) document.body.appendChild(node as LightElement);
 		const before = nodesOf(document.body);
-		hydrate(document.body, page.item);
+		hydrate(document.body, () => create().item);
 		const after = new Set(nodesOf(document.body));
 		return { markup: toHtml(document.body), kept: before.filter((node) => after.has(node)).length };
 	});

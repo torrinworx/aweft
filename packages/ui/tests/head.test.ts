@@ -231,23 +231,25 @@ test('hydration adopts the stamped tags the server wrote, with no remove and no 
 	const { document, ops } = recordingDocument();
 	const light = document as unknown as LightDocument;
 
-	return render(page(), { context: server }).then((body) => {
+	return render(h(page), { context: server }).then((body) => {
 		const head = server.head.markup();
 		for (const node of parseHtml(body, light)) light.body.appendChild(node);
 		for (const node of parseHtml(head, light)) light.head.appendChild(node);
 		assert.deepEqual(tagsIn(light), ['meta', 'title', 'link']);
 
-		let made = 0;
+		// The client builds its own body tree and pairs it with the server's (design 077), so the
+		// `p` is made here. No head tag is: those are claimed off the server's <head>.
+		const made: string[] = [];
 		const factory = light.createElement.bind(light);
 		(light as unknown as Record<string, unknown>)['createElement'] = (tag: string) => {
-			made += 1;
+			made.push(tag);
 			return factory(tag);
 		};
 
 		ops.length = 0;
-		const stop = hydrate(document.body as never, page());
+		const stop = hydrate(document.body as never, page);
 
-		assert.equal(made, 0, 'every head tag was adopted rather than made');
+		assert.deepEqual(made, ['p'], 'every head tag was adopted rather than made');
 		assert.deepEqual(ops.filter((line) => line.includes('from <head>')), [],
 			'no tag was removed and put back');
 		assert.deepEqual(tagsIn(light), ['meta', 'title', 'link']);

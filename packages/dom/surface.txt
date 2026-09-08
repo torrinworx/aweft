@@ -29,6 +29,7 @@ value h: (tag: unknown, props?: Record<string, unknown> | null, ...children: unk
 value htm: (h: H, options?: { join?: ((parts: unknown[]) => unknown) | undefined; }) => (strings: TemplateStringsArray, ...values: unknown[]) => unknown
 value html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown
 value hydrate: (target: ParentLike, item: unknown, context?: unknown) => Remove
+value isComponentCall: (value: unknown) => boolean
 value joined: (parts: unknown[]) => unknown
 value mount: (elem: ParentLike, item: unknown, before?: Remove | undefined, context?: unknown) => Remove
 value parseHtml: (markup: string, document?: LightDocument) => LightNode[]
