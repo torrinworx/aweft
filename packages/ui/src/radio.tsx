@@ -3,7 +3,7 @@
 // A radio group is a group because its members share a `name`. The name is minted off the render's
 // id counter, once per `value` cell, by `groupFor` in `control.ts`, so every radio pointing at one
 // cell is one group and the platform's own arrow keys, wrapping and roving focus all work with
-// nothing written here. `ToggleGroup` mints its names from the same place (design 202).
+// nothing written here.
 
 import { type Mounter, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';

@@ -26,8 +26,8 @@ const groups = new WeakMap<Render, WeakMap<object, string>>();
  *   cell: the value cell the inputs share
  *
  * Returns: the same name for the same cell in the same render, minted off the render's id counter
- * so a server and the hydration that adopts it agree. `Radio` and `ToggleGroup` both call it, so
- * two radios and a toggle group pointed at one cell are one group.
+ * so a server and the hydration that adopts it agree. `Radio` calls it, so two radios pointed at one
+ * cell are one group.
  *
  * Example:
  *   const name = groupFor(context, cell);

@@ -24,7 +24,7 @@ export const Example: ExampleComponent = (props) => {
 				placeholder="Pick one"
 				id={at('select')}
 			/>
-			<Select label="Owner" value={mutable('rita')} options={['rita', 'devlin']} id={at('select-chosen')} />
+			<Select label="Owner" value={mutable('alex')} options={['alex', 'sam']} id={at('select-chosen')} />
 			<Select label="Locked" options={['a', 'b']} disabled={true} id={at('select-disabled')} />
 
 			<p theme={['text', 'sm', 'muted']}>Sizes</p>

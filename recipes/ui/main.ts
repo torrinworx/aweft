@@ -200,11 +200,11 @@ try {
 		'nothing in the note matches yet');
 	await page.click('#note-field');
 	await page.keyboard.press('End');
-	await page.keyboard.type(', TODO ask @rita');
+	await page.keyboard.type(', TODO ask @ada');
 	await page.waitForFunction(() => document.querySelectorAll('#note b').length === 1);
 	assert.equal(await page.evaluate(() => document.querySelectorAll('#note i').length), 1,
 		'the second modifier found the mention in the same pass');
-	assert.match(await page.textContent('#note') ?? '', /nothing to do yet, TODO ask @rita/,
+	assert.match(await page.textContent('#note') ?? '', /nothing to do yet, TODO ask @ada/,
 		'and the gaps between the matches are the text that was typed');
 
 	// --- loading -------------------------------------------------------------------------------

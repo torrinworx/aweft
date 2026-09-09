@@ -98,8 +98,8 @@ export const Table = (props: TableProps): Mounter => (elem, _item, before, conte
 		String((row as Record<string, unknown> | null)?.[column.key] ?? ''));
 	const dense = through(tight, (held) => (held ? 'tight' : null));
 	// A cell holds whatever the application put in it, and a list is only one of the things that
-	// can be. Anything else reads as no rows, the way `Breadcrumb` and `ToggleGroup` read theirs,
-	// rather than reaching `each` and throwing on the first render.
+	// can be. Anything else reads as no rows, the way `Breadcrumb` reads its own, rather than
+	// reaching `each` and throwing on the first render.
 	const rowsOf = through(rows, (held) => (Array.isArray(held) ? held : []));
 
 	// One component per row, so the list mounts it once per item and clones the rest. The cells are

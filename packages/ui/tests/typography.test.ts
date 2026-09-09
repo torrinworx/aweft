@@ -221,8 +221,8 @@ test('a string check is escaped, so its punctuation is not a pattern', () => {
 
 test('a regex check is used as it was written', () => {
 	const own = page(h(TextModifiers as never, { value: [{ check: /@\w+/g, return: badge }] },
-		h(Typography as never, { label: 'hi @ada and @rita' })));
-	assert.deepEqual(partsOf(own.first()), ['hi ', '<b>@ada', ' and ', '<b>@rita']);
+		h(Typography as never, { label: 'hi @ada and @grace' })));
+	assert.deepEqual(partsOf(own.first()), ['hi ', '<b>@ada', ' and ', '<b>@grace']);
 	own.stop();
 });
 

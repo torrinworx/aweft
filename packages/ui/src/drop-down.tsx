@@ -29,7 +29,7 @@ export interface DropDownProps {
 	readonly arrow?: unknown;
 	/**
 	 * The `<details>` group this belongs to. Every drop-down sharing a name keeps one of them open,
-	 * which is the platform's own exclusive accordion and is what `Accordion` uses (design 202).
+	 * which is the platform's own exclusive disclosure group (design 212).
 	 */
 	readonly name?: unknown;
 	/** The summary's button variant. */
@@ -60,8 +60,9 @@ export interface DropDownProps {
  * writes the cell.
  *
  * `name` puts it in a group: the platform keeps one `<details>` of a name open and closes the rest,
- * and the one that closes fires its own `toggle`, so every cell in the group follows. `Accordion` is
- * that group with the lines between.
+ * and the one that closes fires its own `toggle`, so every cell in the group follows. A stack of
+ * disclosures that keeps one open is a run of these sharing a name, and there is no component for it
+ * (design 212).
  *
  * A floating menu is not this: that is `Detached` with a `Button` anchor (design 136).
  *

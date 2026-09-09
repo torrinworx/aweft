@@ -158,7 +158,7 @@ test('removing an array element is always fine', () => {
 
 test('a map entry is checked against the value description, at its id in text form', () => {
 	const doc = board();
-	const person = createObject({ name: 'rita' });
+	const person = createObject({ name: 'ada' });
 
 	assert.deepEqual(problems(Board, doc, () => { doc.people!.add(person); }), []);
 
@@ -169,7 +169,7 @@ test('a map entry is checked against the value description, at its id in text fo
 
 test('removing a map entry is always fine', () => {
 	const doc = board();
-	const person = createObject({ name: 'rita' });
+	const person = createObject({ name: 'ada' });
 	doc.people!.add(person);
 
 	assert.deepEqual(problems(Board, doc, () => { doc.people!.delete(textIdOf(person)); }), []);
