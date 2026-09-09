@@ -215,6 +215,20 @@ fromEvent(window, 'resize').wait(100).effect(relayout);
 assignment) whose `watch` delivers each edit as a list of changes, with no delta and no place
 in a document. A list on the page that is not part of the document, such as open toasts.
 
+`derive(fn)` is a value of the whole list, recomputed on every edit, for the questions a page
+asks about a list rather than about one row:
+
+```ts
+const rows = mutableArray<Session>();
+const empty = rows.derive((items) => items.length === 0);
+const total = rows.derive((items) => items.reduce((sum, r) => sum + r.bytes, 0));
+```
+
+It is an ordinary derived value: watchers hear only the answers that changed, so a `fn` that
+builds a fresh array or object is delivered on every edit, and reading it while nothing watches
+computes it there and then. Unlike `watch`, it settles inside an `atomic` block where each edit
+is made, the same as a plain cell does.
+
 Inside `atomic`, the calls in the block deliver once at its close, as one list in the order
 they were made, so a swap written as two index assignments arrives as one change list and a
 binding over the list moves both rows:

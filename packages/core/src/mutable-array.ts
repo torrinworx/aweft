@@ -8,7 +8,7 @@
 import { codecError } from '@aweftjs/codec';
 
 import { stamp } from './clock.ts';
-import { SOURCE, type Source } from './derived.ts';
+import { SOURCE, type Derived, type Source, chain } from './derived.ts';
 import { dispatch, holdDelivery } from './transaction.ts';
 
 /**
@@ -32,6 +32,22 @@ export interface MutableArray<T> extends Array<T> {
 	 * list has its changes delivered after the current ones, never nested.
 	 */
 	watch(fn: (changes: readonly ArrayChange<T>[]) => void): () => void;
+	/**
+	 * A derived value of the whole list (design 206).
+	 *
+	 * Params:
+	 *   fn: called with the list to read, and its answer is the value. It runs again after
+	 *       every edit, inside an `atomic` block as well as outside one, and must not write
+	 *       to the list
+	 *
+	 * Returns: a read-only derived value. Watchers hear only the answers that changed
+	 * (`Object.is`), so a `fn` that builds a fresh array or object is delivered every time.
+	 * Reading it while nothing watches computes it on the spot.
+	 *
+	 * Example:
+	 *   const empty = rows.derive((items) => items.length === 0);
+	 */
+	derive<U>(fn: (items: readonly T[]) => U): Derived<U>;
 }
 
 const lists = new WeakSet<object>();
@@ -184,6 +200,9 @@ export const mutableArray = <T = unknown>(items?: Iterable<T>): MutableArray<T> 
 				watchers.delete(fn);
 			};
 		},
+		// The list is one source, so a derived value over it is the chain core already builds;
+		// what this adds is a name for it on the list itself (design 206).
+		derive: <U>(fn: (items: readonly T[]) => U): Derived<U> => chain<readonly T[]>(source).map(fn),
 		sort: () => unsupported('sort', 'Assign the order you want, or hold the sort outside the list.'),
 		reverse: () => unsupported('reverse', 'Assign the order you want.'),
 		fill: () => unsupported('fill', 'Assign the slots you mean.'),

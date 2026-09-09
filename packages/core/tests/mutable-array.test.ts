@@ -349,3 +349,69 @@ test('a mirror built from a mid-block subscription matches the list at the close
 	assert.deepEqual(mirror, [...rows]);
 	assert.deepEqual(mirror, ['seed', 'a', 'b', 'c']);
 });
+
+test('derive answers the whole list and recomputes on every kind of edit', () => {
+	const rows = mutableArray<string>(['a']);
+	const empty = rows.derive((items) => items.length === 0);
+	const joined = rows.derive((items) => items.join(','));
+	const seen: boolean[] = [];
+	const stop = empty.effect((value) => seen.push(value));
+
+	assert.equal(joined.get(), 'a');
+	rows.push('b');
+	assert.equal(joined.get(), 'a,b');
+	rows[0] = 'z';
+	assert.equal(joined.get(), 'z,b');
+	rows.splice(0, 1);
+	assert.equal(joined.get(), 'b');
+	rows.length = 0;
+	assert.equal(joined.get(), '');
+
+	// Only the answers that changed: filling and emptying, not every edit on the way.
+	assert.deepEqual(seen, [false, true]);
+	stop();
+	rows.push('c');
+	assert.deepEqual(seen, [false, true]);
+	assert.equal(empty.get(), false);
+});
+
+test('derive settles inside a block, as a cell does, while watch waits for the close', () => {
+	const rows = mutableArray<string>([]);
+	let runs = 0;
+	const size = rows.derive((items) => { runs += 1; return items.length; });
+	const seen: string[] = [];
+	size.effect((value) => seen.push(`size ${value}`));
+	rows.watch(() => seen.push('edits'));
+	runs = 0;
+
+	atomic(() => {
+		rows.push('a');
+		seen.push('mid block');
+		rows.push('b');
+		// The mark is not held, so a derived value inside the block reads the list as it is.
+		assert.equal(size.get(), 2);
+	});
+
+	// One recompute per edit, each settled where it happened; the edit list arrives once, at the
+	// close, which is design 087 and is the list's own delivery rather than this one.
+	assert.deepEqual(seen, ['size 0', 'size 1', 'mid block', 'size 2', 'edits']);
+	assert.equal(runs, 2);
+});
+
+test('derive with nothing watching is computed on the read, and each one hears its own answer', () => {
+	const rows = mutableArray<number>([1, 2]);
+	const total = rows.derive((items) => items.reduce((sum, n) => sum + n, 0));
+	assert.equal(total.get(), 3);
+	rows.push(4);
+	assert.equal(total.get(), 7);
+
+	const evens = rows.derive((items) => items.filter((n) => n % 2 === 0).length);
+	const totals: number[] = [];
+	const evenCounts: number[] = [];
+	total.effect((value) => totals.push(value));
+	evens.effect((value) => evenCounts.push(value));
+	rows.push(3);
+	assert.deepEqual(totals, [7, 10]);
+	assert.deepEqual(evenCounts, [2], 'the value now, and nothing for an answer that did not change');
+	assert.equal(total.isImmutable(), true);
+});
