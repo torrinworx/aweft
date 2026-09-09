@@ -3,7 +3,8 @@
 The first battery: server modules for who is on a connection. A gate that reads `public`,
 sessions as documents in your store, sign-in and sign-up by email and password, and a
 per-user state document shared on every connection of theirs. `@aweftjs/auth/client` is the
-browser half: who the page is, signing in and out, and that state document.
+browser half: who the page is, signing in and out, that state document, and two page modules a
+stage loads by name.
 
 ## Quickstart
 
@@ -136,11 +137,92 @@ and a page follows `user` to notice. `enter` and `leave` refuse with `closed` wh
 answered but the client has since been closed.
 
 **Two seams outside a browser**, and a page needs neither. `origin` is where the session routes
-are, the page's own by default and required where there is no `location`. `fetch` makes the two
-HTTP calls, the global by default; a Node program hands in one that carries the cookie, because
-Node's `fetch` keeps no cookie jar. The client's own `open` seam is the third, and it is
-`@aweftjs/client`'s: a Node program hands in a socket carrying the same cookie header.
-`recipes/client` runs all three.
+are, the page's own by default and read when a route is first called, so making an auth outside a
+page is fine and only calling one refuses `no-origin`. `fetch` makes the two HTTP calls, the
+global by default; a Node program hands in one that carries the cookie, because Node's `fetch`
+keeps no cookie jar. The client's own `open` seam is the third, and it is `@aweftjs/client`'s: a
+Node program hands in a socket carrying the same cookie header. `recipes/client` runs all three.
+
+## The two page modules
+
+`@aweftjs/auth/client` also exports `authClient`, a source of two modules for a stage's
+`sources`. Put it there and the sign-in form is one line in the acts map.
+
+```tsx
+import { authClient } from '@aweftjs/auth/client';
+
+<StageContext
+	sources={[app, authClient]}
+	client={client}
+	acts={{ '': Home, notes: 'notes/Page', join: 'auth/SignIn' }}
+	refused="join"
+>
+	<Stage />
+</StageContext>
+```
+
+| module | what it is |
+|---|---|
+| `auth/Session` | `createAuth` over the `client` the stage handed the loader. Its instance is the `Auth` above, so any module of yours that needs to know who the page is names it in `deps` |
+| `auth/SignIn` | an act module: the sign-in and sign-up form, in one, because `enter` does both |
+
+**The battery never picks a URL.** `auth/SignIn` lands on the address you name it at, and
+`refused: 'join'` is what puts it in front of a page your own gate module refused.
+
+**Configuring `auth/Session`** is the ordinary module thing: a file exporting only `config`, in a
+source before this one. It reads `origin` and `fetch`, the same two seams `createAuth` takes.
+
+```ts
+// modules/auth/Session.ts, in your own source
+export const config = { origin: 'https://api.example.com' };
+```
+
+**Replacing either** is the same rule every battery module has: a module of that name in an
+earlier source wins. A sign-in form of your own is `auth/SignIn` in your own directory.
+
+**`auth/SignIn` picks no URL after a successful `enter`.** The visitor stays on the address they
+asked for. When the form is what `refused` put there, the stage handed it a `retry`, and it calls
+that: the act the URL chose is built again in place, so the gated page appears with no navigation.
+On a URL of its own the form has no `retry` and a success does nothing at all.
+
+**No gate module ships.** "Allowed" means something different in every application, so the page
+writes its own and the act that needs it names it in `deps`:
+
+`user` reads `undefined` until the first socket answers, so a gate waits for the first answer that
+is not `undefined`. Reading `undefined` as "not signed in" would let a stranger in for as long as
+the handshake takes. The wait is safe on a static render too, because there is no socket there and
+identity is answered from the first read.
+
+```ts
+export const deps = ['auth/Session'];
+
+export default ({ imports }) => ({
+	require: async () => {
+		// `undefined` is not an answer and `null` is, so only the first one is waited for.
+		const held = imports.Session.user.get();
+		const who = held !== undefined ? held : await new Promise((done) => {
+			const off = imports.Session.user.watch((now) => {
+				if (now === undefined) return;
+				off();
+				done(now);
+			});
+		});
+		if (who === null) {
+			throw codecError('anonymous', 'this page is for a signed-in user', 'Sign in first.');
+		}
+		return who;
+	},
+});
+```
+
+The act calls `require()` in its own factory, the load rejects, and the stage shows whatever
+`refused` names. `recipes/client` is the whole pattern in one small application.
+
+**A static render has no connection.** Handed no `client`, `auth/Session` is anonymous at once:
+`user` reads `null` from the first read, `state()` rejects `anonymous`, and `enter`, `leave` and
+`check` refuse `no-client`. So it is an anonymous static render: a gated act shows the refused act,
+and a module reading a document with no client renders its waiting state. Handed something that is
+not a client, it refuses `no-client` too, naming what was missing.
 
 ## What is stored
 

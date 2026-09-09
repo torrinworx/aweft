@@ -4,13 +4,13 @@
 	"private": true,
 	"type": "module",
 	"license": "MIT",
-	"description": "The first battery: a gate that reads public, sessions as documents, sign-in and sign-up by email and password, and a per-user state document, as server modules.",
+	"description": "The first battery: a gate that reads public, sessions as documents, sign-in and sign-up by email and password, and a per-user state document, as server modules, with the page half as client modules.",
 	"exports": {
 		".": "./src/index.ts",
 		"./client": "./src/client.ts"
 	},
 	"scripts": {
-		"test": "node --test tests/*.test.ts"
+		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
 	},
 	"dependencies": {
 		"@aweftjs/client": "*",
@@ -18,9 +18,11 @@
 		"@aweftjs/core": "*",
 		"@aweftjs/modules": "*",
 		"@aweftjs/server": "*",
-		"@aweftjs/store": "*"
+		"@aweftjs/store": "*",
+		"@aweftjs/ui": "*"
 	},
 	"devDependencies": {
+		"@aweftjs/build": "*",
 		"@aweftjs/sync": "*",
 		"@aweftjs/testing": "*"
 	},

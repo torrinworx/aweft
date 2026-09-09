@@ -279,15 +279,23 @@ test('origin comes from the page, and its absence is refused with a fix', async 
 	const { seams, stop } = await running();
 	const client = createClient({ url: URL, open: seams.open, reconnect: false });
 
-	assert.throws(() => createAuth(client), (error: Error) =>
+	// The origin is read when a route is called, not when the auth is made, so a module holding
+	// one is buildable with no page at all (design 245). The refusal is on the call.
+	const outside = createAuth(client);
+	await assert.rejects(() => outside.enter('ada@example.com', PASSWORD), (error: Error) =>
 		reasonOf(error) === 'no-origin' && /Pass origin to createAuth/.test(error.message));
+	await assert.rejects(() => outside.leave(), (error: Error) => reasonOf(error) === 'no-origin');
+	outside.stop();
 
 	const held = globalThis as { location?: unknown };
 	for (const location of [{ origin: '' }, { origin: ORIGIN }]) {
 		held.location = location;
 		try {
 			if (location.origin === '') {
-				assert.throws(() => createAuth(client), (error: Error) => reasonOf(error) === 'no-origin');
+				const empty = createAuth(client);
+				await assert.rejects(() => empty.enter('ada@example.com', PASSWORD),
+					(error: Error) => reasonOf(error) === 'no-origin');
+				empty.stop();
 				continue;
 			}
 			const auth = createAuth(client, { fetch: seams.fetch });
