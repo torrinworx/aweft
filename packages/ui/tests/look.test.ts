@@ -632,3 +632,334 @@ test('the modifiers say one thing each and nothing about size', () => {
 			`text_${modifier} says one thing`);
 	}
 });
+
+// --- the display and grouping pieces (designs 199, 200) -----------------------------------------
+
+test('each display piece resolves its fills and its text from roles alone', () => {
+	const badge = rulesFor(['badge']);
+	assert.match(badge, new RegExp(`background: ${valueOf('accent')}`));
+	assert.match(badge, new RegExp(`color: ${valueOf('accentForeground')}`),
+		'a fill and the text on it are a pair, because the root entry paints no text');
+	assert.match(badge, new RegExp(`font-size: ${valueOf('textXs')}`));
+
+	const outline = rulesFor(['badge', 'outline']);
+	assert.match(outline, /background: transparent/, 'an outline badge has no fill at all');
+	assert.match(outline, new RegExp(`border-color: ${valueOf('border')}`));
+
+	const alert = rulesFor(['alert']);
+	assert.match(alert, /display: grid/);
+	assert.match(alert, /grid-template-columns: 1fr/, 'one column until it is given an icon');
+	assert.match(rulesFor(['alert', 'lead']), /grid-template-columns: auto 1fr/);
+	assert.match(rulesFor(['alert', 'danger']),
+		new RegExp(`background: ${valueOf('dangerSubtle')}`));
+
+	const kbd = rulesFor(['kbd']);
+	assert.match(kbd, new RegExp(`font-family: ${valueOf('fontMono')}`));
+	assert.match(kbd, new RegExp(`min-width: ${valueOf('target')}`));
+	assert.match(kbd, new RegExp(`color: ${valueOf('mutedForeground')}`));
+
+	const empty = rulesFor(['empty']);
+	assert.match(empty, /flex-direction: column/);
+	assert.match(empty, new RegExp(`padding: ${valueOf('space6')}`));
+	assert.match(rulesFor(['empty_description']),
+		new RegExp(`color: ${valueOf('mutedForeground')}`));
+});
+
+test('an avatar is one of the three control heights, and each part hides on hidden', () => {
+	const heights: readonly (readonly [readonly string[], string])[] = [
+		[['avatar'], '36px'], [['avatar', 'sm'], '32px'], [['avatar', 'lg'], '40px'],
+	];
+	for (const [classes, height] of heights) {
+		assert.match(rulesFor(classes), new RegExp(`width: ${height}; height: ${height}`),
+			`${classes.join(' ')} is ${height} square`);
+	}
+	assert.match(rulesFor(['avatar', 'round']), /border-radius: 50%/);
+
+	// Each part declares a display of its own, so the host's `[hidden]` rule loses to it and the
+	// theme has to say the same thing at a specificity that wins.
+	for (const part of ['avatar_image', 'avatar_fallback']) {
+		assert.match(rulesFor([part]), /:is\(\[hidden\]\) \{ display: none/, `${part} hides on hidden`);
+	}
+	assert.match(rulesFor(['avatar_fallback']), new RegExp(`background: ${valueOf('muted')}`));
+});
+
+test('a progress is drawn on the three vendor pseudo-elements, and the size is its thickness', () => {
+	const rules = rulesFor(['progress']);
+	assert.match(rules, /appearance: none/, 'the host is not drawing its own bar');
+	assert.match(rules, new RegExp(`height: ${valueOf('space2')}`));
+	assert.match(rules, new RegExp(`background: ${valueOf('muted')}`), 'the track');
+	for (const pseudo of ['::-webkit-progress-value', '::-moz-progress-bar']) {
+		assert.match(rules, new RegExp(`${pseudo} \\{ background: ${valueOf('accent')}`),
+			`the bar is $accent through ${pseudo}`);
+	}
+	assert.match(rulesFor(['progress', 'sm']), new RegExp(`height: ${valueOf('space')}`));
+	assert.match(rulesFor(['progress', 'lg']), new RegExp(`height: ${valueOf('space3')}`));
+});
+
+test('the pulse is one definition, reached by the dots and by a skeleton', () => {
+	// One render, both chains, so what is counted is what a page with both on it would emit.
+	const ui = context();
+	ui.theme.classes(ui.theme.base(), ['dot']);
+	ui.theme.classes(ui.theme.base(), ['skeleton']);
+	const sheet = ui.theme.markup();
+
+	const frames = [...sheet.matchAll(/@keyframes (pulse-\w+)/g)].map((found) => found[1]);
+	assert.equal(frames.length, 1, 'one keyframes block, however many chains reached it');
+	// Both animate, and both name the same generated block.
+	const animations = [...sheet.matchAll(/animation: (pulse-\w+)/g)].map((found) => found[1]);
+	assert.deepEqual(animations, [frames[0], frames[0]], 'the dot and the skeleton share it');
+
+	const skeleton = rulesFor(['skeleton']);
+	const outside = skeleton.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/g, '');
+	assert.doesNotMatch(outside, /animation:/, 'nothing animates outside the reduced-motion query');
+	assert.match(skeleton, new RegExp(`background: ${valueOf('muted')}`));
+	assert.match(rulesFor(['skeleton', 'round']), /border-radius: 50%/);
+});
+
+test('a card stacks only where the component asked it to, so paper is unchanged', () => {
+	const paper = rulesFor(['card']);
+	assert.doesNotMatch(paper, /display: flex/, 'a Paper is the bare block it always was');
+
+	const stacked = rulesFor(['card', 'stack']);
+	assert.match(stacked, /display: flex; flex-direction: column/);
+	assert.match(stacked, new RegExp(`gap: ${valueOf('space4')}`),
+		'$space4 between the head, the body and the foot');
+
+	assert.match(rulesFor(['card_title']), new RegExp(`font-size: ${valueOf('textLg')}`));
+	assert.match(rulesFor(['card_title']), /font-weight: 600/);
+	assert.match(rulesFor(['card_description']), new RegExp(`color: ${valueOf('mutedForeground')}`));
+	assert.match(rulesFor(['card_foot']), /display: flex; align-items: center/);
+	// A part is one class token, so a title does not also wear the card's padding (design 193).
+	assert.doesNotMatch(rulesFor(['card_title']), /padding: 16px/);
+});
+
+test('a button group joins its buttons through rules on its own entry', () => {
+	const rules = rulesFor(['buttongroup']);
+	// Every corner rule names a pseudo-class, because a bare `> *` is one class and so is a button's
+	// own entry, and the group's rules are emitted first.
+	assert.match(rules, /> \*:not\(:first-child\):not\(:last-child\) \{ border-radius: 0/,
+		'every inner corner comes off');
+	assert.match(rules, new RegExp(`> \\* \\+ \\* \\{ margin-left: -${valueOf('borderWidth')}`),
+		'and each child after the first is pulled back by one border width');
+	const radius = valueOf('radius');
+	assert.match(rules, new RegExp(`> \\*:first-child \\{ border-radius: ${radius} 0 0 ${radius}`));
+	assert.match(rules, new RegExp(`> \\*:last-child \\{ border-radius: 0 ${radius} ${radius} 0`));
+	assert.match(rules, new RegExp(`> \\*:only-child \\{ border-radius: ${radius}`),
+		'a group of one keeps all four');
+	// A positioned element paints after every in-flow sibling, so this alone lifts the focused
+	// child over the one overlapping it, and design 113's no-z-index rule still holds.
+	assert.match(rules, /> \*:focus-visible \{ position: relative/,
+		'a ring drawn as a box shadow would otherwise be cut by the neighbour over it');
+	assert.doesNotMatch(rules, /z-index/, 'and it is lifted without one');
+
+	const vertical = rulesFor(['buttongroup', 'vertical']);
+	assert.match(vertical, /flex-direction: column/);
+	assert.match(vertical, new RegExp(`> \\* \\+ \\* \\{ margin-left: 0px; margin-top: -${valueOf('borderWidth')}`));
+	assert.match(vertical, new RegExp(`> \\*:first-child \\{ border-radius: ${radius} ${radius} 0 0`));
+});
+
+test('an input group is the input look on the box and none of it on the input', () => {
+	const box = rulesFor(['inputgroup']);
+	assert.match(box, new RegExp(`height: ${valueOf('control')}`), 'the box is the control');
+	assert.match(box, new RegExp(`border: ${valueOf('borderWidth')} solid ${valueOf('input')}`));
+	assert.match(box, new RegExp(`border-radius: ${valueOf('radius')}`));
+	assert.match(box, /display: flex; align-items: center/);
+	// The ring is on the box, so tabbing into the input rings the whole control.
+	assert.match(box, new RegExp(`:has\\(:focus-visible\\) \\{ border-color: ${valueOf('ring')}`));
+	assert.match(box, /:has\(:focus-visible\) \{[^}]*box-shadow: 0 0 0 3px/);
+
+	// The size axis, through the same `extends` the select's modifiers use, with the padding said
+	// again because the `input_<size>` it pulls in sits after this entry in the chain.
+	assert.match(rulesFor(['inputgroup', 'sm']), new RegExp(`height: ${valueOf('controlSm')}`));
+	assert.match(rulesFor(['inputgroup', 'sm']), new RegExp(`padding: 0 ${valueOf('space2')}`));
+	assert.match(rulesFor(['inputgroup', 'lg']), new RegExp(`height: ${valueOf('controlLg')}`));
+	assert.match(rulesFor(['inputgroup', 'invalid']), new RegExp(`border-color: ${valueOf('danger')}`));
+
+	const control = rulesFor(['inputgroup_control']);
+	assert.match(control, /border: none/);
+	assert.match(control, /background: transparent/);
+	assert.match(control, /flex: 1 1 auto/);
+	assert.match(control, /min-width: 0/, 'so a long value shrinks rather than pushing an addon out');
+	// The halo every themed element gets is turned off here, because the box shows it instead.
+	assert.match(control, /:focus-visible \{ border-color: transparent; box-shadow: none/);
+	assert.match(rulesFor(['inputgroup_addon']),
+		new RegExp(`color: ${valueOf('mutedForeground')}`));
+});
+
+// --- the table and the navigation pieces (designs 201, 202) -------------------------------------
+
+test('a table is drawn out of named values, and each part carries only its own', () => {
+	const table = rulesFor(['table']);
+	assert.match(table, /border-collapse: collapse/,
+		'so a row\'s line and the head\'s line are one edge rather than two');
+	assert.match(table, new RegExp(`font-size: ${valueOf('textSm')}`));
+	assert.match(rulesFor(['table_scroll']), /overflow-x: auto/);
+
+	const line = `${valueOf('borderWidth')} solid ${valueOf('border')}`;
+	assert.match(rulesFor(['table_head']), new RegExp(`border-bottom: ${line}`));
+	assert.match(rulesFor(['table_line']), new RegExp(`border-bottom: ${line}`));
+	assert.match(rulesFor(['table_foot']), new RegExp(`border-top: ${line}`));
+
+	const heading = rulesFor(['table_heading']);
+	assert.match(heading, new RegExp(`padding: ${valueOf('space2')} ${valueOf('space3')}`));
+	assert.match(heading, new RegExp(`color: ${valueOf('mutedForeground')}`));
+	assert.match(heading, /font-weight: 500/);
+	// A part is one class token, so a heading does not also wear the table's own rules (design 193).
+	assert.doesNotMatch(heading, /border-collapse/);
+
+	assert.match(rulesFor(['table_cell']),
+		new RegExp(`padding: ${valueOf('space2')} ${valueOf('space3')}`));
+	// The alignment and the density are said once per element, because a class list holding
+	// `table_heading` reaches no key that starts `table_cell`.
+	for (const part of ['table_cell', 'table_heading']) {
+		assert.match(rulesFor([part, 'right']), /text-align: right/, `${part} lines up right`);
+		assert.match(rulesFor([part, 'center']), /text-align: center/);
+		assert.match(rulesFor([part, 'tight']),
+			new RegExp(`padding: ${valueOf('space')} ${valueOf('space2')}`), `${part} tightens`);
+	}
+
+	// Which rows, rather than what a row looks like, so it is a rule about children.
+	assert.match(rulesFor(['table', 'striped']),
+		new RegExp(`> tbody > tr:nth-child\\(even\\) \\{ background: ${valueOf('muted')}`));
+	assert.match(rulesFor(['table_caption']), /caption-side: bottom/,
+		'the markup wants it first and the reader wants it last');
+});
+
+test('a breadcrumb draws its own separator, out of the same box the select\'s arrow is', () => {
+	const separator = rulesFor(['breadcrumb_separator']);
+	const side = valueOf('chevron');
+	assert.match(separator, new RegExp(`width: ${side}; height: ${side}`));
+	assert.match(separator,
+		new RegExp(`border-right: ${valueOf('borderWidth')} solid ${valueOf('mutedForeground')}`));
+	assert.match(separator, /transform: rotate\(-45deg\)/,
+		'the select\'s chevron turned the other way, so the corner points along the row');
+	// Drawn, so a page with a breadcrumb and no icon pack renders one (design 144).
+	assert.doesNotMatch(separator, /content:/);
+
+	assert.match(rulesFor(['breadcrumb_list']), /list-style: none/);
+	assert.match(rulesFor(['breadcrumb_link']),
+		new RegExp(`color: ${valueOf('mutedForeground')}`));
+	assert.match(rulesFor(['breadcrumb_link']), /:hover \{[^}]*text-decoration: underline/);
+	assert.match(rulesFor(['breadcrumb_current']), new RegExp(`color: ${valueOf('foreground')}`));
+
+	const gap = rulesFor(['pagination_gap']);
+	assert.match(gap, new RegExp(`min-width: ${valueOf('target')}`), 'an ellipsis is still a column');
+	assert.match(gap, new RegExp(`color: ${valueOf('mutedForeground')}`));
+	// The page showing now is a modifier of the button, because it is the same button (design 201).
+	assert.match(rulesFor(['button', 'quiet', 'current']),
+		new RegExp(`background: ${valueOf('accent')}`));
+});
+
+test('a sheet sits against its edge by margin, and slides in from it', () => {
+	const box = rulesFor(['dialog', 'sheet']);
+	assert.match(box, new RegExp(`width: ${valueOf('sheetWidth')}`));
+	assert.match(box, /height: 100%/);
+	assert.match(box, /margin: 0/, 'which is what takes the host\'s own centring off');
+
+	// Each side, its margin, the corner it keeps and what it starts from.
+	const sides: readonly (readonly [string, RegExp, RegExp])[] = [
+		['right', /margin-left: auto/, /translateX\(100%\)/],
+		['left', /margin-right: auto/, /translateX\(-100%\)/],
+		['top', /margin-bottom: auto/, /translateY\(-100%\)/],
+		['bottom', /margin-top: auto/, /translateY\(100%\)/],
+	];
+	for (const [side, margin, motion] of sides) {
+		const rules = rulesFor(['dialog', 'sheet', side]);
+		assert.match(rules, margin, `a ${side} sheet is pushed off the other side`);
+		assert.match(rules, new RegExp(`@starting-style \\{[^}]*${motion.source}`),
+			`and starts translated off its own edge`);
+		assert.match(rules, new RegExp(`:not\\(\\[open\\]\\) \\{[^}]*${motion.source}`),
+			'and goes back the same way');
+		// The base dialog's scale is still emitted; what makes the translate the one that lands is
+		// that this entry is later in the chain, so its rule is written after it in the same layer.
+		assert.ok(rules.lastIndexOf('scale(0.96)') < rules.search(motion),
+			'the sheet\'s translate is written after the dialog\'s scale, so it wins');
+		assert.match(rules, /@starting-style \{[^}]*opacity: 0/,
+			'and the fade the base entry starts from is kept');
+	}
+
+	// A dialog that was not asked to be a sheet is untouched. `$dialogWidth` is the dialog's own
+	// name, so it is read off that chain rather than off the root entry.
+	const width = sheet.variable(sheet.base(), ['dialog'], 'dialogWidth');
+	assert.equal(width, '32rem');
+	const plain = rulesFor(['dialog']);
+	assert.match(plain, new RegExp(`max-width: ${String(width)}`));
+	assert.doesNotMatch(plain, /translateX/);
+});
+
+test('an accordion draws one line between its sections, and a toggle group is the button look', () => {
+	assert.match(rulesFor(['accordion']), /flex-direction: column/);
+	assert.match(rulesFor(['accordion_item']),
+		new RegExp(`:not\\(:first-child\\) \\{ border-top: ${valueOf('borderWidth')} solid ${valueOf('border')}`),
+		'the first section has nothing above it to be told apart from');
+
+	const item = rulesFor(['togglegroup_item']);
+	assert.match(item, new RegExp(`min-height: ${valueOf('control')}`), 'the button\'s own height');
+	assert.match(item, /background: transparent/, 'and the quiet look at rest');
+	assert.match(item, new RegExp(`:has\\(:checked\\) \\{ background: ${valueOf('accent')}`));
+	assert.match(item, /:has\(:focus-visible\) \{[^}]*box-shadow: 0 0 0 3px/,
+		'the ring is on the label, because the input inside it is a pixel nobody can see');
+
+	// The size axis, through the same `extends` the select's modifiers use (design 194).
+	assert.match(rulesFor(['togglegroup_item', 'sm']), new RegExp(`min-height: ${valueOf('controlSm')}`));
+	assert.match(rulesFor(['togglegroup_item', 'lg']), new RegExp(`min-height: ${valueOf('controlLg')}`));
+	assert.match(rulesFor(['togglegroup_item', 'quiet']), /border-color: transparent/);
+
+	const group = rulesFor(['togglegroup']);
+	assert.match(group, new RegExp(`> \\* \\+ \\* \\{ margin-left: -${valueOf('borderWidth')}`),
+		'the corners are joined the way a button group joins its buttons');
+	assert.match(group, /> \*:has\(:focus-visible\) \{ position: relative/);
+	assert.doesNotMatch(group, /z-index/, 'and lifted without one, as design 113 requires');
+});
+
+test('a strip of tabs is a filled box, and the line type is a rail with no box at all', () => {
+	// Design 203. Every value here is a name of the contract; nothing in these entries is written
+	// where it stands.
+	const strip = rulesFor(['tabs_list']);
+	assert.match(strip, new RegExp(`background: ${valueOf('muted')}`), 'the strip is the muted fill');
+	assert.match(strip, new RegExp(`border-radius: ${valueOf('radius')}`));
+	assert.match(strip, new RegExp(`padding: ${valueOf('space')}`));
+	assert.match(rulesFor(['tabs_list', 'vertical']), /flex-direction: column/, 'the tabs stack');
+
+	const rail = rulesFor(['tabs_list', 'line']);
+	assert.match(rail, /background: transparent/, 'the line type has no strip to fill');
+	assert.match(rail, new RegExp(`border-bottom: ${valueOf('borderWidth')} solid ${valueOf('border')}`),
+		'one hairline the whole row stands on');
+	assert.equal(rail.lastIndexOf('border-radius: 0px') > rail.lastIndexOf(`border-radius: ${valueOf('radius')}`),
+		true, 'and the line type is the last word on the corners');
+
+	// The component's own box stacks the strip and the panels, and turns when the strip does.
+	assert.match(rulesFor(['tabs']), /flex-direction: column/);
+	const upright = rulesFor(['tabs', 'vertical']);
+	assert.equal(upright.lastIndexOf('flex-direction: row') > upright.lastIndexOf('flex-direction: column'),
+		true, 'a vertical strip stands beside its panel rather than above it');
+	assert.match(rulesFor(['tabs_panel']), /flex-grow: 1/, 'so the panel takes what is left');
+});
+
+test('a tab is one control height, and the one showing is lifted or underlined by type', () => {
+	// Design 203, and the size axis of design 194 through the same one segment every control uses.
+	const tab = rulesFor(['tab']);
+	assert.match(tab, new RegExp(`min-height: ${valueOf('control')}`));
+	assert.match(tab, /box-sizing: border-box/, 'so its height is its height');
+	assert.match(tab, new RegExp(`color: ${valueOf('mutedForeground')}`), 'a tab not showing is quiet');
+	assert.match(rulesFor(['tab', 'sm']), new RegExp(`min-height: ${valueOf('controlSm')}`));
+	assert.match(rulesFor(['tab', 'lg']), new RegExp(`min-height: ${valueOf('controlLg')}`));
+
+	const chosen = rulesFor(['tab', 'selected']);
+	assert.match(chosen, new RegExp(`background: ${valueOf('background')}`),
+		'the page\'s own ground, which is what lifts it out of the strip');
+	assert.match(chosen, new RegExp(`color: ${valueOf('foreground')}`));
+	assert.match(chosen, new RegExp(`box-shadow: ${valueOf('shadowSm').replace(/[()]/g, '\\$&')}`));
+
+	// The line type takes that lift back off and answers with a rail of its own, and the order is
+	// what decides it: `tab_line` is written after `tab_selected` in the same layer.
+	const underlined = rulesFor(['tab', 'line', 'selected']);
+	assert.match(underlined, new RegExp(`border-bottom: ${valueOf('ringWidth')} solid transparent`));
+	assert.match(underlined, new RegExp(`border-bottom-color: ${valueOf('accent')}`));
+	assert.equal(underlined.lastIndexOf('box-shadow: none') > underlined.lastIndexOf('box-shadow: 0 1px 2px'),
+		true, 'an underlined tab is not also a raised one');
+	assert.equal(underlined.lastIndexOf('border-bottom-color') > underlined.lastIndexOf('border-bottom:'),
+		true, 'and the colour of the rail is the last word on it');
+	assert.match(underlined, new RegExp(`margin-bottom: -${valueOf('borderWidth')}`),
+		'so the tab\'s rail covers the strip\'s hairline rather than sitting over it');
+});

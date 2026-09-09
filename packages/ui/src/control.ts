@@ -10,7 +10,42 @@
 import { mutable } from '@aweftjs/core';
 
 import { assert } from './assert.ts';
+import { type Render, use } from './render.ts';
 import { isWritable, through } from './source.ts';
+
+// Per render, and inside that per cell, so two renders on one page never mint one name for two
+// groups. Both keys are objects the caller already holds, which is the only kind of cache this
+// package keeps at module scope (design 109).
+const groups = new WeakMap<Render, WeakMap<object, string>>();
+
+/**
+ * The `name` every input sharing this value cell uses, so the platform treats them as one group.
+ *
+ * Params:
+ *   context: the opaque context `dom` handed the mounter
+ *   cell: the value cell the inputs share
+ *
+ * Returns: the same name for the same cell in the same render, minted off the render's id counter
+ * so a server and the hydration that adopts it agree. `Radio` and `ToggleGroup` both call it, so
+ * two radios and a toggle group pointed at one cell are one group.
+ *
+ * Example:
+ *   const name = groupFor(context, cell);
+ */
+export const groupFor = (context: unknown, cell: object): string => {
+	const render = use(context);
+	let byCell = groups.get(render);
+	if (byCell === undefined) {
+		byCell = new WeakMap();
+		groups.set(render, byCell);
+	}
+	let name = byCell.get(cell);
+	if (name === undefined) {
+		name = render.ids.next('radio');
+		byCell.set(cell, name);
+	}
+	return name;
+};
 
 /** The two cells a control hands its element, and the segments that follow them. */
 export interface ControlStates {

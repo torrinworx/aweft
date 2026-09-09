@@ -52,7 +52,10 @@ export interface Context<T> {
 	read(context: unknown): T;
 	/** The nearest provider's node, or null when there is none. */
 	node(context: unknown): ContextNode<T> | null;
-	/** A component built from the resolved value, once, when the component is built. */
+	/** A component built from the resolved value, once per mount of the component this hands back,
+	 * from the value at that mount's own place in the tree. A mount already on the page does not
+	 * build again when the value above it moves; read a value that moves with `read`, or hold it in
+	 * a cell the built component follows. */
 	use<P extends Record<string, unknown>>(build: (value: T) => Component<P>): Component<P>;
 }
 

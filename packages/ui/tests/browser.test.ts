@@ -63,12 +63,18 @@ const page = async (name: string, html: string, entry: string): Promise<{ url: s
 			response.writeHead(403).end();
 			return;
 		}
+		// Read first, then write the head: writing 200 before the read answers a missing file with
+		// an empty body and no error, which is a build that produced nothing looking like a page
+		// that renders nothing.
+		let body: ReturnType<typeof readFileSync> | null = null;
 		try {
-			response.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
-			response.end(readFileSync(file));
+			body = readFileSync(file);
 		} catch {
 			response.writeHead(404).end();
+			return;
 		}
+		response.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
+		response.end(body);
 	});
 	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
 	const port = (server.address() as { port: number }).port;
@@ -1844,5 +1850,538 @@ test('a fieldset\'s legend sits above its fields, and the box itself draws nothi
 		assert.equal(seen.padding, '0px');
 		assert.equal(seen.minWidth, '0px', 'so it shrinks inside a column');
 		assert.equal(seen.direction, 'column');
+	});
+});
+
+// --- the display and grouping pieces (designs 199, 200) -----------------------------------------
+
+test('an input group rings the box on a real Tab, and the input inside it rings nothing', async () => {
+	// Design 200. The two elements read as one control, so the halo the root rule gives every
+	// themed element is turned off on the input and drawn on the box through `:has(:focus-visible)`.
+	await drive('input-group-ring', `
+		import { InputGroup, h, mount } from '@aweftjs/ui';
+		mount(document.body, <InputGroup id="amount" label="Price" leading="$" trailing="CAD" />);
+	`, async (view) => {
+		await view.waitForSelector('#amount');
+		const before = await view.evaluate(() =>
+			getComputedStyle(document.querySelector('#amount')!.parentElement!)['boxShadow']);
+
+		await view.keyboard.press('Tab');
+		await view.waitForFunction(() =>
+			getComputedStyle(document.querySelector('#amount')!.parentElement!)['borderTopColor']
+				=== 'rgb(90, 97, 110)');
+
+		const seen = await view.evaluate(() => {
+			const input = document.querySelector('#amount')!;
+			const box = input.parentElement!;
+			const outer = getComputedStyle(box);
+			const inner = getComputedStyle(input);
+			return {
+				focused: document.activeElement?.id ?? '',
+				border: outer['borderTopColor'],
+				shadow: outer['boxShadow'],
+				height: Math.round(box.getBoundingClientRect().height),
+				innerShadow: inner['boxShadow'],
+				innerBorder: inner['borderTopStyle'],
+				innerOutline: inner['outlineStyle'],
+			};
+		});
+		assert.equal(seen.focused, 'amount', 'the Tab landed in the input');
+		assert.equal(seen.border, 'rgb(90, 97, 110)', '$ring, which is $neutral8');
+		assert.match(seen.shadow ?? '', /0px 0px 0px 3px/, 'and the box wears the halo, at $ringWidth');
+		assert.notEqual(seen.shadow, before, 'which it did not before the Tab');
+		assert.equal(seen.height, 36, 'the box is $control tall, so it is the control');
+		assert.equal(seen.innerShadow, 'none', 'the input inside shows no halo of its own');
+		assert.equal(seen.innerBorder, 'none', 'no border');
+		assert.equal(seen.innerOutline, 'none', 'and no outline');
+	});
+});
+
+test('an avatar swaps its letters for a picture that really loads', async () => {
+	// Design 199. The light tree can dispatch `load`; only a browser fires it, and only a browser
+	// says what the two children measure once one of them carries `hidden`.
+	await drive('avatar-load', `
+		import { Avatar, h, mount } from '@aweftjs/ui';
+		const pixel = 'data:image/png;base64,'
+			+ 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+		mount(document.body, <div>
+			<Avatar id="loaded" src={pixel} alt="a pixel" fallback="TL" />
+			<Avatar id="broken" src="data:image/png;base64,AAAA" alt="missing" fallback="AB" size="sm" />
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#loaded');
+		await view.waitForFunction(() =>
+			!document.querySelector('#loaded img')!.hasAttribute('hidden'));
+
+		const seen = await view.evaluate(() => {
+			const read = (id: string) => {
+				const box = document.querySelector(`#${id}`)!;
+				const image = box.querySelector('img')!;
+				const fallback = box.querySelector('span')!;
+				return {
+					side: Math.round(box.getBoundingClientRect().height),
+					image: Math.round(image.getBoundingClientRect().height),
+					letters: fallback.getBoundingClientRect().height,
+					hidden: fallback.hasAttribute('hidden'),
+				};
+			};
+			return { loaded: read('loaded'), broken: read('broken') };
+		});
+
+		assert.equal(seen.loaded.side, 36, 'the avatar is $control square');
+		assert.equal(seen.loaded.image, 36, 'and the picture covers it');
+		assert.equal(seen.loaded.letters, 0, 'the letters take no room');
+		assert.equal(seen.loaded.hidden, true, 'and are out of the accessibility tree');
+
+		// The other one asked for four bytes that are not a PNG, so the decode fails, `error` fires,
+		// and it never leaves its letters.
+		await view.waitForFunction(() =>
+			document.querySelector('#broken img')!.hasAttribute('hidden'));
+		const failed = await view.evaluate(() => {
+			const box = document.querySelector('#broken')!;
+			return {
+				side: Math.round(box.getBoundingClientRect().height),
+				letters: Math.round(box.querySelector('span')!.getBoundingClientRect().height),
+				image: box.querySelector('img')!.getBoundingClientRect().height,
+			};
+		});
+		assert.equal(failed.side, 32, '$controlSm');
+		assert.equal(failed.letters, 32, 'the letters fill it');
+		assert.equal(failed.image, 0, 'and the picture that failed takes no room');
+	});
+});
+
+test('a progress at half is half a track, and a button group shares one border', async () => {
+	// Design 199: the bar is a vendor pseudo-element, so what a page can be asked is the position
+	// the platform computed from the value and the max. Design 200: the overlap is a measurement.
+	await drive('progress-and-group', `
+		import { Button, ButtonGroup, Progress, h, mount } from '@aweftjs/ui';
+		mount(document.body, <div>
+			<Progress id="bar" value={0.5} label="Uploading" />
+			<Progress id="waiting" label="Working" />
+			<ButtonGroup label="Alignment" id="group">
+				<Button label="Left" type="quiet" id="left" />
+				<Button label="Right" type="quiet" id="right" />
+			</ButtonGroup>
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#bar');
+		const bar = await view.evaluate(() => {
+			// `value`, `max` and `position` are the progress element's own properties, which the
+			// narrow element shape this project compiles against does not name.
+			const read = (id: string) =>
+				document.querySelector(`#${id}`) as unknown as { value: number; max: number; position: number };
+			const known = read('bar');
+			return {
+				max: known.max,
+				value: known.value,
+				position: known.position,
+				height: getComputedStyle(document.querySelector('#bar')!)['height'],
+				appearance: getComputedStyle(document.querySelector('#bar')!)['appearance'],
+				indeterminate: read('waiting').position,
+			};
+		});
+		assert.equal(bar.max, 1, 'the element is a fraction of one, so nothing divides');
+		assert.equal(bar.value, 0.5);
+		assert.equal(bar.position, 0.5, 'so the bar is half the track');
+		assert.equal(bar.height, '8px', '$space2 thick');
+		assert.equal(bar.appearance, 'none', 'the host is not drawing its own');
+		assert.equal(bar.indeterminate, -1,
+			'and one with no value attribute is indeterminate, which the platform reports as -1');
+
+		const group = await view.evaluate(() => {
+			const left = document.querySelector('#left')!;
+			const right = document.querySelector('#right')!;
+			const one = left.getBoundingClientRect();
+			const two = right.getBoundingClientRect();
+			const outer = getComputedStyle(left);
+			const inner = getComputedStyle(right);
+			return {
+				width: outer['borderTopWidth'],
+				overlap: Math.round(one.right - two.left),
+				sameRow: Math.round(one.top - two.top),
+				outerCorner: outer['borderTopLeftRadius'],
+				joinLeft: inner['borderTopLeftRadius'],
+				endCorner: inner['borderTopRightRadius'],
+			};
+		});
+		assert.equal(group.width, '1px', '$borderWidth');
+		assert.equal(group.overlap, 1, 'the two borders overlap by exactly one of them');
+		assert.equal(group.sameRow, 0, 'and the two sit on one line');
+		assert.equal(group.outerCorner, '6px', '$radius stays on the outer corners');
+		assert.equal(group.endCorner, '6px');
+		assert.equal(group.joinLeft, '0px', 'and the inner ones come off');
+	});
+});
+
+test('a table wider than its box scrolls inside it, and the page does not', async () => {
+	// Design 201. Only a browser lays a table out, so only a browser can be asked whether the
+	// overflow stayed in the wrapper.
+	await drive('table-scroll', `
+		import { Table, h, mount } from '@aweftjs/ui';
+		const rows = [
+			{ a: 'one', b: 'two', c: 'three', d: 'four', e: 'five' },
+			{ a: 'six', b: 'seven', c: 'eight', d: 'nine', e: 'ten' },
+		];
+		mount(document.body, <div style={{ width: '200px' }}>
+			<Table
+				id="wide"
+				columns={[
+					{ key: 'a', label: 'A rather long heading' },
+					{ key: 'b', label: 'Another long heading' },
+					{ key: 'c', label: 'A third long heading' },
+					{ key: 'd', label: 'A fourth long heading' },
+					{ key: 'e', label: 'A fifth long heading', align: 'right' },
+				]}
+				rows={rows}
+				caption="Five columns in a narrow box"
+				striped={true}
+			/>
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#wide');
+
+		const seen = await view.evaluate(() => {
+			const table = document.querySelector('#wide')!;
+			const scroll = table.parentElement!;
+			const rows = Array.from(table.querySelectorAll('tbody tr'));
+			return {
+				scrolls: scroll.scrollWidth > scroll.clientWidth,
+				box: Math.round(scroll.getBoundingClientRect().width),
+				focusable: scroll.getAttribute('tabindex'),
+				overflow: getComputedStyle(scroll).overflowX,
+				pageScrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+				collapse: getComputedStyle(table).borderCollapse,
+				rows: rows.length,
+				striped: getComputedStyle(rows[1]!).backgroundColor,
+				plain: getComputedStyle(rows[0]!).backgroundColor,
+				aligned: getComputedStyle(table.querySelectorAll('tbody td')[4]!).textAlign,
+			};
+		});
+
+		assert.equal(seen.overflow, 'auto');
+		assert.ok(seen.scrolls, 'the table is wider than the box it is in');
+		assert.equal(seen.box, 200, 'and the box is the width the page gave it');
+		assert.equal(seen.focusable, '0', 'so a keyboard can reach the scroll');
+		assert.ok(!seen.pageScrolls, 'and the page itself did not widen');
+		assert.equal(seen.collapse, 'collapse');
+		assert.equal(seen.rows, 2);
+		assert.notEqual(seen.striped, seen.plain, 'every second body row is tinted');
+		assert.equal(seen.plain, 'rgba(0, 0, 0, 0)', 'and the first one is not');
+		assert.equal(seen.aligned, 'right', 'a column lines its cells up the way it said');
+
+		// The scroll really moves, which is the whole point of the box.
+		const moved = await view.evaluate(() => {
+			const scroll = document.querySelector('#wide')!.parentElement!;
+			scroll.scrollLeft = 40;
+			return scroll.scrollLeft;
+		});
+		assert.ok(moved > 0, `the box scrolled sideways: ${String(moved)}px`);
+	});
+});
+
+test('a breadcrumb link inside a routed page moves the router and reloads nothing', async () => {
+	// Design 201: the component writes no click handler, so what makes this work is that the anchor
+	// is plain and `links(root)` takes it. Only a browser has anchors, clicks and a history.
+	await drive('breadcrumb-route', `
+		import { mutable } from '@aweftjs/core';
+		import { createRouter } from '@aweftjs/dom/router';
+		import { Breadcrumb, h, mount } from '@aweftjs/ui';
+
+		const router = createRouter({});
+		window.loads = (window.loads ?? 0) + 1;
+		const url = mutable(router.url.get());
+		router.url.effect((now) => { url.set(String(now)); });
+
+		mount(document.body, <div>
+			<Breadcrumb items={[
+				{ label: 'Home', href: '/' },
+				{ label: 'Files', href: '/files' },
+				{ label: 'shot.png' },
+			]} />
+			<p id="url">{url}</p>
+		</div>);
+		router.links(document.body);
+	`, async (view) => {
+		await view.waitForSelector('#url');
+		assert.equal(await view.evaluate(() => (window as unknown as { loads: number }).loads), 1);
+
+		const anchors = await view.evaluate(() =>
+			Array.from(document.querySelectorAll('nav a')).map((node) => node.getAttribute('href')));
+		assert.deepEqual(anchors, ['/', '/files'], 'two links and no third');
+
+		await view.click('nav a[href="/files"]');
+		await view.waitForFunction(() => document.querySelector('#url')!.textContent === '/files');
+		assert.equal(await view.evaluate(() => location.pathname), '/files',
+			'the address bar moved');
+		assert.equal(await view.evaluate(() => (window as unknown as { loads: number }).loads), 1,
+			'and the page was never loaded a second time');
+	});
+});
+
+test('a sheet starts off its edge and settles against it', async () => {
+	// Design 202. The class comes off a themed probe and is worn by a real <dialog>, because the
+	// element has to be a <dialog> for the top layer and `[open]` to mean anything: the same shape
+	// the dialog motion test uses.
+	await drive('sheet-motion', `
+		import { h, mount } from '@aweftjs/ui';
+		import { dialogControl } from '@aweftjs/ui/dialog';
+		mount(document.body, <div id="probe" theme={['dialog', 'sheet', 'right']} />);
+		const panel = document.createElement('dialog');
+		panel.id = 'panel';
+		panel.className = document.querySelector('#probe').className;
+		panel.innerHTML = '<p>hello</p>';
+		document.body.appendChild(panel);
+		window.modal = dialogControl(panel, {});
+	`, async (view) => {
+		await view.waitForFunction(() => document.querySelector('#panel') !== null);
+
+		const seen = await view.evaluate(async () => {
+			const panel = document.querySelector('#panel')!;
+			(window as unknown as { modal: { open(): void } }).modal.open();
+			const first = getComputedStyle(panel).transform;
+			await new Promise((go) => setTimeout(go, 300));
+			const box = panel.getBoundingClientRect();
+			return {
+				first,
+				settled: getComputedStyle(panel).transform,
+				width: Math.round(box.width),
+				height: Math.round(box.height),
+				right: Math.round(window.innerWidth - box.right),
+				viewport: window.innerHeight,
+				radius: getComputedStyle(panel).borderTopRightRadius,
+				leftEdge: getComputedStyle(panel).borderLeftWidth,
+			};
+		});
+
+		// A matrix, because the host reports the computed transform rather than what was written.
+		// 24rem at the default 16px root is 384px, which is what the first frame is offset by.
+		assert.equal(seen.first, 'matrix(1, 0, 0, 1, 384, 0)',
+			'the first frame is the sheet\'s own width off the right edge');
+		assert.equal(seen.settled, 'none', 'and it settles in place');
+		assert.equal(seen.width, 384, '$sheetWidth');
+		assert.equal(seen.height, seen.viewport, 'and it is as tall as the viewport');
+		assert.equal(seen.right, 0, 'against the right edge, with the margin holding it there');
+		assert.equal(seen.radius, '0px', 'the outer corner is square');
+		assert.equal(seen.leftEdge, '1px', 'and the one border is the inner edge');
+	});
+});
+
+test('opening the second section of an accordion closes the first, with no script of ours', async () => {
+	// Design 202: the exclusive behaviour is the platform's, and this is the check that says so.
+	await drive('accordion-exclusive', `
+		import { Accordion, DropDown, Icons, h, mount } from '@aweftjs/ui';
+		const pack = { icons: {
+			'chevron-down': { body: '<path d="M0 0 L10 10"/>', width: 10, height: 10 },
+			'chevron-up': { body: '<path d="M0 10 L10 0"/>', width: 10, height: 10 },
+		} };
+		mount(document.body, <Icons value={pack}>
+			<Accordion id="stack" items={[
+				{ label: 'One', content: 'the first' },
+				{ label: 'Two', content: 'the second' },
+			]} />
+		</Icons>);
+	`, async (view) => {
+		await view.waitForSelector('#stack');
+
+		const names = await view.evaluate(() =>
+			Array.from(document.querySelectorAll('#stack details')).map((node) => node.getAttribute('name')));
+		assert.equal(names.length, 2);
+		assert.equal(names[0], names[1], 'one name, which is what puts them in one group');
+		assert.notEqual(names[0], null);
+
+		const open = (): Promise<boolean[]> => view.evaluate(() =>
+			Array.from(document.querySelectorAll('#stack details')).map((node) => node.hasAttribute('open')));
+		assert.deepEqual(await open(), [false, false], 'both start closed');
+
+		await view.click('#stack details:nth-of-type(1) summary');
+		await view.waitForFunction(() =>
+			document.querySelectorAll('#stack details[open]').length === 1);
+		assert.deepEqual(await open(), [true, false]);
+
+		await view.click('#stack details:nth-of-type(2) summary');
+		await view.waitForFunction(() =>
+			document.querySelector('#stack details:nth-of-type(2)')!.hasAttribute('open'));
+		assert.deepEqual(await open(), [false, true],
+			'the platform closed the first when the second opened');
+	});
+});
+
+test('the arrow keys move a toggle group, and the ring lands on the label', async () => {
+	// Design 202: the keyboard is the radios' own, because they share one name, and the ring is on
+	// the label because the input inside it is a pixel nobody can see. Both are measurements.
+	await drive('toggle-group-keys', `
+		import { mutable } from '@aweftjs/core';
+		import { ToggleGroup, h, mount } from '@aweftjs/ui';
+		const align = mutable('left');
+		mount(document.body, <div>
+			<ToggleGroup id="group" label="Alignment" value={align} options={['left', 'centre', 'right']} />
+			<p id="picked">{align}</p>
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#group');
+		assert.equal(await view.textContent('#picked'), 'left');
+
+		// A tab reaches the checked radio, which is the one tab stop the group has.
+		await view.keyboard.press('Tab');
+		const focused = await view.evaluate(() => {
+			const active = document.activeElement!;
+			return { tag: active.tagName.toLowerCase(), value: active.checked };
+		});
+		assert.deepEqual(focused, { tag: 'input', value: true },
+			'Tab lands on the checked radio and nowhere else in the group');
+
+		await view.keyboard.press('ArrowRight');
+		await view.waitForFunction(() => document.querySelector('#picked')!.textContent === 'centre');
+		await view.keyboard.press('ArrowRight');
+		await view.waitForFunction(() => document.querySelector('#picked')!.textContent === 'right');
+		await view.keyboard.press('ArrowRight');
+		await view.waitForFunction(() => document.querySelector('#picked')!.textContent === 'left',
+			{ timeout: 5000 });
+
+		const ring = await view.evaluate(() => {
+			const input = document.activeElement!;
+			const label = input.parentElement!;
+			const box = label.getBoundingClientRect();
+			return {
+				label: getComputedStyle(label)['boxShadow'] ?? '',
+				input: getComputedStyle(input)['boxShadow'] ?? '',
+				fill: getComputedStyle(label).backgroundColor,
+				height: Math.round(box.height),
+				hidden: Math.round(input.getBoundingClientRect().width),
+			};
+		});
+		assert.match(ring.label, /0px 0px 0px 3px/, 'the ring is on the label');
+		assert.equal(ring.input, 'none', 'and the input inside it shows none of its own');
+		assert.equal(ring.height, 36, '$control, through the button entry it extends');
+		assert.ok(ring.hidden < 4, `and the input takes no room: ${String(ring.hidden)}px`);
+
+		// The checked option is the one wearing the fill.
+		const fills = await view.evaluate(() =>
+			Array.from(document.querySelectorAll('#group label')).map((node) =>
+				getComputedStyle(node).backgroundColor));
+		assert.notEqual(fills[0], fills[1], 'the chosen one is filled and the rest are not');
+		assert.equal(fills[1], fills[2]);
+	});
+});
+
+test('a strip of tabs is one tab stop, and the arrows move the selection inside it', async () => {
+	// Design 203. The claim a fake DOM cannot answer is the Tab order: the second Tab press has to
+	// leave the strip for the panel rather than walk to the next tab.
+	await drive('tabs-keys', `
+		import { mutable } from '@aweftjs/core';
+		import { Tabs, h, mount } from '@aweftjs/ui';
+		const view = mutable('all');
+		globalThis.read = () => view.get();
+		mount(document.body, <div>
+			<button id="before">before</button>
+			<Tabs id="strip" label="Views" value={view} tabs={[
+				{ value: 'all', label: 'All', content: 'everything' },
+				{ value: 'mine', label: 'Mine', content: 'the ones I own' },
+				{ value: 'gone', label: 'Deleted', disabled: true, content: 'the bin' },
+			]} />
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#strip');
+		const held = (): Promise<string> =>
+			view.evaluate(() => (globalThis as never as { read(): string }).read());
+
+		// Two Tab presses from the button before it: the first lands on the tab showing, the second
+		// leaves the strip for that tab's panel.
+		await view.focus('#before');
+		await view.keyboard.press('Tab');
+		const first = await view.evaluate(() => ({
+			role: document.activeElement!.getAttribute('role'),
+			text: document.activeElement!.textContent,
+		}));
+		assert.deepEqual(first, { role: 'tab', text: 'All' }, 'Tab lands on the tab showing');
+
+		await view.keyboard.press('Tab');
+		const second = await view.evaluate(() => ({
+			role: document.activeElement!.getAttribute('role'),
+			named: document.activeElement!.getAttribute('aria-labelledby'),
+		}));
+		assert.equal(second.role, 'tabpanel',
+			'the second Tab leaves the strip for the panel, not for the next tab');
+		assert.notEqual(second.named, null, 'and that panel is the one its tab names');
+
+		// Back into the strip, and the arrows move the focus and the selection together.
+		await view.keyboard.down('Shift');
+		await view.keyboard.press('Tab');
+		await view.keyboard.up('Shift');
+		await view.keyboard.press('ArrowRight');
+		await view.waitForFunction(() => (globalThis as never as { read(): string }).read() === 'mine');
+		assert.equal(await view.evaluate(() => document.activeElement!.textContent), 'Mine');
+		const roving = await view.evaluate(() =>
+			Array.from(document.querySelectorAll('#strip [role="tab"]'))
+				.map((node) => node.getAttribute('tabindex')).join(' '));
+		assert.equal(roving, '-1 0 -1', 'the one tab stop moved with the selection');
+
+		// Wrapping past the disabled last tab, then the two end keys.
+		await view.keyboard.press('ArrowRight');
+		await view.waitForFunction(() => (globalThis as never as { read(): string }).read() === 'all',
+			{ timeout: 5000 });
+		assert.equal(await view.evaluate(() => document.activeElement!.textContent), 'All',
+			'the disabled tab is stepped over and the strip wraps to the first');
+
+		await view.keyboard.press('End');
+		assert.equal(await held(), 'mine', 'End is the last tab that can be chosen');
+		await view.keyboard.press('Home');
+		assert.equal(await held(), 'all');
+
+		// A panel that is not showing is hidden by the attribute, so nothing in it is reachable.
+		const reachable = await view.evaluate(() =>
+			Array.from(document.querySelectorAll('#strip [role="tabpanel"]'))
+				.map((node) => node.offsetHeight > 0));
+		assert.deepEqual(reachable, [true, false, false]);
+	});
+});
+
+test('an underlined tab draws a $ringWidth rail in $accent and no fill at all', async () => {
+	// Design 203's two types, measured: the default lifts the tab showing onto the page's own
+	// ground, and `line` drops the strip for a rail under it.
+	await drive('tabs-types', `
+		import { Tabs, h, mount } from '@aweftjs/ui';
+		const items = [
+			{ value: 'one', label: 'One', content: 'the first' },
+			{ value: 'two', label: 'Two', content: 'the second' },
+		];
+		mount(document.body, <div>
+			<Tabs id="filled" label="Filled" tabs={items} />
+			<Tabs id="ruled" label="Ruled" type="line" tabs={items} />
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#ruled');
+
+		const seen = await view.evaluate(() => {
+			const read = (id: string): Record<string, string> => {
+				const tabs = Array.from(document.querySelectorAll(`#${id} [role="tab"]`));
+				const chosen = tabs[0]!;
+				const other = tabs[1]!;
+				const list = document.querySelector(`#${id} [role="tablist"]`)!;
+				return {
+					fill: getComputedStyle(chosen).backgroundColor ?? '',
+					rail: getComputedStyle(chosen).borderBottomWidth ?? '',
+					colour: getComputedStyle(chosen).borderBottomColor ?? '',
+					quiet: getComputedStyle(other).borderBottomColor ?? '',
+					strip: getComputedStyle(list).backgroundColor ?? '',
+					height: String(Math.round(chosen.getBoundingClientRect().height)),
+				};
+			};
+			return { filled: read('filled'), ruled: read('ruled') };
+		});
+
+		// The default: a filled strip with the tab showing lifted onto the page's own ground.
+		assert.equal(seen.filled.strip, 'rgb(237, 239, 243)', '$muted, the third neutral step');
+		assert.equal(seen.filled.fill, 'rgb(252, 252, 253)', '$background, which is what lifts it');
+		assert.equal(seen.filled.rail, '1px', 'the plain tab keeps its own transparent border');
+		assert.equal(seen.filled.height, '36', '$control');
+
+		// The line type: no strip, no fill, and a 3px rail in the accent under the one showing.
+		assert.equal(seen.ruled.strip, 'rgba(0, 0, 0, 0)', 'no strip to fill');
+		assert.equal(seen.ruled.fill, 'rgba(0, 0, 0, 0)', 'and no fill behind the tab showing');
+		assert.equal(seen.ruled.rail, '3px', '$ringWidth');
+		assert.equal(seen.ruled.colour, 'rgb(28, 32, 39)', '$accent, the foreground of this theme');
+		assert.equal(seen.ruled.quiet, 'rgba(0, 0, 0, 0)', 'and the tab beside it draws none');
 	});
 });

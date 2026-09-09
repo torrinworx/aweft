@@ -376,6 +376,7 @@ try {
 		Default: 'the stage template that adds nothing, shown in the Modal example',
 		Detached: 'the mechanism under the Popup and Tooltip examples',
 		FieldGroup: 'shown in the Field example', FieldSet: 'shown in the Field example',
+		Tab: 'shown in the Tabs example', TabPanel: 'shown in the Tabs example',
 	};
 
 	const exported = readFileSync(join(here, '..', '..', 'packages', 'ui', 'surface.txt'), 'utf8')
@@ -398,14 +399,17 @@ try {
 	console.log(`recipes/ui: ${String(shown.length)} examples for ${String(exported.length)} exports, `
 		+ `${String(Object.keys(NO_EXAMPLE).length)} of them named as needing none`);
 
-	// The list down the left is the page's own order, and a link scrolls its section to the top.
+	// The list down the left is the page's own order, and a link scrolls its section to the top. The
+	// nav is named, because an example may put a `<nav>` of its own on the page and a `Breadcrumb`
+	// does.
 	const links = await page.evaluate(() =>
-		Array.from(document.querySelectorAll('#catalogue nav a')).map((node) => node.getAttribute('href')));
+		Array.from(document.querySelectorAll('#catalogue nav[aria-label="Components"] a'))
+			.map((node) => node.getAttribute('href')));
 	assert.deepEqual(links, shown.map((id) => `#${id}`), 'one link per example, in the page\'s order');
 
 	// A section with sections under it, so the scroll is not stopped by the end of the document.
 	const scrolledFrom = await page.evaluate(() => window.scrollY);
-	await page.click('#catalogue nav a[href="#Field"]');
+	await page.click('#catalogue nav[aria-label="Components"] a[href="#Field"]');
 	await page.waitForFunction(() => window.scrollY > 0);
 	const scrolledTo = await page.evaluate(() => window.scrollY);
 	assert.ok(scrolledTo > scrolledFrom,
@@ -682,6 +686,284 @@ try {
 		dark: getComputedStyle(document.querySelector('#tip-anchor-dark')!).backgroundColor,
 	}));
 	assert.notEqual(composedModes.light, composedModes.dark, 'a composite resolves the mode of its pane');
+
+	// --- the display and grouping pieces (designs 199, 200) ----------------------------------------
+
+	// One thing per component, each of them something only a real browser can answer.
+	const badges = await page.evaluate(() => ({
+		light: getComputedStyle(document.querySelector('#badge-light')!).backgroundColor,
+		dark: getComputedStyle(document.querySelector('#badge-dark')!).backgroundColor,
+		outline: getComputedStyle(document.querySelector('#badge-outline-light')!).backgroundColor,
+	}));
+	assert.notEqual(badges.light, badges.dark, 'a Badge resolves the mode of the pane it is in');
+	assert.equal(badges.outline, 'rgba(0, 0, 0, 0)', 'and an outline badge has no fill at all');
+
+	const alerts = await page.evaluate(() => ({
+		plain: document.querySelector('#alert-light')!.getAttribute('role'),
+		bad: document.querySelector('#alert-danger-light')!.getAttribute('role'),
+	}));
+	assert.deepEqual(alerts, { plain: 'status', bad: 'alert' },
+		'a danger alert interrupts a screen reader and the rest wait their turn');
+
+	// The picture is a data URL, so it has loaded by now and the letters are gone; the one with no
+	// src never made an image at all.
+	await page.waitForFunction(() => !document.querySelector('#avatar-light img')!.hasAttribute('hidden'));
+	const avatars = await page.evaluate(() => ({
+		letters: document.querySelector('#avatar-light span')!.hasAttribute('hidden'),
+		images: document.querySelectorAll('#avatar-fallback-light img').length,
+		text: document.querySelector('#avatar-fallback-light')!.textContent,
+	}));
+	assert.deepEqual(avatars, { letters: true, images: 0, text: 'AB' },
+		'a picture that loaded hides its letters, and an avatar with no src never made an image');
+
+	assert.equal(await page.getAttribute('#skeleton-light', 'aria-hidden'), 'true',
+		'a skeleton says nothing to a screen reader');
+
+	const kbd = await page.evaluate(() =>
+		getComputedStyle(document.querySelector('#kbd-light')!)['fontFamily'] ?? '');
+	assert.match(kbd, /mono/, 'a key is drawn in $fontMono');
+
+	// `position` is the progress element's own property, which the narrow element shape this
+	// project compiles against does not name.
+	const positionOf = (id: string): Promise<number> => page.evaluate((held: string) =>
+		(document.querySelector(`#${held}`) as unknown as { position: number }).position, id);
+	assert.equal(await positionOf('progress-light'), 0.5, 'the progress element is a fraction of one');
+	await page.click('#progress-more-light');
+	assert.equal(await positionOf('progress-light'), 0.75, 'and the cell moves it');
+	assert.equal(await positionOf('progress-waiting-light'), -1,
+		'while one with no value at all is indeterminate');
+
+	assert.equal(await page.textContent('#empty-bare-light'), 'Nothing to see',
+		'an empty state renders only the parts it was given');
+
+	const card = await page.evaluate(() =>
+		Array.from(document.querySelector('#card-light')!.querySelectorAll(':scope > div'))
+			.map((node) => (node.getAttribute('class') ?? '') !== ''));
+	assert.deepEqual(card, [true, true, true], 'a card is a head, a body and a foot, each on its own part');
+
+	// Two buttons in a group share one border: the second starts one border width inside the first.
+	const joined = await page.evaluate(() => {
+		const left = document.querySelector('#buttongroup-left-light')!.getBoundingClientRect();
+		const middle = document.querySelector('#buttongroup-middle-light')!.getBoundingClientRect();
+		const style = getComputedStyle(document.querySelector('#buttongroup-middle-light')!);
+		return {
+			overlap: Math.round(left.right - middle.left),
+			corner: style.borderTopLeftRadius,
+		};
+	});
+	assert.equal(joined.overlap, 1, 'two adjacent borders in a button group are one line');
+	assert.equal(joined.corner, '0px', 'and the inner corners came off');
+
+	// The ring is on the box, not on the input inside it.
+	await page.focus('#inputgroup-light');
+	const grouped = await page.evaluate(() => {
+		const input = document.querySelector('#inputgroup-light')!;
+		const box = input.parentElement!;
+		return {
+			box: getComputedStyle(box)['boxShadow'] ?? '',
+			input: getComputedStyle(input)['boxShadow'] ?? '',
+			height: Math.round(box.getBoundingClientRect().height),
+		};
+	});
+	assert.match(grouped.box, /0px 0px 0px 3px/, 'focusing the input rings the whole box');
+	assert.equal(grouped.input, 'none', 'and the input inside it shows none of its own');
+	assert.equal(grouped.height, 36, 'the box is $control tall, so it is the control');
+
+	// --- the table and the navigation pieces (designs 201, 202) ------------------------------------
+
+	// The table's rows, its scroll box, and the entries used on their own with no component at all.
+	const table = await page.evaluate(() => {
+		const box = document.querySelector('#table-light')!;
+		const scroll = box.parentElement!;
+		const markup = document.querySelector('#table-markup-light')!;
+		return {
+			rows: box.querySelectorAll('tbody tr').length,
+			headings: box.querySelectorAll('th[scope="col"]').length,
+			overflow: getComputedStyle(scroll).overflowX,
+			focusable: scroll.getAttribute('tabindex'),
+			caption: box.querySelector('caption')!.textContent,
+			foot: box.querySelector('tfoot td')!.getAttribute('colspan'),
+			byHand: getComputedStyle(markup).borderCollapse,
+			hairline: getComputedStyle(markup.querySelector('tbody tr')!).borderBottomWidth,
+		};
+	});
+	assert.equal(table.rows, 3, 'one row per file');
+	assert.equal(table.headings, 3, 'and one heading per column');
+	assert.equal(table.overflow, 'auto', 'the box a wide table scrolls in');
+	assert.equal(table.focusable, '0', 'and a keyboard can reach that scroll');
+	assert.equal(table.caption, 'Everything in this folder');
+	assert.equal(table.foot, '3', 'the foot spans every column');
+	assert.equal(table.byHand, 'collapse', 'the entries work on markup nobody generated');
+	assert.equal(table.hairline, '1px', '$borderWidth under a hand-written row');
+
+	// The breadcrumb: the last level is where you are, and the separators are drawn rather than
+	// written, so this page needs no icon pack to have them.
+	const trail = await page.evaluate(() => {
+		const nav = document.querySelector('#breadcrumb-light')!;
+		const marks = Array.from(nav.querySelectorAll('[aria-hidden="true"]'));
+		const current = nav.querySelector('[aria-current="page"]')!;
+		return {
+			links: nav.querySelectorAll('a').length,
+			marks: marks.length,
+			drawings: nav.querySelectorAll('svg').length,
+			// The border box, because `getBoundingClientRect` is the turned one and a quarter turn
+			// makes an 8px square measure 11.3.
+			side: marks[0]!.offsetWidth,
+			current: current.textContent,
+			name: nav.getAttribute('aria-label'),
+		};
+	});
+	assert.equal(trail.links, 2, 'two of the three levels are links');
+	assert.equal(trail.marks, 2, 'and there is one separator between each pair');
+	assert.equal(trail.drawings, 0, 'nothing asked the Icons stack for a chevron');
+	assert.equal(trail.side, 8, 'the separator is a $chevron box');
+	assert.equal(trail.current, 'shot.png');
+	assert.equal(trail.name, 'Breadcrumb', 'the nav is named, so a screen reader can list it');
+
+	// The pagination window at page 5 of 12, and a real click moving it.
+	const pages = await page.evaluate(() =>
+		Array.from(document.querySelector('#pagination-light')!.querySelectorAll(':scope > *'))
+			.map((node) => node.textContent));
+	assert.deepEqual(pages, ['Previous', '1', '…', '4', '5', '6', '…', '12', 'Next'],
+		'first, last, and a sibling each side of the page showing now');
+	assert.equal(await page.getAttribute('#pagination-first-light button', 'disabled'), '',
+		'previous is off on the first page');
+	assert.equal(await page.textContent('#pagination-at-light'), '5');
+	await page.click('#pagination-light button[aria-current="page"] + button');
+	await page.waitForFunction(() => document.querySelector('#pagination-at-light')!.textContent === '6');
+
+	// A sheet, opened through the stage the way the modal beside it is. A modal dialog is in the top
+	// layer, so what it is measured against is the viewport rather than the pane it was opened from.
+	await page.click('#open-sheet-light');
+	await page.waitForSelector('#filtering-light');
+	const edge = await page.evaluate(() => {
+		const panel = document.querySelector('#sheet-light')!;
+		const box = panel.getBoundingClientRect();
+		return {
+			tag: panel.tagName.toLowerCase(),
+			modal: panel.matches(':modal'),
+			width: Math.round(box.width),
+			right: Math.round(window.innerWidth - box.right),
+			height: Math.round(box.height),
+			viewport: window.innerHeight,
+		};
+	});
+	assert.equal(edge.tag, 'dialog', 'a sheet is the same element a modal is');
+	assert.ok(edge.modal, 'and it is showing as a modal');
+	assert.equal(edge.width, 384, '$sheetWidth: 24rem');
+	assert.equal(edge.right, 0, 'against the right edge');
+	assert.equal(edge.height, edge.viewport, 'and as tall as the viewport');
+	await page.click('#sheet-light button[aria-label="Close"]');
+	await page.waitForFunction(() => document.querySelector('#filtering-light') === null);
+
+	// The accordion's one-open rule, which is the platform's and not ours.
+	const closed = await page.evaluate(() =>
+		document.querySelectorAll('#accordion-light details[open]').length);
+	assert.equal(closed, 0, 'every section starts closed');
+	await page.click('#accordion-light details:nth-of-type(1) summary');
+	await page.waitForFunction(() =>
+		document.querySelectorAll('#accordion-light details[open]').length === 1);
+	await page.click('#accordion-light details:nth-of-type(2) summary');
+	await page.waitForFunction(() =>
+		document.querySelector('#accordion-light details:nth-of-type(2)')!.hasAttribute('open'));
+	const stack = await page.evaluate(() => ({
+		open: document.querySelectorAll('#accordion-light details[open]').length,
+		first: document.querySelector('#accordion-light details:nth-of-type(1)')!.hasAttribute('open'),
+		names: new Set(Array.from(document.querySelectorAll('#accordion-light details'))
+			.map((node) => node.getAttribute('name'))).size,
+	}));
+	assert.equal(stack.open, 1, 'opening the second closed the first');
+	assert.equal(stack.first, false);
+	assert.equal(stack.names, 1, 'because all three share one name');
+
+	// The toggle group: a real click on a label writes the cell behind the input it wraps.
+	assert.equal(await page.textContent('#togglegroup-value-light'), 'centre');
+	await page.click('#togglegroup-light label:nth-of-type(3)');
+	await page.waitForFunction(() =>
+		document.querySelector('#togglegroup-value-light')!.textContent === 'right');
+	const group = await page.evaluate(() => {
+		const labels = Array.from(document.querySelectorAll('#togglegroup-light label'));
+		const checked = document.querySelectorAll('#togglegroup-many-light input:checked').length;
+		return {
+			height: Math.round(labels[0]!.getBoundingClientRect().height),
+			overlap: Math.round(labels[0]!.getBoundingClientRect().right
+				- labels[1]!.getBoundingClientRect().left),
+			inputs: document.querySelectorAll('#togglegroup-light input[type="radio"]').length,
+			boxes: document.querySelectorAll('#togglegroup-many-light input[type="checkbox"]').length,
+			checked,
+		};
+	});
+	assert.equal(group.height, 36, '$control, through the button entry the option extends');
+	assert.equal(group.overlap, 1, 'two adjacent edges are one line');
+	assert.equal(group.inputs, 3, 'one choice is radios');
+	assert.equal(group.boxes, 5, 'and more than one is checkboxes');
+	assert.equal(group.checked, 1, 'with the day the cell named already ticked');
+
+	// The tabs: a real arrow moves the focus and the selection together, and Home and End go to the
+	// ends. Design 203: the strip is one tab stop, so the keys are what move inside it.
+	const strip = await page.evaluate(() => {
+		const box = document.querySelector('#tabs-light')!;
+		const tabs = Array.from(box.querySelectorAll('[role="tab"]'));
+		return {
+			tabs: tabs.length,
+			panels: box.querySelectorAll('[role="tabpanel"]').length,
+			hidden: Array.from(box.querySelectorAll('[role="tabpanel"]'))
+				.filter((node) => node.hasAttribute('hidden')).length,
+			roving: tabs.map((node) => node.getAttribute('tabindex')).join(' '),
+			named: tabs.every((node) =>
+				document.querySelector(`[id="${node.getAttribute('aria-controls') ?? ''}"]`) !== null),
+			height: Math.round(tabs[0]!.getBoundingClientRect().height),
+		};
+	});
+	assert.equal(strip.tabs, 3, 'one tab per view');
+	assert.equal(strip.panels, 3, 'and one panel per tab, all of them mounted');
+	assert.equal(strip.hidden, 2, 'with the two that are not showing hidden');
+	assert.equal(strip.roving, '0 -1 -1', 'one tab stop, on the tab showing');
+	assert.ok(strip.named, 'every tab names a panel that is really on the page');
+	assert.equal(strip.height, 36, '$control, the height every control is');
+
+	assert.equal(await page.textContent('#tabs-value-light'), 'all');
+	await page.focus('#tabs-light [role="tab"]');
+	await page.keyboard.press('ArrowRight');
+	await page.waitForFunction(() => document.querySelector('#tabs-value-light')!.textContent === 'mine');
+	const moved = await page.evaluate(() => {
+		const tabs = Array.from(document.querySelectorAll('#tabs-light [role="tab"]'));
+		return {
+			focused: document.activeElement!.textContent,
+			selected: tabs.filter((node) => node.getAttribute('aria-selected') === 'true').length,
+			roving: tabs.map((node) => node.getAttribute('tabindex')).join(' '),
+		};
+	});
+	assert.equal(moved.focused, 'Mine', 'the arrow moved the focus');
+	assert.equal(moved.selected, 1, 'and the selection moved with it, which is automatic activation');
+	assert.equal(moved.roving, '-1 0 -1', 'and the one tab stop went with them');
+
+	// End is the last tab that can be chosen, and the third one is disabled here.
+	await page.keyboard.press('End');
+	await page.waitForFunction(() => document.querySelector('#tabs-value-light')!.textContent === 'mine');
+	assert.equal(await page.evaluate(() => document.activeElement!.textContent), 'Mine',
+		'the disabled tab at the end is stepped over rather than landed on');
+	await page.keyboard.press('Home');
+	await page.waitForFunction(() => document.querySelector('#tabs-value-light')!.textContent === 'all');
+
+	// The line type draws a $ringWidth rail in $accent under the tab showing, and no fill behind it.
+	const rail = await page.evaluate(() => {
+		const tabs = Array.from(document.querySelectorAll('#tabs-line-light [role="tab"]'));
+		const chosen = tabs.find((node) => node.getAttribute('aria-selected') === 'true')!;
+		const other = tabs.find((node) => node.getAttribute('aria-selected') !== 'true')!;
+		return {
+			width: getComputedStyle(chosen).borderBottomWidth,
+			colour: getComputedStyle(chosen).borderBottomColor,
+			quiet: getComputedStyle(other).borderBottomColor,
+			fill: getComputedStyle(chosen).backgroundColor,
+			height: Math.round(chosen.getBoundingClientRect().height),
+		};
+	});
+	assert.equal(rail.width, '3px', '$ringWidth');
+	assert.equal(rail.colour, 'rgb(28, 32, 39)', '$accent, which is the foreground in this theme');
+	assert.equal(rail.quiet, 'rgba(0, 0, 0, 0)', 'and the tabs beside it carry a transparent one');
+	assert.equal(rail.fill, 'rgba(0, 0, 0, 0)', 'an underlined tab is not also a filled one');
+	assert.equal(rail.height, 32, '$controlSm, through the size the group handed down');
 
 	// --- one button closes every section, and one opens every section ------------------------------
 

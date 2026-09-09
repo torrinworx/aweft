@@ -56,7 +56,7 @@ export const isMark = (value: unknown): value is Marked =>
 /**
  * What `mark` is: callable by name, and a tag under any slot name.
  *
- * The six slots this package's own components read are declared one by one rather than left to
+ * The eight slots this package's own components read are declared one by one rather than left to
  * the index signature, because `noUncheckedIndexedAccess` widens every read of an index signature
  * with `undefined`, and a JSX tag whose type may be undefined is not a tag the compiler will call.
  * A slot name outside that list works at run time and is written `mark('name', props, ...children)`
@@ -71,6 +71,8 @@ export interface Mark {
 	readonly default: MarkMaker;
 	readonly popup: MarkMaker;
 	readonly anchor: MarkMaker;
+	readonly tabs: MarkMaker;
+	readonly panels: MarkMaker;
 	/** `mark.popup` is the tag; `ui`'s `h` turns it into a mark rather than an element. */
 	readonly [slot: string]: MarkMaker;
 }

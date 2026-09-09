@@ -31,6 +31,12 @@ interface RecipeElement {
 	readonly childNodes: ArrayLike<unknown>;
 	readonly value: string;
 	readonly textContent: string | null;
+	/** On an `<input>`: whether it is ticked. */
+	readonly checked: boolean;
+	/** The scroll box: how wide the content is, how wide the box is, and where it is scrolled to. */
+	readonly scrollWidth: number;
+	readonly clientWidth: number;
+	scrollLeft: number;
 }
 
 declare const document: {
@@ -41,6 +47,7 @@ declare const document: {
 	querySelector(selector: string): RecipeElement | null;
 	querySelectorAll(selector: string): ArrayLike<RecipeElement>;
 	elementFromPoint(x: number, y: number): RecipeElement | null;
+	readonly documentElement: RecipeElement;
 };
 
 /** axe-core, as the preview page reaches it once the script tag is in. */
@@ -57,7 +64,12 @@ declare const axe: {
 	}>;
 };
 
-declare const window: { scrollTo(x: number, y: number): void; readonly scrollY: number };
+declare const window: {
+	scrollTo(x: number, y: number): void;
+	readonly scrollY: number;
+	readonly innerWidth: number;
+	readonly innerHeight: number;
+};
 
 declare const location: { readonly href: string; readonly pathname: string; readonly search: string };
 

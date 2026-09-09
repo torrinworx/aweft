@@ -1,8 +1,9 @@
 // Walking the tree by hand, because the light tree has no `contains` and no bubbling.
 //
-// One walk, called from the three places that need it: the dialog deciding which top-level branch
-// to leave reachable, `dismiss` deciding whether a mousedown landed inside, and the drop zone
-// deciding whether a click was already the input's own or a button's.
+// One walk, called from the four places that need it: the dialog deciding which top-level branch
+// to leave reachable, `dismiss` deciding whether a mousedown landed inside, the drop zone
+// deciding whether a click was already the input's own or a button's, and the tablist reading the
+// tabs out of the strip it was handed.
 //
 // This is not exported from the package.
 
@@ -59,4 +60,17 @@ export const findFrom = (target: unknown, wanted: (element: unknown) => boolean)
 		if (found !== null) return found;
 	}
 	return null;
+};
+
+/** Every element at or under `root` that `wanted` says yes to, in document order. */
+export const findAll = (root: unknown, wanted: (element: unknown) => boolean): unknown[] => {
+	const found: unknown[] = [];
+	const walk = (node: Walkable | null | undefined): void => {
+		if (node === null || node === undefined) return;
+		if (node.nodeType === 1 && wanted(node)) found.push(node);
+		for (let at = (node.firstChild ?? null) as Walkable | null; at !== null && at !== undefined;
+			at = (at.nextSibling ?? null) as Walkable | null) walk(at);
+	};
+	walk(root as Walkable | null);
+	return found;
 };

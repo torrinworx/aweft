@@ -15,7 +15,11 @@ export type ExampleComponent = (props: { mode?: unknown }) => unknown;
 export interface ExampleModule {
 	/** The component's export name from `@aweftjs/ui`. It is the section's id on the page. */
 	readonly name: string;
-	/** Where it sorts: controls from 10, fields from 30, composites from 40, text from 50. */
+	/**
+	 * Where it sorts: controls from 10, fields from 30, composites from 40, text from 50, the
+	 * display pieces from 60, the grouping pieces from 70 and the navigation pieces from 80
+	 * (design 197, amended). Two files may share a number; the page then sorts them by name.
+	 */
 	readonly order: number;
 	/** Every state, type and size of that one component. */
 	readonly Example: ExampleComponent;

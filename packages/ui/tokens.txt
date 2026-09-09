@@ -97,6 +97,7 @@ round
 saturate
 scrim
 shadowSm
+sheetWidth
 shiftBrightness
 slow
 space

@@ -143,6 +143,83 @@ defineTheme({
 		color: '$link',
 		textDecoration: 'underline',
 	},
+	// The one of a run that is showing now: the page a `Pagination` is on (design 201). A modifier
+	// and not a part, because it is the same button as the ones beside it, and `current` is the name
+	// of no entry, which is what design 193's rule asks of a segment.
+	button_current: { background: '$accent', color: '$accentForeground', borderColor: '$accent' },
+
+	// A run of buttons drawn as one control (design 200). The joining is `_children_` rules on this
+	// entry, because a group cannot put a segment in its children's class lists: the two ends keep
+	// their outer corners, everything between them has none, and each child after the first is
+	// pulled back by one border width so two adjacent edges are one line. A child with focus is
+	// positioned, because the ring is a box shadow and the neighbour that overlaps it would cut it
+	// in half. `position: relative` alone is what lifts it: a positioned element paints after every
+	// in-flow sibling, and only the focused child is positioned, so no z-index is needed and record
+	// 113's rule that this package writes none still holds.
+	//
+	// Every corner rule names a pseudo-class, and none of them is the bare `> *`. A button's own
+	// radius is one class and so is `.awN > *`, and the group asks the class cache first because it
+	// is the parent, so its rules are emitted first and a plain `> *` loses the tie: measured in
+	// Chromium, the second button in a group kept a 6px inner corner.
+	buttongroup: {
+		display: 'inline-flex',
+		alignItems: 'center',
+		'_children_*:not(:first-child):not(:last-child)': { borderRadius: 0 },
+		'_children_*:first-child': { borderRadius: '$radius 0 0 $radius' },
+		'_children_*:last-child': { borderRadius: '0 $radius $radius 0' },
+		'_children_*:only-child': { borderRadius: '$radius' },
+		'_children_* + *': { marginLeft: '-$borderWidth' },
+		'_children_*:focus-visible': { position: 'relative' },
+	},
+	buttongroup_vertical: {
+		flexDirection: 'column',
+		alignItems: 'stretch',
+		'_children_* + *': { marginLeft: 0, marginTop: '-$borderWidth' },
+		'_children_*:first-child': { borderRadius: '$radius $radius 0 0' },
+		'_children_*:last-child': { borderRadius: '0 0 $radius $radius' },
+		'_children_*:only-child': { borderRadius: '$radius' },
+	},
+
+	// A run of native inputs drawn as one control (design 202). The joining is `buttongroup`'s again,
+	// on this entry, because a `<label>` is not a `<button>` and the two groups are matched by
+	// different class lists.
+	togglegroup: {
+		display: 'inline-flex',
+		alignItems: 'center',
+		'_children_*:not(:first-child):not(:last-child)': { borderRadius: 0 },
+		'_children_*:first-child': { borderRadius: '$radius 0 0 $radius' },
+		'_children_*:last-child': { borderRadius: '0 $radius $radius 0' },
+		'_children_*:only-child': { borderRadius: '$radius' },
+		'_children_* + *': { marginLeft: '-$borderWidth' },
+		'_children_*:has(:focus-visible)': { position: 'relative' },
+	},
+	// One option: a label wearing the button look, wrapped around an input that is off the screen.
+	// The look is the button's through `extends`, so the size axis moves both at once, and `position`
+	// is what keeps the offscreen input inside this box rather than at the page's corner.
+	togglegroup_item: {
+		extends: ['button', 'button_quiet'],
+		position: 'relative',
+		userSelect: 'none',
+		'_cssProp_has(:checked)': {
+			background: '$accent',
+			color: '$accentForeground',
+			borderColor: '$accent',
+		},
+		// The ring belongs to the label, because the input inside it is a pixel nobody can see. The
+		// halo the root entry gives every themed element is taken back off the input for the reason
+		// `inputgroup_control` takes it off its own (design 200), and it is a rule about children
+		// because the input wears `offscreen`, which every other hidden control shares.
+		'_cssProp_has(:focus-visible)': {
+			borderColor: '$ring',
+			boxShadow: '0 0 0 $ringWidth color-mix(in srgb, $ring 50%, transparent)',
+		},
+		'_children_input:focus-visible': { boxShadow: 'none' },
+	},
+	// The size axis, extending the button's own for the reason `select_sm` extends `input_sm`
+	// (design 194): `extends` is per entry and does not follow into a modifier.
+	togglegroup_item_sm: { extends: 'button_sm' },
+	togglegroup_item_lg: { extends: 'button_lg' },
+	togglegroup_item_quiet: { borderColor: 'transparent', boxShadow: 'none' },
 
 	input: {
 		display: 'block',
@@ -170,6 +247,58 @@ defineTheme({
 	},
 	input_lg: { height: '$controlLg', minHeight: '$controlLg', padding: '$space $space4' },
 	input_invalid: { borderColor: '$danger' },
+
+	// A text field with something beside it inside the same box (design 200). The box is the control,
+	// so it takes the whole `input` look through `extends` and the element inside it takes none of
+	// it. Each size restates the horizontal padding for the reason `select_sm` does: the `input_sm`
+	// that `extends` pulls in sits after this entry in the chain and its `padding` shorthand would
+	// otherwise take the box's own back.
+	inputgroup: {
+		extends: 'input',
+		display: 'flex',
+		alignItems: 'center',
+		gap: '$space2',
+		padding: '0 $space3',
+		overflow: 'hidden',
+		// The ring belongs to the box, because a person sees one control. `pseudo()` writes `has(`
+		// as `:has(`, so this is the same spelling the button's icon padding rules use.
+		'_cssProp_has(:focus-visible)': {
+			borderColor: '$ring',
+			boxShadow: '0 0 0 $ringWidth color-mix(in srgb, $ring 50%, transparent)',
+		},
+	},
+	inputgroup_sm: { extends: 'input_sm', padding: '0 $space2' },
+	inputgroup_lg: { extends: 'input_lg', padding: '0 $space4' },
+	inputgroup_invalid: { borderColor: '$danger' },
+	inputgroup_control: {
+		appearance: 'none',
+		flex: '1 1 auto',
+		minWidth: 0,
+		height: '100%',
+		padding: 0,
+		border: 'none',
+		borderRadius: 0,
+		background: 'transparent',
+		color: 'inherit',
+		fontFamily: '$font',
+		fontSize: 'inherit',
+		lineHeight: 'inherit',
+		// The halo the root entry gives every themed element, turned off here so the box shows it
+		// instead. The outline is already off from there and is not said again, because an entry
+		// that turns one off has to name `$ring` and this one has no ring to name.
+		'_cssProp_focus-visible': { borderColor: 'transparent', boxShadow: 'none' },
+		_cssProp_placeholder: { color: '$mutedForeground' },
+	},
+	inputgroup_addon: {
+		display: 'flex',
+		alignItems: 'center',
+		flexShrink: 0,
+		color: '$mutedForeground',
+		fontFamily: '$font',
+		fontSize: 'inherit',
+		lineHeight: 'inherit',
+		whiteSpace: 'nowrap',
+	},
 
 	// A textarea is an input that grows. `resize: none` because the component sets the height
 	// itself, and a handle that fights it is a handle that loses on the next keystroke.
@@ -487,6 +616,27 @@ defineTheme({
 	},
 	card_tight: { padding: 0 },
 
+	// A card with parts in it (design 200). The column is a modifier rather than a change to `card`,
+	// so a `Paper` renders what it always rendered and only a `Card` stacks.
+	card_stack: { display: 'flex', flexDirection: 'column', gap: '$space4' },
+	card_head: { display: 'flex', flexDirection: 'column', gap: '$space' },
+	card_title: {
+		fontFamily: '$font',
+		fontSize: '$textLg',
+		lineHeight: '$textLgLine',
+		fontWeight: 600,
+		margin: 0,
+	},
+	card_description: {
+		fontFamily: '$font',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+		color: '$mutedForeground',
+		margin: 0,
+	},
+	card_body: { display: 'flex', flexDirection: 'column', gap: '$space2' },
+	card_foot: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '$space2' },
+
 	// It arrives from nothing and does not leave that way: what hides a popup is `display: none`
 	// written on the box the sink places, which is above this element and outside any theme.
 	popup: {
@@ -563,6 +713,58 @@ defineTheme({
 	},
 	dialog_body: { display: 'flex', flexDirection: 'column', gap: '$space2' },
 
+	// The same dialog against an edge (design 202). A modal `<dialog>` is centred by the host with
+	// `margin: auto`, so zeroing the margins and leaving one side `auto` is what anchors it, and the
+	// transform stays free for the motion. The border and the corner are the inner edge only.
+	dialog_sheet: {
+		// The width is the width: a dialog is content-box from the host, so `$sheetWidth` plus the
+		// padding and the border came to 417px, and the slide, which is `translateX(100%)`, moved it
+		// by that instead of by 24rem. Measured in Chromium.
+		boxSizing: 'border-box',
+		width: '$sheetWidth',
+		maxWidth: '100%',
+		height: '100%',
+		maxHeight: '100%',
+		margin: 0,
+		border: 'none',
+		borderRadius: 0,
+	},
+	// Each side says where it sits, which edge it is drawn on, and what it slides from. The
+	// translate replaces the scale the base entry starts from; it is written as a `transform`
+	// because that is the property `dialog`'s transition already names.
+	dialog_sheet_right: {
+		marginLeft: 'auto',
+		borderLeft: '$borderWidth solid $border',
+		borderRadius: '$radiusLg 0 0 $radiusLg',
+		_starting_: { transform: 'translateX(100%)' },
+		'_cssProp_:not([open])': { transform: 'translateX(100%)' },
+	},
+	dialog_sheet_left: {
+		marginRight: 'auto',
+		borderRight: '$borderWidth solid $border',
+		borderRadius: '0 $radiusLg $radiusLg 0',
+		_starting_: { transform: 'translateX(-100%)' },
+		'_cssProp_:not([open])': { transform: 'translateX(-100%)' },
+	},
+	dialog_sheet_top: {
+		width: '100%',
+		height: 'auto',
+		marginBottom: 'auto',
+		borderBottom: '$borderWidth solid $border',
+		borderRadius: '0 0 $radiusLg $radiusLg',
+		_starting_: { transform: 'translateY(-100%)' },
+		'_cssProp_:not([open])': { transform: 'translateY(-100%)' },
+	},
+	dialog_sheet_bottom: {
+		width: '100%',
+		height: 'auto',
+		marginTop: 'auto',
+		borderTop: '$borderWidth solid $border',
+		borderRadius: '$radiusLg $radiusLg 0 0',
+		_starting_: { transform: 'translateY(100%)' },
+		'_cssProp_:not([open])': { transform: 'translateY(100%)' },
+	},
+
 	// A tip is the page's own colours the other way up, which is the same contrast ratio read from
 	// the other side and so is compliant wherever the pair it inverts is.
 	tooltip: {
@@ -597,6 +799,14 @@ defineTheme({
 	// The platform has no `disabled` for a summary, so the pointer is taken away here and the focus
 	// order in the component.
 	disclosure_summary_disabled: { pointerEvents: 'none' },
+
+	// A stack of disclosures sharing one `name`, which is what makes the platform keep one of them
+	// open (design 202). The line belongs to the item and not to the box, so an accordion built out
+	// of a caller's own `DropDown`s draws the same stack.
+	accordion: { display: 'flex', flexDirection: 'column', width: '100%' },
+	accordion_item: {
+		'_cssProp_:not(:first-child)': { borderTop: '$borderWidth solid $border' },
+	},
 
 	filedrop: {
 		display: 'flex',
@@ -668,6 +878,383 @@ defineTheme({
 		background: 'linear-gradient(to right, $hue0, $hue60, $hue120, $hue180, $hue240, $hue300, $hue0)',
 	},
 
+	// --- the display pieces (design 199) ---------------------------------------------------------
+	//
+	// Seven things a page shows and nobody operates. Each paints its own text, because the root
+	// entry paints none (design 198), and each size is a segment after `type` (design 194).
+
+	// A badge is not a control, so its size axis is padding and text rather than `$control`: three
+	// of them down a column of a table would otherwise be three 36px blocks.
+	badge: {
+		display: 'inline-flex',
+		alignItems: 'center',
+		gap: '$space',
+		boxSizing: 'border-box',
+		padding: '$space $space2',
+		border: '$borderWidth solid transparent',
+		borderRadius: '$radius',
+		background: '$accent',
+		color: '$accentForeground',
+		fontFamily: '$font',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+		fontWeight: 500,
+		whiteSpace: 'nowrap',
+	},
+	badge_quiet: { background: '$muted', color: '$mutedForeground' },
+	badge_danger: { background: '$danger', color: '$dangerForeground' },
+	badge_outline: { background: 'transparent', borderColor: '$border', color: '$foreground' },
+	badge_sm: { padding: '0 $space' },
+	badge_lg: { padding: '$space $space3', fontSize: '$textSm', lineHeight: '$textSmLine' },
+
+	// A message about the page. One column, and two when it was given an icon: an empty first track
+	// is zero wide but the gap beside it is not, so an alert with no icon would carry the indent of
+	// one. The title and the body place themselves, so either alone lays out with no second rule.
+	alert: {
+		display: 'grid',
+		gridTemplateColumns: '1fr',
+		columnGap: '$space3',
+		rowGap: '$space',
+		boxSizing: 'border-box',
+		padding: '$space3 $space4',
+		border: '$borderWidth solid $border',
+		borderRadius: '$radius',
+		background: '$surface',
+		color: '$surfaceForeground',
+		fontFamily: '$font',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+	},
+	alert_lead: { gridTemplateColumns: 'auto 1fr' },
+	alert_danger: {
+		background: '$dangerSubtle',
+		color: '$dangerSubtleForeground',
+		borderColor: '$danger',
+	},
+	// The part is `symbol` and not `icon`, because `icon` is an entry of this theme and no segment
+	// may name one (design 193, amended). It spans both rows so the title and the body place
+	// themselves in the second column rather than wrapping under it.
+	alert_symbol: {
+		gridColumn: 1,
+		gridRow: '1 / span 2',
+		display: 'flex',
+		alignItems: 'center',
+		minHeight: '$textSmLine',
+	},
+	alert_title: { fontWeight: 600 },
+	alert_body: { color: '$mutedForeground' },
+
+	// A picture of a person, and the letters shown while it is not there. Both children stay in the
+	// tree and one of them carries `hidden`, which also takes it out of the accessibility tree; each
+	// part declares a `display` of its own, so the host's `[hidden]` rule loses and this says it.
+	avatar: {
+		boxSizing: 'border-box',
+		position: 'relative',
+		display: 'inline-block',
+		flexShrink: 0,
+		overflow: 'hidden',
+		width: '$control',
+		height: '$control',
+		borderRadius: '$radius',
+	},
+	avatar_sm: { width: '$controlSm', height: '$controlSm' },
+	avatar_lg: { width: '$controlLg', height: '$controlLg' },
+	avatar_round: { borderRadius: '50%' },
+	avatar_image: {
+		display: 'block',
+		width: '100%',
+		height: '100%',
+		objectFit: 'cover',
+		'_cssProp_:is([hidden])': { display: 'none' },
+	},
+	avatar_fallback: {
+		display: 'flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		width: '100%',
+		height: '100%',
+		background: '$muted',
+		color: '$mutedForeground',
+		fontFamily: '$font',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+		fontWeight: 500,
+		userSelect: 'none',
+		'_cssProp_:is([hidden])': { display: 'none' },
+	},
+
+	// The pulse, defined once and reached by both the dots and a skeleton (design 199). A keyframes
+	// block is named after the entry that owns it (design 111), so one entry is one `@keyframes` in
+	// the sheet however many chains reach it.
+	pulse: {
+		_keyframes_pulse: '0%, 80%, 100% { opacity: 0.35 } 40% { opacity: 1 }',
+		'_media_(prefers-reduced-motion: no-preference)': { animation: '$pulse $slow infinite' },
+	},
+
+	// A grey box standing in for something that has not arrived. It says nothing to a screen reader:
+	// the thing that is loading says that, and three boxes saying it three times is worse.
+	skeleton: {
+		extends: 'pulse',
+		display: 'block',
+		width: '100%',
+		height: '$textMdLine',
+		borderRadius: '$radiusSm',
+		background: '$muted',
+	},
+	skeleton_round: { borderRadius: '50%' },
+
+	// A key on the keyboard. `$target` wide at the least, so one letter is still something a finger
+	// could have hit.
+	kbd: {
+		display: 'inline-flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		boxSizing: 'border-box',
+		minWidth: '$target',
+		padding: '$space $space2',
+		border: '$borderWidth solid $border',
+		borderRadius: '$radiusSm',
+		background: '$muted',
+		color: '$mutedForeground',
+		fontFamily: '$fontMono',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+	},
+
+	// A bar filling up, drawn out of the three vendor pseudo-elements the way `slider` draws its
+	// track and thumb. They are spelled with their own colons because they are not in this package's
+	// pseudo-element table.
+	progress: {
+		appearance: 'none',
+		display: 'block',
+		boxSizing: 'border-box',
+		width: '100%',
+		height: '$space2',
+		border: 'none',
+		borderRadius: '$radius',
+		overflow: 'hidden',
+		background: '$muted',
+		color: '$accent',
+		'_cssProp_::-webkit-progress-bar': { background: '$muted' },
+		'_cssProp_::-webkit-progress-value': { background: '$accent' },
+		'_cssProp_::-moz-progress-bar': { background: '$accent' },
+	},
+	progress_sm: { height: '$space' },
+	progress_lg: { height: '$space3' },
+
+	// Nothing here yet, and what to do about it. The part is `symbol` for the reason `alert_symbol`
+	// is; it is sized in text, so the icon inside it, which is `1em`, follows.
+	empty: {
+		display: 'flex',
+		flexDirection: 'column',
+		alignItems: 'center',
+		justifyContent: 'center',
+		gap: '$space2',
+		padding: '$space6',
+		textAlign: 'center',
+		fontFamily: '$font',
+	},
+	empty_symbol: { color: '$mutedForeground', fontSize: '$text2xl', lineHeight: '$text2xlLine' },
+	empty_title: {
+		fontFamily: '$font',
+		fontSize: '$textLg',
+		lineHeight: '$textLgLine',
+		fontWeight: 600,
+		color: '$foreground',
+		margin: 0,
+	},
+	empty_description: {
+		fontFamily: '$font',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+		color: '$mutedForeground',
+		margin: 0,
+	},
+	empty_actions: {
+		display: 'flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		flexWrap: 'wrap',
+		gap: '$space2',
+		marginTop: '$space2',
+	},
+
+	// --- the table and the navigation pieces (design 201) ----------------------------------------
+
+	// The box a wide table scrolls inside, so the page does not. It is focusable in the component,
+	// because a box that scrolls and cannot be focused is unreachable from a keyboard.
+	table_scroll: { display: 'block', width: '100%', overflowX: 'auto' },
+
+	// Collapsed borders, so a row's line and the head's line are one edge rather than two.
+	table: {
+		width: '100%',
+		borderCollapse: 'collapse',
+		fontFamily: '$font',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+		color: '$foreground',
+	},
+	// Which rows, rather than what a row looks like, so it is a rule about children the way
+	// `buttongroup`'s joining is (design 201).
+	table_striped: { '_children_tbody > tr:nth-child(even)': { background: '$muted' } },
+	table_caption: {
+		captionSide: 'bottom',
+		padding: '$space2 $space3',
+		textAlign: 'left',
+		color: '$mutedForeground',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+	},
+	// The head draws the line under itself; every body row draws the line under itself. So a
+	// hand-written table gets the same rules from the same names whichever of the two it themes.
+	table_head: { borderBottom: '$borderWidth solid $border' },
+	// The row's part is `line` and not `row`, because `row` is an entry of this theme that lays an
+	// element out and no segment may name one (design 193, amended).
+	table_line: { borderBottom: '$borderWidth solid $border' },
+	table_heading: {
+		padding: '$space2 $space3',
+		textAlign: 'left',
+		fontWeight: 500,
+		color: '$mutedForeground',
+		whiteSpace: 'nowrap',
+	},
+	table_cell: { padding: '$space2 $space3', textAlign: 'left', verticalAlign: 'middle' },
+	// A column lines up its heading and its cells the same way, and a heading is a different element
+	// from a cell, so the alignment is a modifier of each of the two rather than one entry both
+	// reach: a class list holding `table_heading` reaches no key that starts `table_cell`.
+	table_cell_right: { textAlign: 'right' },
+	table_cell_center: { textAlign: 'center' },
+	table_heading_right: { textAlign: 'right' },
+	table_heading_center: { textAlign: 'center' },
+	// A dense table. The segment goes on the cells and not on the table, because a class list is
+	// written by the element that wears it and a table cannot reach its own cells (design 200).
+	table_heading_tight: { padding: '$space $space2' },
+	table_cell_tight: { padding: '$space $space2' },
+	table_foot: { borderTop: '$borderWidth solid $border', fontWeight: 500 },
+
+	// Where a person is, one level at a time. The separator is drawn here rather than asked for by
+	// name, the way the select's arrow is (design 195), so a breadcrumb renders with no icon pack.
+	breadcrumb: { fontFamily: '$font', fontSize: '$textSm', lineHeight: '$textSmLine' },
+	breadcrumb_list: {
+		display: 'flex',
+		alignItems: 'center',
+		flexWrap: 'wrap',
+		gap: '$space2',
+		listStyle: 'none',
+		margin: 0,
+		padding: 0,
+	},
+	breadcrumb_item: { display: 'flex', alignItems: 'center', gap: '$space2' },
+	breadcrumb_link: {
+		color: '$mutedForeground',
+		textDecoration: 'none',
+		borderRadius: '$radiusSm',
+		_cssProp_hover: { color: '$foreground', textDecoration: 'underline' },
+	},
+	breadcrumb_current: { color: '$foreground', fontWeight: 500 },
+	// The select's chevron turned the other way: two sides of an empty box, a quarter turn back, so
+	// the corner that is left points along the row instead of down.
+	breadcrumb_separator: {
+		boxSizing: 'border-box',
+		flexShrink: 0,
+		width: '$chevron',
+		height: '$chevron',
+		borderRight: '$borderWidth solid $mutedForeground',
+		borderBottom: '$borderWidth solid $mutedForeground',
+		transform: 'rotate(-45deg)',
+	},
+
+	// A run of page buttons. The buttons are `Button`s, so the only thing here is the row and the
+	// ellipsis; the page showing now is `button_current` above.
+	pagination: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '$space' },
+	pagination_gap: {
+		display: 'inline-flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		minWidth: '$target',
+		color: '$mutedForeground',
+		fontFamily: '$font',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+	},
+
+	// One set of panels with one showing, and the strip that picks between them (design 203). The
+	// strip is a box of its own inside the component's box, so the two are separate entries: the
+	// component stacks the strip and the panels, and the strip lays the tabs out.
+	tabs: { display: 'flex', flexDirection: 'column', gap: '$space3' },
+	// A strip that stands on its side stands beside what it is showing. Without this the panel
+	// would sit under a column of tabs and take the whole width, which is a stack of headings and
+	// not a set of tabs.
+	tabs_vertical: { flexDirection: 'row', alignItems: 'flex-start', gap: '$space4' },
+	tabs_list: {
+		display: 'inline-flex',
+		alignItems: 'center',
+		gap: '$space',
+		padding: '$space',
+		background: '$muted',
+		borderRadius: '$radius',
+	},
+	tabs_list_vertical: { flexDirection: 'column', alignItems: 'stretch' },
+	// The other type: no strip at all, one hairline the whole row stands on, and the tab showing
+	// draws its own line over that one.
+	tabs_list_line: {
+		gap: '$space4',
+		padding: 0,
+		background: 'transparent',
+		borderRadius: 0,
+		borderBottom: '$borderWidth solid $border',
+	},
+	tabs_panel: { flexGrow: 1, minWidth: 0 },
+	tab: {
+		display: 'inline-flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		gap: '$space2',
+		// A tab is a control and is the height every control is, whatever the host's own box model
+		// says about a `<button>`.
+		boxSizing: 'border-box',
+		minHeight: '$control',
+		padding: '$space $space3',
+		border: '$borderWidth solid transparent',
+		borderRadius: '$radiusSm',
+		background: 'transparent',
+		color: '$mutedForeground',
+		fontFamily: '$font',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+		fontWeight: 500,
+		whiteSpace: 'nowrap',
+		cursor: 'pointer',
+	},
+	// The size axis, one segment after the type (design 194).
+	tab_sm: {
+		minHeight: '$controlSm',
+		padding: '$space $space2',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+	},
+	tab_lg: { minHeight: '$controlLg' },
+	// The one showing is lifted out of the strip: the page's own ground under it, the page's own
+	// text on it, and the hairline every raised surface in this theme carries.
+	tab_selected: { background: '$background', color: '$foreground', boxShadow: '$shadowSm' },
+	// The line type: no box of its own, and a rail under the tab instead of a fill behind it.
+	tab_line: {
+		padding: '$space $space2',
+		background: 'transparent',
+		boxShadow: 'none',
+		borderRadius: 0,
+		borderBottom: '$ringWidth solid transparent',
+		// The strip's own hairline is under this one, so the tab's line covers it rather than
+		// sitting a pixel above it.
+		marginBottom: '-$borderWidth',
+	},
+	// The lift is taken back off here rather than in `tab_line`, because a chain is ordered by how
+	// far along the class list each entry matched and not by the order the entries are written in:
+	// `['tab', 'line', 'selected']` matches `tab_line` at the second segment and `tab_selected` at
+	// the third, so `tab_selected` is emitted last of the two and its fill would win. Measured
+	// before this moved: an underlined tab was raised as well.
+	tab_line_selected: { background: 'transparent', boxShadow: 'none', borderBottomColor: '$accent' },
+
 	text: {
 		fontFamily: '$font',
 		fontSize: '$textMd',
@@ -719,17 +1306,17 @@ defineTheme({
 	},
 
 	// Three dots, pulsing in turn. The motion is declared only inside the query that asks whether
-	// the person wants any (design 118), so reduced motion leaves three still dots.
+	// the person wants any (design 118), so reduced motion leaves three still dots. The keyframes
+	// and the animation are the `pulse` entry above, which a skeleton also extends (design 199).
 	dots: { display: 'inline-flex', alignItems: 'center', gap: '$space' },
 	dot: {
+		extends: 'pulse',
 		$dotSize: '6px',
 		display: 'inline-block',
 		width: '$dotSize',
 		height: '$dotSize',
 		borderRadius: '50%',
 		background: 'currentColor',
-		_keyframes_pulse: '0%, 80%, 100% { opacity: 0.35 } 40% { opacity: 1 }',
-		'_media_(prefers-reduced-motion: no-preference)': { animation: '$pulse $slow infinite' },
 	},
 	dot_second: { '_media_(prefers-reduced-motion: no-preference)': { animationDelay: '$fast' } },
 	dot_third: { '_media_(prefers-reduced-motion: no-preference)': { animationDelay: '$slow' } },

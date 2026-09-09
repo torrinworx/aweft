@@ -28,10 +28,15 @@ export const sizes: Readonly<Record<string, string>> = {
 
 	$target: '24px',
 
-	// The side of the empty box a select's arrow is drawn out of (design 195, amended). A size of
-	// the theme rather than a `$name` on the entry, so an application that wants a bigger arrow
-	// moves one value in the theme it already overrides.
+	// The side of the empty box a select's arrow is drawn out of (design 195, amended), and of the
+	// breadcrumb's separator after it (design 201). A size of the theme rather than a `$name` on the
+	// entry, so an application that wants a bigger arrow moves one value in the theme it already
+	// overrides.
 	$chevron: '8px',
+
+	// How wide a sheet is against the left or the right edge (design 202). A sheet along the top or
+	// the bottom is as tall as what is in it, so there is no height beside this.
+	$sheetWidth: '24rem',
 
 	$borderWidth: '1px',
 	$ringWidth: '3px',

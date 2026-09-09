@@ -1,12 +1,13 @@
 // A raised block: the `card` entry as a component.
 
 import { h } from './h.ts';
+import { through } from './source.ts';
 
 /** What `Paper` takes. Everything not named here goes to the element. */
 export interface PaperProps {
 	/** The theme variant. */
 	readonly type?: unknown;
-	/** Drop the padding, for a block whose children own their own edges. */
+	/** Drop the padding, for a block whose children own their own edges. A value or a cell. */
 	readonly tight?: unknown;
 	/** Decorate this node instead of building one. */
 	readonly element?: unknown;
@@ -32,6 +33,6 @@ export const Paper = (props: PaperProps): unknown => {
 	const { type, tight, element, theme, children, ...rest } = props;
 	return h(element ?? 'div', {
 		...rest,
-		theme: ['card', type, tight ? 'tight' : null, theme],
+		theme: ['card', type, through(tight, (held) => (held ? 'tight' : null)), theme],
 	}, ...(children ?? []));
 };

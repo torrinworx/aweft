@@ -221,6 +221,12 @@ mount(document.body, <Tone value="accent"><Label>hi</Label></Tone>);
 `node(context)` and `use(build)` on it. `transform(raw, parentValue, children)` runs on first read
 and again after `raw` changes; `raw` arrives exactly as written, so a cell arrives as a cell.
 
+`use(build)` calls `build` **once per mount of the component it hands back**, with the value read at
+that mount's own place in the tree. So two mounts under two different providers each get their own
+component, and a mount already on the page does not call `build` again when the value above it
+moves. A value that moves is read with `read(context)` or held in a cell the built component
+follows, not through `use`.
+
 A node has `id`, `parent`, `children` and `value()`. `children` is an observable array in mount
 order, so something above can watch what appears below it. `node(context)` answering null is how a
 component asks whether there is a provider above it at all.
@@ -250,9 +256,9 @@ const [popup, anchor] = categories(props.children, ['popup', 'anchor'], 'anchor'
 Each category has `items` and a `props` merged from every mark of that name. An unknown slot, or
 a bare child with no default slot, is an assert naming the slots the component knows.
 
-`mark.name` is declared for the six slots this package reads (`then`, `else`, `case`, `default`,
-`popup`, `anchor`). Any other name works at run time; in a TypeScript file write it as
-`mark('name', props, ...children)`.
+`mark.name` is declared for the eight slots this package reads (`then`, `else`, `case`, `default`,
+`popup`, `anchor`, `tabs`, `panels`). Any other name works at run time; in a TypeScript file write
+it as `mark('name', props, ...children)`.
 
 ## Control flow
 
@@ -356,6 +362,7 @@ a checkbox's theme is a checkbox that does nothing. There are no imperative hand
 | `Toggle` | `<input type="checkbox" role="switch">` | `value`, `label`, `disabled`, `onChange`, `type` | `sm`, `lg` | `toggle` |
 | `Slider` | `<input type="range">` | `value` (a number), `min`, `max`, `step`, `disabled`, `track` | `sm`, `lg` | `slider` |
 | `Select` | `<select>` in a `<span>` with its arrow | `value`, `options`, `display`, `placeholder`, `disabled`, `onChange` | `sm`, `lg` | `select` |
+| `ToggleGroup` | `<div role="group">` of `<label>`s over hidden radios or checkboxes | `value`, `options`, `display`, `multiple`, `label`, `disabled`, `onChange`, `type` | `sm`, `lg` | `toggle-group` |
 | `Paper` | `<div>` on the `card` entry | `type`, `tight` | | `paper` |
 | `LoadingDots` | three dots | `type`, `size`, `label` | a CSS length | `loading-dots` |
 | `Icon` | `<svg>` | `name`, `size`, `label`, `rot` | a CSS length | `icon` |
@@ -399,6 +406,17 @@ error clears the attribute is removed rather than set to `false`.
 the arrow keys, the wrapping and the roving focus are the platform's. `browser.test.ts` presses
 the real keys: Space on a checkbox, the arrows in a radio group, Home and End on a slider.
 
+**A `ToggleGroup` is that group drawn as buttons** (design 202). Each option is a `<label>` wearing
+the `button` look over a real `<input>` that is off the screen and still in the focus order, so the
+arrows move between them and Space toggles a checkbox with nothing written in the component. One
+choice is radios; `multiple` makes them checkboxes and the `value` cell a list, in the order the
+options were declared. That list is **rebuilt from `options` on every change**, so a value the cell
+was holding that is not among the options is dropped the first time anybody ticks anything: the
+order comes from the options and nothing else, and a cell seeded with a value the options do not
+have does not survive a click. `display` reads exactly as `Select` reads it. Unlike a `ButtonGroup`, it
+takes a `size`, because it renders its own options and can therefore put the segment in their class
+lists.
+
 **`Select` holds items, not the text the element carries.** The chosen row is the one that says it
 is chosen, and a change is read back as the position it happened at, so what the cell holds is
 always the item you put in `options` and adding, removing or reordering the list leaves the choice
@@ -421,9 +439,9 @@ through the `Icons` context.
 
 **This package ships no drawings** (design 144). `Icons` starts empty, and an application supplies
 a pack, a resolver, or both. This is not only about the `Icon` you write yourself: `DropDown`,
-`FileDrop`, `Modal` and `Validate` each mount one of their own, by name, so a page that mounts any
-of them and has no `Icons` provider above it asserts on its first render rather than rendering
-without the glyph. `Validate` is the one that surprises people, because its icon is a default
+`Accordion` (which is a stack of `DropDown`s), `FileDrop`, `Modal` and `Validate` each mount one of
+their own, by name, so a page that mounts any of them and has no `Icons` provider above it asserts
+on its first render rather than rendering without the glyph. `Validate` is the one that surprises people, because its icon is a default
 nobody asked for. Give the page a provider, or give the component its own `icon` prop. (`Select`
 needs none: its arrow is drawn by the theme, design 195.)
 `@aweftjs/icons` turns an installed icon set into exactly that:
@@ -525,10 +543,11 @@ import { ColorPicker, Default, DropDown, FileDrop, Modal, Tooltip, Validate, Val
 
 | component | what it is | its own props | example |
 |---|---|---|---|
-| `Modal` | a stage template: the act inside a native `<dialog>` | `label`, `noEsc`, `noClickEsc`, `type` | `modal` |
+| `Modal` | a stage template: the act inside a native `<dialog>` | `label`, `noEsc`, `noClickEsc`, `type` (`sheet`), `side` | `modal` |
 | `Default` | the stage template that adds nothing | none | `modal` |
 | `Tooltip` | `Detached` plus the hover and focus trigger | `label`, `enabled`, `locations`, `type` | `tooltip` |
-| `DropDown` | a `<details>` whose `<summary>` wears the `button` theme | `open`, `label`, `icon`, `iconOpen`, `iconClose`, `arrow`, `type`, `disabled` | `drop-down` |
+| `DropDown` | a `<details>` whose `<summary>` wears the `button` theme | `open`, `label`, `icon`, `iconOpen`, `iconClose`, `arrow`, `name`, `type`, `disabled` | `drop-down` |
+| `Accordion` | a `<div>` on `accordion` of `DropDown`s sharing one `name` | `name`, `items` of `{ label, content }`, `type`, `element` | `accordion` |
 | `FileDrop` | a drop zone with a real file input in it | `files`, `extensions`, `multiple`, `limit`, `clickable`, `disabled`, `onDrop`, `ready`, `type` | `file-drop` |
 | `Validate` | a check around a control, and the message it shows | `value`, `validate`, `signal`, `valid`, `error`, `showError`, `icon`, `type` | `validate` |
 | `ValidateContext` | the form's answer: every `Validate` below it | `value` | `validate` |
@@ -555,6 +574,20 @@ all call the stage's `close()`, so a modal that owns a history entry goes down t
 one you used (design 124). `noEsc` and `noClickEsc` turn the first two off. A `Modal` with no stage
 above it is an assert naming the call that shows one. The popup sink stays outside the dialog: wrap
 the modal's children in a `PopupContext` of their own to keep its popups inside it.
+
+**A sheet is a `Modal` with `type="sheet"`**, against an edge instead of in the middle, sliding in
+from it (design 202). `side` says which edge, `right` by default, and is read for no other type.
+Everything else is the same: the same stage, the same three ways to close it, the same backdrop.
+
+```tsx
+stage.open({ name: 'filters', template: (p) => <Modal label="Filters" type="sheet">{p.children}</Modal> });
+```
+
+**An `Accordion` is a stack of `DropDown`s that keeps one of them open**, which is the platform's
+own behaviour for a group of `<details>` sharing one `name` (design 202). Give it `items` and it
+renders the drop-downs for you; pass your own children instead and give each of them the same `name`
+and `theme="accordion_item"`. With no `name` it mints one off the render, so a server page and the
+hydration that adopts it stay one group.
 
 **A tip is on hover and on focus, and the anchor names it.** The children are the anchor, and a
 `<mark.popup>` replaces the label with markup. The panel sits inside the box `Detached` placed and
@@ -725,6 +758,173 @@ and `@import` from your own theme's directives.
 `recipes/ui/preview.html` shows the whole family in both modes, and the gallery's modifier demo is
 `recipes/ui/page.tsx`, both driven by `recipes/ui/main.ts`.
 
+## Display
+
+Seven things a page shows and nobody operates (design 199). Each is one native element with a theme
+on it, none takes a handler, and none takes a value the way a control does.
+
+```tsx
+import { Alert, Avatar, Badge, Empty, Kbd, Progress, Skeleton } from '@aweftjs/ui';
+```
+
+| component | the element | its own props | `size` | example |
+|---|---|---|---|---|
+| `Badge` | `<span>` on `badge` | `label`, `type` (`quiet`, `danger`, `outline`), `icon`, `element` | `sm`, `lg` | `badge` |
+| `Alert` | `<div role="alert">` or `<div role="status">` on `alert` | `title`, `icon`, `type` (`danger`), `element`, children as the body | | `alert` |
+| `Avatar` | `<span>` on `avatar`, holding an `<img>` and a `<span>` | `src`, `alt`, `fallback`, `round` | `sm`, `lg` | `avatar` |
+| `Skeleton` | `<div aria-hidden="true">` on `skeleton` | `width`, `height`, `round` | | `skeleton` |
+| `Kbd` | `<kbd>` on `kbd` | `label`, children | | `kbd` |
+| `Progress` | `<progress max="1">` on `progress` | `value` (0 to 1, or nothing), `label`, `element` | `sm`, `lg` | `progress` |
+| `Empty` | `<div>` on `empty` | `icon`, `title`, `description`, `element`, children as the actions | | `empty` |
+
+**An avatar shows its letters until its picture loads, and again if it fails.** Both children stay
+in the tree and whichever is not showing carries `hidden`, so it is out of the accessibility tree as
+well as off the screen. With no `src` there is no `<img>` at all. `round` is true unless you set it
+false.
+
+**A progress with no value is indeterminate.** `value` is a fraction of 1, so nothing has to divide;
+`null` or nothing leaves the attribute off, which is what the platform reads as waiting and draws as
+the moving bar. A number outside 0 to 1 is clamped to it, and anything that is not a finite number,
+`NaN` and a string of digits included, is indeterminate rather than written through. Give it a
+`label`: without one it has no name for a screen reader.
+
+**A skeleton announces nothing.** It is `aria-hidden`, because the thing that is loading is what
+says so and three grey boxes saying it three times is worse than silence. `width` and `height` go
+through `style`, so a bare number is pixels and any CSS length works.
+
+**A badge's size is padding and text, not a height.** A badge is not a control, so `$control` is
+the wrong number for it: `sm` tightens the padding and `lg` widens it and takes the next text step.
+
+**An alert's icon is yours.** This package ships no drawings, so an `Icon` by name needs an `Icons`
+provider above it and there is no default icon here. The box is one column until you give it one.
+
+## Grouping
+
+Three components whose whole job is what they put around other components (design 200).
+
+```tsx
+import { ButtonGroup, Card, InputGroup } from '@aweftjs/ui';
+```
+
+| component | the element | its own props | example |
+|---|---|---|---|
+| `Card` | `<div>` on `card` with the `stack` segment | `title`, `description`, `foot`, `type`, `tight`, `element`, children as the body | `card` |
+| `ButtonGroup` | `<div role="group">` on `buttongroup` | `label`, `vertical`, `element`, children as the buttons | `button-group` |
+| `InputGroup` | a `<div>` on `inputgroup` around an `<input>` | `leading`, `trailing`, and every `TextField` prop | `input-group` |
+
+**`Card` and `Paper` are the same entry.** `Paper` is the bare block; `Card` adds the head, the body
+and the foot and the `$space4` column between them, which is the `card_stack` modifier rather than a
+change to `card`. So a `Paper` renders what it always rendered.
+
+**A `ButtonGroup` takes no `size`.** A class list is written by the element that wears it, so a group
+cannot put a segment in its children's lists; give each button its own `size`. What the group does do
+is take the inner corners off, keep the outer ones, and pull each button after the first back by
+`$borderWidth` so two adjacent borders read as one line.
+
+**An `InputGroup` is a `TextField` with addons.** The box carries the border, the radius, the fill and
+the height, and the `<input>` inside it carries none of them, so the two read as one control. The
+focus ring is on the box: tabbing into the input rings the whole thing. `leading` and `trailing` take
+anything mountable, and text is wrapped on `inputgroup_addon` for you, so an `Icon` or a
+`Button` of `size="icon"` goes in as it is. The label, the description, the error and the ARIA are
+`TextField`'s own wiring, so a `Field` around either behaves the same way.
+
+## Navigation and data
+
+Where a person is, and what they are looking at (designs 201, 203).
+
+```tsx
+import { Breadcrumb, Pagination, Tab, TabPanel, Table, Tabs } from '@aweftjs/ui';
+```
+
+| component | the element | its own props | example |
+|---|---|---|---|
+| `Table` | a `<table>` on `table`, inside a `<div>` on `table_scroll` | `columns`, `rows`, `cell`, `caption`, `foot`, `label`, `striped`, `tight`, `type`, `element` | `table` |
+| `Breadcrumb` | a `<nav>` on `breadcrumb` around an `<ol>` | `items` of `{ label, href }`, `label`, `element` | `breadcrumb` |
+| `Pagination` | a `<nav>` on `pagination` of quiet `Button`s | `page` (a cell), `count`, `siblings`, `onChange`, `size`, `label`, `element` | `pagination` |
+| `Tabs` | a `<div>` on `tabs` around a `<div role="tablist">` on `tabs_list` and the panels | `value` (a cell), `tabs` of `{ value, label, disabled, content }`, `orientation`, `type` (`line`), `size`, `label`, `onChange`, `element` | `tabs` |
+| `Tab` | a `<button type="button" role="tab">` on `tab` | `value`, `label`, `disabled`, `element` | `tabs` |
+| `TabPanel` | a `<div role="tabpanel" tabindex="0">` on `tabs_panel` | `value`, `element` | `tabs` |
+
+**The table's entries work without the component.** Write your own
+`<table theme="table">` with `<thead theme="table_head">`, `<tr theme="table_line">`,
+`<th theme="table_heading">` and `<td theme="table_cell">` and you get the whole look. `Table` is
+the common case: `columns` is a list of `{ key, label, align, width }` or of plain strings, `rows`
+is a list or a cell of one, and `cell` is `(row, column) => anything mountable`, defaulting to
+`String(row[column.key])`.
+
+**Rows go through `each`, so pushing one inserts one `<tr>`.** Every row therefore renders the same
+node shape; `packages/dom/README.md` says what a `cell` that varies its shape costs. A `rows` cell
+holding anything but a list, which is what one holds before the first fetch answers, reads as no
+rows.
+
+**A wide table scrolls in its own box**, which carries `tabindex="0"` so a keyboard can reach the
+scroll. Give the table a `caption` or a `label`: without one it has no name for a screen reader.
+
+**A breadcrumb's links are plain anchors with no `target`.** That is what lets a router take the
+click: `createRouter(...).links(root)` intercepts same-origin anchors and leaves alone anything with
+a target. So a breadcrumb inside a routed page navigates with no reload and no handler.
+
+**Pagination shows the first page, the last, and `siblings` each side of the current one**, with an
+`aria-hidden` ellipsis where a run was left out. `page` is a cell counted from 1; previous is
+disabled on page 1 and next on the last. The page showing now carries `aria-current="page"`.
+
+**A page outside the count is clamped, and the cell is written with the clamp.** `count` shrinking
+under the page it was on is what a filter does every time, and the page it leaves behind has no
+button, no `aria-current` and a dead Next. So the component moves to the last page, writes `page`
+and calls `onChange` with it (the event argument is null, because nobody pressed anything). A
+`count` of 0 renders no page buttons and both arrows off, and writes nothing: there is no page to
+be on.
+
+**A strip of tabs is one stop in the Tab order, and the arrows move inside it** (design 203). Tab
+lands on the tab showing, and the next Tab leaves the strip for that tab's panel rather than walking
+to the next tab. Right and Left move one tab, wrapping at each end; Down and Up do instead when
+`orientation` is `vertical`; Home and End go to the ends. A `disabled` tab is stepped over rather
+than landed on, and it says so with `aria-disabled` so a screen reader still reads it out.
+
+**Arriving on a tab chooses it.** The arrows move the selection as well as the focus, so holding
+Right shows each panel in turn. That is what the roving `tabindex` is for: the tab showing carries
+`0` and every other carries `-1`. All of it is one internal behaviour, `tablist.ts`, the fifth
+beside the field wiring, the dismiss, the dialog and the tooltip trigger (design 129); none of the
+five is exported, and each is tested once on its own.
+
+```tsx
+<Tabs label="Views" value={view} tabs={[
+	{ value: 'all', label: 'All', content: <All /> },
+	{ value: 'mine', label: 'Mine', content: <Mine /> },
+]} />
+```
+
+**Every panel stays mounted, and the ones not showing carry `hidden`**, so coming back to a panel
+finds it as it was left. Wrap a panel's contents in a `Shown` to have them built again instead.
+
+**`tabs` is the common case; two marks are the long way.** The tabs go inside the strip and the
+panels go outside it, and a component may not read another component's props to tell them apart, so
+a caller who writes them out says which is which:
+
+```tsx
+<Tabs label="Sections">
+	<mark.tabs><Tab value="left" label="Left" /></mark.tabs>
+	<mark.panels><TabPanel value="left">the first</TabPanel></mark.panels>
+</Tabs>
+```
+
+With no `value` the component keeps a cell of its own and starts on the first tab, and a cell you
+passed holding nothing is left holding nothing: choosing for you would be a write you did not ask
+for. Each tab and its panel name each other with `aria-controls` and `aria-labelledby`, off ids
+minted from the render's counter, so a page rendered on a server and the hydration that adopts it
+agree.
+
+**The tab showing leaving the `tabs` list moves the selection to the first tab anyone can choose.**
+Otherwise the value names nothing: every tab reads `tabindex="-1"`, so the strip is not in the Tab
+order at all, and every panel is `hidden`, so the page shows nothing. The cell is written and
+`onChange` is called with the new value (the event argument is null). With every tab `disabled`,
+nothing is chosen and the first tab keeps the stop, so the strip is still reachable. Tabs written
+out in the two marks are your own markup and are not read this way; taking one out is a change you
+made to your own tree.
+
+**A `TabPanel` whose `value` no `Tab` has is refused**, because its `aria-labelledby` would name an
+id that is not on the page, which no browser reports.
+
 ## The look
 
 A default theme ships in light and dark. It is what makes `theme="button"` a button, and it is the
@@ -864,12 +1064,29 @@ ask for. Everything else is yours to define.
 | `card_tight` | that card with no padding |
 | `field`, `field_inline`, `field_responsive` | what a labelled control puts around itself, and what `Field` lays out: a column, a `$control`-tall row, or a column that turns into one from 28rem of its container |
 | `field_group`, `field_set`, `field_legend` | the stack a form is, a fieldset with the host's frame taken off, and its heading |
-| `dots`, `dot` | the three pulsing dots of `LoadingDots` |
+| `dots`, `dot`, `pulse` | the three pulsing dots of `LoadingDots`, and the one keyframes block they and `skeleton` share |
+| `badge` and its `quiet`, `danger`, `outline`, `sm` and `lg` | a short label on a fill, sized by its padding and its text rather than by `$control` |
+| `alert`, `alert_lead`, `alert_symbol`, `alert_title`, `alert_body` | a message about the page: a grid of one column, two when it was given an icon |
+| `avatar`, `avatar_image`, `avatar_fallback` and its `sm`, `lg`, `round` | a picture of a person and the letters shown without one; the part that is not showing carries `hidden` |
+| `skeleton`, `skeleton_round` | a grey box standing in for something that has not arrived, pulsing on `pulse` |
+| `kbd` | a key on the keyboard: `$fontMono` at `$textXs`, at least `$target` wide |
+| `progress` and its `sm` and `lg` | a bar filling up, drawn on the three vendor pseudo-elements |
+| `empty`, `empty_symbol`, `empty_title`, `empty_description`, `empty_actions` | nothing here yet, and what to do about it |
+| `card_stack`, `card_head`, `card_title`, `card_description`, `card_body`, `card_foot` | what `Card` adds to `card`; a `Paper` reaches none of them |
+| `buttongroup`, `buttongroup_vertical` | a run of buttons drawn as one control, joined by `_children_` rules on the entry |
+| `togglegroup`, `togglegroup_item` and its `sm`, `lg`, `quiet` | the same joining over `<label>`s that extend the button entry and take the fill under `:has(:checked)` |
+| `button_current` | the one of a run that is showing now: the page a `Pagination` is on |
+| `table`, `table_scroll`, `table_head`, `table_line`, `table_heading`, `table_cell`, `table_caption`, `table_foot` and the `striped`, `right`, `center`, `tight` modifiers | a table: collapsed borders, a hairline under the head and under each row, and a box a wide one scrolls in. The row's part is `line` and not `row`, because `row` is an entry of its own |
+| `breadcrumb`, `breadcrumb_list`, `breadcrumb_item`, `breadcrumb_link`, `breadcrumb_current`, `breadcrumb_separator` | a trail of links and the chevron between them, drawn out of the same `$chevron` box the select's arrow is |
+| `pagination`, `pagination_gap` | a row of page buttons, and the ellipsis where a run was left out |
+| `inputgroup`, `inputgroup_control`, `inputgroup_addon` and its `sm`, `lg`, `invalid` | the `input` look on a box with addons in it, and the input inside it with none of it |
 | `icon` | an icon, sized in `em` so it follows the text |
 | `row`, `column`, `divider` | laying things out in a line, with the seven modifiers above |
 | `dialog`, `dialog_head`, `dialog_body` | a modal dialog, its heading row and its content; the scrim is on `::backdrop` |
+| `dialog_sheet` and its `left`, `right`, `top`, `bottom` | the same dialog against an edge, anchored by margin and sliding in from it |
 | `tooltip` | a tip: the page's own colours the other way up |
 | `disclosure`, `disclosure_summary` | a `<details>` and the summary that wears the `button` entry |
+| `accordion`, `accordion_item` | a stack of those, with a `$border` line between one and the next |
 | `filedrop` and its `dragging`, `prompt`, `input`, `list` and `entry` | a drop zone, its prompt and its listing |
 | `validate` | the message a `Validate` shows, beside its icon |
 | `colorpicker`, `colorpicker_swatch`, `colorpicker_track` and its `hue` | four sliders and the colour they name |
