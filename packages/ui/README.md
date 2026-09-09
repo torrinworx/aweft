@@ -526,8 +526,9 @@ and `end` mean across the page on both.
 <div theme={['row', 'fill', 'spread']}><span>left</span><span>right</span></div>
 ```
 
-`recipes/ui/catalogue.html` is every one of them in every state, in both modes, driven in Chromium
-by `recipes/ui/main.ts` with axe-core over it.
+`recipes/ui/catalogue.html` is every one of them in every state, in both modes, one page per
+component at `#/<Component>`, driven in Chromium by `recipes/ui/main.ts` with axe-core over every
+page.
 
 ## Laying a form out
 

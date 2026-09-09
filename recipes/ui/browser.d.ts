@@ -37,6 +37,10 @@ interface RecipeElement {
 	readonly scrollWidth: number;
 	readonly clientWidth: number;
 	scrollLeft: number;
+	/** The same three down the page, which is how the catalogue's nav scrolls. */
+	readonly scrollHeight: number;
+	readonly clientHeight: number;
+	scrollTop: number;
 }
 
 declare const document: {

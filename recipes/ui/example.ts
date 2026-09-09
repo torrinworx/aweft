@@ -1,8 +1,8 @@
 // What a catalogue example is (design 197): a module the page finds, not a page that lists it.
 //
-// A file under `examples/` exports `name`, `order` and `Example`, and `catalogue.tsx` collects
-// every one of them with the bundler's glob. The id convention lives here too, so an example says
-// which part it is naming and this file adds the mode.
+// A file under `examples/` exports `name` and `Example`, and `catalogue.tsx` collects every one of
+// them with the bundler's glob. The id convention lives here too, so an example says which part it
+// is naming and this file adds the mode.
 //
 // Every example imports `h` from `@aweftjs/ui`, whether or not it calls it: that import is what its
 // JSX compiles to, and a file that binds no `h` of its own gets `dom`'s, which knows nothing about
@@ -13,14 +13,17 @@ export type ExampleComponent = (props: { mode?: unknown }) => unknown;
 
 /** What every file under `examples/` exports. */
 export interface ExampleModule {
-	/** The component's export name from `@aweftjs/ui`. It is the section's id on the page. */
+	/**
+	 * The component's export name from `@aweftjs/ui`. It is the act's name, its URL and the id of
+	 * the page the catalogue renders for it.
+	 */
 	readonly name: string;
 	/**
-	 * Where it sorts: controls from 10, fields from 30, composites from 40, text from 50, the
-	 * display pieces from 60, the grouping pieces from 70 and the navigation pieces from 80
-	 * (design 197, amended). Two files may share a number; the page then sorts them by name.
+	 * What the one-page catalogue grouped by. Nothing reads it since design 226 gave each component
+	 * a page of its own and put the nav in alphabetical order; the files still declare it and the
+	 * next pass through them takes it out.
 	 */
-	readonly order: number;
+	readonly order?: number;
 	/** Every state, type and size of that one component. */
 	readonly Example: ExampleComponent;
 }

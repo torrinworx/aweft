@@ -9,8 +9,8 @@ Three pages.
   nothing else, with the whole `Typography` family in its own section. This is the page you read to
   judge the look as a whole.
 - **The catalogue** (`catalogue.html`): every component the package exports, in every state, type
-  and size, in both modes, one section per component. This is the page you read to find out what a
-  component looks like.
+  and size, in both modes, one routed page per component. This is the page you read to find out what
+  a component looks like.
 
 ## See them
 
@@ -23,6 +23,10 @@ the gate builds, so what you click is what the gate drives. The config says `app
 because these are three pages and not one application: a path that is not one of them answers 404,
 where a single-page server would answer 200 with the gallery's markup and leave a typo looking like
 a page whose every assertion fails.
+
+The catalogue names each component in the URL's hash, `/catalogue.html#/Button`, which is a link you
+can copy and reload. That is why it is the hash and not a path: a path per component is a path this
+server has no file for, and it answers 404 (design 226).
 
 ## What the gate does with it
 
@@ -46,9 +50,11 @@ hover lays the state tint on and leaves the role underneath it, that a real Tab 
 `$ring` and takes the border with it, that reduced motion takes the transition to zero, and that
 axe-core finds no WCAG 2.2 AA violation.
 
-On the catalogue: that every component the package exports has a section, that the nav has a link
-per section and clicking one scrolls that section to the top, and that one button closes every
-section and another opens every one. Then, with everything open: that every control is the native
+On the catalogue: that every component the package exports has a page, that the nav lists them
+alphabetically with the one showing marked, that its box is no taller than the viewport and scrolls
+inside it, that typing in the search narrows the list to the names that match and Escape brings them
+back, that a copied URL reloads onto the page it names and the back button returns to the page
+before it. Then, on each component's own page: that every control is the native
 element and nothing on the page is drawn out of `div`s; that a button is 32, 36 and 40 pixels tall
 at `sm`, nothing and `lg`, that an icon button is a square at each of the three, and that a select
 carrying its own arrow is still 36 pixels tall with the arrow an 8 pixel box 12 pixels in from its
@@ -60,21 +66,24 @@ is checked before the submit signal and everything after it, with a formatting v
 the value back; that the picker's sliders are real range inputs and End on the hue writes the cell;
 that a form laid out with the `field_group`, `field_set` and `field` entries puts its responsive
 field in a row at the pane's width, with the group declaring the container that measurement is taken
-against; and
-that axe-core finds no WCAG 2.2 AA violation with both modes showing.
+against; and that axe-core finds no WCAG 2.2 AA violation on any page with both modes showing.
 
-## Writing an example (design 197)
+The catalogue is read with motion turned off. A component's colours arrive on a transition when the
+page it is on is built, so a colour read in the frame after a navigation is a colour on its way
+somewhere; the motion itself is asserted on the preview page, where nothing navigates.
+
+## Writing an example (designs 197 and 226)
 
 A file under `examples/` exports `name`, the component's export name from `@aweftjs/ui` (or, for the
-one section that shows theme entries rather than a component, a name `main.ts` lists as needing no
-export); `order`, a
-number that puts controls first (from 10), then fields (30), then composites (40), then text (50);
-and `Example`, a component taking `{ mode }` that renders every state, type and size of that one
-component. Every id on the page is `<part>-<mode>`, made with `ids(props.mode)` from `example.ts`,
-so `at('button-quiet')` is `button-quiet-light` in the left pane and `button-quiet-dark` in the
-right. The page finds the file itself, with the bundler's glob, and sorts by `order` then `name`.
-A component the package exports with no example file turns the gate red, unless the driver names it
-as one of the contexts, systems or head tags there is nothing to look at.
+one page that shows theme entries rather than a component, a name `main.ts` lists as needing no
+export); and `Example`, a component taking `{ mode }` that renders every state, type and size of
+that one component. Every id on the page is `<part>-<mode>`, made with `ids(props.mode)` from
+`example.ts`, so `at('button-quiet')` is `button-quiet-light` in the left pane and
+`button-quiet-dark` in the right. The page finds the file itself, with the bundler's glob, and makes
+one act of it: `name` is the act, its URL after `#/`, and the id of the article the page renders.
+The nav lists the names in alphabetical order. A component the package exports with no example file
+turns the gate red, unless the driver names it as one of the contexts, systems or head tags there is
+nothing to look at.
 
 Every example imports `h` from `@aweftjs/ui`, whether or not it calls it. That import is what its
 JSX compiles to, and a file that binds no `h` of its own gets `dom`'s, which knows nothing about
