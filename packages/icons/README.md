@@ -9,7 +9,7 @@ npm install @iconify-json/lucide
 ```
 
 The sets are optional peers, so nothing is installed until you pick one. Any published set works:
-`@iconify-json/lucide`, `@iconify-json/mdi`, `@iconify-json/tabler`.
+`@iconify-json/lucide`, `@iconify-json/mdi`, `@iconify-json/tabler`, `@iconify-json/svg-spinners`.
 
 ## Naming an icon in your source
 
@@ -82,6 +82,30 @@ put a pack in front:
 ```
 
 The nearest source wins, so your pack answers and nothing else changes.
+
+## A spinner that moves
+
+`@aweftjs/ui` ships no drawings and its default loader is three pulsing spans. For a drawn one,
+`svg-spinners` is a set like any other and its icons carry their own motion:
+
+```
+npm install @iconify-json/svg-spinners
+```
+
+```tsx
+import { Icon, LoaderContext } from '@aweftjs/ui';
+import spinner from '@aweftjs/icons/svg-spinners/3-dots-fade';
+
+<LoaderContext value={{ loading: () => <Icon name={spinner} size="1.25em" /> }}><App /></LoaderContext>
+```
+
+That one line covers every wait in `ui`: a `suspend`, a `Button` running a promise, and a
+`FileDrop` entry being uploaded.
+
+Nothing special happens for an animated set. `Icon` writes an icon's body into the element as
+markup, so the `<animate>` elements inside these drawings are ordinary SVG animation the moment the
+page has them, on a fresh mount and on markup a server wrote. That is checked in `ui`'s own suite,
+"an animated body is written through as it is".
 
 ## A name you only have when the page runs
 

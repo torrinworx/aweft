@@ -51,6 +51,39 @@ test('an icon is built from the data, and the body is inside it as real nodes', 
 	stop();
 });
 
+test('an animated body is written through as it is', () => {
+	// A set whose drawings carry their own motion is an ordinary set to this package: the body goes
+	// into the element as markup (design 131), so an `<animate>` inside it is a real SVG animation
+	// the moment the element is on a page (design 219). The fixture is written here; nothing is
+	// installed and no icon data is copied.
+	const spinning: IconData = {
+		body: '<circle cx="6" cy="6" r="3"><animate attributeName="opacity" dur="1s" values="1;0.2" repeatCount="indefinite"/></circle>',
+		width: 12,
+		height: 12,
+	};
+
+	const { root, stop } = page(h(Icon as never, { name: spinning }));
+	const animate = first(root, 'animate');
+	assert.equal(animate.getAttribute('attributeName'), 'opacity',
+		'the animation is a node in the tree with its attributes intact');
+	assert.equal(animate.getAttribute('dur'), '1s');
+	assert.equal(animate.getAttribute('repeatCount'), 'indefinite');
+	assert.equal(first(root, 'circle').getAttribute('r'), '3', 'and it is inside the shape it drives');
+	stop();
+});
+
+test('an animated body survives a static render, so the markup a server writes still moves', async () => {
+	const spinning: IconData = {
+		body: '<rect width="4" height="4"><animate attributeName="x" dur="1s" values="0;8" repeatCount="indefinite"/></rect>',
+		width: 12,
+		height: 12,
+	};
+
+	const markup = await render(h(Icon as never, { name: spinning }), { context: context() });
+	assert.match(markup, /<animate attributeName="x" dur="1s" values="0;8" repeatCount="indefinite">/,
+		'the animation is serialized with the rest of the drawing');
+});
+
 test('a nameless icon is hidden from assistive technology, and a labelled one is an image', () => {
 	const quiet = page(h(Icon as never, { name: square }));
 	const hidden = first(quiet.root, 'svg');

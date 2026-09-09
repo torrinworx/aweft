@@ -8,9 +8,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { mutable, mutableArray } from '@aweftjs/core';
-import { createDocument, parseHtml } from '@aweftjs/dom';
+import { createDocument, parseHtml, toHtml } from '@aweftjs/dom';
 import type { ElementLike, LightElement, NodeLike } from '@aweftjs/dom';
-import { FileDrop, Icons, context, h, hydrate, mount, render } from '@aweftjs/ui';
+import { FileDrop, Icons, LoaderContext, context, h, hydrate, mount, render } from '@aweftjs/ui';
 
 import { testIcons } from './fixtures/icons.ts';
 
@@ -520,4 +520,61 @@ test('an onDrop that throws is reported and the list keeps the entry', () => {
 	} finally {
 		globalThis.queueMicrotask = real;
 	}
+});
+
+// --- the wait ---------------------------------------------------------------------------------
+
+/** A zone under a `LoaderContext`, so what a loading row shows is what the provider named. */
+const waiting = (loading: unknown): {
+	html(): string;
+	list: ReturnType<typeof mutableArray<Entry>>;
+	give(...given: Record<string, unknown>[]): void;
+	stop(): void;
+} => {
+	const list = mutableArray<Entry>();
+	const document = createDocument();
+	const inside = answered(h(FileDrop as never, { files: list }));
+	const stop = mount(document.body, loading === null
+		? inside
+		: h(LoaderContext, { value: { loading: loading as never } }, inside));
+	const input = byTag(document.body.firstChild, 'input');
+	return {
+		html: () => toHtml(document.body.childNodes),
+		list,
+		give: (...given) => {
+			(input as unknown as Record<string, unknown>)['files'] = given;
+			fire(input, 'change');
+		},
+		stop: () => { stop(); },
+	};
+};
+
+test('a loading entry shows the loader the context named', () => {
+	// Design 219: the zone was the one wait in this package that showed nothing. The application
+	// says it is uploading by writing the entry back, which is the edit the list hears.
+	const Uploading = (): unknown => h('b', {}, 'sending');
+	const held = waiting(Uploading);
+	held.give(file('one.png', 'image/png'));
+	assert.doesNotMatch(held.html(), /<b>sending<\/b>/, 'a ready entry is not waiting for anything');
+
+	held.list[0] = { ...held.list[0]!, status: 'loading' };
+	assert.match(held.html(), /<b>sending<\/b>/, 'the row shows the loader the page named');
+	assert.match(held.html(), /one\.png/, 'and still says which file it is');
+
+	held.list[0] = { ...held.list[0]!, status: 'ready' };
+	assert.doesNotMatch(held.html(), /<b>sending<\/b>/, 'and takes it away when the upload lands');
+	held.stop();
+});
+
+test('a loading entry with no provider above it shows the dots', () => {
+	// The shipped default, the same one `Button` falls back to. `LoadingDots` with no
+	// label is a hidden span holding three empty ones, which is what is looked for here.
+	const held = waiting(null);
+	held.give(file('one.png', 'image/png'));
+	const dots = /<span aria-hidden="true"[^>]*><span[^>]*><\/span><span[^>]*><\/span><span[^>]*><\/span><\/span>/;
+	assert.doesNotMatch(held.html(), dots);
+
+	held.list[0] = { ...held.list[0]!, status: 'loading' };
+	assert.match(held.html(), dots, 'three dots, because nothing else was named');
+	held.stop();
 });

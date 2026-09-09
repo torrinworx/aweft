@@ -781,18 +781,26 @@ test('a progress is drawn on the three vendor pseudo-elements, and the size is i
 	assert.match(rulesFor(['progress', 'lg']), new RegExp(`height: ${valueOf('space3')}`));
 });
 
-test('the pulse is one definition, reached by the dots and by a skeleton', () => {
+test('a skeleton breathes and the dots are a wave, and each owns its own block', () => {
 	// One render, both chains, so what is counted is what a page with both on it would emit.
 	const ui = context();
 	ui.theme.classes(ui.theme.base(), ['dot']);
 	ui.theme.classes(ui.theme.base(), ['skeleton']);
 	const sheet = ui.theme.markup();
 
-	const frames = [...sheet.matchAll(/@keyframes (pulse-\w+)/g)].map((found) => found[1]);
-	assert.equal(frames.length, 1, 'one keyframes block, however many chains reached it');
-	// Both animate, and both name the same generated block.
-	const animations = [...sheet.matchAll(/animation: (pulse-\w+)/g)].map((found) => found[1]);
-	assert.deepEqual(animations, [frames[0], frames[0]], 'the dot and the skeleton share it');
+	// Two animations, so two blocks, each emitted once however many chains reach it (design 111).
+	const frames = [...sheet.matchAll(/@keyframes ([a-z]+)-\w+/g)].map((found) => found[1]);
+	assert.deepEqual(frames, ['wave', 'pulse'], 'one block each, and no second copy of either');
+
+	// The two shapes, written from design 218 rather than read off the sheet: a skeleton breathes
+	// between full and half, the dots rise from a third and fall back, and neither holds a value
+	// flat across part of its cycle, which is what made the old shared block a strobe.
+	assert.match(sheet, /@keyframes pulse-\w+ \{ 0%, 100% \{ opacity: 1 \} 50% \{ opacity: 0\.5 \} \}/);
+	assert.match(sheet, /@keyframes wave-\w+ \{ 0%, 100% \{ opacity: 0\.35 \} 50% \{ opacity: 1 \} \}/);
+
+	// The durations they run at, and the curve that turns them around at both ends.
+	assert.match(sheet, /animation: pulse-\w+ 2s ease-in-out infinite/, 'a skeleton takes 2s');
+	assert.match(sheet, /animation: wave-\w+ 1s ease-in-out infinite/, 'a dot takes 1s');
 
 	const skeleton = rulesFor(['skeleton']);
 	const outside = skeleton.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/g, '');

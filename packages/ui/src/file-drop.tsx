@@ -22,6 +22,8 @@ import { type MutableArray, isMutableArray, mutable, mutableArray } from '@aweft
 import { Button, type ButtonProps } from './button.tsx';
 import { type FileDropEntry, type Limits, promptFor, readyValue, sortFiles } from './file-checks.ts';
 import { Icon } from './icon.tsx';
+import { LoaderContext } from './suspend.tsx';
+import { LoadingDots } from './loading-dots.tsx';
 import { assert } from './assert.ts';
 import { controlStates, elementFor } from './control.ts';
 import { findFrom, under, within } from './tree.ts';
@@ -272,9 +274,14 @@ const zone = (props: FileDropProps): Mounter => (elem, _item, before, context) =
 		dragging.set(false);
 	};
 
+	// The same fallback chain `Button` writes, so an application that named a loader once named it
+	// for every wait in this package (design 219).
+	const spinner = LoaderContext.read(context).loading ?? LoadingDots;
+
 	const Row = (row: { each?: unknown }): unknown => {
 		const entry = row.each as FileDropEntry;
 		return h('li', { theme: ['filedrop_entry', entry.status] },
+			entry.status === 'loading' ? h(spinner, {}) : null,
 			h('span', { theme: ['text', 'sm'] }, entry.name),
 			entry.error === undefined ? null : h('span', { theme: ['field_error'] }, entry.error),
 			h(Button, {

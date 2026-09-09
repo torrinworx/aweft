@@ -280,6 +280,18 @@ or the `LoaderContext`'s, and with neither the slot goes empty and the rejection
 the host reports it. `LoaderContext` carries `{ loading, failed }` and inherits them one field at
 a time.
 
+**Every wait in this package shows the same loader** (design 219). `suspend` while its loader runs,
+a `Button` while a promise its `onClick` returned is pending, and a `FileDrop` entry an application
+moved to `status: 'loading'` all show `LoaderContext.loading`, and `LoadingDots` when nothing named
+one. So naming a loader once names it for all three:
+
+```tsx
+<LoaderContext value={{ loading: MySpinner }}><App /></LoaderContext>
+```
+
+No drawing ships (design 144). `LoadingDots` is three spans and a keyframes block; for an animated
+spinner, `@aweftjs/icons` says which set to install and shows the one line that puts it here.
+
 ## Popups
 
 ```tsx
@@ -640,7 +652,8 @@ on: `type` for a file the `extensions` do not cover, `size` for one over `limit`
 second file while `multiple` is false (design 214). An accepted entry carries neither. A refused
 file stays in the list rather than disappearing. Move `status` to `loading` while you upload by
 writing the entry back, `files[0] = { ...files[0], status: 'loading' }`, which is the edit a list
-can hear. `ready` is written null while anything is loading, and otherwise the file, or the array of
+can hear; that row then shows the `LoaderContext`'s loader beside the file's name, and the dots
+when nothing named one (design 219). `ready` is written null while anything is loading, and otherwise the file, or the array of
 files when `multiple` is true, counting every entry that is not in error. The transport is yours:
 `ui` decides nothing about storage, transport or the server, so the entry carries the platform
 `File`.
@@ -1065,11 +1078,23 @@ element wears the entry. A `TextField` given `padding: '12px'` through a theme o
 42px. Before this the padding was added to the height every time. `$target` is the smallest a pointer target may be and now
 sizes nothing in this theme: it is the number your own entries reach for.
 
-**Motion** is `$fast`, `$slow`, `$ease` and `$easeOut`. The root sets one transition for every
-themed element, over the colours a state changes, and `popup`, `dialog`, its `::backdrop` and
-`tooltip` each set one more for the opacity and scale they arrive with (design 192). Every one of
-them is written inside `@media (prefers-reduced-motion: no-preference)`, so a person who asked for
-less motion gets none and no component has to remember the query.
+**Motion** is `$fast` (150ms), `$slow` (240ms), `$ease` (`cubic-bezier(0.4, 0, 0.2, 1)`) and
+`$easeOut`. The root sets one transition for every themed element, over
+`background-color, background-image, border-color, color, transform`, and `popup`, `dialog`, its
+`::backdrop` and `tooltip` each set one more for the opacity and scale they arrive with (record
+192). `box-shadow` is deliberately not on the list: the focus ring is drawn as one, and a ring that
+fades in is a ring that is not there yet (design 217). Every one of these is written inside
+`@media (prefers-reduced-motion: no-preference)`, so a person who asked for less motion gets none
+and no component has to remember the query. The default theme reads neither `$slow` nor `$easeOut`;
+they are there for you.
+
+**Three things move that are not a colour.** A switch's thumb crosses its pill over `$fast`, a
+slider's thumb grows under the pointer over `$fast`, and a skeleton and the loading dots run their
+own cycles: a skeleton breathes between full and half opacity over 2s, and the three dots run a 1s
+cycle a third apart each, so the bright point travels along the row (design 218). The two thumbs
+are pseudo-elements, which the root's transition on the element does not reach, so each declares
+its own transition. The skeleton and the dots are not transitions at all: each is an animation on
+the element itself, with its own keyframes, and the same query around it.
 
 **States are one rule.** `hovered` and `pressed` lay a translucent tint of the element's own
 foreground over whatever background it has, at two fixed strengths. No component names a hover
