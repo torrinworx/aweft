@@ -19,6 +19,10 @@ import { aweft } from '@aweftjs/build';
 export default { plugins: [aweft({ release: process.env.NODE_ENV === 'production' })] };
 ```
 
+The plugin also sets the bundler's own JSX handling to `preserve`, so vite's dependency scan and
+its own transform leave a `.tsx` page to this plugin rather than reading its JSX as another
+library's.
+
 ```ts
 // Anywhere, a browser included, for source that did not exist at build time.
 import { transform } from '@aweftjs/build';
@@ -95,7 +99,9 @@ separate definition without this package knowing anything about it.
 Which package supplies that import is `defaultH`. A bundler takes it as a plugin option,
 `aweft({ defaultH: '@aweftjs/ui' })`. A Node process running the loader has no config to put
 one in, so it says the same thing in the environment: `AWEFT_DEFAULT_H=@aweftjs/ui`, read once
-per file, and refused by name if it is set to anything but the two package names. Set them to
+when the loader starts, and refused by name if it is set to anything but the two package names.
+`--import` is resolved by Node from the working directory, so run it from the application
+root, where `node_modules` is; from anywhere else the failure reads as a missing package. Set them to
 the same value when one `.tsx` is rendered on a server and bundled for a browser, or the two
 sides compile it differently and the page will not hydrate (design 147).
 

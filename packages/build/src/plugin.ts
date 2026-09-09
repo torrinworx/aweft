@@ -26,6 +26,12 @@ const FROM = '?from=';
 export interface Plugin {
 	readonly name: string;
 	readonly enforce: 'pre';
+	/**
+	 * Tells the bundler to leave JSX to this plugin. Its own transform and its dependency scan
+	 * read a `.tsx` file too, and without this they read the JSX as another library's and go
+	 * looking for a runtime that is not installed.
+	 */
+	config(): { oxc: { jsx: 'preserve' } };
 	transform(code: string, id: string): { code: string; map: string } | null;
 	/** Claims an icon import the generator answers, and answers null for everything else. */
 	resolveId(source: string, importer?: string): Promise<string | null>;
@@ -41,7 +47,8 @@ export interface Plugin {
  *
  * Returns: the plugin. It handles `.js`, `.jsx`, `.ts` and `.tsx` and answers null for anything
  * else, which leaves the file to the rest of the pipeline. It also answers the icon imports the
- * transform writes, so one plugin is still the whole registration.
+ * transform writes, and tells the bundler to leave JSX to it, so one plugin is still the whole
+ * registration.
  *
  * Throws: out of `load`, whatever `@aweftjs/icons/node` refuses with: `set-not-installed` for a
  * set the application has not installed, naming the install command, and `icon-not-in-set` for a
@@ -53,6 +60,7 @@ export interface Plugin {
 export const aweft = (options: Omit<TransformOptions, 'filename'> = {}): Plugin => ({
 	name: 'aweft',
 	enforce: 'pre',
+	config: () => ({ oxc: { jsx: 'preserve' } }),
 	transform(code, id) {
 		const filename = id.split('?')[0]!;
 		if (!HANDLED.test(filename)) return null;

@@ -17,11 +17,6 @@ export default defineConfig({
 	// `index.html`, so a driver that asks for a page that is not there gets 200 and the gallery's
 	// markup, and a typo in a path reads as a page whose assertions all fail.
 	appType: 'mpa',
-	// The dev server's dependency scan reads a file the catalogue's glob names without this
-	// plugin's transform in front of it, sees JSX, and asks for a React runtime that is not
-	// installed. These pages import nothing from npm, so there is nothing to pre-bundle and
-	// nothing to lose by not looking.
-	optimizeDeps: { noDiscovery: true, include: [] },
 	build: {
 		outDir: 'dist',
 		emptyOutDir: true,

@@ -104,3 +104,9 @@ test('the plugin refuses a set nobody installed, naming the install', async () =
 	const id = await plugin.resolveId('@aweftjs/icons/nosuchset/home', join(import.meta.dirname, 'page.tsx'));
 	await assert.rejects(async () => plugin.load(id!), /npm install @iconify-json\/nosuchset/);
 });
+
+test('the plugin tells the bundler to leave JSX to it', () => {
+	// Vite's dependency scan and its own transform read a `.tsx` page ahead of any plugin, and
+	// take its JSX for another library's unless told to preserve it.
+	assert.deepEqual(aweft().config(), { oxc: { jsx: 'preserve' } });
+});
