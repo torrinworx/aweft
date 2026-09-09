@@ -21,5 +21,7 @@ import type { Compile, ModuleExports } from './contract.ts';
  */
 export const compile: Compile = async (source: string): Promise<ModuleExports> => {
 	const url = `data:text/javascript,${encodeURIComponent(source)}`;
-	return await import(url) as ModuleExports;
+	// The URL is built at run time on purpose; the hint keeps a bundler's import analysis from
+	// warning about it on every page that reaches this file.
+	return await import(/* @vite-ignore */ url) as ModuleExports;
 };
