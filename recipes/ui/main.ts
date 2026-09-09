@@ -1264,10 +1264,13 @@ try {
 		document.querySelector('#menu-light')!.getAttribute('aria-expanded') === 'false');
 	await page.focus('#menu-light');
 	await page.keyboard.press('ArrowDown');
+	// The active row is named before the focus moves, so the wait covers both: asserting the focus
+	// the moment the row appears reads the anchor, or nothing, on a slow frame.
 	await page.waitForFunction(() => {
 		const menu = document.querySelector('#menu-light-list');
 		return menu !== null && menu.getBoundingClientRect().height > 0
-			&& menu.getAttribute('aria-activedescendant') !== null;
+			&& menu.getAttribute('aria-activedescendant') !== null
+			&& document.activeElement === menu;
 	});
 	assert.equal(await page.getAttribute('#menu-light', 'aria-activedescendant'), null,
 		'the anchor names no active row, which is the attribute axe refuses on a button');
