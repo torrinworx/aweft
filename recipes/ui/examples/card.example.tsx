@@ -1,4 +1,5 @@
-// Card: the head, the body and the foot, and the same block with only a body.
+// Card: the head, the body and the foot, and the same block with none of the three, which is the
+// bare block it always was (design 211).
 
 import { Button, Card, h } from '@aweftjs/ui';
 
@@ -25,6 +26,20 @@ export const Example: ExampleComponent = (props) => {
 			<Card title="No foot on this one" id={at('card-plain')}>
 				<p theme={['text', 'sm', 'muted']}>Each part renders only where it was given something.</p>
 			</Card>
+
+			<Card id={at('paper')}>
+				<p theme={['text', 'lg']}>A bare block</p>
+				<p theme={['text', 'muted']}>With no title, no description and no foot, it is the block
+					and its children.</p>
+			</Card>
+			<Card tight={true} id={at('paper-tight')}>
+				<p theme={['text', 'sm', 'muted']}>Tight: nothing between the edge and what is in it.</p>
+			</Card>
+			<hr theme="divider" id={at('divider')} />
+			<div theme={['row', 'spread']} id={at('spread')}>
+				<span theme={['text', 'sm']}>left</span>
+				<span theme={['text', 'sm']}>right</span>
+			</div>
 		</div>
 	);
 };

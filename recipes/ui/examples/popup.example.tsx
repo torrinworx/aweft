@@ -5,7 +5,7 @@
 // z-index in any of it: the box asks the host for the top layer with `popover`.
 
 import { mutable } from '@aweftjs/core';
-import { Button, Detached, Paper, h, mark } from '@aweftjs/ui';
+import { Button, Card, Detached, h, mark } from '@aweftjs/ui';
 
 import { ids } from '../example.ts';
 import type { ExampleComponent } from '../example.ts';
@@ -24,10 +24,10 @@ export const Example: ExampleComponent = (props) => {
 					<Button label="Open the menu" id={at('popup-anchor')}
 						onClick={() => { open.set(!open.get()); }} />
 					<mark.popup>
-						<Paper id={at('popup-menu')}>
+						<Card id={at('popup-menu')}>
 							<p theme={['text', 'sm']}>Rename</p>
 							<p theme={['text', 'sm']}>Duplicate</p>
-						</Paper>
+						</Card>
 					</mark.popup>
 				</Detached>
 			</div>

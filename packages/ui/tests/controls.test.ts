@@ -10,9 +10,10 @@ import assert from 'node:assert/strict';
 import { mutable } from '@aweftjs/core';
 import { createDocument, parseHtml, toHtml } from '@aweftjs/dom';
 import type { ElementLike, LightElement, NodeLike } from '@aweftjs/dom';
+import type { Render } from '@aweftjs/ui';
 import { recordingDocument } from '@aweftjs/testing';
 import {
-	Button, Checkbox, LoadingDots, Paper, Radio, Select, Slider, TextArea, TextField, Toggle,
+	Button, Card, Checkbox, LoadingDots, Radio, Select, Slider, TextArea, TextField, Toggle,
 	context, h, hydrate, mount, render,
 } from '@aweftjs/ui';
 
@@ -168,6 +169,86 @@ test('a control with no label, description or error is the element and nothing e
 	const { body, stop } = page(h(TextField as never, { placeholder: 'Search' }));
 	assert.equal(toHtml(body.childNodes as NodeLike[]), '<input id="field-0" type="text" placeholder="Search" class="aw0">',
 		'no wrapper is built for a field that has nothing to put around it');
+	stop();
+});
+
+// --- the addons a text field takes (design 210) --------------------------------------------------
+
+test('a text field with neither addon is the markup it always was', () => {
+	const { body, stop } = page(h(TextField as never, { placeholder: 'Search', leading: null, trailing: false }));
+	assert.equal(toHtml(body.childNodes as NodeLike[]), '<input id="field-0" type="text" placeholder="Search" class="aw0">',
+		'nothing that is not an addon builds a box');
+	stop();
+});
+
+test('an addon puts the input in a box, and the box is what wears the look', () => {
+	const { render, body, stop } = styled(h(TextField as never, {
+		leading: '$', trailing: 'CAD', placeholder: 'Amount',
+	}));
+
+	const box = body.firstChild as unknown as LightElement;
+	assert.equal(box.localName, 'div');
+	assert.deepEqual(elements(box.firstChild).map((node) => node.localName), ['span', 'input', 'span'],
+		'the leading addon, the input, then the trailing one, in that order');
+	assert.equal(box.textContent, '$CAD', 'text becomes an addon');
+
+	const outer = rulesOn(render, box);
+	assert.match(outer, /border-radius: 6px/, '$radius, from the input entry through extends');
+	assert.match(outer, /:has\(:focus-visible\)/, 'and the ring is on the box');
+
+	const input = byTag(body.firstChild, 'input');
+	const inner = rulesOn(render, input);
+	assert.match(inner, /border: none/, 'the input carries none of the box');
+	assert.match(inner, /background: transparent/);
+	stop();
+});
+
+test('one addon is enough, on either side', () => {
+	const lead = page(h(TextField as never, { leading: h('svg', {}) }));
+	assert.deepEqual(elements(lead.body.firstChild).map((node) => node.localName), ['div', 'svg', 'input'],
+		'an addon that is already something to mount is mounted as it is');
+	lead.stop();
+
+	const trail = page(h(TextField as never, { trailing: 'CAD' }));
+	assert.deepEqual(elements(trail.body.firstChild).map((node) => node.localName), ['div', 'input', 'span']);
+	trail.stop();
+});
+
+test('the size and the invalid edge land on the box, not on the input', () => {
+	const { render, body, stop } = styled(h(TextField as never, {
+		leading: '$', size: 'sm', error: 'that is more than you have',
+	}));
+	// With an error and no label the field wraps, so the box is one level in.
+	const box = elements(body.firstChild).find((node) => node.localName === 'div'
+		&& node !== body.firstChild)!;
+	const outer = rulesOn(render, box);
+	assert.match(outer, /height: 32px/, '$controlSm');
+	assert.match(outer, new RegExp(`border-color: ${themeRole('danger')}`), '$danger');
+	assert.doesNotMatch(rulesOn(render, byTag(body.firstChild, 'input')), /height: 32px/);
+	stop();
+});
+
+test('a boxed field carries the same wiring an unboxed one does', () => {
+	const { body, stop } = page(h(TextField as never, {
+		label: 'Price', description: 'Before tax', leading: '$', id: 'price',
+	}));
+	const input = byTag(body.firstChild, 'input');
+	assert.equal(input.getAttribute('id'), 'price');
+	assert.equal(input.getAttribute('aria-describedby'), 'price-note');
+	assert.equal(byRoleName(body.firstChild, 'textbox', 'Price').localName, 'input',
+		'the label names the input inside the box, not the box');
+	stop();
+});
+
+test('typing in a boxed field writes the cell, and the cell writes the element', () => {
+	const value = mutable('1');
+	const { body, stop } = page(h(TextField as never, { value, trailing: 'CAD' }));
+	const input = byTag(body.firstChild, 'input');
+	setProp(input, 'value', '12');
+	fire(input, 'input');
+	assert.equal(value.get(), '12', 'typing writes the cell');
+	value.set('20');
+	assert.equal(propOf(input, 'value'), '20', 'and the cell writes the element');
 	stop();
 });
 
@@ -603,7 +684,7 @@ const everything = (): unknown => h('div', {},
 	h(Toggle as never, { label: 'Email me' }),
 	h(Slider as never, { label: 'Volume', min: 0, max: 10 }),
 	h(Select as never, { label: 'Size', options: ['small', 'large'], placeholder: 'Pick one' }),
-	h(Paper as never, {}, 'a card'),
+	h(Card as never, {}, 'a card'),
 	h(LoadingDots as never, {}));
 
 test('every control renders to markup and hydrates onto the nodes the server wrote', async () => {

@@ -2,7 +2,7 @@
 // and the expanded state are the platform's. It opens in the page's flow, not over it.
 
 import { mutable } from '@aweftjs/core';
-import { DropDown, Icon, Paper, h } from '@aweftjs/ui';
+import { Card, DropDown, Icon, h } from '@aweftjs/ui';
 
 import { ids } from '../example.ts';
 import type { ExampleComponent } from '../example.ts';
@@ -17,9 +17,9 @@ export const Example: ExampleComponent = (props) => {
 	return (
 		<div theme="column">
 			<DropDown label="Filters" open={filters} id={at('dropdown')}>
-				<Paper>
+				<Card>
 					<p theme={['text', 'sm']} id={at('dropdown-content')}>Everything under the summary.</p>
-				</Paper>
+				</Card>
 			</DropDown>
 
 			<DropDown label="Open already" open={mutable(true)} id={at('dropdown-open')}>

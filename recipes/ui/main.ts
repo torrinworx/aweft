@@ -375,9 +375,12 @@ try {
 		Stage: 'the stage, shown in the Modal example',
 		Default: 'the stage template that adds nothing, shown in the Modal example',
 		Detached: 'the mechanism under the Popup and Tooltip examples',
-		FieldGroup: 'shown in the Field example', FieldSet: 'shown in the Field example',
 		Tab: 'shown in the Tabs example', TabPanel: 'shown in the Tabs example',
 	};
+
+	// The sections that show theme entries rather than a component. There is one: the form layout,
+	// which is entries and a bare label since design 209 withdrew `Field`.
+	const NO_COMPONENT: readonly string[] = ['Form'];
 
 	const exported = readFileSync(join(here, '..', '..', 'packages', 'ui', 'surface.txt'), 'utf8')
 		.split('\n')
@@ -390,7 +393,7 @@ try {
 	const missing = exported.filter((name) => !(name in NO_EXAMPLE) && !shown.includes(name));
 	assert.deepEqual(missing, [],
 		`every exported component has an example file: ${missing.join(', ')} has none`);
-	const stray = shown.filter((name) => !exported.includes(name));
+	const stray = shown.filter((name) => !exported.includes(name) && !NO_COMPONENT.includes(name));
 	assert.deepEqual(stray, [], `and every example names a component the package exports: ${stray.join(', ')}`);
 
 	const files = readdirSync(join(here, 'examples')).filter((name) => name.endsWith('.example.tsx'));
@@ -409,13 +412,13 @@ try {
 
 	// A section with sections under it, so the scroll is not stopped by the end of the document.
 	const scrolledFrom = await page.evaluate(() => window.scrollY);
-	await page.click('#catalogue nav[aria-label="Components"] a[href="#Field"]');
+	await page.click('#catalogue nav[aria-label="Components"] a[href="#Form"]');
 	await page.waitForFunction(() => window.scrollY > 0);
 	const scrolledTo = await page.evaluate(() => window.scrollY);
 	assert.ok(scrolledTo > scrolledFrom,
 		`a nav link scrolls its section into view: ${String(scrolledFrom)} to ${String(scrolledTo)}`);
 	const landed = await page.evaluate(() =>
-		Math.round(document.querySelector('#Field')!.getBoundingClientRect().top));
+		Math.round(document.querySelector('#Form')!.getBoundingClientRect().top));
 	assert.ok(landed >= -1 && landed < 40,
 		`and the section is at the top of the viewport, under its scroll margin: ${String(landed)}px`);
 	await page.evaluate(() => window.scrollTo(0, 0));
@@ -653,8 +656,8 @@ try {
 	assert.match(await page.textContent('#picked-light') ?? '', /^rgb\(/,
 		'the cell is written back as rgb() text');
 
-	// A form laid out by the three layout components (design 196). A pane on this page is wider
-	// than 28rem, so the responsive field is a row here; the narrow case is measured in
+	// A form laid out by the theme entries and a bare label (design 209). A pane on this page is
+	// wider than 28rem, so the responsive field is a row here; the narrow case is measured in
 	// `packages/ui/tests/browser.test.ts`, where the group's width can be moved.
 	const form = await page.evaluate(() => {
 		const responsive = document.querySelector('#field-responsive-light')!;
@@ -665,20 +668,16 @@ try {
 			wide: Math.round(document.querySelector('#form-light')!.getBoundingClientRect().width),
 			responsive: getComputedStyle(responsive).flexDirection,
 			inline: getComputedStyle(inline).flexDirection,
-			role: responsive.getAttribute('role'),
 			legend: set.querySelector('legend')!.textContent,
 			border: getComputedStyle(set).borderTopStyle,
-			invalid: document.querySelector('#field-bad-light')!.getAttribute('data-invalid'),
 		};
 	});
 	assert.equal(form.group, 'inline-size', 'the group is the container a responsive field measures');
 	assert.ok(form.wide > 448, `and this pane is wider than 28rem: ${String(form.wide)}px`);
 	assert.equal(form.responsive, 'row', 'so the responsive field is a row at this width');
 	assert.equal(form.inline, 'row', 'and the inline one is a row at every width');
-	assert.equal(form.role, 'group', 'a field is a box of related things');
 	assert.equal(form.legend, 'Where to send it');
 	assert.equal(form.border, 'none', 'and the fieldset draws no frame of its own');
-	assert.equal(form.invalid, 'true', 'a field marks itself while a control in it says it is wrong');
 
 	// The two modes resolve their own roles, on the composites as on everything else.
 	const composedModes = await page.evaluate(() => ({
@@ -719,10 +718,6 @@ try {
 	assert.equal(await page.getAttribute('#skeleton-light', 'aria-hidden'), 'true',
 		'a skeleton says nothing to a screen reader');
 
-	const kbd = await page.evaluate(() =>
-		getComputedStyle(document.querySelector('#kbd-light')!)['fontFamily'] ?? '');
-	assert.match(kbd, /mono/, 'a key is drawn in $fontMono');
-
 	// `position` is the progress element's own property, which the narrow element shape this
 	// project compiles against does not name.
 	const positionOf = (id: string): Promise<number> => page.evaluate((held: string) =>
@@ -741,23 +736,16 @@ try {
 			.map((node) => (node.getAttribute('class') ?? '') !== ''));
 	assert.deepEqual(card, [true, true, true], 'a card is a head, a body and a foot, each on its own part');
 
-	// Two buttons in a group share one border: the second starts one border width inside the first.
-	const joined = await page.evaluate(() => {
-		const left = document.querySelector('#buttongroup-left-light')!.getBoundingClientRect();
-		const middle = document.querySelector('#buttongroup-middle-light')!.getBoundingClientRect();
-		const style = getComputedStyle(document.querySelector('#buttongroup-middle-light')!);
-		return {
-			overlap: Math.round(left.right - middle.left),
-			corner: style.borderTopLeftRadius,
-		};
-	});
-	assert.equal(joined.overlap, 1, 'two adjacent borders in a button group are one line');
-	assert.equal(joined.corner, '0px', 'and the inner corners came off');
+	// A card with none of the three parts is the bare block, and its children are its own children.
+	const bareCard = await page.evaluate(() =>
+		Array.from(document.querySelectorAll('#paper-light > *')).map((node) => node.tagName.toLowerCase()));
+	assert.deepEqual(bareCard, ['p', 'p'],
+		'a card with no title, description or foot builds no head, body or foot (design 211)');
 
-	// The ring is on the box, not on the input inside it.
-	await page.focus('#inputgroup-light');
+	// The ring is on the box a `leading` builds, not on the input inside it (design 210).
+	await page.focus('#addon-light');
 	const grouped = await page.evaluate(() => {
-		const input = document.querySelector('#inputgroup-light')!;
+		const input = document.querySelector('#addon-light')!;
 		const box = input.parentElement!;
 		return {
 			box: getComputedStyle(box)['boxShadow'] ?? '',
@@ -853,51 +841,9 @@ try {
 	assert.equal(edge.width, 384, '$sheetWidth: 24rem');
 	assert.equal(edge.right, 0, 'against the right edge');
 	assert.equal(edge.height, edge.viewport, 'and as tall as the viewport');
-	await page.click('#sheet-light button[aria-label="Close"]');
+	await page.click('dialog button[aria-label="Close"]');
 	await page.waitForFunction(() => document.querySelector('#filtering-light') === null);
 
-	// The accordion's one-open rule, which is the platform's and not ours.
-	const closed = await page.evaluate(() =>
-		document.querySelectorAll('#accordion-light details[open]').length);
-	assert.equal(closed, 0, 'every section starts closed');
-	await page.click('#accordion-light details:nth-of-type(1) summary');
-	await page.waitForFunction(() =>
-		document.querySelectorAll('#accordion-light details[open]').length === 1);
-	await page.click('#accordion-light details:nth-of-type(2) summary');
-	await page.waitForFunction(() =>
-		document.querySelector('#accordion-light details:nth-of-type(2)')!.hasAttribute('open'));
-	const stack = await page.evaluate(() => ({
-		open: document.querySelectorAll('#accordion-light details[open]').length,
-		first: document.querySelector('#accordion-light details:nth-of-type(1)')!.hasAttribute('open'),
-		names: new Set(Array.from(document.querySelectorAll('#accordion-light details'))
-			.map((node) => node.getAttribute('name'))).size,
-	}));
-	assert.equal(stack.open, 1, 'opening the second closed the first');
-	assert.equal(stack.first, false);
-	assert.equal(stack.names, 1, 'because all three share one name');
-
-	// The toggle group: a real click on a label writes the cell behind the input it wraps.
-	assert.equal(await page.textContent('#togglegroup-value-light'), 'centre');
-	await page.click('#togglegroup-light label:nth-of-type(3)');
-	await page.waitForFunction(() =>
-		document.querySelector('#togglegroup-value-light')!.textContent === 'right');
-	const group = await page.evaluate(() => {
-		const labels = Array.from(document.querySelectorAll('#togglegroup-light label'));
-		const checked = document.querySelectorAll('#togglegroup-many-light input:checked').length;
-		return {
-			height: Math.round(labels[0]!.getBoundingClientRect().height),
-			overlap: Math.round(labels[0]!.getBoundingClientRect().right
-				- labels[1]!.getBoundingClientRect().left),
-			inputs: document.querySelectorAll('#togglegroup-light input[type="radio"]').length,
-			boxes: document.querySelectorAll('#togglegroup-many-light input[type="checkbox"]').length,
-			checked,
-		};
-	});
-	assert.equal(group.height, 36, '$control, through the button entry the option extends');
-	assert.equal(group.overlap, 1, 'two adjacent edges are one line');
-	assert.equal(group.inputs, 3, 'one choice is radios');
-	assert.equal(group.boxes, 5, 'and more than one is checkboxes');
-	assert.equal(group.checked, 1, 'with the day the cell named already ticked');
 
 	// The tabs: a real arrow moves the focus and the selection together, and Home and End go to the
 	// ends. Design 203: the strip is one tab stop, so the keys are what move inside it.

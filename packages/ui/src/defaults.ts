@@ -148,79 +148,6 @@ defineTheme({
 	// of no entry, which is what design 193's rule asks of a segment.
 	button_current: { background: '$accent', color: '$accentForeground', borderColor: '$accent' },
 
-	// A run of buttons drawn as one control (design 200). The joining is `_children_` rules on this
-	// entry, because a group cannot put a segment in its children's class lists: the two ends keep
-	// their outer corners, everything between them has none, and each child after the first is
-	// pulled back by one border width so two adjacent edges are one line. A child with focus is
-	// positioned, because the ring is a box shadow and the neighbour that overlaps it would cut it
-	// in half. `position: relative` alone is what lifts it: a positioned element paints after every
-	// in-flow sibling, and only the focused child is positioned, so no z-index is needed and record
-	// 113's rule that this package writes none still holds.
-	//
-	// Every corner rule names a pseudo-class, and none of them is the bare `> *`. A button's own
-	// radius is one class and so is `.awN > *`, and the group asks the class cache first because it
-	// is the parent, so its rules are emitted first and a plain `> *` loses the tie: measured in
-	// Chromium, the second button in a group kept a 6px inner corner.
-	buttongroup: {
-		display: 'inline-flex',
-		alignItems: 'center',
-		'_children_*:not(:first-child):not(:last-child)': { borderRadius: 0 },
-		'_children_*:first-child': { borderRadius: '$radius 0 0 $radius' },
-		'_children_*:last-child': { borderRadius: '0 $radius $radius 0' },
-		'_children_*:only-child': { borderRadius: '$radius' },
-		'_children_* + *': { marginLeft: '-$borderWidth' },
-		'_children_*:focus-visible': { position: 'relative' },
-	},
-	buttongroup_vertical: {
-		flexDirection: 'column',
-		alignItems: 'stretch',
-		'_children_* + *': { marginLeft: 0, marginTop: '-$borderWidth' },
-		'_children_*:first-child': { borderRadius: '$radius $radius 0 0' },
-		'_children_*:last-child': { borderRadius: '0 0 $radius $radius' },
-		'_children_*:only-child': { borderRadius: '$radius' },
-	},
-
-	// A run of native inputs drawn as one control (design 202). The joining is `buttongroup`'s again,
-	// on this entry, because a `<label>` is not a `<button>` and the two groups are matched by
-	// different class lists.
-	togglegroup: {
-		display: 'inline-flex',
-		alignItems: 'center',
-		'_children_*:not(:first-child):not(:last-child)': { borderRadius: 0 },
-		'_children_*:first-child': { borderRadius: '$radius 0 0 $radius' },
-		'_children_*:last-child': { borderRadius: '0 $radius $radius 0' },
-		'_children_*:only-child': { borderRadius: '$radius' },
-		'_children_* + *': { marginLeft: '-$borderWidth' },
-		'_children_*:has(:focus-visible)': { position: 'relative' },
-	},
-	// One option: a label wearing the button look, wrapped around an input that is off the screen.
-	// The look is the button's through `extends`, so the size axis moves both at once, and `position`
-	// is what keeps the offscreen input inside this box rather than at the page's corner.
-	togglegroup_item: {
-		extends: ['button', 'button_quiet'],
-		position: 'relative',
-		userSelect: 'none',
-		'_cssProp_has(:checked)': {
-			background: '$accent',
-			color: '$accentForeground',
-			borderColor: '$accent',
-		},
-		// The ring belongs to the label, because the input inside it is a pixel nobody can see. The
-		// halo the root entry gives every themed element is taken back off the input for the reason
-		// `inputgroup_control` takes it off its own (design 200), and it is a rule about children
-		// because the input wears `offscreen`, which every other hidden control shares.
-		'_cssProp_has(:focus-visible)': {
-			borderColor: '$ring',
-			boxShadow: '0 0 0 $ringWidth color-mix(in srgb, $ring 50%, transparent)',
-		},
-		'_children_input:focus-visible': { boxShadow: 'none' },
-	},
-	// The size axis, extending the button's own for the reason `select_sm` extends `input_sm`
-	// (design 194): `extends` is per entry and does not follow into a modifier.
-	togglegroup_item_sm: { extends: 'button_sm' },
-	togglegroup_item_lg: { extends: 'button_lg' },
-	togglegroup_item_quiet: { borderColor: 'transparent', boxShadow: 'none' },
-
 	input: {
 		display: 'block',
 		boxSizing: 'border-box',
@@ -248,12 +175,14 @@ defineTheme({
 	input_lg: { height: '$controlLg', minHeight: '$controlLg', padding: '$space $space4' },
 	input_invalid: { borderColor: '$danger' },
 
-	// A text field with something beside it inside the same box (design 200). The box is the control,
+	// A text field with something beside it inside the same box (designs 200, 210). The parts belong
+	// to `input` now, because the box is what a `TextField` given a `leading` or a `trailing` builds
+	// rather than an entry of its own. The box is the control,
 	// so it takes the whole `input` look through `extends` and the element inside it takes none of
 	// it. Each size restates the horizontal padding for the reason `select_sm` does: the `input_sm`
 	// that `extends` pulls in sits after this entry in the chain and its `padding` shorthand would
 	// otherwise take the box's own back.
-	inputgroup: {
+	input_group: {
 		extends: 'input',
 		display: 'flex',
 		alignItems: 'center',
@@ -267,10 +196,10 @@ defineTheme({
 			boxShadow: '0 0 0 $ringWidth color-mix(in srgb, $ring 50%, transparent)',
 		},
 	},
-	inputgroup_sm: { extends: 'input_sm', padding: '0 $space2' },
-	inputgroup_lg: { extends: 'input_lg', padding: '0 $space4' },
-	inputgroup_invalid: { borderColor: '$danger' },
-	inputgroup_control: {
+	input_group_sm: { extends: 'input_sm', padding: '0 $space2' },
+	input_group_lg: { extends: 'input_lg', padding: '0 $space4' },
+	input_group_invalid: { borderColor: '$danger' },
+	input_group_control: {
 		appearance: 'none',
 		flex: '1 1 auto',
 		minWidth: 0,
@@ -289,7 +218,7 @@ defineTheme({
 		'_cssProp_focus-visible': { borderColor: 'transparent', boxShadow: 'none' },
 		_cssProp_placeholder: { color: '$mutedForeground' },
 	},
-	inputgroup_addon: {
+	input_group_addon: {
 		display: 'flex',
 		alignItems: 'center',
 		flexShrink: 0,
@@ -617,7 +546,7 @@ defineTheme({
 	card_tight: { padding: 0 },
 
 	// A card with parts in it (design 200). The column is a modifier rather than a change to `card`,
-	// so a `Paper` renders what it always rendered and only a `Card` stacks.
+	// so a card with no parts is the bare block it always was and only one with parts stacks.
 	card_stack: { display: 'flex', flexDirection: 'column', gap: '$space4' },
 	card_head: { display: 'flex', flexDirection: 'column', gap: '$space' },
 	card_title: {
@@ -799,14 +728,6 @@ defineTheme({
 	// The platform has no `disabled` for a summary, so the pointer is taken away here and the focus
 	// order in the component.
 	disclosure_summary_disabled: { pointerEvents: 'none' },
-
-	// A stack of disclosures sharing one `name`, which is what makes the platform keep one of them
-	// open (design 202). The line belongs to the item and not to the box, so an accordion built out
-	// of a caller's own `DropDown`s draws the same stack.
-	accordion: { display: 'flex', flexDirection: 'column', width: '100%' },
-	accordion_item: {
-		'_cssProp_:not(:first-child)': { borderTop: '$borderWidth solid $border' },
-	},
 
 	filedrop: {
 		display: 'flex',
@@ -1003,24 +924,6 @@ defineTheme({
 	},
 	skeleton_round: { borderRadius: '50%' },
 
-	// A key on the keyboard. `$target` wide at the least, so one letter is still something a finger
-	// could have hit.
-	kbd: {
-		display: 'inline-flex',
-		alignItems: 'center',
-		justifyContent: 'center',
-		boxSizing: 'border-box',
-		minWidth: '$target',
-		padding: '$space $space2',
-		border: '$borderWidth solid $border',
-		borderRadius: '$radiusSm',
-		background: '$muted',
-		color: '$mutedForeground',
-		fontFamily: '$fontMono',
-		fontSize: '$textXs',
-		lineHeight: '$textXsLine',
-	},
-
 	// A bar filling up, drawn out of the three vendor pseudo-elements the way `slider` draws its
 	// track and thumb. They are spelled with their own colons because they are not in this package's
 	// pseudo-element table.
@@ -1094,8 +997,7 @@ defineTheme({
 		lineHeight: '$textSmLine',
 		color: '$foreground',
 	},
-	// Which rows, rather than what a row looks like, so it is a rule about children the way
-	// `buttongroup`'s joining is (design 201).
+	// Which rows, rather than what a row looks like, so it is a rule about children (design 201).
 	table_striped: { '_children_tbody > tr:nth-child(even)': { background: '$muted' } },
 	table_caption: {
 		captionSide: 'bottom',

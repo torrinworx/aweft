@@ -5,7 +5,7 @@
 // decided: at build time, at import time, or when the page runs.
 
 import { mutable } from '@aweftjs/core';
-import { Button, Icon, Icons, Paper, Theme, h, light } from '@aweftjs/ui';
+import { Button, Card, Icon, Icons, Theme, h, light } from '@aweftjs/ui';
 import standard from '@aweftjs/icons/lucide/+standard';
 
 Theme.define({
@@ -43,31 +43,31 @@ export const Page = (props: PageProps): unknown => {
 			<h1 theme={['text', '2xl', 'heading']} id="title">Three ways to name an icon</h1>
 
 			{/* One: written out, so the build imports that one icon and nothing else. */}
-			<Paper id="named">
+			<Card id="named">
 				<p theme={['text', 'sm', 'muted']}>Named in the source</p>
 				<div theme="strip">
 					<Icon name="lucide:check" label="done" id="icon-named" />
 					<Icon name="lucide:star" size="2rem" label="starred" id="icon-named-big" />
 				</div>
-			</Paper>
+			</Card>
 
 			{/* Two: a standard name, answered by whatever pack the page put in front. */}
 			<Icons value={standard}>
-				<Paper id="standard">
+				<Card id="standard">
 					<p theme={['text', 'sm', 'muted']}>A standard name, from the set's standard selection</p>
 					<div theme="strip">
 						<Button label="More" icon={<Icon name="chevron-down" />} id="button-standard" />
 						<Icon name="triangle-alert" label="careful" id="icon-standard" />
 					</div>
-				</Paper>
+				</Card>
 			</Icons>
 
 			{/* Three: a name the page only has when it runs, fetched from the icon route. */}
 			<Icons value={props.icons}>
-				<Paper id="fetched">
+				<Card id="fetched">
 					<p theme={['text', 'sm', 'muted']}>Fetched by name when the page runs</p>
 					<div theme="strip"><Icon name={late} label="anchor" id="icon-fetched" /></div>
-				</Paper>
+				</Card>
 			</Icons>
 		</main>
 	);

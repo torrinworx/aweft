@@ -58,13 +58,16 @@ that a real hover shows a tip that asked for the top layer as a hint; that Space
 opens it in the page's flow; that a real file on the hidden input lands in the list; that nothing
 is checked before the submit signal and everything after it, with a formatting validator writing
 the value back; that the picker's sliders are real range inputs and End on the hue writes the cell;
-that a form laid out with `FieldGroup`, `FieldSet` and `Field` puts its responsive field in a row
-at the pane's width, with the group declaring the container that measurement is taken against; and
+that a form laid out with the `field_group`, `field_set` and `field` entries puts its responsive
+field in a row at the pane's width, with the group declaring the container that measurement is taken
+against; and
 that axe-core finds no WCAG 2.2 AA violation with both modes showing.
 
 ## Writing an example (design 197)
 
-A file under `examples/` exports `name`, the component's export name from `@aweftjs/ui`; `order`, a
+A file under `examples/` exports `name`, the component's export name from `@aweftjs/ui` (or, for the
+one section that shows theme entries rather than a component, a name `main.ts` lists as needing no
+export); `order`, a
 number that puts controls first (from 10), then fields (30), then composites (40), then text (50);
 and `Example`, a component taking `{ mode }` that renders every state, type and size of that one
 component. Every id on the page is `<part>-<mode>`, made with `ids(props.mode)` from `example.ts`,

@@ -1746,14 +1746,14 @@ test('a part wears its own rules and none of the component it belongs to', async
 });
 
 test('an inline field puts the control beside its words on one line', async () => {
-	// Design 196. The field lays its own children out, so `inline` is for a bare control and the
-	// `<label>` the caller wrote beside it; a control that labels itself already lays that out.
+	// Design 209. The layout is the theme entries and there is no component: `field` is a column,
+	// and its `inline` modifier is the row a bare control and the label beside it sit on.
 	await drive('field-inline', `
-		import { Checkbox, Field, h, mount } from '@aweftjs/ui';
-		mount(document.body, <Field id="row" orientation="inline">
+		import { Checkbox, h, mount } from '@aweftjs/ui';
+		mount(document.body, <div id="row" role="group" theme={['field', 'inline']}>
 			<label for="box" theme="field_label">Email me</label>
 			<Checkbox id="box" />
-		</Field>);
+		</div>);
 	`, async (view) => {
 		await view.waitForSelector('#box');
 		const seen = await view.evaluate(() => {
@@ -1779,20 +1779,20 @@ test('an inline field puts the control beside its words on one line', async () =
 
 test('a responsive field is a column in a narrow group and a row in a wide one', async () => {
 	// The same field, with nothing about it changed but the width of the group around it. The
-	// query is `28rem` of the container, and `FieldGroup` is what declares itself one (design 196).
+	// query is `28rem` of the container, and `field_group` is what declares itself one (design 209).
 	await drive('field-responsive', `
-		import { Field, FieldGroup, TextField, h, mount } from '@aweftjs/ui';
+		import { TextField, h, mount } from '@aweftjs/ui';
 		mount(document.body, <div>
-			<FieldGroup id="group">
-				<Field id="field" orientation="responsive">
+			<div id="group" theme="field_group">
+				<div id="field" theme={['field', 'responsive']}>
 					<label for="mail" theme="field_label">Email</label>
 					<TextField id="mail" />
-				</Field>
-			</FieldGroup>
-			<Field id="lone" orientation="responsive">
+				</div>
+			</div>
+			<div id="lone" theme={['field', 'responsive']}>
 				<label for="other" theme="field_label">Phone</label>
 				<TextField id="other" />
-			</Field>
+			</div>
 		</div>);
 	`, async (view) => {
 		await view.waitForSelector('#mail');
@@ -1821,12 +1821,13 @@ test('a responsive field is a column in a narrow group and a row in a wide one',
 
 test('a fieldset\'s legend sits above its fields, and the box itself draws nothing', async () => {
 	await drive('field-set', `
-		import { Field, FieldGroup, FieldSet, TextField, h, mount } from '@aweftjs/ui';
-		mount(document.body, <FieldGroup>
-			<FieldSet id="set" legend="Billing address">
-				<Field id="street"><TextField id="line" aria-label="Street" /></Field>
-			</FieldSet>
-		</FieldGroup>);
+		import { TextField, h, mount } from '@aweftjs/ui';
+		mount(document.body, <div theme="field_group">
+			<fieldset id="set" theme="field_set">
+				<legend theme="field_legend">Billing address</legend>
+				<div id="street" theme="field"><TextField id="line" aria-label="Street" /></div>
+			</fieldset>
+		</div>);
 	`, async (view) => {
 		await view.waitForSelector('#line');
 		const seen = await view.evaluate(() => {
@@ -1855,12 +1856,12 @@ test('a fieldset\'s legend sits above its fields, and the box itself draws nothi
 
 // --- the display and grouping pieces (designs 199, 200) -----------------------------------------
 
-test('an input group rings the box on a real Tab, and the input inside it rings nothing', async () => {
-	// Design 200. The two elements read as one control, so the halo the root rule gives every
+test('a text field with an addon rings the box on a real Tab, and the input rings nothing', async () => {
+	// Designs 200, 210. The two elements read as one control, so the halo the root rule gives every
 	// themed element is turned off on the input and drawn on the box through `:has(:focus-visible)`.
 	await drive('input-group-ring', `
-		import { InputGroup, h, mount } from '@aweftjs/ui';
-		mount(document.body, <InputGroup id="amount" label="Price" leading="$" trailing="CAD" />);
+		import { TextField, h, mount } from '@aweftjs/ui';
+		mount(document.body, <TextField id="amount" label="Price" leading="$" trailing="CAD" />);
 	`, async (view) => {
 		await view.waitForSelector('#amount');
 		const before = await view.evaluate(() =>
@@ -1951,18 +1952,14 @@ test('an avatar swaps its letters for a picture that really loads', async () => 
 	});
 });
 
-test('a progress at half is half a track, and a button group shares one border', async () => {
+test('a progress at half is half a track', async () => {
 	// Design 199: the bar is a vendor pseudo-element, so what a page can be asked is the position
-	// the platform computed from the value and the max. Design 200: the overlap is a measurement.
+	// the platform computed from the value and the max.
 	await drive('progress-and-group', `
-		import { Button, ButtonGroup, Progress, h, mount } from '@aweftjs/ui';
+		import { Progress, h, mount } from '@aweftjs/ui';
 		mount(document.body, <div>
 			<Progress id="bar" value={0.5} label="Uploading" />
 			<Progress id="waiting" label="Working" />
-			<ButtonGroup label="Alignment" id="group">
-				<Button label="Left" type="quiet" id="left" />
-				<Button label="Right" type="quiet" id="right" />
-			</ButtonGroup>
 		</div>);
 	`, async (view) => {
 		await view.waitForSelector('#bar');
@@ -1988,29 +1985,6 @@ test('a progress at half is half a track, and a button group shares one border',
 		assert.equal(bar.appearance, 'none', 'the host is not drawing its own');
 		assert.equal(bar.indeterminate, -1,
 			'and one with no value attribute is indeterminate, which the platform reports as -1');
-
-		const group = await view.evaluate(() => {
-			const left = document.querySelector('#left')!;
-			const right = document.querySelector('#right')!;
-			const one = left.getBoundingClientRect();
-			const two = right.getBoundingClientRect();
-			const outer = getComputedStyle(left);
-			const inner = getComputedStyle(right);
-			return {
-				width: outer['borderTopWidth'],
-				overlap: Math.round(one.right - two.left),
-				sameRow: Math.round(one.top - two.top),
-				outerCorner: outer['borderTopLeftRadius'],
-				joinLeft: inner['borderTopLeftRadius'],
-				endCorner: inner['borderTopRightRadius'],
-			};
-		});
-		assert.equal(group.width, '1px', '$borderWidth');
-		assert.equal(group.overlap, 1, 'the two borders overlap by exactly one of them');
-		assert.equal(group.sameRow, 0, 'and the two sit on one line');
-		assert.equal(group.outerCorner, '6px', '$radius stays on the outer corners');
-		assert.equal(group.endCorner, '6px');
-		assert.equal(group.joinLeft, '0px', 'and the inner ones come off');
 	});
 });
 
@@ -2164,104 +2138,6 @@ test('a sheet starts off its edge and settles against it', async () => {
 		assert.equal(seen.right, 0, 'against the right edge, with the margin holding it there');
 		assert.equal(seen.radius, '0px', 'the outer corner is square');
 		assert.equal(seen.leftEdge, '1px', 'and the one border is the inner edge');
-	});
-});
-
-test('opening the second section of an accordion closes the first, with no script of ours', async () => {
-	// Design 202: the exclusive behaviour is the platform's, and this is the check that says so.
-	await drive('accordion-exclusive', `
-		import { Accordion, DropDown, Icons, h, mount } from '@aweftjs/ui';
-		const pack = { icons: {
-			'chevron-down': { body: '<path d="M0 0 L10 10"/>', width: 10, height: 10 },
-			'chevron-up': { body: '<path d="M0 10 L10 0"/>', width: 10, height: 10 },
-		} };
-		mount(document.body, <Icons value={pack}>
-			<Accordion id="stack" items={[
-				{ label: 'One', content: 'the first' },
-				{ label: 'Two', content: 'the second' },
-			]} />
-		</Icons>);
-	`, async (view) => {
-		await view.waitForSelector('#stack');
-
-		const names = await view.evaluate(() =>
-			Array.from(document.querySelectorAll('#stack details')).map((node) => node.getAttribute('name')));
-		assert.equal(names.length, 2);
-		assert.equal(names[0], names[1], 'one name, which is what puts them in one group');
-		assert.notEqual(names[0], null);
-
-		const open = (): Promise<boolean[]> => view.evaluate(() =>
-			Array.from(document.querySelectorAll('#stack details')).map((node) => node.hasAttribute('open')));
-		assert.deepEqual(await open(), [false, false], 'both start closed');
-
-		await view.click('#stack details:nth-of-type(1) summary');
-		await view.waitForFunction(() =>
-			document.querySelectorAll('#stack details[open]').length === 1);
-		assert.deepEqual(await open(), [true, false]);
-
-		await view.click('#stack details:nth-of-type(2) summary');
-		await view.waitForFunction(() =>
-			document.querySelector('#stack details:nth-of-type(2)')!.hasAttribute('open'));
-		assert.deepEqual(await open(), [false, true],
-			'the platform closed the first when the second opened');
-	});
-});
-
-test('the arrow keys move a toggle group, and the ring lands on the label', async () => {
-	// Design 202: the keyboard is the radios' own, because they share one name, and the ring is on
-	// the label because the input inside it is a pixel nobody can see. Both are measurements.
-	await drive('toggle-group-keys', `
-		import { mutable } from '@aweftjs/core';
-		import { ToggleGroup, h, mount } from '@aweftjs/ui';
-		const align = mutable('left');
-		mount(document.body, <div>
-			<ToggleGroup id="group" label="Alignment" value={align} options={['left', 'centre', 'right']} />
-			<p id="picked">{align}</p>
-		</div>);
-	`, async (view) => {
-		await view.waitForSelector('#group');
-		assert.equal(await view.textContent('#picked'), 'left');
-
-		// A tab reaches the checked radio, which is the one tab stop the group has.
-		await view.keyboard.press('Tab');
-		const focused = await view.evaluate(() => {
-			const active = document.activeElement!;
-			return { tag: active.tagName.toLowerCase(), value: active.checked };
-		});
-		assert.deepEqual(focused, { tag: 'input', value: true },
-			'Tab lands on the checked radio and nowhere else in the group');
-
-		await view.keyboard.press('ArrowRight');
-		await view.waitForFunction(() => document.querySelector('#picked')!.textContent === 'centre');
-		await view.keyboard.press('ArrowRight');
-		await view.waitForFunction(() => document.querySelector('#picked')!.textContent === 'right');
-		await view.keyboard.press('ArrowRight');
-		await view.waitForFunction(() => document.querySelector('#picked')!.textContent === 'left',
-			{ timeout: 5000 });
-
-		const ring = await view.evaluate(() => {
-			const input = document.activeElement!;
-			const label = input.parentElement!;
-			const box = label.getBoundingClientRect();
-			return {
-				label: getComputedStyle(label)['boxShadow'] ?? '',
-				input: getComputedStyle(input)['boxShadow'] ?? '',
-				fill: getComputedStyle(label).backgroundColor,
-				height: Math.round(box.height),
-				hidden: Math.round(input.getBoundingClientRect().width),
-			};
-		});
-		assert.match(ring.label, /0px 0px 0px 3px/, 'the ring is on the label');
-		assert.equal(ring.input, 'none', 'and the input inside it shows none of its own');
-		assert.equal(ring.height, 36, '$control, through the button entry it extends');
-		assert.ok(ring.hidden < 4, `and the input takes no room: ${String(ring.hidden)}px`);
-
-		// The checked option is the one wearing the fill.
-		const fills = await view.evaluate(() =>
-			Array.from(document.querySelectorAll('#group label')).map((node) =>
-				getComputedStyle(node).backgroundColor));
-		assert.notEqual(fills[0], fills[1], 'the chosen one is filled and the rest are not');
-		assert.equal(fills[1], fills[2]);
 	});
 });
 

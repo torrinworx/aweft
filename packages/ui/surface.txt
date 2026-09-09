@@ -1,6 +1,3 @@
-value Accordion: (props: AccordionProps) => Mounter
-type AccordionItem: interface AccordionItem { readonly label?: unknown; readonly content?: unknown; }
-type AccordionProps: interface AccordionProps { readonly name?: unknown; readonly items?: readonly AccordionItem[]; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type Act: type Act = ActComponent | LazyAct;
 type ActComponent: type ActComponent = Component<Record<string, unknown>> & { entries?: ActEntries; };
 type ActEntries: type ActEntries = () => Promise<readonly Readonly<Record<string, string>>[]>;
@@ -14,8 +11,6 @@ value Breadcrumb: (props: BreadcrumbProps) => Mounter
 type BreadcrumbItem: interface BreadcrumbItem { readonly label?: unknown; readonly href?: unknown; }
 type BreadcrumbProps: interface BreadcrumbProps { readonly items?: unknown; readonly label?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value Button: (props: ButtonProps) => Mounter
-value ButtonGroup: (props: ButtonGroupProps) => unknown
-type ButtonGroupProps: interface ButtonGroupProps { readonly label?: unknown; readonly vertical?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type ButtonProps: interface ButtonProps { readonly label?: unknown; readonly type?: unknown; readonly size?: unknown; readonly icon?: unknown; readonly iconPosition?: string; readonly disabled?: unknown; readonly loading?: unknown; readonly round?: unknown; readonly inline?: unknown; readonly href?: unknown; readonly hrefNewTab?: unknown; readonly onClick?: (event: unknown) => unknown; readonly track?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Card: (props: CardProps) => unknown
 type CardProps: interface CardProps { readonly title?: unknown; readonly description?: unknown; readonly foot?: unknown; readonly type?: unknown; readonly tight?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
@@ -60,10 +55,6 @@ value Icons: Context<IconSource[]>
 type Ids: interface Ids { next(prefix?: string): string; }
 type Input: interface Input { readonly meta?: Readonly<Record<string, unknown>>; readonly on?: (event: Record<string, unknown>) => void; readonly [handler: string]: unknown; }
 value InputContext: Context<Input> & { fire: (context: unknown, type: string, payload?: Record<string, unknown>) => void; }
-value InputGroup: (props: InputGroupProps) => Mounter
-type InputGroupProps: interface InputGroupProps { readonly leading?: unknown; readonly trailing?: unknown; readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly password?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
-value Kbd: (props: KbdProps) => unknown
-type KbdProps: interface KbdProps { readonly label?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type LazyAct: interface LazyAct { load(): Promise<unknown>; entries?: ActEntries; }
 value Link: (props: TagProps) => unknown
 type Loader: type Loader<P> = (props: P, cleanup: (...fns: (() => void)[]) => void) => unknown;
@@ -127,7 +118,7 @@ type TagProps: interface TagProps { readonly key?: string; readonly children?: u
 value TextArea: (props: TextAreaProps) => Mounter
 type TextAreaProps: interface TextAreaProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly maxHeight?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value TextField: (props: TextFieldProps) => Mounter
-type TextFieldProps: interface TextFieldProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly password?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type TextFieldProps: interface TextFieldProps { readonly leading?: unknown; readonly trailing?: unknown; readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly password?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type TextModifier: interface TextModifier { readonly check: string | RegExp; readonly return: (match: string) => unknown; readonly [key: string]: unknown; }
 value TextModifiers: Context<TextModifier[]>
 value Theme: ThemeApi
@@ -138,8 +129,6 @@ type ThemeFunction: type ThemeFunction = (args: string[]) => string;
 type Themed: type Themed = (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown;
 value Title: (props: TagProps) => unknown
 value Toggle: (props: ToggleProps) => Mounter
-value ToggleGroup: (props: ToggleGroupProps) => Mounter
-type ToggleGroupProps: interface ToggleGroupProps { readonly value?: unknown; readonly options?: unknown; readonly display?: unknown; readonly multiple?: unknown; readonly size?: unknown; readonly type?: unknown; readonly disabled?: unknown; readonly label?: unknown; readonly onChange?: (next: unknown, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type ToggleProps: interface ToggleProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly onChange?: (next: boolean, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value Tooltip: (props: TooltipProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
 type TooltipProps: interface TooltipProps { readonly label?: unknown; readonly enabled?: unknown; readonly locations?: unknown; readonly type?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }

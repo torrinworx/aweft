@@ -6,13 +6,9 @@
 //
 // This is not exported. A component calls it, spreads `aria` onto its element, and renders
 // `label()` and `notes()` around it.
-//
-// It also tells a `Field` laid out above it what its error is, through the slot below (record
-// 196). That is the only thing a control says upward, and it says it without changing an id, an
-// attribute or a piece of markup.
 
 import { h } from './h.ts';
-import { slotOf, use } from './render.ts';
+import { use } from './render.ts';
 import { through } from './source.ts';
 import { errorAt } from './validation.ts';
 
@@ -45,26 +41,6 @@ export interface Wiring {
 /** Nothing to say: what an absent label, description or error looks like. */
 export const empty = (value: unknown): boolean =>
 	value === undefined || value === null || value === false || value === '';
-
-const MARKS: unique symbol = Symbol('aweft.ui.field.marks');
-
-/** A `Field` above a control, following whether anything under it has something wrong with it. */
-export interface FieldMarks {
-	/**
-	 * Follow one control's error, for as long as the field is on the page.
-	 *
-	 * The value is whatever the control was given: a plain value, or a cell. Anything `empty()`
-	 * says is nothing to say.
-	 */
-	mark(error: unknown): void;
-}
-
-/** The slot key a `Field` writes and `wireField` reads. */
-export const MARKS_SLOT = MARKS;
-
-/** The field above this mount, or null when the control is not inside one. */
-export const marksAt = (context: unknown): FieldMarks | null =>
-	(slotOf(context, MARKS) as FieldMarks | undefined) ?? null;
 
 /**
  * Mint a control's ids and work out its ARIA.
@@ -114,10 +90,6 @@ export const wireField = (context: unknown, props: WiringProps): Wiring => {
 	});
 
 	const invalid = through(error, (value) => (empty(value) ? null : 'true'));
-
-	// The one thing a control says upward: what its error is, to a `Field` laid out around it, so
-	// that field can mark itself (design 196). It is the same value the ARIA above follows.
-	marksAt(context)?.mark(error);
 
 	return {
 		id,

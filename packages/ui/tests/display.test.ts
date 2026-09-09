@@ -1,4 +1,4 @@
-// The display and grouping pieces, in the light tree (designs 199, 200): what each
+// The display and grouping pieces, in the light tree (designs 199, 200, 211, 212, 215): what each
 // one renders, what a screen reader would call it, and which entry it lands on.
 //
 // What only a browser can answer, which is the ring on a real Tab and an image that really loads,
@@ -11,10 +11,7 @@ import assert from 'node:assert/strict';
 import { mutable } from '@aweftjs/core';
 import { createDocument } from '@aweftjs/dom';
 import type { LightElement, NodeLike } from '@aweftjs/dom';
-import {
-	Alert, Avatar, Badge, Button, ButtonGroup, Card, Empty, InputGroup, Kbd, Paper, Progress,
-	Skeleton, context, h, mount,
-} from '@aweftjs/ui';
+import { Alert, Avatar, Badge, Button, Card, Empty, Progress, Skeleton, context, h, mount } from '@aweftjs/ui';
 import type { Render } from '@aweftjs/ui';
 
 const elements = (node: NodeLike | null): LightElement[] => {
@@ -201,18 +198,6 @@ test('a skeleton says nothing to a screen reader, and takes its size from style'
 	stop();
 });
 
-// --- Kbd -----------------------------------------------------------------------------------
-
-test('a kbd is the element the platform has for one, in the mono family', () => {
-	const { render, root, stop } = page(h(Kbd as never, { label: 'Esc' }));
-	assert.equal(root.localName, 'kbd');
-	assert.equal(root.textContent, 'Esc');
-	const rules = rulesOn(render, root);
-	assert.match(rules, /font-family: ui-monospace/, '$fontMono');
-	assert.match(rules, /min-width: 24px/, '$target');
-	stop();
-});
-
 // --- Progress ------------------------------------------------------------------------------
 
 test('a progress is a fraction of one, and a value cell moves it', () => {
@@ -293,9 +278,9 @@ test('an empty state renders only the parts it was given', () => {
 	bare.stop();
 });
 
-// --- Card and Paper ------------------------------------------------------------------------
+// --- Card ------------------------------------------------------------------------------------
 
-test('a card is the paper entry with parts in it, and paper stays the bare block', () => {
+test('a card with parts is a stack, and one with none is the bare block', () => {
 	const card = page(h(Card as never, {
 		title: 'Today', description: 'What is due', foot: h(Button as never, { label: 'Add' }),
 	}, h('p', {}, 'nothing yet')));
@@ -312,32 +297,46 @@ test('a card is the paper entry with parts in it, and paper stays the bare block
 	assert.equal(card.root.textContent, 'TodayWhat is duenothing yetAdd');
 	card.stop();
 
-	const paper = page(h(Paper as never, {}, h('p', {}, 'x')));
-	const bare = rulesOn(paper.render, paper.root);
-	assert.match(bare, /border-radius: 10px/, 'the same entry');
-	assert.doesNotMatch(bare, /flex-direction: column/, 'and none of the card component\'s column');
-	paper.stop();
+	// Design 211: no title, no description and no foot is the bare block it always was. The
+	// children are the card's own children, with no body wrapper and no column between them.
+	const bare = page(h(Card as never, {}, h('p', {}, 'x'), h('p', {}, 'y')));
+	const plain = rulesOn(bare.render, bare.root);
+	assert.match(plain, /border-radius: 10px/, 'the same entry');
+	assert.doesNotMatch(plain, /flex-direction: column/, 'and none of the stack modifier');
+	assert.deepEqual(childrenOf(bare.root).map((node) => node.localName), ['p', 'p'],
+		'the children are the card\'s own children');
+	bare.stop();
 });
 
-test('tight is read as a cell on a card and on a paper, so false in one is not true', () => {
+test('a foot on its own is enough to make the parts', () => {
+	const { root, stop } = page(h(Card as never, {
+		foot: h(Button as never, { label: 'Add' }),
+	}, h('p', {}, 'x')));
+	assert.deepEqual(childrenOf(root).map((node) => node.getAttribute('theme') ?? node.localName),
+		['div', 'div'], 'the body and the foot, with no head');
+	assert.equal(root.textContent, 'xAdd');
+	stop();
+});
+
+test('tight is read as a cell, on a card with parts and on one without', () => {
 	// Every other look prop here follows a cell. A cell handed straight to `?:` is an object, and
 	// an object is truthy, so a card told `tight={cell}` was tight whatever the cell held.
 	const dense = mutable<unknown>(false);
 	const card = page(h(Card as never, { title: 'Today', tight: dense }));
-	const paper = page(h(Paper as never, { tight: dense }, h('p', {}, 'x')));
+	const bare = page(h(Card as never, { tight: dense }, h('p', {}, 'x')));
 
 	// The tight modifier is a second rule on the same class, so what says it landed is its own
 	// declaration and not the absence of the entry's.
 	const dropped = /padding: 0px/;
 	assert.match(rulesOn(card.render, card.root), /padding: 16px/, '$space4, the card entry');
 	assert.doesNotMatch(rulesOn(card.render, card.root), dropped, 'a false cell is not tight');
-	assert.doesNotMatch(rulesOn(paper.render, paper.root), dropped);
+	assert.doesNotMatch(rulesOn(bare.render, bare.root), dropped);
 
 	dense.set(true);
 	assert.match(rulesOn(card.render, card.root), dropped, 'and the cell takes the padding away');
-	assert.match(rulesOn(paper.render, paper.root), dropped);
+	assert.match(rulesOn(bare.render, bare.root), dropped);
 	card.stop();
-	paper.stop();
+	bare.stop();
 });
 
 test('a card head holds only the parts it was given', () => {
@@ -346,100 +345,5 @@ test('a card head holds only the parts it was given', () => {
 	assert.deepEqual(childrenOf(head).map((node) => node.localName), ['p'],
 		'a card with no description renders no line for one');
 	assert.equal(head.textContent, 'Today');
-	stop();
-});
-
-// --- ButtonGroup ---------------------------------------------------------------------------
-
-test('a button group is a named group whose children share one border', () => {
-	const { render, root, stop } = page(h(ButtonGroup as never, { label: 'Alignment' },
-		h(Button as never, { label: 'Left' }), h(Button as never, { label: 'Right' })));
-
-	assert.equal(root.localName, 'div');
-	assert.equal(root.getAttribute('role'), 'group');
-	assert.equal(root.getAttribute('aria-label'), 'Alignment');
-
-	const rules = rulesOn(render, root);
-	assert.match(rules, /> \* \+ \* \{ margin-left: -1px/, 'two adjacent borders are one line');
-	assert.match(rules, /> \*:not\(:first-child\):not\(:last-child\) \{ border-radius: 0/,
-		'and the inner corners come off');
-	assert.match(rules, /> \*:first-child \{ border-radius: 6px 0 0 6px/, '$radius on the ends');
-	stop();
-});
-
-// --- InputGroup ----------------------------------------------------------------------------
-
-test('an input group is one box holding its addons and an input that wears none of the box', () => {
-	const { render, root, stop } = page(h(InputGroup as never, {
-		leading: '$', trailing: 'CAD', placeholder: 'Amount',
-	}));
-
-	// No label, description or error, so the box is what mounted.
-	assert.equal(root.localName, 'div');
-	const inside = childrenOf(root);
-	assert.deepEqual(inside.map((node) => node.localName), ['span', 'input', 'span'],
-		'a text addon is wrapped, and the input sits between the two');
-	assert.equal(inside[0]?.textContent, '$');
-	assert.equal(inside[2]?.textContent, 'CAD');
-
-	const box = rulesOn(render, root);
-	assert.match(box, /height: 36px/, '$control: the box is the control');
-	assert.match(box, new RegExp(`border: 1px solid ${roleOf('input')}`), '$input, through extends');
-	assert.match(box, /:has\(:focus-visible\) \{[^}]*box-shadow: 0 0 0 3px/, 'and the ring is on it');
-
-	const control = rulesOn(render, inside[1]!);
-	assert.match(control, /border: none/);
-	assert.match(control, /background: transparent/);
-	assert.match(control, /flex: 1 1 auto/);
-	stop();
-});
-
-test('an input group\'s input carries the whole field wiring', () => {
-	const error = mutable('');
-	const { root, stop } = page(h(InputGroup as never, {
-		label: 'Price', description: 'in dollars', error, leading: '$',
-	}));
-
-	const input = byTag(root.firstChild, 'input');
-	const label = byTag(root.firstChild, 'label');
-	const id = input.getAttribute('id') ?? '';
-	assert.notEqual(id, '', 'the input was given an id off the render');
-	assert.equal(label.getAttribute('for'), id, 'and the label points at it');
-	assert.equal(input.getAttribute('aria-describedby'), `${id}-note`,
-		'the description is what describes it while there is no error');
-	assert.equal(input.getAttribute('aria-invalid'), null);
-
-	error.set('too much');
-	assert.equal(input.getAttribute('aria-invalid'), 'true');
-	assert.equal(input.getAttribute('aria-describedby'), `${id}-note ${id}-error`,
-		'and the message joins the description');
-	const message = elements(root.firstChild).find((node) => node.getAttribute('id') === `${id}-error`);
-	assert.equal(message?.getAttribute('role'), 'alert', 'so it is read out when it arrives');
-
-	error.set('');
-	assert.equal(input.getAttribute('aria-invalid'), null, 'removed rather than set to false');
-	stop();
-});
-
-test('typing in an input group writes the cell, and the cell writes the element', () => {
-	const value = mutable('');
-	const { root, stop } = page(h(InputGroup as never, { value, trailing: 'CAD' }));
-	const input = byTag(root.firstChild, 'input');
-
-	(input as unknown as Record<string, unknown>)['value'] = '12';
-	fire(input, 'input');
-	assert.equal(value.get(), '12', 'the keystroke reached the cell');
-
-	value.set('34');
-	assert.equal((input as unknown as Record<string, unknown>)['value'], '34',
-		'and writing the cell wrote the element');
-	stop();
-});
-
-test('an input group in error wears the danger edge on the box, not on the input', () => {
-	const { render, root, stop } = page(h(InputGroup as never, { error: 'no' }));
-	// With an error and no label the field wraps, so the box is one level in.
-	const box = childrenOf(root)[0]!;
-	assert.match(rulesOn(render, box), new RegExp(`border-color: ${roleOf('danger')}`), '$danger');
 	stop();
 });

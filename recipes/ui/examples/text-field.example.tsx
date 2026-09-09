@@ -1,7 +1,8 @@
-// TextField: the words around it, the states it can be in, and the size axis.
+// TextField: the words around it, the states it can be in, the size axis, and the addons that put
+// it in a box (design 210).
 
 import { mutable } from '@aweftjs/core';
-import { Button, TextField, h } from '@aweftjs/ui';
+import { Button, Icon, TextField, h } from '@aweftjs/ui';
 
 import { ids } from '../example.ts';
 import type { ExampleComponent } from '../example.ts';
@@ -13,6 +14,8 @@ export const Example: ExampleComponent = (props) => {
 	const at = ids(props.mode);
 	const project = mutable('');
 	const bad = mutable<string | null>(null);
+	const price = mutable('12.00');
+	const query = mutable('');
 
 	return (
 		<div theme="column">
@@ -26,6 +29,29 @@ export const Example: ExampleComponent = (props) => {
 			<TextField placeholder="Small" size="sm" aria-label="Small field" id={at('field-sm')} />
 			<TextField placeholder="Default" aria-label="Default field" id={at('field-md')} />
 			<TextField placeholder="Large" size="lg" aria-label="Large field" id={at('field-lg')} />
+
+			<p theme={['text', 'sm', 'muted']}>Addons</p>
+			<TextField label="Price" leading="$" trailing="CAD" value={price} id={at('addon')} />
+
+			<TextField
+				label="Search"
+				placeholder="Anything"
+				leading={<Icon name="lucide:search" />}
+				trailing={<Button icon={<Icon name="lucide:x" label="Clear" />} type="quiet" size="icon-sm"
+					onClick={() => { query.set(''); }} />}
+				value={query}
+				id={at('addon-search')}
+			/>
+
+			<TextField label="Website" leading="https://" description="Without the protocol"
+				id={at('addon-described')} />
+
+			<TextField label="Amount" leading="$" error="that is more than you have"
+				id={at('addon-invalid')} />
+
+			<TextField label="Small" leading="$" size="sm" id={at('addon-sm')} />
+			<TextField label="Large" leading="$" size="lg" id={at('addon-lg')} />
+			<TextField label="Off" leading="$" disabled={true} id={at('addon-disabled')} />
 
 			<Button
 				label={bad.bool('Clear the error', 'Show an error')}

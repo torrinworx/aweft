@@ -327,6 +327,24 @@ the generic `on` and then `on<Type>`, with the application's `meta` merged in la
 runs `fn` with a fresh `AbortSignal` and hands back the abort. `sizeProperties` is the set of
 property names a bare number is given `px` for.
 
+## What every component takes
+
+Four props mean the same thing on every component in this package, controls, composites, display
+pieces and grouping pieces alike.
+
+- **`theme` appends your own segments** to the ones the component writes, so
+  `<Card theme="tight">` is the card entry plus `card_tight` and `<Button theme={cell}>` follows a
+  cell.
+- **`class` appends** a plain class name, leaving the generated one alone.
+- **`element` hands in the node to decorate** instead of building one. An `element` of the wrong tag
+  is an assert naming both tags, because a `<div>` wearing a checkbox's theme is a checkbox that
+  does nothing.
+- **Anything else goes to the element**, so `id`, `aria-*` and a handler the component does not name
+  land where you would expect them.
+
+**Every state prop is a cell, or absent.** Given one, the component writes it and follows it; given
+none, it keeps its own. A display prop takes a value or a cell. There are no imperative handles.
+
 ## Controls
 
 Every control here is one native element with a theme on it. There is nothing in this package that
@@ -346,24 +364,16 @@ const problem = mutable(null);
 <Button label="Save" onClick={() => save(email.get())} />
 ```
 
-**Every state prop is a cell, or absent.** Given one, the control writes it and follows it; given
-none, it keeps its own. A display prop takes a value or a cell. `class` appends, `theme` appends
-your own segments to the component's, and `element` hands in the node to decorate instead of
-building one. An `element` of the wrong tag is an assert naming both tags, because a `<div>` wearing
-a checkbox's theme is a checkbox that does nothing. There are no imperative handles.
-
 | component | the element | its own props | `size` | example |
 |---|---|---|---|---|
 | `Button` | `<button>`, or `<a>` with an `href` | `label`, `type`, `icon`, `iconPosition`, `disabled`, `loading`, `round`, `inline`, `href`, `hrefNewTab`, `onClick`, `track` | `sm`, `lg`, `icon`, `icon-sm`, `icon-lg` | `button` |
-| `TextField` | `<input>` | `value`, `label`, `description`, `error`, `placeholder`, `password`, `onEnter`, `onKeyDown`, `disabled`, `type` | `sm`, `lg` | `text-field` |
+| `TextField` | `<input>`, in a `<div>` on `input_group` when it was given an addon | `value`, `label`, `description`, `error`, `leading`, `trailing`, `placeholder`, `password`, `onEnter`, `onKeyDown`, `disabled`, `type` | `sm`, `lg` | `text-field` |
 | `TextArea` | `<textarea>` | the same, plus `maxHeight` | `sm`, `lg` | `text-area` |
 | `Checkbox` | `<input type="checkbox">` | `value`, `label`, `invert`, `indeterminate`, `disabled`, `onChange` | `sm`, `lg` | `checkbox` |
 | `Radio` | `<input type="radio">` | `value` (the group's), `option` (this one's), `label`, `disabled`, `onChange` | `sm`, `lg` | `radio` |
 | `Toggle` | `<input type="checkbox" role="switch">` | `value`, `label`, `disabled`, `onChange`, `type` | `sm`, `lg` | `toggle` |
 | `Slider` | `<input type="range">` | `value` (a number), `min`, `max`, `step`, `disabled`, `track` | `sm`, `lg` | `slider` |
 | `Select` | `<select>` in a `<span>` with its arrow | `value`, `options`, `display`, `placeholder`, `disabled`, `onChange` | `sm`, `lg` | `select` |
-| `ToggleGroup` | `<div role="group">` of `<label>`s over hidden radios or checkboxes | `value`, `options`, `display`, `multiple`, `label`, `disabled`, `onChange`, `type` | `sm`, `lg` | `toggle-group` |
-| `Paper` | `<div>` on the `card` entry | `type`, `tight` | | `paper` |
 | `LoadingDots` | three dots | `type`, `size`, `label` | a CSS length | `loading-dots` |
 | `Icon` | `<svg>` | `name`, `size`, `label`, `rot` | a CSS length | `icon` |
 
@@ -406,16 +416,18 @@ error clears the attribute is removed rather than set to `false`.
 the arrow keys, the wrapping and the roving focus are the platform's. `browser.test.ts` presses
 the real keys: Space on a checkbox, the arrows in a radio group, Home and End on a slider.
 
-**A `ToggleGroup` is that group drawn as buttons** (design 202). Each option is a `<label>` wearing
-the `button` look over a real `<input>` that is off the screen and still in the focus order, so the
-arrows move between them and Space toggles a checkbox with nothing written in the component. One
-choice is radios; `multiple` makes them checkboxes and the `value` cell a list, in the order the
-options were declared. That list is **rebuilt from `options` on every change**, so a value the cell
-was holding that is not among the options is dropped the first time anybody ticks anything: the
-order comes from the options and nothing else, and a cell seeded with a value the options do not
-have does not survive a click. `display` reads exactly as `Select` reads it. Unlike a `ButtonGroup`, it
-takes a `size`, because it renders its own options and can therefore put the segment in their class
-lists.
+**`TextField` takes `leading` and `trailing`, and builds a box only when it was given one**
+(design 210). With neither, the markup is the `<input>` and nothing else. With either, the input
+goes inside a `<div>` on `input_group` that carries the border, the radius, the fill and the height,
+and the input carries none of them, so the two read as one control. The focus ring is on the box, so
+tabbing into the input rings the whole thing. Text is wrapped on `input_group_addon` for you, and
+anything else is mounted as it is, which is what lets an `Icon` or a `Button` of `size="icon"` go
+there.
+
+```tsx
+<TextField label="Price" leading="$" trailing="CAD" value={price} />
+<TextField label="Search" leading={<Icon name="search" />} value={query} />
+```
 
 **`Select` holds items, not the text the element carries.** The chosen row is the one that says it
 is chosen, and a change is read back as the position it happened at, so what the cell holds is
@@ -482,60 +494,59 @@ and `end` mean across the page on both.
 `recipes/ui/catalogue.html` is every one of them in every state, in both modes, driven in Chromium
 by `recipes/ui/main.ts` with axe-core over it.
 
-## Fields
+## Laying a form out
 
-Three components lay a form out (design 196). They do layout and nothing else: **a control still
-labels itself**, so `label`, `description` and `error` stay where they are and nothing here can
-disagree with a control about what a label is.
+There is no `Field` component. A form is the theme entries and a bare `<label>` (design 209): five
+builders out of five reached past the components, for the same reason each time, so the components
+went and the entries stayed.
 
 ```tsx
-import { Checkbox, Field, FieldGroup, FieldSet, TextField } from '@aweftjs/ui';
+import { Checkbox, TextField } from '@aweftjs/ui';
 
-<FieldGroup>
-  <FieldSet legend="Where to send it">
-    <Field orientation="responsive">
+<div theme="field_group">
+  <fieldset theme="field_set">
+    <legend theme="field_legend">Where to send it</legend>
+    <div theme={['field', 'responsive']}>
       <label for="street" theme="field_label">Street</label>
       <TextField id="street" value={street} />
-    </Field>
-    <Field orientation="inline">
+    </div>
+    <div theme={['field', 'inline']}>
       <Checkbox id="post" value={post} />
       <label for="post" theme="field_label">Post it rather than email it</label>
-    </Field>
-  </FieldSet>
-  <Field><TextField label="Notes" value={notes} description="Anything else" /></Field>
-</FieldGroup>
+    </div>
+  </fieldset>
+  <TextField label="Notes" value={notes} description="Anything else" />
+</div>
 ```
 
-| component | the element | its own props | example |
-|---|---|---|---|
-| `Field` | `<div role="group">` on `field` | `orientation`, `element`, `theme` | `field` |
-| `FieldGroup` | `<div>` on `field_group` | `element`, `theme` | `field` |
-| `FieldSet` | `<fieldset>` on `field_set` | `legend`, `element`, `theme` | `field` |
+| entry | what it lays out |
+|---|---|
+| `field` | one field: a control, whatever labels it, and whatever is said under it, in a column |
+| `field_inline` | the same field as one `$control`-tall row |
+| `field_responsive` | a column that turns into that row from 28rem of its container |
+| `field_group` | the stack a form is, `$space6` apart, declaring itself the container above measures |
+| `field_set` | the same stack on a `<fieldset>`, with the host's border, padding and minimum width off |
+| `field_legend` | the `<legend>` inside one |
+| `field_label`, `field_hint`, `field_error` | the three things written around a control |
 
-**`orientation` is `column`, `inline` or `responsive`**, a value or a cell. `column` is the default:
-the label above, the control, then the notes. `inline` is the control beside its words on one
-`$control`-tall line. `responsive` is a column that turns inline from 28rem of its container's
-width. The container is `FieldGroup`, which is the only thing here that declares itself one, so a
-`responsive` field with no group above it stays a column at every width.
+**A control still labels itself.** `label`, `description` and `error` stay on the control, and a
+control given any of the three wraps itself in its own `<div theme="field">`. So the last line of
+the form above needs no box around it: a `Field` around a control that lays itself out is a column
+of one thing.
 
-`inline` and `responsive` lay out the field's own children, so they are for a bare control and the
-`<label for>` you wrote beside it. A control you gave a `label` to already lays that pair out
-itself, and putting one in a `Field` is a column of one thing.
+**`field_inline` and `field_responsive` lay out the box's own children**, so they are for a bare
+control and the `<label for>` you wrote beside it.
 
-**A field marks itself when a control inside it is wrong.** While any control in it says it has an
-error, whether from its own `error` prop or from a `Validate` around it, the field carries
-`data-invalid`, and the attribute goes when the error clears. The default theme colours a
-`field_label` under a marked field the colour its message already has, and your own stylesheet can
-reach it the same way.
+**`field_responsive` measures the nearest ancestor that declares itself a container**, which in this
+package is `field_group` and nothing else. With no group above it, a query with no container answers
+false and the field stays a column at every width.
 
-**`FieldSet` is the platform's fieldset**, with its border, padding, margin and minimum width taken
-off. `disabled` goes through to the element and disables every control inside it natively. It does
-not dim them: the disabled look is a class a control writes from its own `disabled` prop, and a
-fieldset writes no class on anything. Set `disabled` on the controls too where the dimming matters.
+**A label under an ancestor carrying `data-invalid` takes the colour its message has.** Nothing
+writes that attribute for you; write it from the same cell you pass to `error` if you want it.
 
 ## Composites
 
-Eight more components, each built out of the controls above and the behaviours underneath them.
+Seven more components, each built out of the controls above and the behaviours underneath them.
 
 ```tsx
 import { ColorPicker, Default, DropDown, FileDrop, Modal, Tooltip, Validate, ValidateContext } from '@aweftjs/ui';
@@ -547,7 +558,6 @@ import { ColorPicker, Default, DropDown, FileDrop, Modal, Tooltip, Validate, Val
 | `Default` | the stage template that adds nothing | none | `modal` |
 | `Tooltip` | `Detached` plus the hover and focus trigger | `label`, `enabled`, `locations`, `type` | `tooltip` |
 | `DropDown` | a `<details>` whose `<summary>` wears the `button` theme | `open`, `label`, `icon`, `iconOpen`, `iconClose`, `arrow`, `name`, `type`, `disabled` | `drop-down` |
-| `Accordion` | a `<div>` on `accordion` of `DropDown`s sharing one `name` | `name`, `items` of `{ label, content }`, `type`, `element` | `accordion` |
 | `FileDrop` | a drop zone with a real file input in it | `files`, `extensions`, `multiple`, `limit`, `clickable`, `disabled`, `onDrop`, `ready`, `type` | `file-drop` |
 | `Validate` | a check around a control, and the message it shows | `value`, `validate`, `signal`, `valid`, `error`, `showError`, `icon`, `type` | `validate` |
 | `ValidateContext` | the form's answer: every `Validate` below it | `value` | `validate` |
@@ -798,35 +808,41 @@ the wrong number for it: `sm` tightens the padding and `lg` widens it and takes 
 **An alert's icon is yours.** This package ships no drawings, so an `Icon` by name needs an `Icons`
 provider above it and there is no default icon here. The box is one column until you give it one.
 
+**`danger` interrupts and `success` waits.** A `danger` alert is `role="alert"`, so a screen reader
+breaks off to read it; every other type, `success` included, is `role="status"` and waits its turn
+(design 216). A thing that went right is not an interruption.
+
 ## Grouping
 
-Three components whose whole job is what they put around other components (design 200).
+One component whose whole job is what it puts around other components (designs 200, 211).
 
 ```tsx
-import { ButtonGroup, Card, InputGroup } from '@aweftjs/ui';
+import { Card } from '@aweftjs/ui';
 ```
 
 | component | the element | its own props | example |
 |---|---|---|---|
-| `Card` | `<div>` on `card` with the `stack` segment | `title`, `description`, `foot`, `type`, `tight`, `element`, children as the body | `card` |
-| `ButtonGroup` | `<div role="group">` on `buttongroup` | `label`, `vertical`, `element`, children as the buttons | `button-group` |
-| `InputGroup` | a `<div>` on `inputgroup` around an `<input>` | `leading`, `trailing`, and every `TextField` prop | `input-group` |
+| `Card` | `<div>` on `card`, with the `stack` segment when it has parts | `title`, `description`, `foot`, `type`, `tight`, `element`, children as the body | `card` |
 
-**`Card` and `Paper` are the same entry.** `Paper` is the bare block; `Card` adds the head, the body
-and the foot and the `$space4` column between them, which is the `card_stack` modifier rather than a
-change to `card`. So a `Paper` renders what it always rendered.
+**A `Card` with none of `title`, `description` and `foot` is the bare block**: the `card` entry, and
+the children directly inside it (design 211). Given any of the three it takes the `stack` segment
+and builds the parts: the head, the body around your children, the foot, and `$space4` between them.
+Each part renders only where it was given something.
 
-**A `ButtonGroup` takes no `size`.** A class list is written by the element that wears it, so a group
-cannot put a segment in its children's lists; give each button its own `size`. What the group does do
-is take the inner corners off, keep the outer ones, and pull each button after the first back by
-`$borderWidth` so two adjacent borders read as one line.
+```tsx
+<Card><h2 theme={['text', 'lg']}>Today</h2><p theme="text">Nothing yet.</p></Card>
+<Card title="Today" description="What is due" foot={<Button label="Add" />}>Nothing yet.</Card>
+```
 
-**An `InputGroup` is a `TextField` with addons.** The box carries the border, the radius, the fill and
-the height, and the `<input>` inside it carries none of them, so the two read as one control. The
-focus ring is on the box: tabbing into the input rings the whole thing. `leading` and `trailing` take
-anything mountable, and text is wrapped on `inputgroup_addon` for you, so an `Icon` or a
-`Button` of `size="icon"` goes in as it is. The label, the description, the error and the ARIA are
-`TextField`'s own wiring, so a `Field` around either behaves the same way.
+`tight` drops the padding, for a card whose children reach the edge. Write `<Card theme="stack">`
+to get the column spacing on a card that has no parts.
+
+**A row of buttons joined into one control is yours to write** (design 212). There is no component
+for it: a class list is written by the element that wears it, so a group could never put a segment
+in its children's lists anyway.
+
+**A text field with something beside it inside the same box is `TextField`'s `leading` and
+`trailing`** (design 210), not a component of its own. See Controls.
 
 ## Navigation and data
 
@@ -852,10 +868,21 @@ the common case: `columns` is a list of `{ key, label, align, width }` or of pla
 is a list or a cell of one, and `cell` is `(row, column) => anything mountable`, defaulting to
 `String(row[column.key])`.
 
-**Rows go through `each`, so pushing one inserts one `<tr>`.** Every row therefore renders the same
-node shape; `packages/dom/README.md` says what a `cell` that varies its shape costs. A `rows` cell
-holding anything but a list, which is what one holds before the first fetch answers, reads as no
-rows.
+**Rows go through `each`, so pushing one inserts one `<tr>`.** A `rows` cell holding anything but a
+list, which is what one holds before the first fetch answers, reads as no rows.
+
+**A `cell` may return a different thing on every row.** A button on the rows that can be acted on
+and nothing on the rest, text on some and a `Badge` on others: `cell` is called per row and what it
+returns is mounted per row, so nothing about the one-shape rule under `each` reaches it.
+
+```tsx
+<Table rows={files} columns={[{ key: 'name', label: 'Name' }, { key: 'act', label: '' }]}
+	cell={(row, column) => (column.key !== 'act' ? row.name
+		: row.mine ? <Button label="Delete" type="quiet" size="sm" onClick={() => remove(row)} /> : null)} />
+```
+
+What `each` asks one shape of is a row component you write yourself, which is a different thing;
+`packages/dom/README.md` says what that costs.
 
 **A wide table scrolls in its own box**, which carries `tabindex="0"` so a keyboard can reach the
 scroll. Give the table a `caption` or a `label`: without one it has no name for a screen reader.
@@ -1062,31 +1089,27 @@ ask for. Everything else is yours to define.
 | `slider` | a range input: the track and the thumb on the vendor pseudo-elements |
 | `option` | one row of a select's open list, where the host draws it from the theme |
 | `card_tight` | that card with no padding |
-| `field`, `field_inline`, `field_responsive` | what a labelled control puts around itself, and what `Field` lays out: a column, a `$control`-tall row, or a column that turns into one from 28rem of its container |
+| `field`, `field_inline`, `field_responsive` | what a labelled control puts around itself, and what a form is laid out with: a column, a `$control`-tall row, or a column that turns into one from 28rem of its container |
 | `field_group`, `field_set`, `field_legend` | the stack a form is, a fieldset with the host's frame taken off, and its heading |
 | `dots`, `dot`, `pulse` | the three pulsing dots of `LoadingDots`, and the one keyframes block they and `skeleton` share |
-| `badge` and its `quiet`, `danger`, `outline`, `sm` and `lg` | a short label on a fill, sized by its padding and its text rather than by `$control` |
-| `alert`, `alert_lead`, `alert_symbol`, `alert_title`, `alert_body` | a message about the page: a grid of one column, two when it was given an icon |
-| `avatar`, `avatar_image`, `avatar_fallback` and its `sm`, `lg`, `round` | a picture of a person and the letters shown without one; the part that is not showing carries `hidden` |
+| `badge` and its `quiet`, `danger`, `success`, `outline`, `sm` and `lg` | a short label on a fill, sized by its padding and its text rather than by `$control` |
+| `alert`, `alert_lead`, `alert_danger`, `alert_success`, `alert_symbol`, `alert_title`, `alert_body` | a message about the page: a grid of one column, two when it was given an icon |
+| `avatar`, `avatar_image`, `avatar_fallback` and its `sm`, `lg`, `round` | a picture of a person and the letters shown without one; the part that is not showing carries `hidden`, and the letters are `$avatarLetter` of the box |
 | `skeleton`, `skeleton_round` | a grey box standing in for something that has not arrived, pulsing on `pulse` |
-| `kbd` | a key on the keyboard: `$fontMono` at `$textXs`, at least `$target` wide |
 | `progress` and its `sm` and `lg` | a bar filling up, drawn on the three vendor pseudo-elements |
 | `empty`, `empty_symbol`, `empty_title`, `empty_description`, `empty_actions` | nothing here yet, and what to do about it |
-| `card_stack`, `card_head`, `card_title`, `card_description`, `card_body`, `card_foot` | what `Card` adds to `card`; a `Paper` reaches none of them |
-| `buttongroup`, `buttongroup_vertical` | a run of buttons drawn as one control, joined by `_children_` rules on the entry |
-| `togglegroup`, `togglegroup_item` and its `sm`, `lg`, `quiet` | the same joining over `<label>`s that extend the button entry and take the fill under `:has(:checked)` |
+| `card_stack`, `card_head`, `card_title`, `card_description`, `card_body`, `card_foot` | what a `Card` adds when it was given a title, a description or a foot; one with none of the three reaches none of them |
 | `button_current` | the one of a run that is showing now: the page a `Pagination` is on |
 | `table`, `table_scroll`, `table_head`, `table_line`, `table_heading`, `table_cell`, `table_caption`, `table_foot` and the `striped`, `right`, `center`, `tight` modifiers | a table: collapsed borders, a hairline under the head and under each row, and a box a wide one scrolls in. The row's part is `line` and not `row`, because `row` is an entry of its own |
 | `breadcrumb`, `breadcrumb_list`, `breadcrumb_item`, `breadcrumb_link`, `breadcrumb_current`, `breadcrumb_separator` | a trail of links and the chevron between them, drawn out of the same `$chevron` box the select's arrow is |
 | `pagination`, `pagination_gap` | a row of page buttons, and the ellipsis where a run was left out |
-| `inputgroup`, `inputgroup_control`, `inputgroup_addon` and its `sm`, `lg`, `invalid` | the `input` look on a box with addons in it, and the input inside it with none of it |
+| `input_group`, `input_group_control`, `input_group_addon` and its `sm`, `lg`, `invalid` | the `input` look on the box a `TextField` with an addon builds, and the input inside it with none of it |
 | `icon` | an icon, sized in `em` so it follows the text |
 | `row`, `column`, `divider` | laying things out in a line, with the seven modifiers above |
 | `dialog`, `dialog_head`, `dialog_body` | a modal dialog, its heading row and its content; the scrim is on `::backdrop` |
 | `dialog_sheet` and its `left`, `right`, `top`, `bottom` | the same dialog against an edge, anchored by margin and sliding in from it |
 | `tooltip` | a tip: the page's own colours the other way up |
 | `disclosure`, `disclosure_summary` | a `<details>` and the summary that wears the `button` entry |
-| `accordion`, `accordion_item` | a stack of those, with a `$border` line between one and the next |
 | `filedrop` and its `dragging`, `prompt`, `input`, `list` and `entry` | a drop zone, its prompt and its listing |
 | `validate` | the message a `Validate` shows, beside its icon |
 | `colorpicker`, `colorpicker_swatch`, `colorpicker_track` and its `hue` | four sliders and the colour they name |
