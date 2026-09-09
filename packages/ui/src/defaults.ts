@@ -609,6 +609,68 @@ defineTheme({
 		_starting_: { opacity: 0, transform: 'scale(0.96)' },
 	},
 
+	// The drawn list a `Select` opens (design 224) and, through `menu`, the one a `Menu` opens
+	// (design 225). It is the popup's own surface with rows in it, so it extends `popup` rather than
+	// saying the fill, the border and the corner a second time. A list longer than the screen
+	// scrolls inside itself; the box the solver placed caps how tall that can be.
+	listbox: {
+		extends: 'popup',
+		$listMax: '18rem',
+		// The width a `Select` measures off its control is the width the list is, edges and padding
+		// included, so the two line up rather than the list standing 10px proud of it.
+		boxSizing: 'border-box',
+		display: 'flex',
+		flexDirection: 'column',
+		gap: '$space',
+		padding: '$space',
+		maxHeight: '$listMax',
+		overflowY: 'auto',
+	},
+	// A row is a control's height, so a list of them reads at the rhythm the rest of the page does.
+	// It is a `<div role="option">`, so the pointer and the text have to be said here.
+	listbox_item: {
+		display: 'flex',
+		alignItems: 'center',
+		gap: '$space2',
+		minHeight: '$control',
+		padding: '$space $space2',
+		borderRadius: '$radiusSm',
+		color: '$surfaceForeground',
+		cursor: 'pointer',
+		fontFamily: '$font',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+	},
+	listbox_item_sm: {
+		minHeight: '$controlSm',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+	},
+	listbox_item_lg: { minHeight: '$controlLg' },
+	listbox_item_selected: { background: '$accentSubtle', color: '$accentSubtleForeground' },
+	// Where the keyboard and the pointer are now, which is one state and not two: the behaviour
+	// writes the same cell for both (design 223). It paints the fill and leaves the row's own
+	// colour alone, so the danger row of a menu is still the danger colour under the keyboard.
+	listbox_item_active: { background: '$muted' },
+
+	// A menu is the same list of the same rows, with a heading over a group and one row that is the
+	// dangerous one (design 225).
+	menu: { extends: 'listbox' },
+	menu_item: { extends: 'listbox_item' },
+	menu_item_sm: { extends: 'listbox_item_sm' },
+	menu_item_lg: { extends: 'listbox_item_lg' },
+	menu_item_danger: { color: '$danger' },
+	menu_item_active: { extends: 'listbox_item_active' },
+	menu_group: { display: 'flex', flexDirection: 'column', gap: '$space' },
+	menu_heading: {
+		padding: '$space $space2',
+		fontFamily: '$font',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+		fontWeight: 500,
+		color: '$mutedForeground',
+	},
+
 	// Off the screen and still in the reading order. Put it in a class list beside anything: a file
 	// input that has to stay focusable, a message shown somewhere else, a label a page replaced.
 	offscreen: {

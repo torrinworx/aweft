@@ -589,10 +589,44 @@ import { ColorPicker, Default, DropDown, FileDrop, Modal, Tooltip, Validate, Val
 | `FileDrop` | a drop zone with a real file input in it | `files`, `extensions`, `multiple`, `limit`, `clickable`, `disabled`, `onDrop`, `ready`, `type` | `file-drop` |
 | `Validate` | a check around a control, and the message it shows | `value`, `validate`, `signal`, `valid`, `error`, `showError`, `icon`, `type` | `validate` |
 | `ValidateContext` | the form's answer: every `Validate` below it | `value` | `validate` |
-| `ColorPicker` | four `Slider`s and a swatch | `value`, `hasAlpha`, `disabled`, `type` | `color-picker` |
+| `ColorPicker` | a saturation and brightness square, the hue and the alpha as `Slider`s, and a swatch | `value`, `hasAlpha`, `disabled`, `type` | `color-picker` |
+| `Menu` | a button and the list of actions it opens | `items`, `open`, `label`, `icon`, `type`, `size`, `disabled`, `locations` | `menu` |
 
 These ask for `chevron-up`, `chevron-down`, `x`, `triangle-alert` and `upload` by name, so a page
-using them answers those five through `Icons`; `@aweftjs/icons/<set>/+standard` does.
+using them answers those five through `Icons`; `@aweftjs/icons/<set>/+standard` does. A `Menu` asks
+for none: its rows hold whatever `icon` you give them.
+
+**A `Menu` is a button and the actions under it.** `items` is a list of
+`{ label, icon?, type?, disabled?, onSelect }`, and `{ heading, items }` anywhere in that list draws
+a small heading over its own group. `type: 'danger'` draws a row in the danger colour, which is what
+a delete belongs in.
+
+```tsx
+<Menu label="Quick Actions" items={[{
+	heading: 'Conversation',
+	items: [
+		{ label: 'Mute Conversation', onSelect: mute },
+		{ label: 'Mark as Read', onSelect: read },
+		{ label: 'Delete Conversation', type: 'danger', onSelect: remove },
+	],
+}]} />
+```
+
+The keys are the ones a `Select` has, because they are the same behaviour: the arrows move and wrap,
+Home and End go to the ends, typing moves by what a row reads, Enter and Space choose, Escape and an
+outside click close it, and Escape and choosing put the focus back on the button. The list is
+`role="menu"` and the rows are `role="menuitem"`, named by the button. The list is in the page
+while the menu is closed, inside the box the sink places, which is what hides it; a script that looks
+for an open one asks by role with hidden elements left out, not for the first `role="menu"` it finds.
+
+Opening it moves the focus onto the `role="menu"` element, which is where `aria-activedescendant`
+names the row the keys are on. That is the ARIA menu-button pattern, and it is the only shape ARIA
+allows: the attribute may not sit on the button that opened the menu. Escape and choosing a row put
+the focus back on that button.
+
+The anchor is the button this component builds, so the ARIA is in the markup rather than written
+onto a node it does not own. Children go inside that button, and `element` hands one in. A group is
+`{ heading, items }`, and a heading makes it one whether or not it has any items yet.
 
 **A modal is a stage template, so back closes it.**
 
@@ -1194,7 +1228,10 @@ ask for. Everything else is yours to define.
 | `toggle` | a switch: a pill and a thumb drawn with `::before` |
 | `slider` | a range input: the track and the thumb on the vendor pseudo-elements, with `$space` of room at each end for the thumb |
 | `slider_hovered`, `slider_pressed` | the one entry pair that answers the two state segments itself: the root tint goes off the box, the track takes the tint and the thumb scales (design 220) |
-| `option` | one row of a select's open list, where the host draws it from the theme |
+| `listbox` | the list a select opens: the popup's surface with rows in it, scrolling past `$listMax` |
+| `listbox_item` | one row of it, a `$control`-tall line. `listbox_item_selected` is the chosen one and `listbox_item_active` is the one the keys and the pointer are on |
+| `menu`, `menu_item` | the same list and the same row for a `Menu`'s actions |
+| `menu_item_danger`, `menu_heading`, `menu_group` | the dangerous row in `$danger`, a group's small heading in `$mutedForeground`, and the column a group is |
 | `card_tight` | that card with no padding |
 | `field`, `field_inline`, `field_responsive` | what a labelled control puts around itself, and what a form is laid out with: a column, a `$control`-tall row, or a column that turns into one from 28rem of its container |
 | `field_group`, `field_set`, `field_legend` | the stack a form is, a fieldset with the host's frame taken off, and its heading |

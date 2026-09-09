@@ -52,6 +52,8 @@ export { Radio } from './radio.tsx';
 export type { RadioProps } from './radio.tsx';
 export { Select } from './select.tsx';
 export type { SelectProps } from './select.tsx';
+export { Menu } from './menu.tsx';
+export type { MenuGroup, MenuItem, MenuProps } from './menu.tsx';
 export { Slider } from './slider.tsx';
 export type { SliderProps } from './slider.tsx';
 export { TextArea } from './text-area.tsx';
