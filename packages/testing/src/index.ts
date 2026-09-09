@@ -46,3 +46,5 @@ export { errorLines, errorsOf } from './errors.ts';
 export type { ThrownRefusal } from './errors.ts';
 export { checkTheme, themeTokens } from './theme.ts';
 export type { ThemeSource, ThemeViolation } from './theme.ts';
+export { checkWords, wordRules } from './words.ts';
+export type { WordSource, WordViolation } from './words.ts';

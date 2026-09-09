@@ -25,6 +25,8 @@ type ThemeViolation: interface ThemeViolation { readonly path: string; readonly 
 type ThrownRefusal: interface ThrownRefusal { readonly reason: string; readonly fix: string; }
 type ValueJson: type ValueJson = null | boolean | number | string | { readonly bytes: string; } | { readonly ref: string; readonly kind: ObservableKind; readonly edge: EdgeKind; };
 type Violation: interface Violation { readonly from: string; readonly to: string; readonly rule: 'upward-tier' | 'cross-plane' | 'unknown-package' | 'not-allowed'; readonly detail: string; }
+type WordSource: interface WordSource { readonly path: string; readonly text: string; }
+type WordViolation: interface WordViolation { readonly path: string; readonly line: number; readonly word: string; readonly fix: string; readonly text: string; }
 value applyCommit: (doc: DocumentJson, commit: Commit) => DocumentJson
 value aweftPackageOf: (specifier: string) => string | undefined
 value canonicalJson: (value: unknown) => string
@@ -34,6 +36,7 @@ value checkGraph: (edges: readonly (readonly [string, string])[], table: Readonl
 value checkInvalidFixture: (f: InvalidFixture, applier?: Applier) => void
 value checkManifests: (manifests: readonly Manifest[], allowed: readonly string[], perPackage?: Readonly<Record<string, readonly string[]>>) => string[]
 value checkTheme: (files: readonly ThemeSource[]) => ThemeViolation[]
+value checkWords: (sources: readonly WordSource[]) => WordViolation[]
 value commitToJson: (commit: Commit, bytes: Uint8Array<ArrayBufferLike>) => CommitJson
 value deltaFromJson: (d: DeltaJson) => Delta
 value deltaToJson: (d: Delta) => DeltaJson
@@ -62,3 +65,4 @@ value surfaceProgram: (indexPaths: readonly string[]) => Program
 value themeTokens: (files: readonly ThemeSource[]) => string[]
 value valueFromJson: (v: ValueJson) => Value
 value valueToJson: (v: Value) => ValueJson
+value wordRules: () => readonly { readonly word: string; readonly fix: string; }[]

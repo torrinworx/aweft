@@ -24,7 +24,7 @@ test('the entry file exports exactly what was decided', () => {
 		'refFromJson', 'refToJson', 'roomChecks',
 		'seedFrom', 'shuffle', 'slotKeyOf',
 		'surfaceOf', 'surfaceProgram',
-		'checkTheme', 'themeTokens',
+		'checkTheme', 'themeTokens', 'checkWords', 'wordRules',
 		'valueFromJson', 'valueToJson',
 	];
 

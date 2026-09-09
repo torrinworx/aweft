@@ -26,7 +26,8 @@
 		"errors": "node packages/testing/scripts/check-errors.ts --write",
 		"errors:check": "node packages/testing/scripts/check-errors.ts",
 		"theme": "node packages/testing/scripts/check-theme.ts --write",
-		"theme:check": "node packages/testing/scripts/check-theme.ts"
+		"theme:check": "node packages/testing/scripts/check-theme.ts",
+		"words": "node packages/testing/scripts/check-words.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^24.13.3",

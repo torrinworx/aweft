@@ -171,6 +171,22 @@ There is one generator here rather than one per suite. Copies of the same shift 
 drifted apart in small ways, and a seed that reproduces a failure under one copy reproduces
 nothing under another.
 
+## The words check
+
+`npm run words` reads every tracked file for the vocabulary of how the stack was built (who
+decided a thing, when, through which review) and prints each line that carries a word from the
+list, with what to write instead. The list is in `packages/testing/src/words.ts`, one entry per
+word with its fix. It reads text, not syntax, so it matches the spellings the process used and
+leaves the words the code needs alone.
+
+```ts
+import { checkWords } from '@aweftjs/testing';
+checkWords([{ path: 'note.md', text }]);   // [] means the text is clean
+```
+
+With paths, `node packages/testing/scripts/check-words.ts docs/design` reads those files
+instead of the whole tree.
+
 ## Running the gate
 
 `npm test` at the root is the whole gate: typecheck, the dependency rules, the tier rule over
