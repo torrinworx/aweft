@@ -5,7 +5,7 @@ import { mutable } from '@aweftjs/core';
 
 import { empty, wireField } from './field.ts';
 import { h } from './h.ts';
-import { controlStates, elementFor, starting, valueOf } from './control.ts';
+import { controlStates, elementFor, sizeSegments, starting, valueOf } from './control.ts';
 import { isWritable, through } from './source.ts';
 
 /** What `TextField` takes. Everything not named here goes to the element. */
@@ -30,6 +30,8 @@ export interface TextFieldProps {
 	readonly disabled?: unknown;
 	/** The theme variant. */
 	readonly type?: unknown;
+	/** How tall it is: `sm`, `lg`, or nothing for the default. A value or a cell. */
+	readonly size?: unknown;
 	/** Decorate this node instead of building one. */
 	readonly element?: unknown;
 	/** Extra theme segments, appended to this component's own. */
@@ -42,8 +44,8 @@ export interface TextFieldProps {
  *
  * Params:
  *   props: `value`, `label`, `description`, `error`, `placeholder`, `password`, `onEnter`,
- *          `onKeyDown`, `disabled`, `type`, `element`, and anything else, which goes to the
- *          `<input>`
+ *          `onKeyDown`, `disabled`, `type`, `size`, `element`, and anything else, which goes to
+ *          the `<input>`
  *
  * Returns: an `<input>` on its own, or the input inside a `<div>` with its label, description and
  * error, when it was given any of the three. The cell and the element follow each other: typing
@@ -58,7 +60,7 @@ export interface TextFieldProps {
 export const TextField = (props: TextFieldProps): Mounter => (elem, _item, before, context) => {
 	const {
 		value, label, description, error, placeholder, password,
-		onEnter, onKeyDown, disabled, type, element, theme, ...rest
+		onEnter, onKeyDown, disabled, type, size, element, theme, ...rest
 	} = props;
 
 	const cell = isWritable(value) ? value : mutable('');
@@ -78,7 +80,7 @@ export const TextField = (props: TextFieldProps): Mounter => (elem, _item, befor
 	const input = h(elementFor(element, 'input'), {
 		...rest,
 		...field.aria,
-		theme: ['input', type, through(error, (held) => (empty(held) ? null : 'invalid')), theme, ...states.segments],
+		theme: ['input', type, sizeSegments(size), through(error, (held) => (empty(held) ? null : 'invalid')), theme, ...states.segments],
 		type: password ? 'password' : 'text',
 		placeholder,
 		disabled,

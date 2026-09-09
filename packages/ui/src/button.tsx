@@ -11,7 +11,7 @@ import { h } from './h.ts';
 import { InputContext } from './input.ts';
 import { LoaderContext } from './suspend.tsx';
 import { LoadingDots } from './loading-dots.tsx';
-import { controlStates, elementFor } from './control.ts';
+import { controlStates, elementFor, sizeSegments } from './control.ts';
 import { isWritable, through } from './source.ts';
 
 /** What `Button` takes. Everything not named here goes to the element. */
@@ -20,6 +20,9 @@ export interface ButtonProps {
 	readonly label?: unknown;
 	/** The theme variant: nothing, `quiet` or `danger`. */
 	readonly type?: unknown;
+	/** How big it is: `sm`, `lg`, nothing, or `icon`, `icon-sm` and `icon-lg` for a square one.
+	 * A value or a cell. */
+	readonly size?: unknown;
 	/** An icon beside the label. Anything mountable; usually an `Icon`. */
 	readonly icon?: unknown;
 	/** Which side the icon goes: `left` (the default) or `right`. */
@@ -55,7 +58,7 @@ const isPromise = (value: unknown): value is Promise<unknown> =>
  * A button, or a link drawn as one.
  *
  * Params:
- *   props: `label`, `type`, `icon`, `iconPosition`, `disabled`, `loading`, `round`, `inline`,
+ *   props: `label`, `type`, `size`, `icon`, `iconPosition`, `disabled`, `loading`, `round`, `inline`,
  *          `href`, `hrefNewTab`, `onClick`, `track`, `element`, and anything else, which goes to
  *          the element
  *
@@ -75,7 +78,7 @@ const isPromise = (value: unknown): value is Promise<unknown> =>
  */
 export const Button = (props: ButtonProps): Mounter => (elem, _item, before, context) => {
 	const {
-		label, type, icon, iconPosition, disabled, loading, round, inline,
+		label, type, size, icon, iconPosition, disabled, loading, round, inline,
 		href, hrefNewTab, onClick, track, element, theme, children, ...rest
 	} = props;
 
@@ -113,7 +116,7 @@ export const Button = (props: ButtonProps): Mounter => (elem, _item, before, con
 
 	const shared: Record<string, unknown> = {
 		...rest,
-		theme: ['button', type, round ? 'round' : null, inline ? 'inline' : null, theme, ...states.segments],
+		theme: ['button', type, sizeSegments(size), round ? 'round' : null, inline ? 'inline' : null, theme, ...states.segments],
 		isHovered: states.isHovered,
 		isClicked: states.isClicked,
 		onClick: press,

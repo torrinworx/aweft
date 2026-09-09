@@ -6,7 +6,7 @@
 import { type Mounter, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';
 
-import { checkedOf, controlStates, elementFor } from './control.ts';
+import { checkedOf, controlStates, elementFor, sizeSegments } from './control.ts';
 import { wireField } from './field.ts';
 import { h } from './h.ts';
 import { isWritable, through } from './source.ts';
@@ -25,6 +25,8 @@ export interface ToggleProps {
 	readonly disabled?: unknown;
 	/** The theme variant. */
 	readonly type?: unknown;
+	/** How tall it is: `sm`, `lg`, or nothing for the default. A value or a cell. */
+	readonly size?: unknown;
 	/** Called with what the cell now holds. */
 	readonly onChange?: (next: boolean, event: unknown) => void;
 	/** Decorate this node instead of building one. */
@@ -38,7 +40,7 @@ export interface ToggleProps {
  * An on and off switch.
  *
  * Params:
- *   props: `value`, `label`, `description`, `error`, `disabled`, `type`, `onChange`, `element`,
+ *   props: `value`, `label`, `description`, `error`, `disabled`, `type`, `size`, `onChange`, `element`,
  *          and anything else, which goes to the `<input>`
  *
  * Returns: an `<input type="checkbox" role="switch">`, inside a `<div>` with its label when it was
@@ -48,7 +50,9 @@ export interface ToggleProps {
  *   <Toggle label="Email me" value={subscribed} />
  */
 export const Toggle = (props: ToggleProps): Mounter => (elem, _item, before, context) => {
-	const { value, label, description, error, disabled, type, onChange, element, theme, ...rest } = props;
+	const {
+		value, label, description, error, disabled, type, size, onChange, element, theme, ...rest
+	} = props;
 
 	const cell = isWritable(value) ? value : mutable(false);
 	const states = controlStates(disabled, props);
@@ -57,7 +61,7 @@ export const Toggle = (props: ToggleProps): Mounter => (elem, _item, before, con
 	const track = h(elementFor(element, 'input'), {
 		...rest,
 		...field.aria,
-		theme: ['toggle', type, theme, ...states.segments],
+		theme: ['toggle', type, sizeSegments(size), theme, ...states.segments],
 		type: 'checkbox',
 		role: 'switch',
 		disabled,

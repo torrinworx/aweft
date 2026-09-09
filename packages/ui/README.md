@@ -88,6 +88,13 @@ element themed `card primary hovered`, and `hovered_card` does not match anythin
 `card hovered`. Entries are ordered by where their last segment matched, ties going to the longer
 entry, and later in that order wins.
 
+**A class token holding `_` names one entry: that is how you reach a part.** A part is a different
+element from its component, and it must not wear the component's own box, so `theme="card_title"`
+reaches `card_title` and not the bare `card`. A modifier is a state or a variant of the same
+element and stays a segment of its own, so `theme={['card', 'tight']}` reaches `card` and
+`card_tight`. Both spellings mix: `theme={['card_title', 'muted']}` reaches `card_title` and
+`card_title_muted`, and an element that wants a part and its component says both tokens.
+
 **Values.** `$name` is a variable, `$fn(a, b)` is a call, `$$` is a literal `$`, and `$size$px`
 is the variable followed by the text `px`. A bare number in one of `sizeProperties` gets `px`.
 What a variable holds is text, and that text is not read again: `$a: '$b'` writes the four
@@ -119,12 +126,26 @@ it was read, so `calc()` and `rgb()` survive untouched.
 | `_children_span` | `.awN > span { … }` |
 | `_cssProp_focus` | `.awN:focus { … }`; a pseudo-element gets `::`, and a key written with its own colons is used as written |
 | `_media_(min-width: 40em)` | that entry's body inside the query |
+| `_container_(min-width: 28rem)` | that entry's body inside a container query |
+| `_starting_` | that entry's body inside `@starting-style`, the style a transition starts from. It takes nothing after the name |
 | `_keyframes_spin` | `@keyframes spin-<id>`, with `$spin` bound to the generated name |
 | `_fontFace_body` | `@font-face { … }` |
 | `_import_fonts` | `@import url(…) layer(aweft);` |
 
 `@font-face`, `@keyframes` and `@import` are emitted once per definition per render rather than
 with the entry's own rules, so two class chains reaching one entry emit the font once.
+
+**A directive block holds declarations and one more directive.** A `_media_` or a `_container_` may
+hold a `_cssProp_` and a `_starting_`; a `_cssProp_` may hold a `_starting_`. That is what lets a
+dialog's `::backdrop` fade: its transition has to reach `.awN::backdrop` and has to stay inside the
+reduced-motion query. A third level compiles to nothing, and an enclosing rule is dropped wherever
+its own body came out empty. `_keyframes_`, `_fontFace_` and `_import_` leave the entry body rather
+than wrapping the rule, so they are read at the entry's own level only.
+
+**A declaration whose value is a list is emitted once per item, in order.**
+`appearance: ['none', 'base-select']` writes `appearance: none; appearance: base-select;`, and a
+host that cannot read the second keeps the first. That is the only way an entry, which is an
+object, can say one property twice.
 
 **Every rule is inside `@layer aweft`, and this package ships zero `!important`.** Unlayered
 styles beat every layer, so an application's own stylesheet overrides the library with a one-class
@@ -325,19 +346,30 @@ your own segments to the component's, and `element` hands in the node to decorat
 building one. An `element` of the wrong tag is an assert naming both tags, because a `<div>` wearing
 a checkbox's theme is a checkbox that does nothing. There are no imperative handles.
 
-| component | the element | its own props |
-|---|---|---|
-| `Button` | `<button>`, or `<a>` with an `href` | `label`, `type`, `icon`, `iconPosition`, `disabled`, `loading`, `round`, `inline`, `href`, `hrefNewTab`, `onClick`, `track` |
-| `TextField` | `<input>` | `value`, `label`, `description`, `error`, `placeholder`, `password`, `onEnter`, `onKeyDown`, `disabled`, `type` |
-| `TextArea` | `<textarea>` | the same, plus `maxHeight` |
-| `Checkbox` | `<input type="checkbox">` | `value`, `label`, `invert`, `indeterminate`, `disabled`, `onChange` |
-| `Radio` | `<input type="radio">` | `value` (the group's), `option` (this one's), `label`, `disabled`, `onChange` |
-| `Toggle` | `<input type="checkbox" role="switch">` | `value`, `label`, `disabled`, `onChange`, `type` |
-| `Slider` | `<input type="range">` | `value` (a number), `min`, `max`, `step`, `disabled`, `track` |
-| `Select` | `<select>` | `value`, `options`, `display`, `placeholder`, `disabled`, `onChange` |
-| `Paper` | `<div>` on the `card` entry | `type`, `tight` |
-| `LoadingDots` | three dots | `type`, `size`, `label` |
-| `Icon` | `<svg>` | `name`, `size`, `label`, `rot` |
+| component | the element | its own props | `size` | example |
+|---|---|---|---|---|
+| `Button` | `<button>`, or `<a>` with an `href` | `label`, `type`, `icon`, `iconPosition`, `disabled`, `loading`, `round`, `inline`, `href`, `hrefNewTab`, `onClick`, `track` | `sm`, `lg`, `icon`, `icon-sm`, `icon-lg` | `button` |
+| `TextField` | `<input>` | `value`, `label`, `description`, `error`, `placeholder`, `password`, `onEnter`, `onKeyDown`, `disabled`, `type` | `sm`, `lg` | `text-field` |
+| `TextArea` | `<textarea>` | the same, plus `maxHeight` | `sm`, `lg` | `text-area` |
+| `Checkbox` | `<input type="checkbox">` | `value`, `label`, `invert`, `indeterminate`, `disabled`, `onChange` | `sm`, `lg` | `checkbox` |
+| `Radio` | `<input type="radio">` | `value` (the group's), `option` (this one's), `label`, `disabled`, `onChange` | `sm`, `lg` | `radio` |
+| `Toggle` | `<input type="checkbox" role="switch">` | `value`, `label`, `disabled`, `onChange`, `type` | `sm`, `lg` | `toggle` |
+| `Slider` | `<input type="range">` | `value` (a number), `min`, `max`, `step`, `disabled`, `track` | `sm`, `lg` | `slider` |
+| `Select` | `<select>` in a `<span>` with its arrow | `value`, `options`, `display`, `placeholder`, `disabled`, `onChange` | `sm`, `lg` | `select` |
+| `Paper` | `<div>` on the `card` entry | `type`, `tight` | | `paper` |
+| `LoadingDots` | three dots | `type`, `size`, `label` | a CSS length | `loading-dots` |
+| `Icon` | `<svg>` | `name`, `size`, `label`, `rot` | a CSS length | `icon` |
+
+The last column is the file under `recipes/ui/examples/`, without its `.example.tsx` ending. Each
+one renders every state, type and size of its component, in both modes, on `catalogue.html`, and
+the recipe's driver reads it there (design 197).
+
+**`size` is one theme segment, right after `type`** (design 194): `sm` is 32px tall, nothing is
+36px and `lg` is 40px, and the entries are `button_sm`, `input_lg`, `checkbox_sm` and so on, the
+same way `quiet` and `danger` are. A small control takes the smaller text step with it. `Button`
+also takes `icon`, `icon-sm` and `icon-lg`, which are a square of that height with no padding, for
+a button whose label is an icon. It is a value or a cell, like every other display prop.
+`LoadingDots` and `Icon` have a `size` of their own, which is a CSS length and not this axis.
 
 **A label is what gives a control a name.** Give one and the component renders a `<label for>` next
 to the element, both inside one `<div>`, mints the ids off the render (so a server and its hydration
@@ -375,12 +407,26 @@ so a form the select is in posts something readable. Two things the element cann
 component will not fake: outside Chromium the open list is drawn by the host and is not themed, and
 there is no way to know whether it is open. Design 130 has both.
 
+**`Select` draws its own arrow** (design 195). Every host draws a different one and no theme can
+reach any of them, so the entry tells every host to draw none and the component renders the element
+inside a `<span>` with an empty box at the right of it. The `select_chevron` entry draws the arrow the
+way `checkbox` draws its tick: a `$chevron` square with two of its sides in `$mutedForeground`,
+turned a quarter turn. So it needs no icon pack, and an application that wants another arrow gives
+`select_chevron` its own rules. It is `aria-hidden` and takes no pointer events, so a screen reader
+reads the combobox and a click reaches the element under it.
+
 **`Icon` is built from icon data**, in the shape the icon sets publish: `body`, `width`, `height`,
 `left`, `top`, and optional `rotate`, `hFlip` and `vFlip`. `name` is that data, or a name looked up
 through the `Icons` context.
 
 **This package ships no drawings** (design 144). `Icons` starts empty, and an application supplies
-a pack, a resolver, or both. `@aweftjs/icons` turns an installed icon set into exactly that:
+a pack, a resolver, or both. This is not only about the `Icon` you write yourself: `DropDown`,
+`FileDrop`, `Modal` and `Validate` each mount one of their own, by name, so a page that mounts any
+of them and has no `Icons` provider above it asserts on its first render rather than rendering
+without the glyph. `Validate` is the one that surprises people, because its icon is a default
+nobody asked for. Give the page a provider, or give the component its own `icon` prop. (`Select`
+needs none: its arrow is drawn by the theme, design 195.)
+`@aweftjs/icons` turns an installed icon set into exactly that:
 
 ```tsx
 import { Icon, Icons } from '@aweftjs/ui';
@@ -415,8 +461,59 @@ and `end` mean across the page on both.
 <div theme={['row', 'fill', 'spread']}><span>left</span><span>right</span></div>
 ```
 
-`recipes/ui/controls.html` is every control in every state, in both modes, driven in Chromium by
-`recipes/ui/main.ts` with axe-core over it.
+`recipes/ui/catalogue.html` is every one of them in every state, in both modes, driven in Chromium
+by `recipes/ui/main.ts` with axe-core over it.
+
+## Fields
+
+Three components lay a form out (design 196). They do layout and nothing else: **a control still
+labels itself**, so `label`, `description` and `error` stay where they are and nothing here can
+disagree with a control about what a label is.
+
+```tsx
+import { Checkbox, Field, FieldGroup, FieldSet, TextField } from '@aweftjs/ui';
+
+<FieldGroup>
+  <FieldSet legend="Where to send it">
+    <Field orientation="responsive">
+      <label for="street" theme="field_label">Street</label>
+      <TextField id="street" value={street} />
+    </Field>
+    <Field orientation="inline">
+      <Checkbox id="post" value={post} />
+      <label for="post" theme="field_label">Post it rather than email it</label>
+    </Field>
+  </FieldSet>
+  <Field><TextField label="Notes" value={notes} description="Anything else" /></Field>
+</FieldGroup>
+```
+
+| component | the element | its own props | example |
+|---|---|---|---|
+| `Field` | `<div role="group">` on `field` | `orientation`, `element`, `theme` | `field` |
+| `FieldGroup` | `<div>` on `field_group` | `element`, `theme` | `field` |
+| `FieldSet` | `<fieldset>` on `field_set` | `legend`, `element`, `theme` | `field` |
+
+**`orientation` is `column`, `inline` or `responsive`**, a value or a cell. `column` is the default:
+the label above, the control, then the notes. `inline` is the control beside its words on one
+`$control`-tall line. `responsive` is a column that turns inline from 28rem of its container's
+width. The container is `FieldGroup`, which is the only thing here that declares itself one, so a
+`responsive` field with no group above it stays a column at every width.
+
+`inline` and `responsive` lay out the field's own children, so they are for a bare control and the
+`<label for>` you wrote beside it. A control you gave a `label` to already lays that pair out
+itself, and putting one in a `Field` is a column of one thing.
+
+**A field marks itself when a control inside it is wrong.** While any control in it says it has an
+error, whether from its own `error` prop or from a `Validate` around it, the field carries
+`data-invalid`, and the attribute goes when the error clears. The default theme colours a
+`field_label` under a marked field the colour its message already has, and your own stylesheet can
+reach it the same way.
+
+**`FieldSet` is the platform's fieldset**, with its border, padding, margin and minimum width taken
+off. `disabled` goes through to the element and disables every control inside it natively. It does
+not dim them: the disabled look is a class a control writes from its own `disabled` prop, and a
+fieldset writes no class on anything. Set `disabled` on the controls too where the dimming matters.
 
 ## Composites
 
@@ -426,16 +523,16 @@ Eight more components, each built out of the controls above and the behaviours u
 import { ColorPicker, Default, DropDown, FileDrop, Modal, Tooltip, Validate, ValidateContext } from '@aweftjs/ui';
 ```
 
-| component | what it is | its own props |
-|---|---|---|
-| `Modal` | a stage template: the act inside a native `<dialog>` | `label`, `noEsc`, `noClickEsc`, `type` |
-| `Default` | the stage template that adds nothing | none |
-| `Tooltip` | `Detached` plus the hover and focus trigger | `label`, `enabled`, `locations`, `type` |
-| `DropDown` | a `<details>` whose `<summary>` wears the `button` theme | `open`, `label`, `icon`, `iconOpen`, `iconClose`, `arrow`, `type`, `disabled` |
-| `FileDrop` | a drop zone with a real file input in it | `files`, `extensions`, `multiple`, `limit`, `clickable`, `disabled`, `onDrop`, `ready`, `type` |
-| `Validate` | a check around a control, and the message it shows | `value`, `validate`, `signal`, `valid`, `error`, `showError`, `icon`, `type` |
-| `ValidateContext` | the form's answer: every `Validate` below it | `value` |
-| `ColorPicker` | four `Slider`s and a swatch | `value`, `hasAlpha`, `disabled`, `type` |
+| component | what it is | its own props | example |
+|---|---|---|---|
+| `Modal` | a stage template: the act inside a native `<dialog>` | `label`, `noEsc`, `noClickEsc`, `type` | `modal` |
+| `Default` | the stage template that adds nothing | none | `modal` |
+| `Tooltip` | `Detached` plus the hover and focus trigger | `label`, `enabled`, `locations`, `type` | `tooltip` |
+| `DropDown` | a `<details>` whose `<summary>` wears the `button` theme | `open`, `label`, `icon`, `iconOpen`, `iconClose`, `arrow`, `type`, `disabled` | `drop-down` |
+| `FileDrop` | a drop zone with a real file input in it | `files`, `extensions`, `multiple`, `limit`, `clickable`, `disabled`, `onDrop`, `ready`, `type` | `file-drop` |
+| `Validate` | a check around a control, and the message it shows | `value`, `validate`, `signal`, `valid`, `error`, `showError`, `icon`, `type` | `validate` |
+| `ValidateContext` | the form's answer: every `Validate` below it | `value` | `validate` |
+| `ColorPicker` | four `Slider`s and a swatch | `value`, `hasAlpha`, `disabled`, `type` | `color-picker` |
 
 These ask for `chevron-up`, `chevron-down`, `x`, `triangle-alert` and `upload` by name, so a page
 using them answers those five through `Icons`; `@aweftjs/icons/<set>/+standard` does.
@@ -501,7 +598,7 @@ are the whole of what reaches this component from the host.
 Children replace the prompt line and the listing. `FileDrop.Button` is a `Button` that opens the file
 dialog, for use inside those children; one outside a `FileDrop` is an assert. The input itself is
 visually hidden rather than `display: none`, so it is still focusable, and its label is the zone's
-prompt whichever chrome is showing. `look.test.ts` reads the `filedrop_input` rule and fails if it
+prompt whichever chrome is showing. `look.test.ts` reads the `filedrop_picker` rule and fails if it
 ever becomes `display: none`.
 
 **A check is given the cell, not the value.**
@@ -553,7 +650,7 @@ Moving a slider is the only thing that writes the cell, so mounting a picker on 
 colour and its notation alone. With `hasAlpha` false a write keeps the alpha the cell already had:
 nothing on the screen can change an alpha nobody can see.
 
-The hue track is a gradient of six named hues in the `colorpicker_hue` entry. The other three tracks
+The hue track is a gradient of six named hues in the `colorpicker_track_hue` entry. The other three tracks
 are the colour chosen right now, so the component builds a `linear-gradient(...)` from what the cell
 holds and puts that text in the element's inline `style`. The theme check reads source text, and
 that gradient is arithmetic rather than a value anybody typed, so there is nothing there for it to
@@ -568,7 +665,7 @@ kept a cell of its own would look as though it had honoured what you asked for.
 `validate`, and `colorpicker` with `swatch`, `track` and `hue`. `offscreen` is one more, and it is
 yours to use: it takes an element off the screen and leaves it in the reading order.
 
-`recipes/ui/composites.html` is every composite in both modes, driven in Chromium by
+Each of them has a section on `recipes/ui/catalogue.html`, in both modes, driven in Chromium by
 `recipes/ui/main.ts` with axe-core over it.
 
 ## Text
@@ -577,12 +674,12 @@ yours to use: it takes an element off the screen and leaves it in the reading or
 import { TextModifiers, Typography } from '@aweftjs/ui';
 ```
 
-| export | what it is | its own props |
-|---|---|---|
-| `Typography` | one run of themed text: one element on the `text` entry | `type`, `label`, `element`, `theme` |
-| `TextModifiers` | a context holding the list `Typography` runs over its label | `value` |
-| `TypographyProps` | what `Typography` takes | |
-| `TextModifier` | one entry of that list: `{ check, return }` | |
+| export | what it is | its own props | example |
+|---|---|---|---|
+| `Typography` | one run of themed text: one element on the `text` entry | `type`, `label`, `element`, `theme` | `typography` |
+| `TextModifiers` | a context holding the list `Typography` runs over its label | `value` | `typography` |
+| `TypographyProps` | what `Typography` takes | | |
+| `TextModifier` | one entry of that list: `{ check, return }` | | |
 
 **`type` is theme segments joined by `_`, and the first segment also picks the element.**
 `<Typography type="h2_bold" label="Today" />` is an `<h2>` themed `text h2 bold`, so `text_h2` and
@@ -637,7 +734,7 @@ contract a component of this package is allowed to use. Designs 115 to 120 are t
 `$neutral12` and so on. The steps follow one job list: 1 and 2 are backgrounds, 3 to 5 component
 fills by state, 6 to 8 lines, 9 and 10 solids, 11 and 12 text.
 
-**Seventeen roles**, each set from one step. A component uses a role, never a step:
+**Eighteen roles**, each set from one step. A component uses a role, never a step:
 
 | role | pairs with | what it is for |
 |---|---|---|
@@ -651,40 +748,102 @@ fills by state, 6 to 8 lines, 9 and 10 solids, 11 and 12 text.
 | `$border` | | the line around a block |
 | `$input` | | the edge of a control |
 | `$ring` | | the focus ring |
+| `$link` | | text that goes somewhere |
 
 Every pair meets WCAG 2 AA in both modes, 4.5:1 for text and 3:1 for a line, asserted in
 `packages/ui/tests/contrast.test.ts` with a ratio the test computes itself.
+
+**The default is monochrome.** `$accent` is the neutral scale's text step and `$accentForeground`
+is its page step, so a filled button is near-black on near-white in light and the same line read
+the other way round in dark. `$ring` and `$accentSubtle` are neutral too. The accent scale is
+still defined, all twelve steps of it, and `$link` is the one role that uses it. Colour is a
+decision your application makes: one provider at the root redefining `$accent` and
+`$accentForeground` puts it back on every filled control, because no component names a step.
+`$danger` is unchanged and still red.
 
 **Type** is `$textXs`, `$textSm`, `$textMd`, `$textLg`, `$textXl`, `$text2xl`, `$text3xl` and
 `$text4xl`, in `rem`, each with `$textXsLine` and so on beside it. `$font` and `$fontMono` are the
 families.
 
 **Sizes** are `$space` (4px) and its six multiples, `$space2`, `$space3`, `$space4`, `$space6`,
-`$space8` and `$space12`, with no step between them; `$radius` and `$radiusLg`; `$target` (24px,
-the smallest a pointer target may be); and `$borderWidth`, `$ringWidth` and `$ringOffset`.
+`$space8` and `$space12`, with no step between them; `$radiusSm`, `$radius` and `$radiusLg`;
+`$controlSm` (32px), `$control` (36px) and `$controlLg` (40px); `$target` (24px, the smallest a
+pointer target may be, which sizes the things that are not controls); and `$borderWidth`,
+`$ringWidth` and `$shadowSm`.
 
-**Motion** is `$fast`, `$slow`, `$ease` and `$easeOut`. Nothing in this package sets a transition
-of its own: the root sets one, inside `@media (prefers-reduced-motion: no-preference)`, so a
-person who asked for less motion gets none and no component has to remember the query.
+**Every control is `$control` tall.** A button, a text field, a select, a slider's hit area and
+the row a checkbox sits in beside its words are all 36px, so a line of controls is a line. A text
+area is sized by what is in it and keeps a minimum of its own. `$controlSm` and `$controlLg` are
+the same rule at the two other sizes.
+
+**The height is the box, so your own padding fits inside it rather than adding to it.** Controls
+declare `box-sizing: border-box`, which is what makes the declared height the height whatever
+element wears the entry. A `TextField` given `padding: '12px'` through a theme override is still
+36px tall, with a 10px content box; `padding: '20px'` is more than fits, so the control grows to
+42px. Before this the padding was added to the height every time. `$target` is the smallest a pointer target may be and now
+sizes nothing in this theme: it is the number your own entries reach for.
+
+**Motion** is `$fast`, `$slow`, `$ease` and `$easeOut`. The root sets one transition for every
+themed element, over the colours a state changes, and `popup`, `dialog`, its `::backdrop` and
+`tooltip` each set one more for the opacity and scale they arrive with (design 192). Every one of
+them is written inside `@media (prefers-reduced-motion: no-preference)`, so a person who asked for
+less motion gets none and no component has to remember the query.
 
 **States are one rule.** `hovered` and `pressed` lay a translucent tint of the element's own
 foreground over whatever background it has, at two fixed strengths. No component names a hover
 colour, and there is no ripple. `disabled` clears the tint.
 
-**Focus is one rule.** The root gives every themed element `outline: $ringWidth solid $ring` on
-`:focus-visible`. Nothing here writes `outline: none`.
+**Focus is one rule.** The root gives every themed element, on `:focus-visible`, a border in
+`$ring` and a `$ringWidth` halo of `$ring` at half strength, drawn as a box shadow. An outline is
+drawn outside the border box and cannot be soft, so it reads as a second border; the halo reads as
+focus. The focus rule is the one place in this package that writes `outline: none`, and it names
+`$ring` twice in the same block, which is what the gate check asks of an entry that turns an
+outline off.
+
+**The border is what meets the contrast target, not the halo.** `$ring` on `$background` is 6.08:1
+in light and 7.39:1 in dark, well past the 3:1 a non-text indicator has to reach. The halo as it is
+actually painted is `$ring` at 50% over whatever is behind the control, which measures 2.15:1 in
+light and 2.74:1 in dark. So the halo is what makes the focus easy to see and the border is what
+makes it pass; a theme that keeps the halo and drops the border colour has an indicator nobody has
+measured.
+
+**Disabled dims.** `opacity: 0.5` and `cursor: not-allowed`, with the state tint off. It does not
+repaint the control, because a disabled danger button repainted in `$muted` is no longer the
+control it is.
+
+**Inputs and quiet buttons carry a hairline.** `$shadowSm` is one pixel of offset and two of blur
+in the element's own foreground at 6%. It is an edge, not elevation: nothing here lifts a block
+off the page with a shadow.
+
+**Overlays arrive.** `dialog`, `popup` and `tooltip` transition their opacity and a small scale in
+over `$fast`, from an `@starting-style`, inside the reduced-motion query. The dialog leaves the
+same way and its `::backdrop` fades with it. A popup and a tooltip arrive and do not leave, because
+what hides either is a `display: none` written on the box the popup sink places, above the element
+the theme reaches.
+
+**The tick box, the radio and the select's arrow are drawn here** (design 195). Each is still the
+native element: `appearance: none` takes the host's drawing and leaves the keyboard, the form and
+the label. A tick box is a `$box` square with `$radiusSm` corners and the `$input` edge, filled
+`$accent` when it is ticked, and the tick is two sides of an empty `::before` turned 45 degrees in
+`$accentForeground`. Indeterminate is a bar. A radio is the same box as a circle with a centred
+dot. A `<select>` says `appearance: none` and then `base-select`, so every host stops drawing an
+arrow and Chromium still themes the open list, and the component puts an empty box at the right of
+the control for `select_chevron` to draw the arrow in, the same way: a `$chevron` square with two of
+its sides turned a quarter turn. Nothing here is an image, an icon pack or a name asked of one.
 
 **The entries it ships.** These are the theme names a component of this package, or of yours, can
 ask for. Everything else is yours to define.
 
 | entry | what it is for |
 |---|---|
-| `button` | a filled control: the accent fill, its foreground, a 24px minimum height |
+| `button` | a filled control: the accent fill, its foreground, `$control` tall |
+| `button_sm`, `button_lg`, `button_square` | the size axis, and a square for a button whose label is an icon. `size="icon"` is the prop; `square` is the segment, because `icon` is an entry of its own |
+| `input_sm`, `input_lg`, `select_sm`, `select_lg`, `checkbox_sm`, `checkbox_lg`, `radio_sm`, `radio_lg`, `toggle_sm`, `toggle_lg`, `slider_sm`, `slider_lg` | the same axis on the rest of the controls |
 | `button_quiet` | the same control with no fill: a border and accent-subtle text |
 | `button_danger` | the same control in the danger colours |
-| `input` | a text field: the surface fill, the `$input` edge, a placeholder in `$mutedForeground` |
+| `input` | a text field: the surface fill, the `$input` edge, the hairline, a placeholder in `$mutedForeground` |
 | `input_invalid` | that field with a danger edge |
-| `select` | `input` again, with room on the right for the arrow the host draws |
+| `select` | `input` again, laid out in a line, with room on the right for its own arrow |
 | `card` | a raised block: the surface fill, a border, the larger radius, `$space4` of padding |
 | `popup` | the same block at popup size: the smaller radius, tighter padding |
 | `text` | body copy at `$textMd`, with no margin, and a newline kept as a line break |
@@ -694,14 +853,17 @@ ask for. Everything else is yours to define.
 | `text_bold`, `text_regular`, `text_italic`, `text_center`, `text_inline` | one declaration each, to put after any of the above |
 | `text_mono` | that copy in `$fontMono` |
 | `muted` | text in `$mutedForeground`, readable on any of the three backgrounds |
-| `button_round`, `button_inline` | that control as a circle, and with no fill or padding at all |
+| `button_round`, `button_inline` | that control as a circle, and as a run of `$link` text with no fill or padding at all |
 | `textarea` | the text field again, growing to its content up to `$textAreaMax` |
-| `checkbox`, `radio` | a native box and dot at `$target`, tinted with `accent-color` |
+| `checkbox`, `radio` | a `$box` square and a circle, drawn here: the box, the tick and the dot |
+| `field_label`, `field_hint`, `field_error` | a control's label, the line under it, and its message. Parts, so each is one class token. A label under a `[data-invalid]` field takes the message's colour |
+| `select_wrap`, `select_chevron` | the box a select's own arrow is placed in, and the arrow: a `$chevron` square with two sides drawn, turned a quarter turn |
 | `toggle` | a switch: a pill and a thumb drawn with `::before` |
 | `slider` | a range input: the track and the thumb on the vendor pseudo-elements |
 | `option` | one row of a select's open list, where the host draws it from the theme |
 | `card_tight` | that card with no padding |
-| `field`, `field_inline`, `field_label`, `field_hint`, `field_error` | what a labelled control puts around itself |
+| `field`, `field_inline`, `field_responsive` | what a labelled control puts around itself, and what `Field` lays out: a column, a `$control`-tall row, or a column that turns into one from 28rem of its container |
+| `field_group`, `field_set`, `field_legend` | the stack a form is, a fieldset with the host's frame taken off, and its heading |
 | `dots`, `dot` | the three pulsing dots of `LoadingDots` |
 | `icon` | an icon, sized in `em` so it follows the text |
 | `row`, `column`, `divider` | laying things out in a line, with the seven modifiers above |
@@ -710,13 +872,26 @@ ask for. Everything else is yours to define.
 | `disclosure`, `disclosure_summary` | a `<details>` and the summary that wears the `button` entry |
 | `filedrop` and its `dragging`, `prompt`, `input`, `list` and `entry` | a drop zone, its prompt and its listing |
 | `validate` | the message a `Validate` shows, beside its icon |
-| `colorpicker` and its `swatch`, `track` and `hue` | four sliders and the colour they name |
+| `colorpicker`, `colorpicker_swatch`, `colorpicker_track` and its `hue` | four sliders and the colour they name |
 | `offscreen` | off the screen and still in the reading order |
 
 `hovered`, `pressed` and `disabled` are three more entries, and you put them in a class list
 yourself: `theme={['button', hovered.bool('hovered', null)]}`. They match anywhere, so they apply
 to any entry above. They are meant for the controls, `button` and its two variants, `input` and its
 variant, and `select`; `card`, `popup`, the `text` sizes and `muted` have no state to show.
+
+**Your root entry sets the page's background and its colour.** The root `*` entry of this theme
+sets neither, because it is on every themed element: a colour written there lands on an element
+inside a control as well as on the control, and an `Icon` inside a filled `Button` took the page's
+foreground on the button's own fill, which is an icon nobody can see (design 198). So the page's
+own entry says both, once, and everything under it inherits:
+
+```ts
+Theme.define({ page: { background: '$background', color: '$foreground' } });
+```
+
+Without one the page reads in the host's own default colours, which is right in light and wrong in
+dark, so a page that offers dark mode needs this entry.
 
 **Dark is a theme.** `dark` and `light` are partial themes handed to the provider:
 
@@ -740,6 +915,12 @@ there is. A value with no name yet gets one in the entry that needs it:
 ```ts
 Theme.define({ splash: { $splashHeight: '320px', minHeight: '$splashHeight' } });
 ```
+
+**No segment that is an entry name.** The same check refuses a theme key whose segments after the
+first name a top-level entry that lays an element out, because a class list is matched segment by
+segment and that entry is compiled onto the same element: the square button was `button_icon` and
+took the `icon` entry's `display: inline-block; width: 1em` along with it. The segment is `square`
+now, and `size="icon"` is still what you write.
 
 Point the check at your own source to adopt the same rule; nothing makes you. A path is resolved
 against the repository root, so an absolute one is taken as it is, and a path with no `.ts` or

@@ -87,7 +87,7 @@ export const DropDown = (props: DropDownProps): Mounter => (elem, _item, before,
 		: [icon ?? null, label ?? null, chevron];
 
 	const summary = h('summary', {
-		theme: ['button', type, 'disclosure', 'summary', arrow === 'left' ? 'left' : null, ...states.segments],
+		theme: ['button', type, 'disclosure_summary', arrow === 'left' ? 'left' : null, ...states.segments],
 		isHovered: states.isHovered,
 		isClicked: states.isClicked,
 		// The element keeps the role and the expanded state. These two are what `disabled` means on

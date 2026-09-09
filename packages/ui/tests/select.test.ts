@@ -209,10 +209,29 @@ test('an options cell replaces the list', () => {
 	stop();
 });
 
-test('a select is a select and nothing else', () => {
+test('a select is a select, its arrow, and nothing else', () => {
+	// Design 130 said a select was the element alone. Design 195 puts one box around it, holding
+	// the element and an empty span the theme draws the arrow on. There is still no button and no
+	// drawn list: the element is the combobox and the whole keyboard map is the platform's.
 	const document = createDocument();
 	const stop = mount(document.body, h(Select as never, { options: ['a'] }));
-	assert.match(toHtml(document.body.childNodes), /^<select [^>]*><option value="a"[^>]*>a<\/option><\/select>$/,
-		'no wrapper, no button, no drawn list');
+	assert.match(
+		toHtml(document.body.childNodes),
+		/^<span [^>]*><select [^>]*><option value="a"[^>]*>a<\/option><\/select><span aria-hidden="true"[^>]*><\/span><\/span>$/,
+		'the wrapper holds the element and the arrow, and nothing else',
+	);
+	stop();
+});
+
+test('a select renders with no Icons above it, and the arrow is a part of the theme', () => {
+	// The arrow is drawn out of two borders rather than asked for by name (design 195, amended), so
+	// `Select` is not a control that needs a pack: this page has none and mounts anyway.
+	const document = createDocument();
+	const stop = mount(document.body, h(Select as never, { options: ['a'] }));
+	const arrow = of(document.body.firstChild, 'span')
+		.find((element) => element.getAttribute('aria-hidden') === 'true');
+	assert.ok(arrow !== undefined, 'the arrow is on the page');
+	assert.equal(arrow.firstChild, null, 'and it is an empty box, not a drawing');
+	assert.equal(of(document.body.firstChild, 'svg').length, 0, 'no icon was asked for');
 	stop();
 });

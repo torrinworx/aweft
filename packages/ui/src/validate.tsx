@@ -160,7 +160,7 @@ export const Validate = (
 		: h('span', {
 			id,
 			role: 'alert',
-			theme: ['field', 'error', 'validate', showError === false ? 'offscreen' : null, type, theme],
+			theme: ['field_error', 'validate', showError === false ? 'offscreen' : null, type, theme],
 		}, icon ?? h(Icon, { name: 'triangle-alert' }), said)));
 
 	const own = withSlot(context, ERROR_SLOT, { error: message, id });

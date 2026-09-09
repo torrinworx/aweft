@@ -2,10 +2,10 @@ type Act: type Act = ActComponent | LazyAct;
 type ActComponent: type ActComponent = Component<Record<string, unknown>> & { entries?: ActEntries; };
 type ActEntries: type ActEntries = () => Promise<readonly Readonly<Record<string, string>>[]>;
 value Button: (props: ButtonProps) => Mounter
-type ButtonProps: interface ButtonProps { readonly label?: unknown; readonly type?: unknown; readonly icon?: unknown; readonly iconPosition?: string; readonly disabled?: unknown; readonly loading?: unknown; readonly round?: unknown; readonly inline?: unknown; readonly href?: unknown; readonly hrefNewTab?: unknown; readonly onClick?: (event: unknown) => unknown; readonly track?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
+type ButtonProps: interface ButtonProps { readonly label?: unknown; readonly type?: unknown; readonly size?: unknown; readonly icon?: unknown; readonly iconPosition?: string; readonly disabled?: unknown; readonly loading?: unknown; readonly round?: unknown; readonly inline?: unknown; readonly href?: unknown; readonly hrefNewTab?: unknown; readonly onClick?: (event: unknown) => unknown; readonly track?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type Category: interface Category { readonly items: unknown[]; readonly props: Record<string, unknown>; }
 value Checkbox: (props: CheckboxProps) => Mounter
-type CheckboxProps: interface CheckboxProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly invert?: unknown; readonly indeterminate?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly onChange?: (next: boolean, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type CheckboxProps: interface CheckboxProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly invert?: unknown; readonly indeterminate?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly onChange?: (next: boolean, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value ColorPicker: (props: ColorPickerProps, cleanup: (...fns: (() => void)[]) => void) => Mounter
 type ColorPickerProps: interface ColorPickerProps { readonly value?: unknown; readonly hasAlpha?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type Component: type Component<P = Record<string, unknown>> = (props: P & { children?: unknown[]; each?: unknown; }, cleanup: Cleanup, mounted: Mounted, pending: Pending) => unknown;
@@ -17,6 +17,12 @@ value Detached: (props: { enabled?: unknown; locations?: readonly Placement[] | 
 value DropDown: (props: DropDownProps) => Mounter
 type DropDownProps: interface DropDownProps { readonly open?: unknown; readonly label?: unknown; readonly icon?: unknown; readonly iconOpen?: unknown; readonly iconClose?: unknown; readonly arrow?: unknown; readonly type?: unknown; readonly disabled?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type Entry: type Entry = Readonly<Record<string, unknown>>;
+value Field: (props: FieldProps, cleanup: (...fns: (() => void)[]) => void) => Mounter
+value FieldGroup: (props: FieldGroupProps) => unknown
+type FieldGroupProps: interface FieldGroupProps { readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
+type FieldProps: interface FieldProps { readonly orientation?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
+value FieldSet: (props: FieldSetProps) => unknown
+type FieldSetProps: interface FieldSetProps { readonly legend?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value FileDrop: FileDropComponent
 type FileDropComponent: interface FileDropComponent { (props: FileDropProps): Mounter; Button(props: ButtonProps): Mounter; }
 type FileDropEntry: interface FileDropEntry { readonly name: string; readonly file: unknown; readonly status: 'ready' | 'loading' | 'error'; readonly error?: string; }
@@ -59,17 +65,17 @@ value PopupContext: (props: { popups?: Registry<unknown> | undefined; children?:
 type PopupPlacement: type PopupPlacement = Placed | null;
 type ProviderProps: interface ProviderProps { readonly value?: unknown; readonly children?: unknown[]; }
 value Radio: (props: RadioProps) => Mounter
-type RadioProps: interface RadioProps { readonly value?: unknown; readonly option?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly onChange?: (next: unknown, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type RadioProps: interface RadioProps { readonly value?: unknown; readonly option?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly onChange?: (next: unknown, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type Rect: interface Rect { readonly left: number; readonly top: number; readonly width: number; readonly height: number; }
 type Registry: interface Registry<T = unknown> { readonly items: MutableArray<T>; add(item: T): () => void; claim(): boolean; }
 type Render: interface Render { readonly theme: Sheet; readonly head: HeadList; readonly stage: Registry<StageEntry>; readonly ids: Ids; readonly popups: Registry; }
 value Script: (props: TagProps) => unknown
 value Select: (props: SelectProps) => Mounter
-type SelectProps: interface SelectProps { readonly value?: unknown; readonly options?: unknown; readonly display?: unknown; readonly placeholder?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly onChange?: (next: unknown, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type SelectProps: interface SelectProps { readonly value?: unknown; readonly options?: unknown; readonly display?: unknown; readonly placeholder?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly onChange?: (next: unknown, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type Sheet: interface Sheet { classes(definitions: Definitions, classes: readonly string[]): string; variable(definitions: Definitions, classes: readonly string[], name: string): string | null; call(definitions: Definitions, classes: readonly string[], name: string): ThemeFunction | null; value(definitions: Definitions, classes: readonly string[], text: string): string; base(): Definitions; markup(): string; readonly text: Derived<string>; }
 value Shown: (props: { value?: unknown; invert?: unknown; children?: unknown[] | undefined; }) => unknown
 value Slider: (props: SliderProps) => Mounter
-type SliderProps: interface SliderProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly min?: unknown; readonly max?: unknown; readonly step?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly track?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type SliderProps: interface SliderProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly min?: unknown; readonly max?: unknown; readonly step?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly track?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value Stage: () => Mounter
 type StageAct: interface StageAct { readonly name: string; readonly loader: boolean; readonly entries: ActEntries | null; }
 value StageContext: StageContextComponent
@@ -81,9 +87,9 @@ value Style: (props: TagProps) => unknown
 value Switch: (props: { value?: unknown; cases?: Record<string, unknown> | undefined; children?: unknown[] | undefined; }) => unknown
 type TagProps: interface TagProps { readonly key?: string; readonly children?: unknown[]; readonly [attribute: string]: unknown; }
 value TextArea: (props: TextAreaProps) => Mounter
-type TextAreaProps: interface TextAreaProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly maxHeight?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type TextAreaProps: interface TextAreaProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly maxHeight?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value TextField: (props: TextFieldProps) => Mounter
-type TextFieldProps: interface TextFieldProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly password?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type TextFieldProps: interface TextFieldProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly password?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type TextModifier: interface TextModifier { readonly check: string | RegExp; readonly return: (match: string) => unknown; readonly [key: string]: unknown; }
 value TextModifiers: Context<TextModifier[]>
 value Theme: ThemeApi
@@ -94,7 +100,7 @@ type ThemeFunction: type ThemeFunction = (args: string[]) => string;
 type Themed: type Themed = (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown;
 value Title: (props: TagProps) => unknown
 value Toggle: (props: ToggleProps) => Mounter
-type ToggleProps: interface ToggleProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly onChange?: (next: boolean, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type ToggleProps: interface ToggleProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly onChange?: (next: boolean, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value Tooltip: (props: TooltipProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
 type TooltipProps: interface TooltipProps { readonly label?: unknown; readonly enabled?: unknown; readonly locations?: unknown; readonly type?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type Transform: type Transform<T> = (raw: unknown, parent: T, children: MutableArray<ContextNode<T>>) => T;

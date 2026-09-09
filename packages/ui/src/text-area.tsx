@@ -8,7 +8,7 @@
 import { type ElementLike, type Mounter, createElement, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';
 
-import { controlStates, elementFor, starting, valueOf } from './control.ts';
+import { controlStates, elementFor, sizeSegments, starting, valueOf } from './control.ts';
 import { empty, wireField } from './field.ts';
 import { h } from './h.ts';
 import { isWritable, through } from './source.ts';
@@ -35,6 +35,8 @@ export interface TextAreaProps {
 	readonly disabled?: unknown;
 	/** The theme variant. */
 	readonly type?: unknown;
+	/** How tall it is: `sm`, `lg`, or nothing for the default. A value or a cell. */
+	readonly size?: unknown;
 	/** Decorate this node instead of building one. */
 	readonly element?: unknown;
 	/** Extra theme segments, appended to this component's own. */
@@ -51,8 +53,8 @@ interface Measurable {
  *
  * Params:
  *   props: `value`, `label`, `description`, `error`, `placeholder`, `maxHeight`, `onEnter`,
- *          `onKeyDown`, `disabled`, `type`, `element`, and anything else, which goes to the
- *          `<textarea>`
+ *          `onKeyDown`, `disabled`, `type`, `size`, `element`, and anything else, which goes to
+ *          the `<textarea>`
  *
  * Returns: a `<textarea>` on its own, or the textarea inside a `<div>` with its label,
  * description and error, when it was given any of the three.
@@ -67,7 +69,7 @@ interface Measurable {
 export const TextArea = (props: TextAreaProps): Mounter => (elem, _item, before, context) => {
 	const {
 		value, label, description, error, placeholder, maxHeight,
-		onEnter, onKeyDown, disabled, type, element, theme, ...rest
+		onEnter, onKeyDown, disabled, type, size, element, theme, ...rest
 	} = props;
 
 	const cell = isWritable(value) ? value : mutable('');
@@ -100,7 +102,9 @@ export const TextArea = (props: TextAreaProps): Mounter => (elem, _item, before,
 	const area = h(node, {
 		...rest,
 		...field.aria,
-		theme: ['input', 'textarea', type, through(error, (held) => (empty(held) ? null : 'invalid')), theme, ...states.segments],
+		// `textarea` sits after the size segment on purpose: it is the shape rule, and it has to win
+		// over `input_sm`, which sets a fixed height a text area does not have (design 194).
+		theme: ['input', type, sizeSegments(size), 'textarea', through(error, (held) => (empty(held) ? null : 'invalid')), theme, ...states.segments],
 		style: { maxHeight, height },
 		placeholder,
 		disabled,

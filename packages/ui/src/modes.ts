@@ -1,6 +1,6 @@
 // The two modes, as themes a page swaps at its root (design 117).
 //
-// Each is a partial theme holding the thirty-six scale steps and the seventeen roles of one mode
+// Each is a partial theme holding the thirty-six scale steps and the eighteen roles of one mode
 // and nothing else. `Theme` already merges a partial theme onto whatever is above it and already
 // gives its subtree its own generated classes, so swapping the page is one provider and nesting
 // one mode inside the other works with no further mechanism.

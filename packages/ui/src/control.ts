@@ -67,6 +67,31 @@ export const controlStates = (disabled: unknown, given?: StateProps): ControlSta
 	};
 };
 
+// The public name of the square size is `icon`, and the segment it puts in the class list is
+// `square`. They differ because `icon` is also a top-level entry, so a class list holding the
+// bare segment `icon` compiles that entry too and the button loses its own box (design 194,
+// amended). No segment of a modifier may be the name of an entry, and `checkTheme` refuses one.
+const SEGMENT_OF: Readonly<Record<string, string>> = { icon: 'square' };
+
+/**
+ * The theme segments a control's `size` prop puts after its `type`.
+ *
+ * Params:
+ *   size: `'sm'`, `'lg'`, nothing, or one of `Button`'s `'icon'`, `'icon-sm'` and `'icon-lg'`.
+ *         A value or a cell
+ *
+ * Returns: the segments, or null for no size at all, following the cell when it is one. A hyphen
+ * separates two segments, so `icon-sm` is `square` then `sm` and reaches `button_square` and
+ * `button_square_sm` (design 194).
+ *
+ * Example:
+ *   theme: ['button', props.type, sizeSegments(props.size), ...states.segments]
+ */
+export const sizeSegments = (size: unknown): unknown =>
+	through(size, (held) => (held === null || held === undefined || held === false || held === ''
+		? null
+		: String(held).split('-').map((part) => SEGMENT_OF[part] ?? part)));
+
 /** What was handed in, for a message that has to say why it is not an element. */
 const describe = (value: unknown): string => {
 	if (typeof value === 'function') return 'a function, which is a component or a themed element';

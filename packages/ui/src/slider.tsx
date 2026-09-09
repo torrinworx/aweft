@@ -7,7 +7,7 @@
 import { type Mounter, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';
 
-import { controlStates, elementFor, valueOf } from './control.ts';
+import { controlStates, elementFor, sizeSegments, valueOf } from './control.ts';
 import { wireField } from './field.ts';
 import { h } from './h.ts';
 import { InputContext } from './input.ts';
@@ -33,6 +33,8 @@ export interface SliderProps {
 	readonly disabled?: unknown;
 	/** The theme variant. */
 	readonly type?: unknown;
+	/** How tall it is: `sm`, `lg`, or nothing for the default. A value or a cell. */
+	readonly size?: unknown;
 	/** Set false to fire no `InputContext` event for this slider. */
 	readonly track?: unknown;
 	/** Decorate this node instead of building one. */
@@ -47,7 +49,7 @@ export interface SliderProps {
  *
  * Params:
  *   props: `value`, `label`, `description`, `error`, `min`, `max`, `step`, `disabled`, `type`,
- *          `track`, `element`, and anything else, which goes to the `<input>`
+ *          `size`, `track`, `element`, and anything else, which goes to the `<input>`
  *
  * Returns: an `<input type="range">`, inside a `<div>` with its label when it was given one. The
  * cell holds a number, not the text the element carries.
@@ -64,7 +66,7 @@ export interface SliderProps {
  */
 export const Slider = (props: SliderProps): Mounter => (elem, _item, before, context) => {
 	const {
-		value, label, description, error, min, max, step, disabled, type, track, element, theme,
+		value, label, description, error, min, max, step, disabled, type, size, track, element, theme,
 		onInput, ...rest
 	} = props;
 
@@ -76,7 +78,7 @@ export const Slider = (props: SliderProps): Mounter => (elem, _item, before, con
 	const line = h(elementFor(element, 'input'), {
 		...rest,
 		...field.aria,
-		theme: ['slider', type, theme, ...states.segments],
+		theme: ['slider', type, sizeSegments(size), theme, ...states.segments],
 		type: 'range',
 		min: low,
 		max: max ?? 100,

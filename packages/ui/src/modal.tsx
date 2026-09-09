@@ -118,7 +118,7 @@ export const Modal = (
 				control.close();
 			},
 		},
-		h('div', { theme: ['dialog', 'head'] },
+		h('div', { theme: ['dialog_head'] },
 			named ? h('h2', { id: titleId, theme: ['text', 'lg'] }, label) : null,
 			h(Button, {
 				type: 'quiet',
@@ -127,7 +127,7 @@ export const Modal = (
 				icon: h(Icon, { name: 'x' }),
 				onClick: () => { control.close(); },
 			})),
-		h('div', { theme: ['dialog', 'body'] }, ...(children ?? [])));
+		h('div', { theme: ['dialog_body'] }, ...(children ?? [])));
 
 		return mount(elem, item, before, context);
 	};

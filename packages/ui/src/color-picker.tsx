@@ -150,24 +150,24 @@ export const ColorPicker = (
 		...rest,
 		theme: ['colorpicker', type, theme],
 	},
-	h('span', { theme: ['colorpicker', 'swatch'], 'aria-hidden': 'true', style: { background: swatch } }),
+	h('span', { theme: ['colorpicker_swatch'], 'aria-hidden': 'true', style: { background: swatch } }),
 	h('div', { theme: ['column', 'fill'] },
 		h(Slider, {
 			label: 'Hue', value: hue, min: 0, max: 360, disabled, track: false, onInput: putOut,
-			theme: ['colorpicker', 'track', 'hue'],
+			theme: ['colorpicker_track', 'hue'],
 		}),
 		h(Slider, {
 			label: 'Saturation', value: saturation, min: 0, max: 100, disabled, track: false,
-			onInput: putOut, theme: ['colorpicker', 'track'], style: { background: saturationTrack },
+			onInput: putOut, theme: ['colorpicker_track'], style: { background: saturationTrack },
 		}),
 		h(Slider, {
 			label: 'Brightness', value: brightness, min: 0, max: 100, disabled, track: false,
-			onInput: putOut, theme: ['colorpicker', 'track'], style: { background: brightnessTrack },
+			onInput: putOut, theme: ['colorpicker_track'], style: { background: brightnessTrack },
 		}),
 		alphaOn
 			? h(Slider, {
 				label: 'Opacity', value: opacity, min: 0, max: 100, disabled, track: false,
-				onInput: putOut, theme: ['colorpicker', 'track'], style: { background: opacityTrack },
+				onInput: putOut, theme: ['colorpicker_track'], style: { background: opacityTrack },
 			})
 			: null));
 

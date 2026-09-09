@@ -4,11 +4,15 @@
 // lives here, and it is the element's own selection rather than a string written into a row: the
 // chosen option says it is chosen, and a change is read back as the position it happened at. A row
 // built for one item stays that item's row wherever the list moves it.
+//
+// The one thing this draws is the arrow (design 195). Every host draws a different one and the
+// theme cannot reach any of them, so the host is told to draw none and the component puts an empty
+// box beside the element for the `select_chevron` entry to draw the chevron in.
 
 import { type Mounter, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';
 
-import { controlStates, elementFor } from './control.ts';
+import { controlStates, elementFor, sizeSegments } from './control.ts';
 import { empty, wireField } from './field.ts';
 import { h } from './h.ts';
 import { isSource, isWritable, through } from './source.ts';
@@ -33,6 +37,8 @@ export interface SelectProps {
 	readonly disabled?: unknown;
 	/** The theme variant. */
 	readonly type?: unknown;
+	/** How tall it is: `sm`, `lg`, or nothing for the default. A value or a cell. */
+	readonly size?: unknown;
 	/** Called with the item now chosen. */
 	readonly onChange?: (next: unknown, event: unknown) => void;
 	/** Decorate this node instead of building one. */
@@ -56,8 +62,8 @@ const indexOf = (event: unknown): number => {
  *
  * Params:
  *   props: `value`, `options`, `display`, `placeholder`, `label`, `description`, `error`,
- *          `disabled`, `type`, `onChange`, `element`, and anything else, which goes to the
- *          `<select>`
+ *          `disabled`, `type`, `size`, `onChange`, `element`, and anything else, which goes to
+ *          the `<select>`
  *
  * Returns: a `<select>` with one `<option>` per item, inside a `<div>` with its label when it was
  * given one. The cell holds the item, never the string the element carries, so an object list
@@ -81,7 +87,7 @@ const indexOf = (event: unknown): number => {
 export const Select = (props: SelectProps): Mounter => (elem, _item, before, context) => {
 	const {
 		value, options, display, placeholder, label, description, error,
-		disabled, type, onChange, element, theme, ...rest
+		disabled, type, size, onChange, element, theme, ...rest
 	} = props;
 
 	const cell = isWritable(value) ? value : mutable<unknown>(null);
@@ -132,7 +138,7 @@ export const Select = (props: SelectProps): Mounter => (elem, _item, before, con
 	const picker = h(elementFor(element, 'select'), {
 		...rest,
 		...field.aria,
-		theme: ['select', type, through(error, (held) => (empty(held) ? null : 'invalid')), theme, ...states.segments],
+		theme: ['select', type, sizeSegments(size), through(error, (held) => (empty(held) ? null : 'invalid')), theme, ...states.segments],
 		disabled,
 		isHovered: states.isHovered,
 		isClicked: states.isClicked,
@@ -145,8 +151,15 @@ export const Select = (props: SelectProps): Mounter => (elem, _item, before, con
 		},
 	}, blank, h(Option, { each: options ?? [] }));
 
+	// The element and the arrow, in a box the arrow can be placed against. The arrow is an empty
+	// span the theme draws two borders on, and it is `aria-hidden` and out of the reading order:
+	// the control beside it is what a screen reader announces, and it already says it is a combobox.
+	const wrap = h('span', { theme: ['select_wrap'] },
+		picker,
+		h('span', { theme: ['select_chevron'], 'aria-hidden': 'true' }));
+
 	const item = field.wrapped
-		? h('div', { theme: ['field'] }, field.label(), picker, field.notes())
-		: picker;
+		? h('div', { theme: ['field'] }, field.label(), wrap, field.notes())
+		: wrap;
 	return mount(elem, item, before, context);
 };

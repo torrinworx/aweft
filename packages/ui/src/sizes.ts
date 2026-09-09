@@ -1,10 +1,12 @@
-// The sizes: the spacing step and its multiples, the two corner sizes, the smallest pointer
-// target, and the three line widths.
+// The sizes: the spacing step and its multiples, the corner sizes, the height every control is,
+// the smallest pointer target, and the edges a control is drawn with.
 //
 // `$space` is four pixels and everything else made of space is a multiple of it, so two things
-// laid out by different components still line up. `$target` is the smallest a thing a finger has
-// to hit may be. The line widths are named because an entry that writes `1px` has written a value
-// nobody can find again.
+// laid out by different components still line up. `$control` is how tall a control is at rest, so
+// a button beside a field beside a select reads as one row rather than three heights (design 192).
+// `$target` is the smallest a thing a finger has to hit may be, and it sizes the things that are
+// not controls. The edges are named because an entry that writes `1px` has written a value nobody
+// can find again.
 
 /** Every size the default theme ships. */
 export const sizes: Readonly<Record<string, string>> = {
@@ -16,12 +18,25 @@ export const sizes: Readonly<Record<string, string>> = {
 	$space8: '32px',
 	$space12: '48px',
 
+	$radiusSm: '4px',
 	$radius: '6px',
 	$radiusLg: '10px',
 
+	$controlSm: '32px',
+	$control: '36px',
+	$controlLg: '40px',
+
 	$target: '24px',
 
+	// The side of the empty box a select's arrow is drawn out of (design 195, amended). A size of
+	// the theme rather than a `$name` on the entry, so an application that wants a bigger arrow
+	// moves one value in the theme it already overrides.
+	$chevron: '8px',
+
 	$borderWidth: '1px',
-	$ringWidth: '2px',
-	$ringOffset: '2px',
+	$ringWidth: '3px',
+	// A hairline along the bottom edge of an input, not elevation. It is `currentColor`
+	// for the same reason the two state tints are: a `$name` holds text and that text is not read
+	// again (design 111), so a `$foreground` written in here would reach the CSS as its characters.
+	$shadowSm: '0 1px 2px color-mix(in srgb, currentColor 6%, transparent)',
 };

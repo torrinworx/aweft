@@ -19,9 +19,14 @@ alpha
 background
 border
 borderWidth
+box
 brightness
 ceil
+chevron
 contrast_text
+control
+controlLg
+controlSm
 danger
 danger1
 danger10
@@ -40,6 +45,7 @@ dangerSubtle
 dangerSubtleForeground
 dialogWidth
 div
+dot
 dotSize
 ease
 easeOut
@@ -61,6 +67,7 @@ iconSize
 if
 input
 invert
+link
 luminance
 max
 min
@@ -83,12 +90,13 @@ neutral9
 pressTint
 radius
 radiusLg
+radiusSm
 ring
-ringOffset
 ringWidth
 round
 saturate
 scrim
+shadowSm
 shiftBrightness
 slow
 space
@@ -123,5 +131,8 @@ textXlLine
 textXs
 textXsLine
 thumbSize
+tickHeight
+tickStroke
+tickWidth
 tooltipWidth
 trackHeight

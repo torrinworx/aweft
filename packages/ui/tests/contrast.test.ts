@@ -66,12 +66,21 @@ const PAIRS: readonly (readonly [string, string, number])[] = [
 	['danger', 'surface', 3],
 	['border', 'background', 3],
 	['border', 'surface', 3],
-	// `disabled` sets background `$muted` and borderColor `$border`, so this is the tightest pair
-	// the default theme ships. `$input` and `$ring` never land on `$muted`: `disabled` takes the
-	// border to `$border`, and the ring is drawn outside the element, over whatever is behind it.
+	// A line on a quiet fill is the tightest pair the default theme ships. `disabled` used to make
+	// it by repainting the control and no longer does (design 192), but a page that puts a bordered
+	// block on a `$muted` panel still makes it, so the contract keeps it.
 	['border', 'muted', 3],
 	['input', 'background', 3],
 	['input', 'surface', 3],
+	// The focus ring is a line, and the halo it is drawn as is that line at half strength over
+	// whatever is behind the control, so the role itself is measured at the line target.
+	['ring', 'background', 3],
+	['ring', 'surface', 3],
+	// `$link` is text with no fill of its own, so it is measured against every background a page
+	// can put it on (design 191).
+	['link', 'background', 4.5],
+	['link', 'surface', 4.5],
+	['link', 'muted', 4.5],
 ];
 
 const MODES: readonly (readonly [string, Definitions])[] = [['light', light], ['dark', dark]];

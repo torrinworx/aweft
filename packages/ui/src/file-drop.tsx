@@ -211,9 +211,9 @@ const zone = (props: FileDropProps): Mounter => (elem, _item, before, context) =
 
 	const Row = (row: { each?: unknown }): unknown => {
 		const entry = row.each as FileDropEntry;
-		return h('li', { theme: ['filedrop', 'entry', entry.status] },
+		return h('li', { theme: ['filedrop_entry', entry.status] },
 			h('span', { theme: ['text', 'sm'] }, entry.name),
-			entry.error === undefined ? null : h('span', { theme: ['field', 'error'] }, entry.error),
+			entry.error === undefined ? null : h('span', { theme: ['field_error'] }, entry.error),
 			h(Button, {
 				type: 'quiet',
 				round: true,
@@ -234,12 +234,12 @@ const zone = (props: FileDropProps): Mounter => (elem, _item, before, context) =
 	const replaced = children !== undefined && children.length > 0;
 
 	const inside = [
-		h(prompt, { for: id, theme: ['filedrop', 'prompt', replaced ? 'offscreen' : null] },
+		h(prompt, { for: id, theme: ['filedrop_prompt', replaced ? 'offscreen' : null] },
 			replaced ? null : h(Icon, { name: 'upload' }), promptText),
 		h(input, {
 			id,
 			type: 'file',
-			theme: ['filedrop', 'input'],
+			theme: ['filedrop_picker'],
 			accept: wanted.length === 0 ? null : wanted.join(','),
 			multiple: many ? '' : null,
 			$multiple: many,
@@ -251,7 +251,7 @@ const zone = (props: FileDropProps): Mounter => (elem, _item, before, context) =
 				(target as { value?: unknown }).value = '';
 			},
 		}),
-		...(replaced ? children : [h('ul', { theme: ['filedrop', 'list'] }, h(Row, { each: list }))]),
+		...(replaced ? children : [h('ul', { theme: ['filedrop_list'] }, h(Row, { each: list }))]),
 	];
 
 	const node = h(elementFor(element, 'div'), {

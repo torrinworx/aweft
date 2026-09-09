@@ -1,6 +1,6 @@
 // The theme a page gets before it defines one of its own.
 //
-// The `*` entry holds the whole contract: the three scales, the seventeen roles, the type scale,
+// The `*` entry holds the whole contract: the three scales, the eighteen roles, the type scale,
 // the sizes, the motion, and the theme functions. The entries under it are what a component
 // reaches for, and every one of them is written out of that contract. No colour, size or duration
 // is written where it is used, and `check-theme.ts` refuses one that is (design 119).
@@ -30,12 +30,25 @@ defineTheme({
 		...motion,
 
 		fontFamily: '$font',
-		color: '$foreground',
+		// No `color` here. This entry is on every themed element, so a colour written here lands on
+		// an element inside a control as well as on the control, and an `Icon` inside a filled
+		// button took the page's foreground on the button's own fill: measured in Chromium on
+		//, `rgb(28, 32, 39)` on `rgb(28, 32, 39)`, an invisible icon. The page's colour
+		// belongs to the page's own entry, beside the background it already has to set (design 198).
 
 		// The focus ring, set once for every themed element, so no component has to remember it
 		// and none can forget it (design 118). The key after `_cssProp_` is the pseudo-class as
 		// CSS spells it, which is why this one is hyphenated and quoted.
-		'_cssProp_focus-visible': { outline: '$ringWidth solid $ring', outlineOffset: '$ringOffset' },
+		//
+		// A translucent halo rather than an outline (design 192): an outline is drawn outside the
+		// border box and cannot be soft, so it reads as a second border. The outline is turned off
+		// here and only here, and this block names `$ring` twice, which is what design 119's check
+		// asks of an entry that turns one off.
+		'_cssProp_focus-visible': {
+			outline: 'none',
+			borderColor: '$ring',
+			boxShadow: '0 0 0 $ringWidth color-mix(in srgb, $ring 50%, transparent)',
+		},
 
 		// The only motion this package declares, inside the query that asks whether the person
 		// wants any. Written the other way round, as a reduce override, it would lose to a
@@ -53,11 +66,11 @@ defineTheme({
 	// its segment sits later in the class list.
 	hovered: { backgroundImage: 'linear-gradient($hoverTint, $hoverTint)' },
 	pressed: { backgroundImage: 'linear-gradient($pressTint, $pressTint)' },
+	// Dimmed rather than repainted (design 192): a disabled danger button repainted in `$muted` is
+	// no longer recognisable as the control it is. The tint goes off, as design 118 has it.
 	disabled: {
 		backgroundImage: 'none',
-		background: '$muted',
-		color: '$mutedForeground',
-		borderColor: '$border',
+		opacity: 0.5,
 		cursor: 'not-allowed',
 	},
 
@@ -66,8 +79,11 @@ defineTheme({
 		alignItems: 'center',
 		justifyContent: 'center',
 		gap: '$space2',
-		minHeight: '$target',
-		padding: '$space2 $space4',
+		// A control's height is its height, whatever the host's own box model says: an `<a>` with
+		// an `href` wears this entry too, and an anchor is content-box where a button is not.
+		boxSizing: 'border-box',
+		minHeight: '$control',
+		padding: '$space $space4',
 		border: '$borderWidth solid transparent',
 		borderRadius: '$radius',
 		background: '$accent',
@@ -77,8 +93,44 @@ defineTheme({
 		lineHeight: '$textSmLine',
 		fontWeight: 500,
 		cursor: 'pointer',
+		// An icon reads narrower than the text beside it, so the side it sits on gives up `$space`
+		// of its padding. Written as two rules because a button may hold one at each end; a button
+		// holding one icon and a bare text label matches both, because a text node is not a child
+		// element and the icon is therefore first and last (design 194).
+		'_cssProp_has(> svg:first-child)': { paddingLeft: '$space3' },
+		'_cssProp_has(> svg:last-child)': { paddingRight: '$space3' },
 	},
-	button_quiet: { background: 'transparent', color: '$accentSubtleForeground', borderColor: '$border' },
+	// The size axis, one segment after `type` (design 194). A small control takes the smaller text
+	// step with it; a large one is the same text in a taller box.
+	button_sm: {
+		minHeight: '$controlSm',
+		padding: '$space $space2',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+	},
+	button_lg: { minHeight: '$controlLg' },
+	// A square for a button whose label is an icon: the height in both directions, and no padding
+	// at all. The segment is `square` and not `icon`, because `icon` is an entry of its own and a
+	// bare `icon` segment would compile that entry onto the button as well (design 194, amended).
+	// The zero is said three times over, and every one of them is a rule the plain button would
+	// otherwise win: `button_sm` matches later in the class list than `button_square`, so its
+	// `padding` shorthand outranks it, and the two `:has()` rules above outrank both by specificity
+	// whatever the order (design 194).
+	button_square: {
+		width: '$control',
+		padding: 0,
+		'_cssProp_has(> svg:first-child)': { paddingLeft: 0 },
+		'_cssProp_has(> svg:last-child)': { paddingRight: 0 },
+	},
+	button_square_sm: { width: '$controlSm', padding: 0 },
+	button_square_lg: { width: '$controlLg', padding: 0 },
+
+	button_quiet: {
+		background: 'transparent',
+		color: '$accentSubtleForeground',
+		borderColor: '$border',
+		boxShadow: '$shadowSm',
+	},
 	button_danger: { background: '$danger', color: '$dangerForeground' },
 	// A circle for an icon on its own. The padding is even so the icon sits in the middle of it.
 	button_round: { borderRadius: '50%', padding: '$space2', aspectRatio: '1' },
@@ -88,24 +140,35 @@ defineTheme({
 		border: 'none',
 		padding: 0,
 		minHeight: 0,
-		color: '$accentSubtleForeground',
+		color: '$link',
 		textDecoration: 'underline',
 	},
 
 	input: {
 		display: 'block',
+		boxSizing: 'border-box',
 		width: '100%',
-		minHeight: '$target',
-		padding: '$space2 $space3',
+		height: '$control',
+		minHeight: '$control',
+		padding: '$space $space3',
 		border: '$borderWidth solid $input',
 		borderRadius: '$radius',
 		background: '$surface',
 		color: '$surfaceForeground',
+		boxShadow: '$shadowSm',
 		fontFamily: '$font',
 		fontSize: '$textSm',
 		lineHeight: '$textSmLine',
 		_cssProp_placeholder: { color: '$mutedForeground' },
 	},
+	input_sm: {
+		height: '$controlSm',
+		minHeight: '$controlSm',
+		padding: '$space $space2',
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+	},
+	input_lg: { height: '$controlLg', minHeight: '$controlLg', padding: '$space $space4' },
 	input_invalid: { borderColor: '$danger' },
 
 	// A textarea is an input that grows. `resize: none` because the component sets the height
@@ -114,21 +177,81 @@ defineTheme({
 		$textAreaMax: '16rem',
 		resize: 'none',
 		overflowY: 'auto',
+		// A text area is sized by what is in it, so it takes back the fixed height `input` sets
+		// and keeps a minimum of its own.
+		height: 'auto',
+		padding: '$space2 $space3',
 		minHeight: '$space12',
 		maxHeight: '$textAreaMax',
 	},
 
-	// A tick box and a radio are drawn by the host out of one property, so this says how big and
-	// what colour, and the host draws the tick.
+	// A tick box drawn here rather than by the host (design 195). `accent-color` was one line and
+	// gave every host a different box: a different size, a different corner, a different tick, and
+	// no say over any of it. The host is told not to draw one, and the box, the tick and the bar
+	// are three rules. The box is a centring grid so the mark is its one child and needs no offsets.
 	checkbox: {
-		width: '$target',
-		height: '$target',
+		$box: '16px',
+		$tickWidth: '4px',
+		$tickHeight: '8px',
+		$tickStroke: '2px',
+		appearance: 'none',
+		boxSizing: 'border-box',
+		display: 'inline-grid',
+		placeContent: 'center',
+		width: '$box',
+		height: '$box',
 		margin: 0,
 		flexShrink: 0,
-		accentColor: '$accent',
+		border: '$borderWidth solid $input',
+		borderRadius: '$radiusSm',
+		background: '$background',
 		cursor: 'pointer',
+		_cssProp_checked: { background: '$accent', borderColor: '$accent' },
+		// Two sides of an empty box, turned a quarter turn: the corner that is left is the tick.
+		// Nudged up by the stroke, because turning a rectangle about its centre leaves the long
+		// arm's end lower than the eye reads as centred.
+		'_cssProp_:checked::before': {
+			content: '\'\'',
+			width: '$tickWidth',
+			height: '$tickHeight',
+			marginTop: '-$tickStroke',
+			borderRight: '$tickStroke solid $accentForeground',
+			borderBottom: '$tickStroke solid $accentForeground',
+			transform: 'rotate(45deg)',
+		},
+		// Neither ticked nor clear is one bar across the middle.
+		'_cssProp_:indeterminate::before': {
+			content: '\'\'',
+			width: '$tickHeight',
+			height: '$tickStroke',
+			borderRadius: '$tickStroke',
+			background: '$accentForeground',
+		},
 	},
-	radio: { extends: 'checkbox' },
+	// The mark follows the box. The three tick names are redefined per size the way `$dot` is on a
+	// radio: the turned mark's bounding box is (width + stroke + height + stroke) / root two, so
+	// leaving them fixed drew one 11.31px mark in a 12px inner box and in an 18px one.
+	checkbox_sm: { $box: '14px', $tickWidth: '3px', $tickHeight: '6px', $tickStroke: '2px' },
+	checkbox_lg: { $box: '20px', $tickWidth: '5px', $tickHeight: '10px', $tickStroke: '3px' },
+
+	// The same box as a circle, with a dot in the middle of it instead of a tick. The tick's two
+	// borders and its turn are taken back by name, because `extends` merges rather than replaces.
+	radio: {
+		extends: 'checkbox',
+		$dot: '8px',
+		borderRadius: '50%',
+		'_cssProp_:checked::before': {
+			width: '$dot',
+			height: '$dot',
+			marginTop: 0,
+			border: 'none',
+			borderRadius: '50%',
+			background: '$accentForeground',
+			transform: 'none',
+		},
+	},
+	radio_sm: { extends: 'checkbox_sm', $dot: '7px' },
+	radio_lg: { extends: 'checkbox_lg', $dot: '10px' },
 
 	// A switch is a checkbox the host is told not to draw, so this draws the pill and the thumb.
 	toggle: {
@@ -161,6 +284,11 @@ defineTheme({
 		// taken out of it, worked out in the stylesheet so a change of size needs one edit.
 		'_cssProp_:checked::before': { left: 'calc(100% - $space - $switchThumb)' },
 	},
+	// The pill and its thumb scale by their three names alone: the entry above reads them out of
+	// whichever entry in the chain last defined them (design 111), so a size is three values and
+	// no second copy of the rules that use them.
+	toggle_sm: { $switchWidth: '32px', $switchHeight: '20px', $switchThumb: '14px' },
+	toggle_lg: { $switchWidth: '48px', $switchHeight: '28px', $switchThumb: '22px' },
 
 	// A range input is drawn out of two vendor pseudo-elements, which are spelled with their own
 	// colons because they are not in this package's pseudo-element table.
@@ -169,7 +297,7 @@ defineTheme({
 		$thumbSize: '16px',
 		appearance: 'none',
 		width: '100%',
-		height: '$target',
+		height: '$control',
 		margin: 0,
 		background: 'transparent',
 		cursor: 'pointer',
@@ -200,6 +328,9 @@ defineTheme({
 			background: '$accent',
 		},
 	},
+	// The hit area, the track and the thumb, the last two by name alone.
+	slider_sm: { $trackHeight: '4px', $thumbSize: '14px', height: '$controlSm' },
+	slider_lg: { $trackHeight: '8px', $thumbSize: '20px', height: '$controlLg' },
 
 	// What a labelled control puts around itself: the label above, the description and the error
 	// below, and the whole thing in a column unless the control sits beside its words.
@@ -214,13 +345,64 @@ defineTheme({
 		alignItems: 'center',
 		flexWrap: 'wrap',
 		gap: '$space2',
+		minHeight: '$control',
 	},
+	// The same row, taken at a width rather than declared (design 196). The container is the nearest
+	// ancestor that declares one, which is `field_group` and nothing else here, so a responsive
+	// field with no group above it stays a column: a query with no container answers false.
+	field_responsive: {
+		'_container_(min-width: 28rem)': {
+			flexDirection: 'row',
+			alignItems: 'center',
+			flexWrap: 'wrap',
+			gap: '$space2',
+			minHeight: '$control',
+		},
+	},
+
+	// The stack a form is, and a run of fields under a heading. Parts, so each is one class token
+	// (design 193). A fieldset arrives from the host with a border, three uneven paddings and a
+	// minimum width that stops it shrinking in a column, so all four are taken off by name.
+	field_group: {
+		display: 'flex',
+		flexDirection: 'column',
+		gap: '$space6',
+		width: '100%',
+		containerType: 'inline-size',
+	},
+	field_set: {
+		display: 'flex',
+		flexDirection: 'column',
+		gap: '$space6',
+		width: '100%',
+		border: 'none',
+		padding: 0,
+		margin: 0,
+		minWidth: 0,
+	},
+	field_legend: {
+		fontFamily: '$font',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+		fontWeight: 500,
+		marginBottom: '$space2',
+		padding: 0,
+	},
+
+	// Three parts of a field, reached as one class token each (design 193): `field_label` in a class
+	// list names this entry and no longer also matches the bare `field`, so the label stops taking
+	// the field's own column layout and its full width.
 	field_label: {
 		fontFamily: '$font',
 		fontSize: '$textSm',
 		lineHeight: '$textSmLine',
 		fontWeight: 500,
 		color: '$foreground',
+		// A `Field` marks itself while a control inside it has something wrong (design 196), and the
+		// label under it takes the colour its message already has. The rule is written from the
+		// label rather than from the field because a part's class is generated per chain, so
+		// `field`'s rules cannot name this one's.
+		'_elem_[data-invalid]': { color: '$dangerSubtleForeground' },
 	},
 	field_hint: {
 		fontFamily: '$font',
@@ -237,15 +419,24 @@ defineTheme({
 		flexBasis: '100%',
 	},
 
-	// A select is an input that opens: same edge, same fill, room on the right for the arrow the
-	// host draws. `base-select` is what puts Chromium 135 and later into the appearance whose open
-	// list is themed; every other host ignores it and draws its own (design 130).
+	// A select is an input that opens, and unlike an input it lays out children of its own: the
+	// value it is showing and the arrow. As a block those stack (design 192).
+	//
+	// The appearance is said twice (design 195): `none` first, so every host stops drawing its own
+	// arrow, then `base-select`, which Chromium 135 and later takes and which is what lets the open
+	// list, the option rows and the picker be themed. A host that does not know the second keyword
+	// drops that declaration and keeps `none`. The arrow the closed control shows is drawn here, the
+	// way the tick and the dot are, so it is the same mark everywhere and the host's is hidden where
+	// there is one.
 	select: {
 		extends: 'input',
-		appearance: 'base-select',
+		appearance: ['none', 'base-select'],
+		display: 'inline-flex',
+		alignItems: 'center',
+		width: '100%',
 		paddingRight: '$space8',
 		cursor: 'pointer',
-		'_cssProp_::picker-icon': { color: '$mutedForeground' },
+		'_cssProp_::picker-icon': { display: 'none' },
 		'_cssProp_::picker(select)': {
 			background: '$surface',
 			color: '$surfaceForeground',
@@ -253,6 +444,31 @@ defineTheme({
 			borderRadius: '$radius',
 			padding: '$space',
 		},
+	},
+	// The room for the chevron is said again in each size: a modifier of `select` does not extend
+	// the modifier of `input` on its own, and the `input_sm` that `extends` pulls in sits after
+	// `select` in the chain, so its `padding` shorthand would otherwise take the room back.
+	select_sm: { extends: 'input_sm', paddingRight: '$space8' },
+	select_lg: { extends: 'input_lg', paddingRight: '$space8' },
+
+	// The box the component puts around the element so the chevron has something to be absolute
+	// against, and the chevron itself. Parts, so each is one class token (design 193).
+	//
+	// The chevron is the tick's trick again: an empty box `$chevron` square with two of its four
+	// sides drawn, turned a quarter turn, so the corner that is left points down. It takes no
+	// pointer events, so a click on it reaches the element under it.
+	select_wrap: { position: 'relative', display: 'block', width: '100%' },
+	select_chevron: {
+		position: 'absolute',
+		right: '$space3',
+		top: '50%',
+		boxSizing: 'border-box',
+		width: '$chevron',
+		height: '$chevron',
+		borderRight: '$borderWidth solid $mutedForeground',
+		borderBottom: '$borderWidth solid $mutedForeground',
+		transform: 'translateY(-50%) rotate(45deg)',
+		pointerEvents: 'none',
 	},
 	option: {
 		padding: '$space $space2',
@@ -271,12 +487,18 @@ defineTheme({
 	},
 	card_tight: { padding: 0 },
 
+	// It arrives from nothing and does not leave that way: what hides a popup is `display: none`
+	// written on the box the sink places, which is above this element and outside any theme.
 	popup: {
 		background: '$surface',
 		color: '$surfaceForeground',
 		border: '$borderWidth solid $border',
 		borderRadius: '$radius',
 		padding: '$space2',
+		'_media_(prefers-reduced-motion: no-preference)': {
+			transition: 'opacity $fast $ease, transform $fast $ease',
+		},
+		_starting_: { opacity: 0, transform: 'scale(0.96)' },
 	},
 
 	// Off the screen and still in the reading order. Put it in a class list beside anything: a file
@@ -306,7 +528,31 @@ defineTheme({
 		borderRadius: '$radiusLg',
 		background: '$surface',
 		color: '$surfaceForeground',
-		'_cssProp_::backdrop': { background: '$scrim' },
+		// The scrim fades with the dialog. Its starting style is inside the pseudo block, which is
+		// what one level of nesting buys (design 190, amended): the transition has to reach
+		// `.awN::backdrop`, and it has to stay inside the reduced-motion query.
+		'_cssProp_::backdrop': {
+			background: '$scrim',
+			opacity: 1,
+			_starting_: { opacity: 0 },
+		},
+		'_cssProp_:not([open])::backdrop': { opacity: 0 },
+
+		// It arrives from nothing and leaves the same way (design 192). `display` and `overlay`
+		// hold their old values for the length of the transition, which is what lets a dialog that
+		// is no longer `[open]` still be on the screen while it goes.
+		'_media_(prefers-reduced-motion: no-preference)': {
+			transition: 'opacity $fast $ease, transform $fast $ease,'
+				+ ' display $fast allow-discrete, overlay $fast allow-discrete',
+			'_cssProp_::backdrop': {
+				transition: 'opacity $fast $ease,'
+					+ ' display $fast allow-discrete, overlay $fast allow-discrete',
+			},
+		},
+		// Outside the query on purpose: a starting style is only ever read by a transition, so with
+		// no transition there is nothing to start from and the dialog is solid in its first frame.
+		_starting_: { opacity: 0, transform: 'scale(0.96)' },
+		'_cssProp_:not([open])': { opacity: 0, transform: 'scale(0.96)' },
 	},
 	dialog_head: {
 		display: 'flex',
@@ -329,6 +575,10 @@ defineTheme({
 		fontFamily: '$font',
 		fontSize: '$textXs',
 		lineHeight: '$textXsLine',
+		'_media_(prefers-reduced-motion: no-preference)': {
+			transition: 'opacity $fast $ease, transform $fast $ease',
+		},
+		_starting_: { opacity: 0, transform: 'scale(0.96)' },
 	},
 
 	// A disclosure: the summary is a button, so it takes the `button` entry and adds only what a
@@ -374,7 +624,7 @@ defineTheme({
 		color: '$mutedForeground',
 		cursor: 'pointer',
 	},
-	filedrop_input: { extends: 'offscreen' },
+	filedrop_picker: { extends: 'offscreen' },
 	filedrop_list: {
 		display: 'flex',
 		flexDirection: 'column',
@@ -405,7 +655,10 @@ defineTheme({
 		'_cssProp_::-webkit-slider-runnable-track': { background: 'transparent' },
 		'_cssProp_::-moz-range-track': { background: 'transparent' },
 	},
-	colorpicker_hue: {
+	// A modifier of the track, not of the picker: the class list says `colorpicker_track` as one
+	// token, so an entry that starts `colorpicker_` and then says something else reaches nothing
+	// (design 193).
+	colorpicker_track_hue: {
 		$hue0: 'hsl(0, 100%, 50%)',
 		$hue60: 'hsl(60, 100%, 50%)',
 		$hue120: 'hsl(120, 100%, 50%)',

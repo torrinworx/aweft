@@ -3,7 +3,7 @@
 import { type Mounter, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';
 
-import { checkedOf, controlStates, elementFor } from './control.ts';
+import { checkedOf, controlStates, elementFor, sizeSegments } from './control.ts';
 import { wireField } from './field.ts';
 import { h } from './h.ts';
 import { isWritable, through } from './source.ts';
@@ -26,6 +26,8 @@ export interface CheckboxProps {
 	readonly disabled?: unknown;
 	/** The theme variant. */
 	readonly type?: unknown;
+	/** How tall it is: `sm`, `lg`, or nothing for the default. A value or a cell. */
+	readonly size?: unknown;
 	/** Called with what the cell now holds. */
 	readonly onChange?: (next: boolean, event: unknown) => void;
 	/** Decorate this node instead of building one. */
@@ -40,7 +42,7 @@ export interface CheckboxProps {
  *
  * Params:
  *   props: `value`, `label`, `description`, `error`, `invert`, `indeterminate`, `disabled`,
- *          `type`, `onChange`, `element`, and anything else, which goes to the `<input>`
+ *          `type`, `size`, `onChange`, `element`, and anything else, which goes to the `<input>`
  *
  * Returns: an `<input type="checkbox">`, inside a `<div>` with its label when it was given one.
  * Space toggles it, because it is the platform's own box.
@@ -58,7 +60,7 @@ export interface CheckboxProps {
 export const Checkbox = (props: CheckboxProps): Mounter => (elem, _item, before, context) => {
 	const {
 		value, label, description, error, invert, indeterminate,
-		disabled, type, onChange, element, theme, ...rest
+		disabled, type, size, onChange, element, theme, ...rest
 	} = props;
 
 	const cell = isWritable(value) ? value : mutable(false);
@@ -69,7 +71,7 @@ export const Checkbox = (props: CheckboxProps): Mounter => (elem, _item, before,
 	const box = h(elementFor(element, 'input'), {
 		...rest,
 		...field.aria,
-		theme: ['checkbox', type, theme, ...states.segments],
+		theme: ['checkbox', type, sizeSegments(size), theme, ...states.segments],
 		type: 'checkbox',
 		disabled,
 		// The attribute is what a static render writes, so a server page shows the box ticked; the

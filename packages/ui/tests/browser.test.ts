@@ -523,15 +523,18 @@ test('Enter in a text field calls onEnter and does not submit the form it is in'
 
 test('a real change on a select hands the caller back the object it put in the list', async () => {
 	await drive('select-change', `
-		import { Select, h, mount } from '@aweftjs/ui';
+		import { Icons, Select, h, mount } from '@aweftjs/ui';
 		import { mutable } from '@aweftjs/core';
+		${ANY_ICON}
 		const users = [{ id: 7, name: 'Ada' }, { id: 9, name: 'Grace' }];
 		const chosen = mutable(null);
 		globalThis.read = () => chosen.get();
 		globalThis.pick = (at) => chosen.set(users[at]);
 		mount(document.body, (
-			<Select id="user" label="Owner" value={chosen} options={users}
-				display={(user) => user.name} placeholder="Pick someone" />
+			<Icons value={anyIcon}>
+				<Select id="user" label="Owner" value={chosen} options={users}
+					display={(user) => user.name} placeholder="Pick someone" />
+			</Icons>
 		));
 	`, async (view) => {
 		await view.waitForSelector('#user');
@@ -1209,4 +1212,637 @@ test('a Typography heading computes the theme\'s weight and the wrap the host re
 		await browser.close();
 		await site.close();
 	}
+});
+
+// --- the look, measured rather than read off the stylesheet --------------------------------------
+
+test('every control computes the one height, and a select lays its content out in a line', async () => {
+	const site = await page('control-heights', BLANK, `
+		import { Button, Checkbox, Icons, Select, TextField, h, mount } from '@aweftjs/ui';
+		${ANY_ICON}
+		mount(document.body, <Icons value={anyIcon}><div>
+			<Button id="btn" label="Save" />
+			<TextField id="tf" placeholder="Something short" />
+			<Select id="sel" options={['a', 'b']} />
+			<Checkbox id="cb" label="Tick me" />
+		</div></Icons>);
+	`);
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForSelector('#sel');
+		const seen = await view.evaluate(() => {
+			const box = (id: string): { top: number; height: number } =>
+				document.querySelector(`#${id}`)!.getBoundingClientRect();
+			const label = document.querySelector('#cb')!.parentElement!.querySelector('label')!;
+			return {
+				button: box('btn').height,
+				field: box('tf').height,
+				select: box('sel').height,
+				selectDisplay: getComputedStyle(document.querySelector('#sel')!)['display'],
+				row: document.querySelector('#cb')!.parentElement!.getBoundingClientRect().height,
+				boxTop: box('cb').top,
+				labelTop: label.getBoundingClientRect().top,
+			};
+		});
+
+		// $control, measured. A declared height is only the height because the entry says what its
+		// box model is: an `<input>` is content-box in Chromium and a `<button>` is not.
+		assert.equal(seen.button, 36, 'a button is $control tall');
+		assert.equal(seen.field, 36, 'and so is a text field');
+		// A `<select>` in the base appearance lays out its value and the host's picker icon, and
+		// as the block `input` is those stacked and took it to 58px (design 192).
+		assert.equal(seen.selectDisplay, 'inline-flex');
+		assert.equal(seen.select, 36, 'a select is the same height as the field beside it');
+
+		// The label used to match the bare `field` entry as well and become a full-width column,
+		// which pushed the box onto a line of its own (design 192).
+		assert.ok(Math.abs(seen.boxTop - seen.labelTop) < 4,
+			`a checkbox and its label are on one line: ${String(seen.boxTop)} against ${String(seen.labelTop)}`);
+		assert.equal(seen.row, 36, 'and the row they sit in is $control tall');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
+
+test('a real Tab draws the ring as a halo and takes the border to $ring', async () => {
+	const site = await page('focus-ring', BLANK, `
+		import { TextField, h, mount } from '@aweftjs/ui';
+		mount(document.body, <TextField id="tf" placeholder="x" />);
+	`);
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForSelector('#tf');
+
+		const resting = await view.evaluate(() =>
+			getComputedStyle(document.querySelector('#tf')!)['boxShadow'] ?? '');
+		assert.match(resting, /0px 1px 2px/, 'an input carries the hairline edge before anything is focused');
+
+		await view.keyboard.press('Tab');
+		// The border colour transitions, so this waits for it rather than reading it mid-way.
+		await view.waitForFunction(() =>
+			getComputedStyle(document.querySelector('#tf')!)['borderTopColor'] === 'rgb(90, 97, 110)');
+		const focused = await view.evaluate(() => {
+			const style = getComputedStyle(document.querySelector('#tf')!);
+			return {
+				id: document.activeElement!.id,
+				outline: style['outlineStyle'] ?? '',
+				border: style['borderTopColor'] ?? '',
+				shadow: style['boxShadow'] ?? '',
+			};
+		});
+
+		assert.equal(focused.id, 'tf');
+		assert.equal(focused.outline, 'none', 'the ring is not an outline (design 192)');
+		// $ring in light mode is $neutral8, #5a616e. Written here from the scale, not read from it.
+		assert.equal(focused.border, 'rgb(90, 97, 110)', 'the control\'s own edge moves to $ring');
+		assert.match(focused.shadow, /0px 0px 0px 3px/, 'a $ringWidth halo');
+		assert.match(focused.shadow, /0\.5/, 'in $ring at half strength');
+		// The focus rule is `.awN:focus-visible` and the hairline is `.awN`, so the pseudo-class
+		// outranks it and the halo is the whole shadow rather than one of two.
+		assert.doesNotMatch(focused.shadow, /1px 2px/, 'and it replaced the hairline rather than joining it');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
+
+test('a dialog is transitioned in from nothing, and reduced motion shows it at once', async () => {
+	const site = await page('dialog-motion', BLANK, `
+		import { h, mount } from '@aweftjs/ui';
+		import { dialogControl } from '@aweftjs/ui/dialog';
+		// The theme entry's class, taken off a themed element, and worn by the real <dialog>: the
+		// element has to be a <dialog> for [open] and the top layer to mean anything.
+		mount(document.body, <div id="probe" theme="dialog" />);
+		const sheet = document.createElement('dialog');
+		sheet.id = 'sheet';
+		sheet.className = document.querySelector('#probe').className;
+		sheet.innerHTML = '<p>hello</p>';
+		document.body.appendChild(sheet);
+		window.modal = dialogControl(sheet, {});
+	`);
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		// A closed dialog is not visible, so this waits for it to be in the document rather than
+		// for it to be on the screen.
+		await view.waitForFunction(() => document.querySelector('#sheet') !== null);
+
+		const moved = await view.evaluate(async () => {
+			const sheet = document.querySelector('#sheet')!;
+			const scrim = (): string => getComputedStyle(sheet, '::backdrop')['opacity'] ?? '';
+			(window as unknown as { modal: { open(): void } }).modal.open();
+			const first = getComputedStyle(sheet)['opacity'] ?? '';
+			const scrimFirst = scrim();
+			await new Promise<void>((go) => requestAnimationFrame(() => requestAnimationFrame(() => { go(); })));
+			const during = getComputedStyle(sheet)['opacity'] ?? '';
+			const scrimDuring = scrim();
+			await new Promise((go) => setTimeout(go, 300));
+			return {
+				first, during, scrimFirst, scrimDuring,
+				settled: getComputedStyle(sheet)['opacity'] ?? '',
+				scrimSettled: scrim(),
+			};
+		});
+		assert.equal(moved.first, '0', '@starting-style is what the first frame is drawn from');
+		assert.ok(Number(moved.during) > 0 && Number(moved.during) < 1,
+			`and it is on its way in the frames after: ${moved.during}`);
+		assert.equal(moved.settled, '1', 'and solid once $fast has passed');
+
+		// The scrim goes with it now (design 190, amended): a `_cssProp_` inside a `_media_` is what
+		// keeps the backdrop's transition inside the reduced-motion query, and design 192 said this
+		// could not be written. It can.
+		assert.equal(moved.scrimFirst, '0', 'the backdrop starts from nothing too');
+		assert.ok(Number(moved.scrimDuring) > 0 && Number(moved.scrimDuring) < 1,
+			`and fades with the dialog: ${moved.scrimDuring}`);
+		assert.equal(moved.scrimSettled, '1', 'and is solid at the end of it');
+
+		await view.emulateMedia({ reducedMotion: 'reduce' });
+		const still = await view.evaluate(async () => {
+			const sheet = document.querySelector('#sheet')!;
+			const modal = (window as unknown as { modal: { open(): void; close(): void } }).modal;
+			modal.close();
+			await new Promise((go) => setTimeout(go, 300));
+			modal.open();
+			return getComputedStyle(sheet)['opacity'] ?? '';
+		});
+		// A starting style is only ever read by a transition, so with no transition there is
+		// nothing to start from and the dialog is solid in the frame it is rendered (design 190).
+		assert.equal(still, '1', 'reduced motion shows it at once');
+		const scrimStill = await view.evaluate(() =>
+			getComputedStyle(document.querySelector('#sheet')!, '::backdrop')['opacity'] ?? '');
+		assert.equal(scrimStill, '1', 'and so does the scrim, for the same reason');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
+
+test('every control has three heights, and an icon button is a square at each of them', async () => {
+	// The size axis, measured (design 194). The expected numbers are `$controlSm`, `$control` and
+	// `$controlLg` written from the design, and the box, the pill and the thumb from the entries
+	// that name them.
+	await drive('control-sizes', `
+		import {
+			Button, Checkbox, Icon, Icons, Radio, Select, Slider, TextField, Toggle, h, mount,
+		} from '@aweftjs/ui';
+		${ANY_ICON}
+		const row = (suffix, size) => <div>
+			<Button id={'btn' + suffix} label="Save" size={size} />
+			<Button id={'square' + suffix} icon={<Icon name="search" label="Find" />}
+				size={size === undefined ? 'icon' : 'icon-' + size} />
+			<TextField id={'tf' + suffix} placeholder="x" size={size} />
+			<Select id={'sel' + suffix} options={['a', 'b']} size={size} />
+			<Checkbox id={'cb' + suffix} size={size} />
+			<Radio id={'rd' + suffix} option="a" size={size} />
+			<Toggle id={'tg' + suffix} size={size} />
+			<Slider id={'sl' + suffix} size={size} />
+		</div>;
+		mount(document.body, <Icons value={anyIcon}>
+			{row('', undefined)}{row('-sm', 'sm')}{row('-lg', 'lg')}
+		</Icons>);
+	`, async (view) => {
+		await view.waitForSelector('#sl-lg');
+		const seen = await view.evaluate(() => {
+			const of = (id: string): [number, number] => {
+				const box = document.querySelector(`#${id}`)!.getBoundingClientRect();
+				return [Math.round(box.width), Math.round(box.height)];
+			};
+			const out: Record<string, [number, number]> = {};
+			for (const name of ['btn', 'square', 'tf', 'sel', 'cb', 'rd', 'tg', 'sl']) {
+				for (const suffix of ['', '-sm', '-lg']) out[name + suffix] = of(name + suffix);
+			}
+			return out;
+		});
+
+		// The four controls whose whole box is the control: 32, 36, 40.
+		for (const name of ['btn', 'tf', 'sel', 'sl']) {
+			assert.equal(seen[name]![1], 36, `${name} is $control tall`);
+			assert.equal(seen[`${name}-sm`]![1], 32, `${name} at sm is $controlSm`);
+			assert.equal(seen[`${name}-lg`]![1], 40, `${name} at lg is $controlLg`);
+		}
+		// The three drawn ones, which are a mark beside their words rather than a row of their own.
+		assert.deepEqual(seen['cb'], [16, 16], 'a tick box is $box square');
+		assert.deepEqual(seen['cb-sm'], [14, 14]);
+		assert.deepEqual(seen['cb-lg'], [20, 20]);
+		assert.deepEqual(seen['rd'], [16, 16], 'and a radio reaches the same box through extends');
+		assert.deepEqual(seen['rd-sm'], [14, 14]);
+		assert.deepEqual(seen['rd-lg'], [20, 20]);
+		assert.deepEqual(seen['tg'], [40, 24], 'the switch is its pill');
+		assert.deepEqual(seen['tg-sm'], [32, 20]);
+		assert.deepEqual(seen['tg-lg'], [48, 28]);
+		// A square at every size: the width is the height, and no padding survives, not even the
+		// `:has()` rule that tightens a button holding an icon.
+		assert.deepEqual(seen['square'], [36, 36]);
+		assert.deepEqual(seen['square-sm'], [32, 32]);
+		assert.deepEqual(seen['square-lg'], [40, 40]);
+		const padding = await view.evaluate(() => ({
+			plain: getComputedStyle(document.querySelector('#btn')!)['padding'],
+			square: getComputedStyle(document.querySelector('#square')!)['padding'],
+		}));
+		assert.equal(padding.plain, '4px 16px');
+		assert.equal(padding.square, '0px', 'a square is its icon and nothing around it');
+	});
+});
+
+test('a tick box and a radio are drawn by the theme, in both modes', async () => {
+	// Design 195. The host draws neither: `appearance` is `none`, and what is on the screen is the
+	// entry's own box and its `::before`.
+	await drive('drawn-controls', `
+		import { Checkbox, Radio, Theme, dark, h, mount } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+		mount(document.body, <div>
+			<Checkbox id="on" value={mutable(true)} />
+			<Checkbox id="off" value={mutable(false)} />
+			<Checkbox id="mixed" value={mutable(false)} indeterminate={true} />
+			<Radio id="picked" value={mutable('a')} option="a" />
+			<Theme value={dark}><Checkbox id="dark-on" value={mutable(true)} /></Theme>
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#dark-on');
+		const seen = await view.evaluate(() => {
+			const of = (id: string, pseudo?: string): Record<string, string> =>
+				getComputedStyle(document.querySelector(`#${id}`)!, pseudo);
+			return {
+				appearance: of('on')['appearance'],
+				light: of('on')['backgroundColor'],
+				dark: of('dark-on')['backgroundColor'],
+				clear: of('off')['backgroundColor'],
+				tick: `${of('on', '::before')['width']} x ${of('on', '::before')['height']}`,
+				tickColour: of('on', '::before')['borderRightColor'],
+				tickTurn: of('on', '::before')['transform'],
+				noTick: of('off', '::before')['content'],
+				bar: `${of('mixed', '::before')['width']} x ${of('mixed', '::before')['height']}`,
+				dot: `${of('picked', '::before')['width']} x ${of('picked', '::before')['height']}`,
+				dotRound: of('picked', '::before')['borderRadius'],
+				ring: of('on')['borderTopColor'],
+			};
+		});
+
+		assert.equal(seen.appearance, 'none', 'the host is not drawing a box of its own');
+		// `$accent` is `$neutral12`, which is #1c2027 in light and #edeff3 in dark (design 191).
+		// Written here from the scale rather than read off the page.
+		assert.equal(seen.light, 'rgb(28, 32, 39)', 'a ticked box is $accent in light');
+		assert.equal(seen.dark, 'rgb(237, 239, 243)', 'and $accent in dark, which is the other end');
+		assert.equal(seen.clear, 'rgb(252, 252, 253)', 'a clear one is $background');
+
+		// The tick is two sides of a $tickWidth by $tickHeight box, turned a quarter turn.
+		assert.equal(seen.tick, '4px x 8px');
+		assert.equal(seen.tickColour, 'rgb(252, 252, 253)', 'drawn in $accentForeground');
+		assert.equal(seen.tickTurn, 'matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, 0)', '45 degrees');
+		assert.equal(seen.noTick, 'none', 'a clear box has no ::before at all');
+		assert.equal(seen.bar, '8px x 2px', 'neither ticked nor clear is one bar');
+
+		assert.equal(seen.dot, '8px x 8px', 'a picked radio is a centred dot');
+		assert.equal(seen.dotRound, '50%', 'and the dot is round, not the turned tick it extends');
+	});
+});
+
+test('the drawn mark fits its box at every size', async () => {
+	// The three tick names are redefined per size, so the mark scales with the box (design 195,
+	// amended). Fixed at 4, 8 and 2 the mark was one 11.31px lozenge in a 12px inner box and in an
+	// 18px one; measured before the fix.
+	await drive('drawn-sizes', `
+		import { Checkbox, h, mount } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+		mount(document.body, <div>
+			<Checkbox id="sm" size="sm" value={mutable(true)} />
+			<Checkbox id="md" value={mutable(true)} />
+			<Checkbox id="lg" size="lg" value={mutable(true)} />
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#lg');
+		const seen = await view.evaluate(() => {
+			const of = (id: string): { box: number; inner: number; mark: number } => {
+				const node = document.querySelector(`#${id}`)!;
+				const style = getComputedStyle(node, '::before');
+				const border = parseFloat(getComputedStyle(node)['borderTopWidth'] ?? '0');
+				// The mark is a rectangle turned 45 degrees, so what has to fit is its diagonal.
+				const wide = parseFloat(style['width'] ?? '0') + parseFloat(style['borderRightWidth'] ?? '0');
+				const tall = parseFloat(style['height'] ?? '0') + parseFloat(style['borderBottomWidth'] ?? '0');
+				return {
+					box: node.getBoundingClientRect().width,
+					inner: node.getBoundingClientRect().width - border * 2,
+					mark: Number(((wide + tall) / Math.SQRT2).toFixed(2)),
+				};
+			};
+			return { sm: of('sm'), md: of('md'), lg: of('lg') };
+		});
+
+		assert.deepEqual([seen.sm.box, seen.md.box, seen.lg.box], [14, 16, 20], 'three boxes');
+		// Each mark is its own size, and each one fits inside the box it sits in.
+		assert.equal(seen.sm.mark, 9.19);
+		assert.equal(seen.md.mark, 11.31);
+		assert.equal(seen.lg.mark, 14.85);
+		for (const [name, held] of Object.entries(seen)) {
+			assert.ok(held.mark < held.inner,
+				`the ${name} mark is ${String(held.mark)}px inside a ${String(held.inner)}px box`);
+		}
+	});
+});
+
+test('a square button centres its icon, and the icon takes the button\'s own colour', async () => {
+	// Two bugs in one page. The size segment is `square` and not `icon`, because `icon` is an entry
+	// and the bare segment compiled it onto the button: measured `display: inline-block;
+	// width: 1em; height: 1em`, and the svg sat 12.25px from the top of the 36px box and 9.75px
+	// from the bottom. And the root entry no longer writes `color`, because it wrote the page's
+	// foreground onto an `Icon` inside a filled button: `rgb(28, 32, 39)` on the button's own
+	// `rgb(28, 32, 39)` fill, an invisible icon (design 198).
+	await drive('square-button', `
+		import { Button, Icon, Icons, Theme, dark, h, mount } from '@aweftjs/ui';
+		const pack = { icons: { plus: { body: '<path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2"/>' } } };
+		mount(document.body, <Icons value={pack}>
+			<div id="light">
+				<Button id="square" size="icon" icon={<Icon name="plus" />} />
+			</div>
+			<Theme value={dark}>
+				<div id="dark">
+					<Button id="dark-square" size="icon" icon={<Icon name="plus" />} />
+				</div>
+			</Theme>
+		</Icons>);
+	`, async (view) => {
+		await view.waitForSelector('#dark-square');
+		const seen = await view.evaluate(() => {
+			const of = (id: string) => {
+				const node = document.querySelector(`#${id}`)!;
+				const style = getComputedStyle(node);
+				const box = node.getBoundingClientRect();
+				const svg = node.querySelector('svg')!;
+				const drawn = svg.getBoundingClientRect();
+				return {
+					display: style['display'],
+					fill: style['backgroundColor'],
+					size: [Math.round(box.width), Math.round(box.height)],
+					top: Number((drawn.top - box.top).toFixed(2)),
+					bottom: Number((box.bottom - drawn.bottom).toFixed(2)),
+					left: Number((drawn.left - box.left).toFixed(2)),
+					right: Number((box.right - drawn.right).toFixed(2)),
+					ink: getComputedStyle(svg)['color'],
+				};
+			};
+			return { light: of('square'), dark: of('dark-square') };
+		});
+
+		for (const [mode, held] of Object.entries(seen)) {
+			assert.equal(held.display, 'inline-flex', `the ${mode} square still centres what is in it`);
+			assert.deepEqual(held.size, [36, 36], `the ${mode} square is $control both ways`);
+			assert.ok(Math.abs(held.top - held.bottom) <= 1,
+				`the ${mode} svg is centred down the box: ${String(held.top)} above, ${String(held.bottom)} below`);
+			assert.ok(Math.abs(held.left - held.right) <= 1,
+				`the ${mode} svg is centred across it: ${String(held.left)} left, ${String(held.right)} right`);
+		}
+		// `$accent` is #1c2027 in light and #edeff3 in dark, and `$accentForeground` is the other
+		// one (design 191). The icon reads the button's colour, not the page's.
+		assert.equal(seen.light.fill, 'rgb(28, 32, 39)');
+		assert.equal(seen.light.ink, 'rgb(252, 252, 253)', 'the icon is $accentForeground in light');
+		assert.equal(seen.dark.fill, 'rgb(237, 239, 243)');
+		assert.equal(seen.dark.ink, 'rgb(15, 18, 22)', 'and $accentForeground in dark');
+	});
+});
+
+test('a tick box takes the root focus ring, which is the only ring it has', async () => {
+	// Nothing in the `checkbox` entry mentions focus. The root rule is what draws it (design 118),
+	// and it is worth measuring once now the host draws no box of its own.
+	await drive('drawn-focus', `
+		import { Checkbox, h, mount } from '@aweftjs/ui';
+		mount(document.body, <Checkbox id="box" label="Tick me" />);
+	`, async (view) => {
+		await view.waitForSelector('#box');
+		await view.keyboard.press('Tab');
+		await view.waitForFunction(() =>
+			getComputedStyle(document.querySelector('#box')!)['borderTopColor'] === 'rgb(90, 97, 110)');
+		const seen = await view.evaluate(() => {
+			const style = getComputedStyle(document.querySelector('#box')!);
+			return { outline: style['outlineStyle'], border: style['borderTopColor'], shadow: style['boxShadow'] };
+		});
+		assert.equal(seen.outline, 'none');
+		assert.equal(seen.border, 'rgb(90, 97, 110)', '$ring, which is $neutral8');
+		assert.match(seen.shadow ?? '', /0px 0px 0px 3px/, 'and the halo the root rule draws');
+	});
+});
+
+test('a select carries its own arrow inside its box, and the host draws none', async () => {
+	// Design 195, amended. The arrow is an empty box the theme draws two borders on and turns a
+	// quarter turn, absolutely placed in a wrapper, so it is the same mark on every host, it costs
+	// the select no height, and the page needs no icon pack to have one.
+	await drive('select-arrow', `
+		import { Select, h, mount } from '@aweftjs/ui';
+		mount(document.body, <Select id="sel" options={['a', 'b']} />);
+	`, async (view) => {
+		await view.waitForSelector('#sel');
+		const seen = await view.evaluate(() => {
+			const select = document.querySelector('#sel')!;
+			const wrap = select.parentElement!;
+			const arrow = wrap.querySelector('span')!;
+			const style = getComputedStyle(arrow);
+			const box = select.getBoundingClientRect();
+			const mark = arrow.getBoundingClientRect();
+			return {
+				tag: (wrap as unknown as { localName: string }).localName,
+				select: Math.round(box.height),
+				wrap: Math.round(wrap.getBoundingClientRect().height),
+				// The turned box overhangs its own corners, so its bounding rect reaches past the
+				// inset the entry declares. `right` is what the entry said.
+				right: style['right'],
+				// The border box, un-turned: `getComputedStyle` reports the content box, and the
+				// rect below is the turned one.
+				size: `${String(arrow.offsetWidth)} x ${String(arrow.offsetHeight)}`,
+				sides: `${style['borderRightWidth'] ?? ''} ${style['borderBottomWidth'] ?? ''}`,
+				missing: `${style['borderTopStyle'] ?? ''} ${style['borderLeftStyle'] ?? ''}`,
+				colour: style['borderRightColor'],
+				turn: style['transform'],
+				offCentre: Math.round((mark.top + mark.height / 2) - (box.top + box.height / 2)),
+				inside: mark.right <= box.right && mark.left >= box.left,
+				appearance: getComputedStyle(select)['appearance'],
+				events: style['pointerEvents'],
+				hidden: arrow.getAttribute('aria-hidden'),
+				drawings: wrap.querySelectorAll('svg').length,
+				empty: arrow.childNodes.length,
+			};
+		});
+
+		assert.equal(seen.tag, 'span', 'one wrapper, and it is not a block that breaks a row');
+		assert.equal(seen.select, 36, 'the select is still $control tall with the arrow in it');
+		assert.equal(seen.wrap, 36, 'and the wrapper is the height of the select, not taller');
+		assert.equal(seen.inside, true, 'the arrow is inside the control it belongs to');
+		assert.equal(seen.right, '12px', '$space3 in from the right edge');
+		assert.equal(seen.size, '8 x 8', '$chevron square');
+		assert.equal(seen.sides, '1px 1px', 'two sides at $borderWidth');
+		assert.equal(seen.missing, 'none none', 'and the other two are not drawn');
+		assert.equal(seen.colour, 'rgb(84, 90, 102)', '$mutedForeground, which is $neutral11');
+		assert.equal(seen.turn, 'matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, -4)',
+			'up half its height and turned 45 degrees, so the drawn corner points down');
+		assert.equal(seen.offCentre, 0, 'and on the middle line');
+		assert.equal(seen.appearance, 'base-select',
+			'Chromium takes the second appearance, so the open list is themed');
+		assert.equal(seen.events, 'none', 'a click on the arrow reaches the select under it');
+		assert.equal(seen.hidden, 'true', 'the control beside it is what a screen reader reads');
+		assert.equal(seen.drawings, 0, 'nothing was asked of the Icons stack');
+		assert.equal(seen.empty, 0, 'the arrow is an empty box, and the borders are the mark');
+	});
+});
+
+test('a part wears its own rules and none of the component it belongs to', async () => {
+	// Design 193, measured. Before it, a class list of `filedrop entry` also matched the bare
+	// `filedrop`, so a row in the listing wore the drop zone's dashed border and its padding; and
+	// `dialog head` matched `dialog`, so the heading row wore the dialog's own box.
+	await drive('parts', `
+		import { FileDrop, Icons, h, mount } from '@aweftjs/ui';
+		import { mutableArray } from '@aweftjs/core';
+		${ANY_ICON}
+		const files = mutableArray([{ name: 'a.png', size: 10, status: 'ready', file: null }]);
+		mount(document.body, <Icons value={anyIcon}>
+			<FileDrop id="zone" files={files} />
+			<div id="head" theme={['dialog_head']}>x</div>
+			<div id="body" theme={['dialog_body']}>x</div>
+		</Icons>);
+	`, async (view) => {
+		await view.waitForSelector('#zone li');
+		const seen = await view.evaluate(() => {
+			const of = (selector: string): { border: string; padding: string; maxWidth: string } => {
+				const style = getComputedStyle(document.querySelector(selector)!);
+				return {
+					border: `${style['borderTopWidth']} ${style['borderTopStyle']}`,
+					padding: style['padding'] ?? '',
+					maxWidth: style['maxWidth'] ?? '',
+				};
+			};
+			return {
+				zone: of('#zone'),
+				row: of('#zone li'),
+				gap: getComputedStyle(document.querySelector('#zone li')!)['gap'],
+				head: of('#head'),
+				body: of('#body'),
+			};
+		});
+
+		assert.equal(seen.zone.border, '1px dashed', 'the zone itself still draws the dashed edge');
+		assert.equal(seen.zone.padding, '16px');
+		assert.equal(seen.row.border, '0px none', 'and a row in its listing does not');
+		assert.equal(seen.row.padding, '0px');
+		assert.equal(seen.gap, '8px', 'the row is still the row: $space2 between its parts');
+
+		assert.equal(seen.head.padding, '0px', 'a dialog\'s head is not a second dialog');
+		assert.equal(seen.head.border, '0px none');
+		assert.equal(seen.head.maxWidth, 'none', 'and it does not take the dialog\'s width cap');
+		assert.equal(seen.body.padding, '0px');
+		assert.equal(seen.body.border, '0px none');
+	});
+});
+
+test('an inline field puts the control beside its words on one line', async () => {
+	// Design 196. The field lays its own children out, so `inline` is for a bare control and the
+	// `<label>` the caller wrote beside it; a control that labels itself already lays that out.
+	await drive('field-inline', `
+		import { Checkbox, Field, h, mount } from '@aweftjs/ui';
+		mount(document.body, <Field id="row" orientation="inline">
+			<label for="box" theme="field_label">Email me</label>
+			<Checkbox id="box" />
+		</Field>);
+	`, async (view) => {
+		await view.waitForSelector('#box');
+		const seen = await view.evaluate(() => {
+			const row = document.querySelector('#row')!.getBoundingClientRect();
+			const words = document.querySelector('#row label')!.getBoundingClientRect();
+			const box = document.querySelector('#box')!.getBoundingClientRect();
+			return {
+				direction: getComputedStyle(document.querySelector('#row')!)['flexDirection'],
+				height: Math.round(row.height),
+				overlap: words.top < box.bottom && box.top < words.bottom,
+				middles: Math.round((words.top + words.height / 2) - (box.top + box.height / 2)),
+				order: Math.round(box.left - words.right),
+			};
+		});
+
+		assert.equal(seen.direction, 'row');
+		assert.equal(seen.overlap, true, 'the words and the box share a line');
+		assert.equal(seen.height, 36, 'and the line is $control tall');
+		assert.equal(seen.middles, 0, 'with their middles level');
+		assert.ok(seen.order >= 0, 'the box is after the words the caller wrote first');
+	});
+});
+
+test('a responsive field is a column in a narrow group and a row in a wide one', async () => {
+	// The same field, with nothing about it changed but the width of the group around it. The
+	// query is `28rem` of the container, and `FieldGroup` is what declares itself one (design 196).
+	await drive('field-responsive', `
+		import { Field, FieldGroup, TextField, h, mount } from '@aweftjs/ui';
+		mount(document.body, <div>
+			<FieldGroup id="group">
+				<Field id="field" orientation="responsive">
+					<label for="mail" theme="field_label">Email</label>
+					<TextField id="mail" />
+				</Field>
+			</FieldGroup>
+			<Field id="lone" orientation="responsive">
+				<label for="other" theme="field_label">Phone</label>
+				<TextField id="other" />
+			</Field>
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#mail');
+		const at = async (width: string): Promise<string> => view.evaluate((size: string) => {
+			document.querySelector('#group')!.setAttribute('style', `width: ${size}`);
+			return getComputedStyle(document.querySelector('#field')!)['flexDirection'] ?? '';
+		}, width);
+
+		assert.equal(await at('20rem'), 'column', 'under 28rem of its container it stacks');
+		assert.equal(await at('40rem'), 'row', 'and over it the control sits beside its words');
+		assert.equal(await at('20rem'), 'column', 'and back, because it is a query and not a class');
+
+		// A field with no group above it has no container to measure, and a query with no container
+		// answers false, so it stays a column however wide the page is.
+		const alone = await view.evaluate(() => {
+			const field = document.querySelector('#lone')!;
+			return {
+				direction: getComputedStyle(field)['flexDirection'] ?? '',
+				width: Math.round(field.getBoundingClientRect().width),
+			};
+		});
+		assert.ok(alone.width > 448, `the page is wider than 28rem: ${String(alone.width)}px`);
+		assert.equal(alone.direction, 'column', 'and it is still a column, because nothing is a container');
+	});
+});
+
+test('a fieldset\'s legend sits above its fields, and the box itself draws nothing', async () => {
+	await drive('field-set', `
+		import { Field, FieldGroup, FieldSet, TextField, h, mount } from '@aweftjs/ui';
+		mount(document.body, <FieldGroup>
+			<FieldSet id="set" legend="Billing address">
+				<Field id="street"><TextField id="line" aria-label="Street" /></Field>
+			</FieldSet>
+		</FieldGroup>);
+	`, async (view) => {
+		await view.waitForSelector('#line');
+		const seen = await view.evaluate(() => {
+			const box = document.querySelector('#set')!;
+			const style = getComputedStyle(box);
+			const legend = box.querySelector('legend')!.getBoundingClientRect();
+			const field = document.querySelector('#street')!.getBoundingClientRect();
+			return {
+				above: legend.bottom <= field.top,
+				gap: Math.round(field.top - legend.bottom),
+				border: `${style['borderTopWidth'] ?? ''} ${style['borderTopStyle'] ?? ''}`,
+				padding: style['padding'],
+				minWidth: style['minWidth'],
+				direction: style['flexDirection'],
+			};
+		});
+
+		assert.equal(seen.above, true, 'the legend names what is under it');
+		assert.ok(seen.gap >= 8, `$space2 or more between the two: ${String(seen.gap)}px`);
+		assert.equal(seen.border, '0px none', 'the host\'s own frame is off');
+		assert.equal(seen.padding, '0px');
+		assert.equal(seen.minWidth, '0px', 'so it shrinks inside a column');
+		assert.equal(seen.direction, 'column');
+	});
 });

@@ -1,4 +1,4 @@
-// The seventeen colour roles, and the scale step each one takes (design 115).
+// The eighteen colour roles, and the scale step each one takes (design 115).
 //
 // A component of this library uses a role. It never uses a step and never writes a colour, and
 // `check-theme.ts` is what says so out loud.
@@ -24,13 +24,15 @@ const rolesFrom = (scale: Scale): Readonly<Record<string, string>> => ({
 	$muted: scale.$neutral3,
 	$mutedForeground: scale.$neutral11,
 
-	// the solid accent, and the text on it
-	$accent: scale.$accent9,
+	// the solid accent, and the text on it. The default theme is monochrome (design 191), so the
+	// solid one is the text colour and its pair is the page: near-black on near-white in light, and
+	// the same line read the other way round in dark.
+	$accent: scale.$neutral12,
 	$accentForeground: scale.$neutral1,
 
 	// a tinted accent fill, and the text on it
-	$accentSubtle: scale.$accent3,
-	$accentSubtleForeground: scale.$accent11,
+	$accentSubtle: scale.$neutral3,
+	$accentSubtleForeground: scale.$neutral12,
 
 	// the solid danger, and the text on it
 	$danger: scale.$danger9,
@@ -43,7 +45,11 @@ const rolesFrom = (scale: Scale): Readonly<Record<string, string>> => ({
 	// the line around a block, the edge of a control, and the focus ring
 	$border: scale.$neutral6,
 	$input: scale.$neutral7,
-	$ring: scale.$accent8,
+	$ring: scale.$neutral8,
+
+	// text that goes somewhere. The one role that keeps the accent scale, and the only place the
+	// default theme is coloured at all (design 191). It is text, so it has no fill to pair with.
+	$link: scale.$accent11,
 });
 
 /**
@@ -61,8 +67,14 @@ export const foregroundFor: Readonly<Record<string, string>> = {
 	dangerSubtle: 'dangerSubtleForeground',
 };
 
-/** Every foreground role there is, in the order a message offers them. */
-export const foregroundRoles: readonly string[] = [...new Set(Object.values(foregroundFor))];
+/**
+ * Every foreground role there is, in the order a message offers them.
+ *
+ * `$link` is in the list and is in no pair above it: a link is text on whatever background it
+ * landed on rather than half of a fill and its text, so it has no partner to name and is still
+ * somewhere a message can send a caller.
+ */
+export const foregroundRoles: readonly string[] = [...new Set([...Object.values(foregroundFor), 'link'])];
 
 /** The roles of the light mode. */
 export const lightRoles = rolesFrom(lightScale);

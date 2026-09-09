@@ -7,7 +7,7 @@
 import { type Mounter, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';
 
-import { controlStates, elementFor } from './control.ts';
+import { controlStates, elementFor, sizeSegments } from './control.ts';
 import { wireField } from './field.ts';
 import { h } from './h.ts';
 import { type Render, use } from './render.ts';
@@ -49,6 +49,8 @@ export interface RadioProps {
 	readonly disabled?: unknown;
 	/** The theme variant. */
 	readonly type?: unknown;
+	/** How tall it is: `sm`, `lg`, or nothing for the default. A value or a cell. */
+	readonly size?: unknown;
 	/** Called with the value now chosen. */
 	readonly onChange?: (next: unknown, event: unknown) => void;
 	/** Decorate this node instead of building one. */
@@ -63,7 +65,7 @@ export interface RadioProps {
  *
  * Params:
  *   props: `value`, the cell the group shares; `option`, this one's value; `label`,
- *          `description`, `error`, `disabled`, `type`, `onChange`, `element`, and anything else,
+ *          `description`, `error`, `disabled`, `type`, `size`, `onChange`, `element`, and anything else,
  *          which goes to the `<input>`
  *
  * Returns: an `<input type="radio">`, inside a `<div>` with its label when it was given one. Every
@@ -76,7 +78,7 @@ export interface RadioProps {
  */
 export const Radio = (props: RadioProps): Mounter => (elem, _item, before, context) => {
 	const {
-		value, option, label, description, error, disabled, type, onChange, element, theme, ...rest
+		value, option, label, description, error, disabled, type, size, onChange, element, theme, ...rest
 	} = props;
 
 	const cell = isWritable(value) ? value : mutable(option);
@@ -87,7 +89,7 @@ export const Radio = (props: RadioProps): Mounter => (elem, _item, before, conte
 	const dot = h(elementFor(element, 'input'), {
 		...rest,
 		...field.aria,
-		theme: ['radio', type, theme, ...states.segments],
+		theme: ['radio', type, sizeSegments(size), theme, ...states.segments],
 		type: 'radio',
 		name,
 		disabled,
