@@ -662,4 +662,8 @@ export const endHydration = (root: Root): void => {
 	root.hydration?.finish();
 	root.hydration = null;
 };
+/** Close the pairing walk without checking it: the mount it belonged to has gone (design 243). */
+export const dropHydration = (root: Root): void => {
+	root.hydration = null;
+};
 export type { Root };

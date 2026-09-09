@@ -4,9 +4,9 @@ import { assert } from './assert.ts';
 import { h } from './h.ts';
 import { Hydration, REMEDY } from './hydration.ts';
 import { createDocument, toHtml } from './light.ts';
-import { type Remove, createRoot, drainRoot, endHydration, getFirst, isComponentCall, mountItem, pendingOf, runMount } from './mount.ts';
+import { type Remove, createRoot, drainRoot, dropHydration, endHydration, getFirst, isComponentCall, mountItem, pendingOf, runMount } from './mount.ts';
 import { isMade } from './props.ts';
-import { type DocumentLike, type ParentLike, isNodeLike } from './types.ts';
+import { type DocumentLike, type NodeLike, type ParentLike, isNodeLike } from './types.ts';
 
 /**
  * Render an item to markup, with no browser.
@@ -50,11 +50,17 @@ export const render = async (item: unknown, options: { context?: unknown } = {})
  *         component with no props
  *   context: the opaque value every mounter below receives
  *
- * Returns: the remove function, as `mount` does. Server nodes are adopted, not rebuilt: a
+ * Returns: the remove function, with `ready` on it. Server nodes are adopted, not rebuilt: a
  * matching element keeps its identity and gains the properties and listeners the client
  * gives it. A mismatch asserts in development; in production the region that differs is
  * replaced with what the client built. One live hydration per target: a second call over the
  * same target asserts, because it would claim the first one's nodes.
+ *
+ * The pairing walk stays open until every promise a component declared `pending` during it has
+ * settled, so an act, a page or a panel that arrives later still claims the markup the server
+ * wrote for it rather than replacing it (design 243). `ready` resolves when that is done, which
+ * for a page with nothing pending is before this call returns. It never rejects: a mismatch
+ * found after the wait is thrown on a fresh task, where the host reports it.
  *
  * An element built before the call is refused, and so is one a maker returns after building it
  * earlier: it was made outside every mount, where nothing records which nodes the binding made,
@@ -67,10 +73,16 @@ export const render = async (item: unknown, options: { context?: unknown } = {})
  * built before the mount, or markup that does not match what the client builds.
  *
  * Example:
- *   hydrate(document.body, h(App, { url: location.pathname }));
- *   hydrate(document.body, () => h('main', {}, 'ready'));
+ *   const page = hydrate(document.body, h(App, { url: location.pathname }));
+ *   await page.ready;
  */
 const hydrated = new WeakSet<ParentLike>();
+
+/** What `hydrate` answers: the remove function, and when the pairing walk finished. */
+export type Hydrated = Remove & {
+	/** Resolves once every pending load has settled and the markup has been checked. */
+	readonly ready: Promise<void>;
+};
 
 /**
  * Refuse a top-level item that is a node this hydration did not make. Nothing has been
@@ -93,7 +105,7 @@ const guard = (maker: (...args: unknown[]) => unknown): ((...args: unknown[]) =>
 	return checked;
 };
 
-export const hydrate = (target: ParentLike, item: unknown, context?: unknown): Remove => {
+export const hydrate = (target: ParentLike, item: unknown, context?: unknown): Hydrated => {
 	assert(!hydrated.has(target), 'hydrate: the target already holds a live hydration; remove that one first');
 	refuseUnmade(item);
 	const own = target.ownerDocument;
@@ -113,13 +125,41 @@ export const hydrate = (target: ParentLike, item: unknown, context?: unknown): R
 	const handle = runMount(root, scope, () =>
 		mountItem({ root, elem: target, scope, context, owner: null }, mounted, () => null));
 	drainRoot(root);
-	endHydration(root);
-	hydrated.add(target);
 
-	return (arg) => {
+	let gone = false;
+	const pending = pendingOf(root);
+	// A page with nothing pending is paired, checked and closed inside this call, exactly as it
+	// was before design 243. Anything else waits, with the walk still open (design 243).
+	const settle = async (): Promise<void> => {
+		while (pending.size > 0) await Promise.allSettled([...pending]);
+		if (gone) return;
+		try {
+			endHydration(root);
+		} catch (error) {
+			// Nobody is on the other end of `ready` by contract, so the mismatch goes where the
+			// host already looks rather than into a promise a caller may never read.
+			queueMicrotask(() => { throw error; });
+		}
+	};
+	let ready = Promise.resolve();
+	if (pending.size === 0) {
+		// A mismatch throws from here, before the target is marked, so the caller may hydrate it
+		// again once they have fixed what differed.
+		endHydration(root);
+		hydrated.add(target);
+	} else {
+		hydrated.add(target);
+		ready = settle();
+	}
+
+	const remove = (arg?: typeof getFirst): NodeLike | null | undefined => {
 		if (arg === getFirst) return handle.first();
+		gone = true;
+		// Nothing is left to claim or to check: the page this walk was pairing has gone.
+		dropHydration(root);
 		hydrated.delete(target);
 		runMount(root, null, () => handle.remove());
 		return undefined;
 	};
+	return Object.assign(remove, { ready });
 };

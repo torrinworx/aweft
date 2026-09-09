@@ -2,12 +2,14 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { createArray, createObject, mutable, observer } from '@aweftjs/core';
 import { recordingDocument } from '@aweftjs/testing';
 
 import type { Cleanup, LightElement, Mounted, Pending } from '../src/index.ts';
-import { createDocument, getFirst, h, hydrate, mount, render, toHtml } from '../src/index.ts';
+import { createDocument, getFirst, h, hydrate, hydrating, mount, render, toHtml } from '../src/index.ts';
 
 interface Row extends Record<string, unknown> { label?: string }
 const row = (label: string): Row => createObject<Row>({ label });
@@ -230,4 +232,160 @@ test('hydrate needs a document, and answers getFirst', async () => {
 	doc.body.innerHTML = await render('x');
 	const stop = hydrate(doc.body, 'x');
 	assert.equal(stop(getFirst), doc.body.firstChild);
+});
+
+// --- the hydration waits for what the page is still loading (design 243) -----------------------
+
+/** A component whose content arrives when `settle` is called, the way a loaded act arrives. */
+const arriving = (make: () => unknown): {
+	Late: (p: unknown, c: Cleanup, m: Mounted, pending: Pending) => unknown;
+	settle: () => void;
+} => {
+	const shown = mutable<unknown>(null);
+	let go = (): void => undefined;
+	const waited = new Promise<void>((resolve) => { go = resolve; });
+	const Late = (_p: unknown, _c: Cleanup, _m: Mounted, pending: Pending): unknown => {
+		pending(waited.then(() => { shown.set(make()); }));
+		return shown;
+	};
+	return { Late, settle: go };
+};
+
+/**
+ * The same page on both sides, with its own arrival on each: the server's has already landed.
+ *
+ * What arrives is a component call rather than an element, because an element built outside a
+ * mount is nobody's and hydration inserts it rather than claiming with it (design 157).
+ */
+const twoSides = (make: () => unknown): { server: () => unknown; client: () => unknown; settle: () => void } => {
+	const first = arriving(make);
+	first.settle();
+	const second = arriving(make);
+	const page = (Late: (p: unknown, c: Cleanup, m: Mounted, pending: Pending) => unknown) =>
+		(): unknown => h('main', {}, h('span', {}, 'first'), h(Late, {}));
+	return { server: page(first.Late), client: page(second.Late), settle: second.settle };
+};
+
+test('hydrate keeps the pairing walk open until a pending load has settled', async () => {
+	const Arrived = (): unknown => h('p', { id: 'late' }, 'arrived');
+	const { server, client, settle } = twoSides(() => h(Arrived, {}));
+
+	const markup = await render(h(server));
+	assert.match(markup, /<p id="late">arrived<\/p>/, 'the server rendered the loaded content');
+
+	const { document, ops } = recordingDocument();
+	document.body.innerHTML = markup;
+	const main = (document.body as LightElement).children[0]!;
+	const before = [...main.children];
+	assert.equal(before.length, 2, 'the server wrote both the plain element and the loaded one');
+	ops.length = 0;
+
+	const page = hydrate(document.body, h(client));
+	let finished = false;
+	void page.ready.then(() => { finished = true; });
+	// Nothing has been checked or taken away yet: the loaded half is still the server's markup.
+	assert.deepEqual([...main.children], before, 'the server nodes are all still there');
+	assert.deepEqual(ops.filter((op) => op.startsWith('remove') || op.startsWith('clear')), [],
+		`nothing was removed while the load was in flight: ${ops.join(' | ')}`);
+
+	// Enough turns for a `ready` that had resolved inside the call to have run its `then`. It has
+	// not: the hydration is not over while the load is in flight, which is the whole record.
+	for (let i = 0; i < 6; i += 1) await Promise.resolve();
+	assert.equal(finished, false, 'ready is still pending while the load is in flight');
+
+	settle();
+	await page.ready;
+	assert.equal(finished, true, 'and it resolves once the load has landed');
+	assert.deepEqual([...main.children], before, 'every element the server wrote was adopted, by identity');
+	assert.deepEqual(ops.filter((op) => op.startsWith('remove') || op.startsWith('clear')), [],
+		`and nothing was removed once it landed: ${ops.join(' | ')}`);
+	page();
+});
+
+test('ready resolves with nothing pending, and a rejected load still finishes the hydration', async () => {
+	const Plain = () => h('main', {}, 'plain');
+	const plainMarkup = await render(h(Plain));
+	const plain = recordingDocument().document;
+	plain.body.innerHTML = plainMarkup;
+	const first = hydrate(plain.body, h(Plain));
+	await first.ready;
+	assert.equal(toHtml(plain.body), `<body>${plainMarkup}</body>`, 'a page with nothing pending is unchanged');
+	first();
+
+	// A load that rejects settles like any other: the walk closes and the page keeps what it has.
+	const Broken = (_p: unknown, _c: Cleanup, _m: Mounted, pending: Pending): unknown => {
+		pending(Promise.reject(new Error('nope')));
+		return h('p', {}, 'here anyway');
+	};
+	const markup = await render(h(Broken));
+	const { document } = recordingDocument();
+	document.body.innerHTML = markup;
+	const kept = (document.body as LightElement).children[0]!;
+	const page = hydrate(document.body, h(Broken));
+	await page.ready;
+	assert.equal((document.body as LightElement).children[0], kept, 'the server node is still the one in the page');
+	assert.equal(toHtml(document.body), `<body>${markup}</body>`);
+	page();
+});
+
+test('a hydration removed while a load is in flight checks nothing when it lands', async () => {
+	const Arrived = (): unknown => h('p', {}, 'arrived');
+	const { server, client, settle } = twoSides(() => h(Arrived, {}));
+	const markup = await render(h(server));
+	const { document } = recordingDocument();
+	document.body.innerHTML = markup;
+
+	const page = hydrate(document.body, h(client));
+	page();
+	assert.equal(toHtml(document.body), '<body></body>', 'the page came down');
+	settle();
+	// The surplus check would assert on everything the server sent, and there is nobody to
+	// assert for: `ready` resolves and the removal stands.
+	await page.ready;
+	assert.equal(toHtml(document.body), '<body></body>');
+});
+
+test('hydrating() answers for the mount that is running, not for the page', async () => {
+	// The three answers `suspend` depends on: outside every mount, inside a plain mount made while
+	// a hydration is open elsewhere, and inside a component that mounts late into the hydrated root.
+	assert.equal(hydrating(), false, 'outside every mount there is nothing to be inside');
+
+	let seen: Record<string, boolean> = {};
+	const Probe = (props: { name?: string }): unknown => {
+		seen[String(props.name)] = hydrating();
+		return h('span', {}, String(props.name));
+	};
+
+	const { server, client, settle } = twoSides(() => h(Probe, { name: 'late' }));
+	const markup = await render(h(server));
+	const document = createDocument();
+	document.body.innerHTML = markup;
+
+	seen = {};
+	const page = hydrate(document.body, h(client));
+
+	// Another root entirely, mounted while the hydration above is still open for its load.
+	const other = createDocument();
+	const stop = mount(other.body, h(Probe, { name: 'plain' }));
+	assert.equal(seen['plain'], false, 'a plain mount on another root is no part of that hydration');
+
+	settle();
+	await page.ready;
+	assert.equal(seen['late'], true, 'a component mounted late inside the hydrated root still is one');
+
+	stop();
+	page();
+});
+
+test('a mismatch found after the wait reaches the host rather than a promise nobody reads', () => {
+	// In its own process: the guarantee is that the host reports it, and a test runner catches an
+	// uncaught error before the host can, so asserting it in process would assert nothing.
+	const run = spawnSync(process.execPath, [
+		'--import', '@aweftjs/build/loader',
+		'packages/dom/tests/fixtures/late-mismatch.ts',
+	], { cwd: fileURLToPath(new URL('../../../', import.meta.url)), encoding: 'utf8' });
+
+	assert.equal(run.status, 3, 'the mismatch reached the host rather than nowhere');
+	assert.match(run.stderr, /hydration mismatch: the server sent/);
+	assert.match(run.stdout, /^READY:resolved$/m, 'and `ready` resolved rather than rejecting');
 });

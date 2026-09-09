@@ -4,6 +4,7 @@ type Component: type Component<P = Record<string, unknown>> = (props: P & { chil
 type DocumentLike: interface DocumentLike { createElement(tag: string): ElementLike; createElementNS(namespace: string, tag: string): ElementLike; createTextNode(data: string): TextLike; createComment(data: string): CommentLike; }
 type ElementLike: interface ElementLike extends NodeLike, ParentLike { readonly localName: string; readonly namespaceURI: string | null; setAttribute(name: string, value: string): void; getAttribute(name: string): string | null; hasAttribute(name: string): boolean; removeAttribute(name: string): void; getAttributeNames(): string[]; readonly firstChild: NodeLike | null; textContent: string | null; [property: string]: unknown; }
 type H: type H = (tag: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => unknown;
+type Hydrated: type Hydrated = Remove & { readonly ready: Promise<void>; };
 type LightComment: class LightComment
 type LightDocument: class LightDocument
 type LightElement: class LightElement
@@ -28,7 +29,8 @@ value getFirst: typeof getFirst
 value h: (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown
 value htm: (h: H, options?: { join?: ((parts: unknown[]) => unknown) | undefined; }) => (strings: TemplateStringsArray, ...values: unknown[]) => unknown
 value html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown
-value hydrate: (target: ParentLike, item: unknown, context?: unknown) => Remove
+value hydrate: (target: ParentLike, item: unknown, context?: unknown) => Hydrated
+value hydrating: () => boolean
 value isComponentCall: (value: unknown) => boolean
 value joined: (parts: unknown[]) => unknown
 value mount: (elem: ParentLike, item: unknown, before?: Remove | undefined, context?: unknown) => Remove

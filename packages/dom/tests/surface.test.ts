@@ -10,7 +10,7 @@ import * as dom from '../src/index.ts';
 test('the entry file exports exactly what was decided', () => {
 	const decided = [
 		'createDocument', 'createElement', 'createTextNode',
-		'getFirst', 'h', 'htm', 'html', 'hydrate', 'isComponentCall', 'joined',
+		'getFirst', 'h', 'htm', 'html', 'hydrate', 'hydrating', 'isComponentCall', 'joined',
 		'mount', 'parseHtml', 'render', 'setAttribute', 'template', 'toHtml', 'watch',
 	];
 	assert.deepEqual(Object.keys(dom).sort(), decided);

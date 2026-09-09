@@ -222,10 +222,28 @@ which is how a component keeps a canvas or a map it owns. Markup must parse back
 tree `render` wrote: write `tbody` yourself, and avoid whitespace-only text where the browser
 drops it.
 
-A component that waits with `pending` runs again on the client, and starting its wait again
-would render the loading state over the server's finished one, which is a mismatch. Give it
-the resolved value as a prop from data the page embeds (`h(Status, { known })`), so it renders
-what it knows and only waits when it has nothing; `recipes/dom/` shows the pattern.
+**`hydrate` waits for what the page is still loading.** The pairing walk stays open until every
+promise a component declared `pending` during the hydration has settled, so a page whose content
+arrives one microtask later still claims the markup the server wrote for it. Until then nothing
+has been checked and nothing the server sent has been taken away: what is on screen is the
+server's markup, untouched.
+
+```ts
+const page = hydrate(document.body, h(App, { url: location.pathname }));
+await page.ready;                       // every pending load settled, the markup checked
+```
+
+`ready` is on the remove function `hydrate` answers, and it resolves for a page with nothing
+pending before the call has even returned. It never rejects: a mismatch found after the wait is
+thrown on a fresh task, where the host reports it. Removing the hydration while a load is in
+flight closes the walk and checks nothing, because the page it was pairing has gone.
+
+A component that waits with `pending` and shows a loading state runs again on the client, and
+showing that state over the server's finished markup is a mismatch, whatever the wait does after.
+Either render what you know (give the resolved value as a prop from data the page embeds,
+`h(Status, { known })`, which is what `recipes/dom/` shows) or show nothing while a hydration is
+open: `hydrating()` answers whether the mount running right now is claiming server nodes, and
+`@aweftjs/ui`'s `suspend` uses it to keep its fallback off the page during one.
 
 An empty text node is inserted rather than paired. `''` renders to no characters, so the
 markup holds no node to pair it with, and a form's error line that is empty until something
