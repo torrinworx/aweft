@@ -18,6 +18,7 @@ Start here if you know what you are trying to build.
 
 | Recipe | The job | Packages it crosses |
 |---|---|---|
+| `full-stack/` | A page and a server in one directory: the page reaching the server in development through the dev server's proxy, and a sign-in that sets the cookie on that one origin | client, server, auth, store, modules, ui, build |
 | `todo-list/` | A list you add to, toggle, filter and reorder, with the list following each edit rather than being rebuilt | core, dom |
 | `two-clients/` | Two people editing one document at once, including what happens when they write the same slot and who yields | core, sync |
 | `optimistic-write/` | A write that applies locally before the server sees it, is refused, and is rolled back | core, sync, debug |

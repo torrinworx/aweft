@@ -122,7 +122,10 @@ socket afterwards.
 Two seams, and a page needs neither.
 
 - `url` defaults to the page's own origin with the `ws` or `wss` scheme and path `/`. Where
-  there is no `location`, `url` is required and its absence is refused with `no-url`.
+  there is no `location`, `url` is required and its absence is refused with `no-url`. Behind a
+  dev server's proxy the socket takes a path of its own, `/ws`, proxied with `ws: true`, because
+  a proxy entry for `/` takes the dev server's own socket with it; `recipes/full-stack/` is that
+  setup.
 - `open(url)` makes the socket, `new WebSocket(url)` by default. A Node program hands in one
   that carries a cookie header, which is how a script signs in:
 
