@@ -82,8 +82,9 @@ aweft/
                            + dom/router subpath: history and URL to state
     ui/                    components and theming
     icons/                 icon sets as modules, and one resolver
-    server/                connections and requests behind a gate: a listener, the link and
-                           the call channel on one socket, the modules' hooks
+    server/                connections and requests behind a gate: the loader it builds from
+                           the sources, a listener, the link and the call channel on one
+                           socket, the modules' hooks
     auth/                  the first battery: the gate, sessions, sign-in, per-user state
     jobs/                  a scheduler over an array the application hands in
     ssg/                   static generation
@@ -118,7 +119,7 @@ version in lockstep.
 | `client` | One connection to a server for the life of a page: the socket, the link and the requests attached before it opens, asks, share handles that keep one document object across reconnects, the retry | Who is on the connection, what a document means, which documents a page shares; users, sessions, cookies; components |
 | `ui` | Components, theming | Storage, transport, server |
 | `icons` | Turning an installed icon set into modules a page imports: one icon, a whole set, the standard names, and a resolver for a name known only at run time | Which sets an application installs, whether a page fetches, what an icon looks like; any icon data of its own |
-| `server` | Accepting connections and requests through a listener; one socket as a link and a call channel; running the modules' `connection`, `call` and `routes` hooks behind the gate the application supplies | Who is on a connection, who may reach a module, who may write a commit, which modules load; users, sessions, storage; component internals |
+| `server` | Building the loader from the sources the application names and loading every module they list; accepting connections and requests through a listener; one socket as a link and a call channel; running the modules' `connection`, `call` and `routes` hooks behind the gate the application supplies | Who is on a connection, who may reach a module, who may write a commit, what a module is for; users, sessions, storage; component internals |
 | `auth` | The gate that reads `public`, sessions as documents, sign-in and sign-up, the per-user state document, as server modules; and the client half over a `client` connection: `user` as a cell, `enter`, `leave`, `state` and `check` | Which application loads it; how a page renders any of it |
 | `jobs` | When a row runs, over an observable array the application hands in: the timers, the cron arithmetic, `last` written onto the row | What a job does; who may add, edit or remove a row; storage; queues, retries, catch-up; modules; component internals |
 | `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom |
@@ -200,8 +201,9 @@ superseded it.
 | A call | A row in the calls document, in both directions, with JSON text either side and anything that is not data refused by name; the writer deletes an answered row | 068 |
 | A runner | `start` makes the room and hands back the channel, `stop` ends it; `inProcess`, `iframe` and `child` ship, bubblewrap and docker are examples; limits are parameters with no defaults; each runner says what it stops and the wall is the operator's | 069 |
 | Proof of a runner | The escape suite in `testing`, two halves, append-only, run in every shipped runner and under a real browser for the frame | 070 |
-| The gate | Required and outside every module: `identify` once per connection or request answers a context or refuses, `access` runs before a module sees a connection, a call or a request; `open` is the trusted case; a module declares `public` or nothing and the auth gate reads it, `server` does not | 071 |
+| The gate | Required and outside every module: `identify` once per connection or request answers a context or refuses, `access` runs before a module sees a connection, a call or a request; `open` is the trusted case; a module declares `public` or nothing and the auth gate reads it, `server` does not; the application names a `Gate` object or a module that is one, and a composed gate is a module | 071, 241 |
 | A connection | One socket behind a listener the application supplies: the link as binary messages, requests as text; hooks run in load order for the modules the gate allows; a share on it requires `accept` | 072, 073 |
+| The boot | `createServer({ sources, store, gate, listener })` builds its own loader and `start` loads every module every source lists; `loader` and `props` are refused; the platform hands in `store` and nothing else, so anything the application makes is a module others `deps` on; `stop` unloads in reverse load order | 240 |
 | Sessions and sign-in | Documents in the application's store, tokens from the id source, identity fixed per connection from the handshake cookie; sign-in and sign-out are HTTP routes | 074 |
 | Scheduling | One scheduler over an observable array the application hands in: a row says when (`at`, `every`, or `cron` with `tz`) and the application's `run` does the job; `last` is written onto the row and nothing else; nothing is caught up, resumed or retried | 075, 076 |
 | The mounting model | One mounter with a host seam: `mount` creates through the page, `render` through the light tree with markers around every dynamic part, `hydrate` claims the server's nodes in place at insert time; user code runs from a queue per root | 077, 078 |
@@ -317,7 +319,7 @@ indexed by the job rather than the package, are not in this table.
 | dom | mount and hydrate a page with a dynamic list; edits assert exact DOM operations against the mock |
 | ui | an interactive page composed from components, driven and asserted against the mock (plus a manual browser page, outside CI) |
 | icons | a page naming icons three ways (written out, a standard name, a name fetched when the page runs), with the bundle weighed: the icons it named and not the one it looked up |
-| server | a full-stack app: an authenticated connection syncs state through the application's rules to store and back; an anonymous one reaches only what the gate allows; `gate: open` reaches everything; a gate with no session in it works in its place |
+| server | a full-stack app on the rail (`sources`, `store`, a named gate, a listener): an authenticated connection syncs state through the application's rules to store and back; an anonymous one reaches only what the gate allows; `gate: open` reaches everything; a gate with no session in it works in its place |
 | client | a page against a real listener: a share and an ask made before the socket opens both arrive, the server is restarted underneath it, and the page comes back on its own with the same state document object holding what the server wrote while it was down, with an ask made while it was down answered on the new socket |
 | auth | inside the server recipe: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous; and, in the client recipe, the client half signs in, reads `user`, opens `state` and signs out |
 | jobs | a scheduled job runs, persists an effect, and survives a restart |
