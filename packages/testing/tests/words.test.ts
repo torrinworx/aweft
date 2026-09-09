@@ -57,6 +57,8 @@ test('the words the code needs are left alone', () => {
 		'a record of every node operation',
 		'the store records no actor',
 		'twenty-nine uses pass a function of their own',
+		"at: '2026-03-07T12:00:00Z',",
+		'const at = `2026-09-0${(i % 9) + 1}`;',
 	];
 	for (const text of fine) assert.deepEqual(words(text), [], text);
 });

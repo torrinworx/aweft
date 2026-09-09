@@ -6,11 +6,11 @@
 stack was built and prints each line that carries a word from the list, with what to write
 instead. `npm run words` runs it, and the root gate runs it first.
 
-The list is in `packages/testing/src/words.ts`, one entry per word with its fix: a maintainer by
-name, a calls file id, a record or decision id in the old spelling, a log id, a review step, a
-build step or the branch it ran on, a comparison to another library, a session, an agent by model,
-an application by name, a date in prose. Each pattern is written against the spelling the process
-used, not the bare word, so `batch` in a delivery loop and `session` in `auth` are left alone.
+The list is in `packages/testing/src/words.ts`, one entry per word with its fix: a calls file id,
+a record or decision id in the old spelling, a log id, a review step, a build step or the branch
+it ran on, a session, a date in prose and not inside a quoted value. Each pattern is written
+against the spelling the process used, not the bare word, so `batch` in a delivery loop and
+`session` in `auth` are left alone.
 
 Four tracked files are not read: `spec/CHANGELOG.md`, because a changelog carries dates on
 purpose; `package-lock.json`, which is not prose; and the two files that define and test the

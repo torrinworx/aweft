@@ -55,7 +55,7 @@ const RULES: readonly Rule[] = [
 	{ word: 'a work order', pattern: /\bwork orders?\b/i, fix: 'state the requirement' },
 	{ word: 'a build batch', pattern: /\bbatch (?:one|two|three|four)\b|\bthis batch\b/i, fix: 'drop it' },
 	{ word: 'a session', pattern: /\bthis session\b|\bthe session's\b|\bsession, log\b|\bsession that (?:built|wrote|decided)\b/i, fix: 'state what was done, not who did it' },
-	{ word: 'a date', pattern: /\b2026-\d\d(?:-\d\d)?\b/, fix: 'the changelog carries dates; prose does not' },
+	{ word: 'a date', pattern: /^[^'"`]*\b2026-\d\d(?:-\d\d)?\b/, fix: 'the changelog carries dates; prose does not' },
 ];
 
 /**
