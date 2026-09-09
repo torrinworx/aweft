@@ -290,23 +290,50 @@ test('a mark.popup replaces the tooltip\'s label with markup', () => {
 
 // --- ColorPicker --------------------------------------------------------------------------------
 
-/** The four sliders, by the labels the component gives them. */
+/** The sliders, by the labels the component gives them. Real range inputs, both of them. */
 const knobs = (root: NodeLike | null): Record<string, LightElement | undefined> => {
 	const found: Record<string, LightElement | undefined> = {};
-	for (const name of ['Hue', 'Saturation', 'Brightness', 'Opacity']) {
+	for (const name of ['Hue', 'Opacity']) {
 		found[name] = elements(root).find((element) =>
-			roleOf(element) === 'slider' && nameOf(root, element) === name);
+			element.localName === 'input' && nameOf(root, element) === name);
 	}
 	return found;
 };
 
-test('a colour picker is four labelled sliders and a swatch nobody has to read', () => {
+/** The plane's thumb, which is the one element in this package with a role written on it. */
+const thumbOf = (root: NodeLike | null): LightElement => {
+	const found = elements(root).find((element) =>
+		element.localName === 'span' && element.getAttribute('role') === 'slider');
+	assert.ok(found !== undefined, 'the plane has a thumb');
+	return found;
+};
+
+/** The plane is what the thumb sits in, given a box so a press has somewhere to land. */
+const planeOf = (root: NodeLike | null, box: { width: number; height: number }): LightElement => {
+	const plane = thumbOf(root).parentNode as unknown as LightElement;
+	(plane as unknown as Record<string, unknown>)['getBoundingClientRect'] =
+		(): unknown => ({ left: 0, top: 0, width: box.width, height: box.height });
+	return plane;
+};
+
+test('a colour picker is a plane, a hue slider and a swatch nobody has to read', () => {
 	const { body, stop } = page(h(ColorPicker as never, { value: mutable('#ff0000') }));
 	const found = knobs(body.firstChild);
-	for (const name of ['Hue', 'Saturation', 'Brightness', 'Opacity']) {
+	for (const name of ['Hue', 'Opacity']) {
 		assert.ok(found[name] !== undefined, `there is a slider called ${name}`);
 		assert.equal(found[name]!.localName, 'input');
 	}
+	// Design 222 reverses design 139's other two: they are the plane now.
+	assert.equal(elements(body.firstChild).filter((element) => element.localName === 'input').length, 2,
+		'two range inputs, not four');
+
+	const thumb = thumbOf(body.firstChild);
+	assert.equal(thumb.getAttribute('tabindex'), '0', 'the thumb is where a keyboard lands');
+	assert.equal(thumb.getAttribute('aria-label'), 'Saturation and brightness');
+	assert.equal(thumb.getAttribute('aria-valuetext'), 'saturation 100%, brightness 100%',
+		'and it says both axes, because there is no two-axis role');
+	assert.equal(thumb.getAttribute('aria-valuenow'), '100', 'with the saturation as the number');
+
 	const swatch = elements(body.firstChild).find((element) =>
 		element.getAttribute('aria-hidden') === 'true' && element.localName === 'span');
 	assert.ok(swatch !== undefined, 'the swatch is hidden from a screen reader');
@@ -323,16 +350,23 @@ test('hasAlpha false takes the opacity slider off', () => {
 	stop();
 });
 
-test('the colour cell moves the sliders, and a slider moves the cell', () => {
+test('the colour cell moves the thumb, and the hue slider moves the cell', () => {
 	const picked = mutable('#ff0000');
 	const { body, stop } = page(h(ColorPicker as never, { value: picked, hasAlpha: false }));
-	const found = knobs(body.firstChild);
-	const hue = found['Hue']!;
+	const hue = knobs(body.firstChild)['Hue']!;
+	const thumb = thumbOf(body.firstChild);
 
 	// Red read into hue, saturation and brightness, worked out by hand: hue 0, both others full.
 	assert.equal((hue as unknown as { value?: unknown }).value, '0');
-	assert.equal((found['Saturation'] as unknown as { value?: unknown }).value, '100');
-	assert.equal((found['Brightness'] as unknown as { value?: unknown }).value, '100');
+	assert.match(thumb.getAttribute('style') ?? '', /left: 100%/);
+	assert.match(thumb.getAttribute('style') ?? '', /top: 0%/, 'full brightness is the top edge');
+
+	// #804040 is half saturated at half brightness, worked out by hand off `hsvOf`.
+	picked.set('#804040');
+	assert.equal((hue as unknown as { value?: unknown }).value, '0');
+	assert.match(thumb.getAttribute('style') ?? '', /left: 50%/);
+	assert.match(thumb.getAttribute('style') ?? '', /top: 50%/);
+	assert.equal(thumb.getAttribute('aria-valuetext'), 'saturation 50%, brightness 50%');
 
 	picked.set('rgb(0, 0, 255)');
 	assert.equal((hue as unknown as { value?: unknown }).value, '240', 'blue is 240 degrees round');
@@ -340,6 +374,56 @@ test('the colour cell moves the sliders, and a slider moves the cell', () => {
 	setProp(hue, 'value', '120');
 	fire(hue, 'input');
 	assert.equal(picked.get(), 'rgb(0, 255, 0)', 'and the slider wrote the cell back as rgb()');
+	stop();
+});
+
+test('a press in the plane writes the saturation and the brightness', () => {
+	const picked = mutable('#ff0000');
+	const { body, stop } = page(h(ColorPicker as never, { value: picked, hasAlpha: false }));
+	const plane = planeOf(body.firstChild, { width: 200, height: 100 });
+	const thumb = thumbOf(body.firstChild);
+
+	// A quarter across and a quarter down a 200 by 100 box: saturation 25, brightness 75. The
+	// colour that names, worked out by hand through `fromHsv` at hue 0.
+	fire(plane, 'pointerdown', { currentTarget: plane, pointerId: 1, clientX: 50, clientY: 25 });
+	assert.equal(picked.get(), 'rgb(191, 143, 143)');
+	assert.equal(thumb.getAttribute('aria-valuetext'), 'saturation 25%, brightness 75%');
+	assert.match(thumb.getAttribute('style') ?? '', /left: 25%/);
+	assert.match(thumb.getAttribute('style') ?? '', /top: 25%/);
+
+	// And the drag keeps going while the pointer is down.
+	fire(plane, 'pointermove', { currentTarget: plane, pointerId: 1, clientX: 200, clientY: 0 });
+	assert.equal(picked.get(), 'rgb(255, 0, 0)', 'the far top corner is the hue at full strength');
+	stop();
+});
+
+test('an arrow on the thumb writes the cell', () => {
+	const picked = mutable('#ff0000');
+	const { body, stop } = page(h(ColorPicker as never, { value: picked, hasAlpha: false }));
+	const thumb = thumbOf(body.firstChild);
+
+	// One step is a hundredth of the range, so saturation goes from 100 to 99. The colour that
+	// names is `fromHsv(0, 0.99, 1, 1)`, worked out by hand.
+	fire(thumb, 'keydown', { currentTarget: thumb, key: 'ArrowLeft', shiftKey: false });
+	assert.equal(picked.get(), 'rgb(255, 3, 3)');
+	assert.equal(thumb.getAttribute('aria-valuetext'), 'saturation 99%, brightness 100%');
+
+	// Down the box is less brightness, and Shift is ten steps of it.
+	fire(thumb, 'keydown', { currentTarget: thumb, key: 'ArrowDown', shiftKey: true });
+	assert.equal(thumb.getAttribute('aria-valuetext'), 'saturation 99%, brightness 90%');
+	stop();
+});
+
+test('a disabled picker moves for neither a press nor a key', () => {
+	const picked = mutable('#ff0000');
+	const { body, stop } = page(h(ColorPicker as never, { value: picked, hasAlpha: false, disabled: true }));
+	const plane = planeOf(body.firstChild, { width: 200, height: 100 });
+	const thumb = thumbOf(body.firstChild);
+
+	fire(plane, 'pointerdown', { currentTarget: plane, pointerId: 1, clientX: 50, clientY: 25 });
+	fire(thumb, 'keydown', { currentTarget: thumb, key: 'End', shiftKey: false });
+	assert.equal(picked.get(), '#ff0000', 'the cell is what the caller put in it');
+	assert.equal(thumb.getAttribute('tabindex'), '-1', 'and the thumb is out of the tab order');
 	stop();
 });
 

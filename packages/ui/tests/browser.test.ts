@@ -1152,7 +1152,90 @@ test('a real click on a FileDrop.Button opens the file dialog once', async () =>
 	});
 });
 
-test('End on a colour picker slider writes the cell', async () => {
+test('a real drag across the colour plane moves the thumb and writes the cell', async () => {
+	// The plane is the one control in this package drawn out of an element of its own (design 222),
+	// so what a real browser has to answer is the geometry: a pointer measured against a real box,
+	// pointer capture on a real element, and a thumb placed by percentages of a real square.
+	await drive('colorpicker-plane', `
+		import { ColorPicker, h, mount } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+		const picked = mutable('#ff0000');
+		globalThis.read = () => picked.get();
+		globalThis.write = (text) => picked.set(text);
+		mount(document.body, <ColorPicker id="pick" value={picked} hasAlpha={false} />);
+	`, async (view) => {
+		await view.waitForSelector('#pick [role="slider"]');
+		const started = await view.evaluate(() => (globalThis as never as { read(): string }).read());
+		assert.equal(started, '#ff0000', 'mounting left the caller\'s colour and its notation alone');
+
+		// $planeSize, which is 160px, in both directions.
+		const square = await view.evaluate(() => {
+			const box = document.querySelector('#pick [role="slider"]')!.parentElement!.getBoundingClientRect();
+			return { width: Math.round(box.width), height: Math.round(box.height) };
+		});
+		assert.deepEqual(square, { width: 160, height: 160 }, 'the plane is $planeSize square');
+
+		// A press a quarter across and a quarter down, then a drag on to the middle, with the button
+		// held the whole way. The capture is what keeps the moves coming.
+		const box = await view.evaluate(() => {
+			const rect = document.querySelector('#pick [role="slider"]')!.parentElement!.getBoundingClientRect();
+			return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+		});
+		await view.mouse.move(box.x + box.width * 0.25, box.y + box.height * 0.25);
+		await view.mouse.down();
+		await view.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+		await view.mouse.up();
+
+		const after = await view.evaluate(() => ({
+			cell: (globalThis as never as { read(): string }).read(),
+			text: document.querySelector('#pick [role="slider"]')!.getAttribute('aria-valuetext'),
+			left: (document.querySelector('#pick [role="slider"]') as never as { style: Record<string, string> }).style.left,
+			top: (document.querySelector('#pick [role="slider"]') as never as { style: Record<string, string> }).style.top,
+		}));
+		assert.equal(after.text, 'saturation 50%, brightness 50%',
+			`the middle of the square is half of each axis, and the thumb says ${String(after.text)}`);
+		assert.equal(after.left, '50%', 'the thumb is where the pointer left it');
+		assert.equal(after.top, '50%');
+		// Half saturated and half bright at hue 0, worked out by hand through `fromHsv`.
+		assert.equal(after.cell, 'rgb(128, 64, 64)', 'and the drag wrote the cell as rgb() text');
+
+		// The other direction: a colour written from outside puts the thumb where that colour is.
+		// A full blue is the far top corner, which is nowhere near where the drag left it.
+		await view.evaluate(() => (globalThis as never as { write(text: string): void }).write('rgb(0, 0, 255)'));
+		await view.waitForFunction(() =>
+			(document.querySelector('#pick [role="slider"]') as never as { style: Record<string, string> }).style.left === '100%');
+		const moved = await view.evaluate(() => ({
+			left: (document.querySelector('#pick [role="slider"]') as never as { style: Record<string, string> }).style.left,
+			top: (document.querySelector('#pick [role="slider"]') as never as { style: Record<string, string> }).style.top,
+			text: document.querySelector('#pick [role="slider"]')!.getAttribute('aria-valuetext'),
+			hue: (document.querySelector('#pick input[type=range]') as never as { value: string }).value,
+		}));
+		assert.deepEqual(moved, {
+			left: '100%', top: '0%', text: 'saturation 100%, brightness 100%', hue: '240',
+		}, 'a full blue is the far corner of the square and 240 degrees round the hue');
+
+		// An arrow on the thumb writes, which is the half no pointer proves.
+		await view.focus('#pick [role="slider"]');
+		await view.keyboard.press('ArrowLeft');
+		await view.waitForFunction(() =>
+			document.querySelector('#pick [role="slider"]')!.getAttribute('aria-valuetext')
+				=== 'saturation 99%, brightness 100%');
+		assert.match(await view.evaluate(() => (globalThis as never as { read(): string }).read()), /^rgb\(/,
+			'and a key is a write, as rgb() text');
+
+		// The plane is a control a person operates, so it has to pass the same audit every page in
+		// this package does. The audit is scoped to the picker: the page around it is this file's
+		// blank harness, with no title and no language, and neither is anything the component says.
+		await view.addScriptTag({ path: fileURLToPath(import.meta.resolve('axe-core/axe.min.js')) });
+		const audit = await view.evaluate(async () => (globalThis as never as {
+			axe: { run(node: unknown, options: unknown): Promise<{ violations: { id: string; help: string }[] }> };
+		}).axe.run(document.querySelector('#pick')!, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] } }));
+		assert.deepEqual(audit.violations.map((violation) => `${violation.id}: ${violation.help}`), [],
+			'axe found nothing to fix on the picker');
+	});
+});
+
+test('End on the colour picker\'s hue slider writes the cell', async () => {
 	await drive('colorpicker-keys', `
 		import { ColorPicker, h, mount } from '@aweftjs/ui';
 		import { mutable } from '@aweftjs/core';

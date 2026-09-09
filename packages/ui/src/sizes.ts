@@ -34,6 +34,12 @@ export const sizes: Readonly<Record<string, string>> = {
 	// overrides.
 	$chevron: '8px',
 
+	// The side of the colour picker's saturation and brightness square (design 222). A size of the
+	// theme rather than a `$name` on the entry, so an application that wants a bigger square moves
+	// one value in the theme it is already overriding, which is what it has instead of a `size`
+	// prop on that component.
+	$planeSize: '160px',
+
 	// How wide a sheet is against the left or the right edge (design 202). A sheet along the top or
 	// the bottom is as tall as what is in it, so there is no height beside this.
 	$sheetWidth: '24rem',

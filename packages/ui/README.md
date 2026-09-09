@@ -740,22 +740,32 @@ valid because its check crashed.
 registers when it mounts and leaves when it unmounts, so a field that goes away stops holding the
 form invalid.
 
-**A colour picker is four sliders.** `value` is a cell holding CSS colour text, anything `readColour`
-reads, and it is written back as `rgb()` or `rgba()`; text that is not a colour is an assert naming
-the text. Hue, saturation, brightness and opacity, the last only when `hasAlpha` is not false, each
-labelled and each a real range input with the platform's keyboard on it. The swatch beside them is
-`aria-hidden`, because it says what the four already say. There is no eyedropper and no hex field;
+**A colour picker is a square and one or two sliders.** `value` is a cell holding CSS colour text,
+anything `readColour` reads, and it is written back as `rgb()` or `rgba()`; text that is not a
+colour is an assert naming the text. Saturation and brightness are one place in a square, dragged
+with a pointer or driven with the arrows; hue and opacity, the last only when `hasAlpha` is not
+false, are labelled range inputs with the platform's keyboard on them. The swatch beside them is
+`aria-hidden`, because it says what the rest already say. There is no eyedropper and no hex field;
 a `TextField` on the same cell is the hex field, because the cell is text.
 
-Moving a slider is the only thing that writes the cell, so mounting a picker on a colour leaves that
-colour and its notation alone. With `hasAlpha` false a write keeps the alpha the cell already had:
-nothing on the screen can change an alpha nobody can see.
+The square's thumb is the one element in this package with a role written on it, because there is
+no two-axis role in ARIA (design 222). It is `role="slider"`, focusable, and says both axes:
+`aria-valuenow` carries the saturation and `aria-valuetext` reads `saturation 40%, brightness 80%`.
+Left and right move saturation, up and down move brightness, `Home` and `End` take saturation to
+its ends, and Shift makes any of them coarse. A press anywhere in the square moves the thumb there,
+and a drag that leaves the square keeps working.
 
-The hue track is a gradient of six named hues in the `colorpicker_track_hue` entry. The other three tracks
-are the colour chosen right now, so the component builds a `linear-gradient(...)` from what the cell
-holds and puts that text in the element's inline `style`. The theme check reads source text, and
-that gradient is arithmetic rather than a value anybody typed, so there is nothing there for it to
-refuse.
+A drag, a key or a slider writes the cell, and nothing else does, so mounting a picker on a colour
+leaves that colour and its notation alone. With `hasAlpha` false a write keeps the alpha the cell
+already had: nothing on the screen can change an alpha nobody can see.
+
+The square is `$planeSize` on each side and there is no `size` prop: it is a composite with no one
+height, so an application that wants a bigger square redefines `$planeSize`. The two gradients over
+it are the `colorpicker_plane` entry's, and the hue track's six hues are `colorpicker_track_hue`'s.
+What the component writes is the colour that is chosen now, which does not exist until it runs: the
+hue under the square, the thumb's own fill and the opacity track are inline `style`. The theme check
+reads source text, and each of those is arithmetic rather than a value anybody typed, so there is
+nothing there for it to refuse.
 
 **A state prop takes a cell.** `open`, `enabled`, `value` and `files` are cells or absent; give one a
 plain value and it is a loud assert naming the prop and the fix, because a component that quietly
@@ -763,10 +773,10 @@ kept a cell of its own would look as though it had honoured what you asked for.
 
 **The theme entries these add**, on top of the ones above: `dialog` with its `::backdrop`, `tooltip`,
 `disclosure` and `disclosure_summary`, `filedrop` with `dragging`, `prompt`, `list` and `entry`,
-`validate`, and `colorpicker` with `swatch`, `track` and `hue`. `offscreen` is one more, and it is
+`validate`, and `colorpicker` with `swatch`, `plane`, `plane_thumb`, `track` and `hue`. `offscreen` is one more, and it is
 yours to use: it takes an element off the screen and leaves it in the reading order.
 
-Each of them has a section on `recipes/ui/catalogue.html`, in both modes, driven in Chromium by
+Each of them has a page on `recipes/ui/catalogue.html`, in both modes, driven in Chromium by
 `recipes/ui/main.ts` with axe-core over it.
 
 ## Text
@@ -1194,7 +1204,7 @@ ask for. Everything else is yours to define.
 | `disclosure`, `disclosure_summary` | a `<details>` and the summary that wears the `button` entry |
 | `filedrop` and its `dragging`, `prompt`, `input`, `list` and `entry` | a drop zone, its prompt and its listing |
 | `validate` | the message a `Validate` shows, beside its icon |
-| `colorpicker`, `colorpicker_swatch`, `colorpicker_track` and its `hue` | four sliders and the colour they name |
+| `colorpicker`, `colorpicker_swatch`, `colorpicker_plane`, `colorpicker_plane_thumb` and its `hovered` and `pressed`, `colorpicker_track` and its `hue` | the saturation and brightness square, its thumb, the sliders beside it and the colour they name |
 | `offscreen` | off the screen and still in the reading order |
 
 `hovered`, `pressed` and `disabled` are three more entries, and you put them in a class list

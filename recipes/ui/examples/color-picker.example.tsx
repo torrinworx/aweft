@@ -1,4 +1,5 @@
-// ColorPicker: real range inputs and a swatch, with and without the alpha channel.
+// ColorPicker: a saturation and brightness square, the hue and the alpha on real range inputs,
+// and a swatch, with and without the alpha channel.
 
 import { mutable } from '@aweftjs/core';
 import { ColorPicker, h } from '@aweftjs/ui';
@@ -15,11 +16,11 @@ export const Example: ExampleComponent = (props) => {
 
 	return (
 		<div theme="column">
-			<p theme={['text', 'sm', 'muted']}>Three sliders, because there is no alpha</p>
+			<p theme={['text', 'sm', 'muted']}>The plane and the hue, because there is no alpha</p>
 			<ColorPicker value={picked} hasAlpha={false} id={at('picker')} />
 			<span theme={['text', 'sm', 'muted']} id={at('picked')}>{picked}</span>
 
-			<p theme={['text', 'sm', 'muted']}>Four, with it</p>
+			<p theme={['text', 'sm', 'muted']}>The opacity as well, with it</p>
 			<ColorPicker value={mutable('rgba(27, 110, 243, 0.5)')} id={at('picker-alpha')} />
 
 			<ColorPicker value={mutable('#1b6ef3')} disabled={true} id={at('picker-disabled')} />

@@ -814,9 +814,50 @@ defineTheme({
 	// which the class list already carries.
 	validate: { display: 'flex', alignItems: 'center', gap: '$space' },
 
-	// Four sliders and a swatch. The hue track is the only gradient with a fixed set of stops, so it
-	// is the only one written here; the other three are the colour that is chosen now (design 139).
+	// A square, two sliders and a swatch (design 222). Two of the square's three layers are drawn
+	// here, and so is the hue track's fixed set of stops; what the component writes is the colour
+	// that is chosen now, which does not exist until it runs (design 139).
 	colorpicker: { display: 'flex', alignItems: 'flex-start', gap: '$space3' },
+	colorpicker_plane: {
+		$planeTint: '#fff',
+		$planeShade: '#000',
+		position: 'relative',
+		boxSizing: 'border-box',
+		width: '$planeSize',
+		height: '$planeSize',
+		flexShrink: 0,
+		borderRadius: '$radius',
+		border: '$borderWidth solid $border',
+		// Saturation thins the white out to the right and brightness thins the black out upward,
+		// over the hue the component writes as this element's own background colour. The first
+		// image in the list is the top layer, so the shade goes first.
+		backgroundImage:
+			'linear-gradient(to bottom, transparent, $planeShade), '
+			+ 'linear-gradient(to right, $planeTint, transparent)',
+		// Without this a finger scrolls the page instead of dragging the thumb (design 221).
+		touchAction: 'none',
+		cursor: 'crosshair',
+	},
+	colorpicker_plane_thumb: {
+		$planeThumb: '12px',
+		$thumbHover: 'scale(1.2)',
+		$thumbPress: 'scale(1.3)',
+		position: 'absolute',
+		boxSizing: 'border-box',
+		width: '$planeThumb',
+		height: '$planeThumb',
+		borderRadius: '50%',
+		border: '$borderWidth solid $background',
+		// The centring is `translate` rather than `transform`, because the two state entries below
+		// put a scale on `transform` and a shorthand would take the centring away with it.
+		translate: '-50% -50%',
+		cursor: 'grab',
+	},
+	// The slider's answer to design 220, on a real element this time: the thumb is what the pointer
+	// is over, and a tint over a thumb whose whole job is to show a colour would show the wrong one.
+	// The root transition rule reaches this element, so the scale eases with no rule of its own.
+	colorpicker_plane_thumb_hovered: { backgroundImage: 'none', transform: '$thumbHover' },
+	colorpicker_plane_thumb_pressed: { backgroundImage: 'none', transform: '$thumbPress' },
 	colorpicker_swatch: {
 		width: '$space12',
 		height: '$space12',

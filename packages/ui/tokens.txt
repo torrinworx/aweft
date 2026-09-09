@@ -89,6 +89,10 @@ neutral6
 neutral7
 neutral8
 neutral9
+planeShade
+planeSize
+planeThumb
+planeTint
 pressTint
 pulseCycle
 radius

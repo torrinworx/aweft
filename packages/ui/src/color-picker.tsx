@@ -1,18 +1,20 @@
-// Picking a colour with four range inputs (design 139).
+// Picking a colour on a square and two sliders (design 222).
 //
-// Nothing here draws a saturation square or tracks a pointer. Each control is a `Slider`, which is
-// the platform's range input (design 128), so the keyboard, the announced number and the pointer
-// handling all come with the element. The maths is `color.ts`, which this package already had.
+// The square is the one thing in this package drawn out of an element of its own: saturation and
+// brightness are one place rather than two numbers, and the platform has no element for two axes.
+// The pointer and the key map under it are `drag.ts` (design 221); the hue and the opacity are
+// `Slider`, which is the platform's range input (design 128). The maths is `color.ts`.
 
 import { type Mounter, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';
 
 import { Slider } from './slider.tsx';
 import { assert } from './assert.ts';
-import { elementFor } from './control.ts';
+import { controlStates, elementFor } from './control.ts';
+import { drag } from './drag.ts';
 import { fromHsv, hsvOf, readColour, writeColour } from './color.ts';
 import { h } from './h.ts';
-import { isWritable } from './source.ts';
+import { isWritable, through } from './source.ts';
 
 /** What `ColorPicker` takes. Everything not named here goes to the wrapper. */
 export interface ColorPickerProps {
@@ -31,23 +33,30 @@ export interface ColorPickerProps {
 	readonly [prop: string]: unknown;
 }
 
-/** Where each slider starts when the component keeps its own colour: a full red. */
+/** Where the picker starts when the component keeps its own colour: a full red. */
 const START = { h: 0, s: 1, v: 1, a: 1 };
 
 /**
- * A colour, picked on four sliders.
+ * A colour, picked on a square and two sliders.
  *
  * Params:
  *   props: `value`, `hasAlpha`, `disabled`, `type`, `element`, and anything else, which goes to the
  *          wrapper
  *
- * Returns: a `<div>` holding a swatch and four `Slider`s: hue, saturation, brightness and opacity,
- * the last only when `hasAlpha` is not false. Each is labelled, so each is found by name and
- * announces its number; the swatch is `aria-hidden`, because it says what the four already say.
+ * Returns: a `<div>` holding a swatch, a saturation and brightness square with a thumb in it, and
+ * one or two `Slider`s: hue, and opacity when `hasAlpha` is not false. Each slider is labelled, so
+ * each is found by name and announces its number; the swatch is `aria-hidden`, because it says what
+ * the rest already say.
+ *
+ * The square's thumb is `role="slider"`, focusable, and carries both axes: `aria-valuenow` is the
+ * saturation and `aria-valuetext` reads "saturation 40%, brightness 80%". There is no two-axis role
+ * in ARIA and one control that says both beats two a person has to switch between (design 222).
+ * Left and right move saturation, up and down move brightness, Home and End take saturation to its
+ * ends, and Shift makes any of them coarse. A press anywhere in the square moves the thumb there.
  *
  * The cell holds CSS colour text, anything `readColour` reads, and is written back as `rgb()` or
- * `rgba()`. Moving a slider writes it, and nothing else does: mounting this on a colour leaves that
- * colour alone. Writing the cell from outside moves the sliders.
+ * `rgba()`. A drag, a key or a slider writes it, and nothing else does: mounting this on a colour
+ * leaves that colour alone. Writing the cell from outside moves the thumb and the sliders.
  *
  * With `hasAlpha` false there is no opacity slider, and a write keeps the alpha the cell already
  * had rather than making the colour opaque.
@@ -80,28 +89,35 @@ export const ColorPicker = (
 	const opacity = mutable(START.a * 100);
 
 	const swatch = mutable('');
-	const saturationTrack = mutable('');
-	const brightnessTrack = mutable('');
 	const opacityTrack = mutable('');
+	// The square's own three: the hue it is drawn over, the colour its thumb shows, and the one
+	// string a screen reader hears for two axes.
+	const planeBase = mutable('');
+	const thumbFill = mutable('');
+	const valueText = mutable('');
 
-	// The tracks show the range at the colour that is chosen now, which only exists at run time. The
-	// six hues of the hue track are named values in the theme entry, which is where a literal
-	// belongs (design 139).
+	// The thumb answers hover and press itself, so its two cells are the component's rather than a
+	// caller's: nothing outside this file has a thumb to point at.
+	const states = controlStates(disabled);
+
+	// The plane's gradients are the theme's, so what is computed here is the hue underneath them
+	// and the colour that is chosen now, neither of which exists until run time (design 222). The
+	// opacity track is the same trick design 139 already used.
 	const paint = (): void => {
 		const at = hue.get();
 		const s = saturation.get() / 100;
 		const v = brightness.get() / 100;
 		const a = alphaOn ? opacity.get() / 100 : alpha;
-		const band = (from: string, to: string): string => `linear-gradient(to right, ${from}, ${to})`;
-		saturationTrack.set(band(writeColour(fromHsv(at, 0, v, 1)), writeColour(fromHsv(at, 1, v, 1))));
-		brightnessTrack.set(band(writeColour(fromHsv(at, s, 0, 1)), writeColour(fromHsv(at, s, 1, 1))));
-		opacityTrack.set(band(writeColour(fromHsv(at, s, v, 0)), writeColour(fromHsv(at, s, v, 1))));
+		opacityTrack.set(`linear-gradient(to right, ${writeColour(fromHsv(at, s, v, 0))}, ${writeColour(fromHsv(at, s, v, 1))})`);
+		planeBase.set(writeColour(fromHsv(at, 1, 1, 1)));
+		thumbFill.set(writeColour(fromHsv(at, s, v, 1)));
 		swatch.set(writeColour(fromHsv(at, s, v, a)));
+		valueText.set(`saturation ${String(saturation.get())}%, brightness ${String(brightness.get())}%`);
 	};
 
-	// The text the cell and the sliders last agreed on. A flag would not do: a delivery is deferred
+	// The text the cell and the controls last agreed on. A flag would not do: a delivery is deferred
 	// to a safe point, so by the time the cell reports what this component wrote, the write has long
-	// finished. Comparing the text is what stops a slider being set back from the value it just
+	// finished. Comparing the text is what stops a control being set back from the value it just
 	// produced, which is how a colour with no hue of its own would snap to red.
 	let agreed = '';
 
@@ -126,9 +142,10 @@ export const ColorPicker = (
 		paint();
 	};
 
-	// Called from a slider's own `input` and from nowhere else. Hung off the knobs' effects it also
-	// ran once as the component mounted, and that first run moved the caller's colour before anybody
-	// had touched a slider: a hex arrived and an `rgb()` of its own making went back.
+	// Called from a slider's own `input`, from the drag, and from nowhere else. Hung off the cells'
+	// effects it also ran once as the component mounted, and that first run moved the caller's
+	// colour before anybody had touched anything: a hex arrived and an `rgb()` of its own making
+	// went back.
 	const putOut = (): void => {
 		paint();
 		const text = writeColour(fromHsv(
@@ -139,6 +156,19 @@ export const ColorPicker = (
 		agreed = text;
 		cell.set(text);
 	};
+
+	// The square measured as fractions: across is saturation, and down is less brightness, because
+	// a box is measured from its top and a colour gets darker towards the bottom of one.
+	const grip = drag({
+		axes: 'xy',
+		at: () => ({ x: saturation.get() / 100, y: 1 - brightness.get() / 100 }),
+		disabled: () => states.isDisabled(),
+		onMove: (to) => {
+			saturation.set(Math.round(to.x * 100));
+			brightness.set(Math.round((1 - to.y) * 100));
+			putOut();
+		},
+	});
 
 	cleanup(cell.effect((value) => {
 		const text = value === null || value === undefined ? '' : String(value);
@@ -152,17 +182,35 @@ export const ColorPicker = (
 	},
 	h('span', { theme: ['colorpicker_swatch'], 'aria-hidden': 'true', style: { background: swatch } }),
 	h('div', { theme: ['column', 'fill'] },
+		h('div', {
+			theme: ['colorpicker_plane'],
+			style: { backgroundColor: planeBase },
+			...grip.pointer,
+		},
+		h('span', {
+			theme: ['colorpicker_plane_thumb', ...states.segments],
+			// `left` and `top` are on no transition list, so the thumb arrives in the frame the
+			// pointer did rather than easing after it.
+			style: {
+				left: through(saturation, (held) => `${String(held)}%`),
+				top: through(brightness, (held) => `${String(100 - Number(held))}%`),
+				backgroundColor: thumbFill,
+			},
+			role: 'slider',
+			tabindex: through(disabled, (held) => (held ? '-1' : '0')),
+			'aria-label': 'Saturation and brightness',
+			'aria-valuemin': '0',
+			'aria-valuemax': '100',
+			'aria-valuenow': through(saturation, (held) => String(held)),
+			'aria-valuetext': valueText,
+			'aria-disabled': through(disabled, (held) => (held ? 'true' : null)),
+			isHovered: states.isHovered,
+			isClicked: states.isClicked,
+			...grip.keys,
+		})),
 		h(Slider, {
 			label: 'Hue', value: hue, min: 0, max: 360, disabled, track: false, onInput: putOut,
 			theme: ['colorpicker_track', 'hue'],
-		}),
-		h(Slider, {
-			label: 'Saturation', value: saturation, min: 0, max: 100, disabled, track: false,
-			onInput: putOut, theme: ['colorpicker_track'], style: { background: saturationTrack },
-		}),
-		h(Slider, {
-			label: 'Brightness', value: brightness, min: 0, max: 100, disabled, track: false,
-			onInput: putOut, theme: ['colorpicker_track'], style: { background: brightnessTrack },
 		}),
 		alphaOn
 			? h(Slider, {

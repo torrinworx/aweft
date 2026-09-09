@@ -459,6 +459,35 @@ test('a part named as one class token wears its own rules and none of its compon
 	assert.match(rulesFor(['colorpicker_track', 'hue']), /linear-gradient/);
 });
 
+test('the colour plane is a square the theme shades, and its thumb answers its own states', () => {
+	// Design 222. The hue underneath is the one thing the component writes, so what is here is the
+	// box, the two gradients over it and the rule that lets a finger drag rather than scroll.
+	const plane = rulesFor(['colorpicker_plane']);
+	assert.match(plane, new RegExp(`width: ${valueOf('planeSize')}`), 'the square is $planeSize');
+	assert.match(plane, new RegExp(`height: ${valueOf('planeSize')}`), 'in both directions');
+	assert.match(plane, /position: relative/, 'so the thumb inside it is placed against it');
+	assert.match(plane, /touch-action: none/, 'a finger drags the thumb instead of scrolling');
+	assert.match(plane, /background-image: linear-gradient\(to bottom, transparent, #000\), linear-gradient\(to right, #fff, transparent\)/,
+		'brightness down and saturation across, the shade on top');
+	assert.doesNotMatch(plane, /background(-color)?:/, 'and the hue under them is the component\'s');
+
+	const thumb = rulesFor(['colorpicker_plane_thumb']);
+	assert.match(thumb, /position: absolute/);
+	assert.match(thumb, /translate: -50% -50%/, 'centred with translate, so a scale can have transform');
+	// `left` and `top` are on no transition list, the root's included, so the thumb arrives in the
+	// frame the pointer did rather than easing after it.
+	assert.doesNotMatch(thumb, /transition-property: [^;]*\b(left|top)\b/);
+	assert.equal((thumb.match(/transition-property:/g) ?? []).length, 1,
+		'and the only transition in the chain is the root\'s own');
+
+	// Design 220's slider thumb, on a real element. The root rule reaches this one, so the scale
+	// eases with no rule of its own and the tint has to be turned off by name.
+	const hovered = rulesFor(['colorpicker_plane_thumb', 'hovered']);
+	assert.match(hovered, /background-image: none/, 'no tint over a thumb that is showing a colour');
+	assert.match(hovered, /transform: scale\(1\.2\)/);
+	assert.match(rulesFor(['colorpicker_plane_thumb', 'pressed']), /transform: scale\(1\.3\)/);
+});
+
 test('a form\'s layout is three entries and two modifiers', () => {
 	// Design 196. `field_group`, `field_set` and `field_legend` are parts, so each is one class
 	// token; `field_inline` and `field_responsive` are modifiers of `field`, so each is a segment.
