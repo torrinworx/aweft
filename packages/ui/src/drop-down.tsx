@@ -27,6 +27,11 @@ export interface DropDownProps {
 	readonly iconClose?: unknown;
 	/** Which side the chevron goes: `right` (the default) or `left`. */
 	readonly arrow?: unknown;
+	/**
+	 * The `<details>` group this belongs to. Every drop-down sharing a name keeps one of them open,
+	 * which is the platform's own exclusive accordion and is what `Accordion` uses (design 202).
+	 */
+	readonly name?: unknown;
 	/** The summary's button variant. */
 	readonly type?: unknown;
 	/** A value or a cell. */
@@ -43,7 +48,7 @@ export interface DropDownProps {
  * A button and the block it shows.
  *
  * Params:
- *   props: `open`, `label`, `icon`, `iconOpen`, `iconClose`, `arrow`, `type`, `disabled`,
+ *   props: `open`, `label`, `icon`, `iconOpen`, `iconClose`, `arrow`, `name`, `type`, `disabled`,
  *          `element`, and anything else, which goes to the `<details>`
  *   children: what shows while it is open, in the page's flow
  *
@@ -54,6 +59,10 @@ export interface DropDownProps {
  * The `open` cell goes both ways: writing it opens and closes the element, and a person opening it
  * writes the cell.
  *
+ * `name` puts it in a group: the platform keeps one `<details>` of a name open and closes the rest,
+ * and the one that closes fires its own `toggle`, so every cell in the group follows. `Accordion` is
+ * that group with the lines between.
+ *
  * A floating menu is not this: that is `Detached` with a `Button` anchor (design 136).
  *
  * Throws: the assert `elementFor` makes for an `element` that is not a `<details>`.
@@ -63,7 +72,8 @@ export interface DropDownProps {
  */
 export const DropDown = (props: DropDownProps): Mounter => (elem, _item, before, context) => {
 	const {
-		open, label, icon, iconOpen, iconClose, arrow, type, disabled, element, theme, children, ...rest
+		open, label, icon, iconOpen, iconClose, arrow, name, type, disabled, element, theme, children,
+		...rest
 	} = props;
 
 	// A state prop is a cell or absent. A plain value looks as though it was honoured and is not,
@@ -99,6 +109,7 @@ export const DropDown = (props: DropDownProps): Mounter => (elem, _item, before,
 
 	const node = h(elementFor(element, 'details'), {
 		...rest,
+		name: name ?? null,
 		theme: ['disclosure', type, theme],
 		// The attribute is what a static render writes, so a server page shows it open; the property
 		// is what a live element answers to.

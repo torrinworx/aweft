@@ -25,8 +25,10 @@ export interface ModalProps {
 	readonly noEsc?: unknown;
 	/** A mousedown on the backdrop does not close it. */
 	readonly noClickEsc?: unknown;
-	/** The theme variant. */
+	/** The theme variant. `sheet` puts the dialog against an edge instead of in the middle. */
 	readonly type?: unknown;
+	/** Which edge a `sheet` sits on: `right` (the default), `left`, `top` or `bottom`. */
+	readonly side?: unknown;
 	/** Decorate this `<dialog>` instead of building one. */
 	readonly element?: unknown;
 	/** Extra theme segments, appended to this component's own. */
@@ -39,10 +41,13 @@ export interface ModalProps {
  * The act, in a modal dialog.
  *
  * Params:
- *   props: `label`, `noEsc`, `noClickEsc`, `type`, `element`, and anything else, which goes to the
- *          `<dialog>`
+ *   props: `label`, `noEsc`, `noClickEsc`, `type`, `side`, `element`, and anything else, which goes
+ *          to the `<dialog>`
  *
  * Returns: a `<dialog>`, opened as this mounts, holding a heading, a close button and the act.
+ *
+ * `type="sheet"` is the same dialog against an edge, sliding in from it rather than growing in the
+ * middle (design 202). `side` says which edge, `right` by default, and is read for no other type.
  *
  * Every close is the stage's `close()`: Escape through the element's own `cancel` event, a mousedown
  * on the backdrop, and the close button. So a modal opened with `history: true` is taken down by the
@@ -57,6 +62,7 @@ export interface ModalProps {
  * Example:
  *   stage.open({ name: 'edit', history: true, template: Modal });
  *   stage.open({ name: 'edit', history: true, template: (p) => h(Modal, { label: 'Edit' }, ...p.children) });
+ *   stage.open({ name: 'filters', template: (p) => h(Modal, { label: 'Filters', type: 'sheet' }, ...p.children) });
  */
 export const Modal = (
 	props: ModalProps,
@@ -68,7 +74,7 @@ export const Modal = (
 	let show = (): void => undefined;
 	mounted(() => { show(); });
 	return (elem, _item, before, context) => {
-		const { label, noEsc, noClickEsc, type, element, theme, children, ...rest } = props;
+		const { label, noEsc, noClickEsc, type, side, element, theme, children, ...rest } = props;
 
 		const stage = StageContext.read(context);
 		assert(stage !== null,
@@ -100,7 +106,10 @@ export const Modal = (
 
 		const item = h(node, {
 			...rest,
-			theme: ['dialog', type, theme],
+			// The side is a second segment after the type, so `type="sheet" side="left"` reaches
+			// `dialog`, `dialog_sheet` and `dialog_sheet_left` (design 202). It is written only for a
+			// sheet, because no other type has an edge to sit on.
+			theme: ['dialog', type, type === 'sheet' ? side ?? 'right' : null, theme],
 			'aria-labelledby': named ? titleId : null,
 			onCancel: (event: unknown) => {
 				if (noEsc === true) {
