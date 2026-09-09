@@ -3,6 +3,8 @@
 //
 // The same file renders on a server with no browser and mounts in a page, which is the point.
 
+import { fromBundle } from '@aweftjs/modules';
+import type { Source } from '@aweftjs/modules';
 import { Head, Meta, Stage, StageContext, Theme, Title, h } from '@aweftjs/ui';
 import type { Act, Component } from '@aweftjs/ui';
 import type { Router } from '@aweftjs/dom/router';
@@ -132,13 +134,18 @@ const NotFound = (): unknown => (
 	</main>
 );
 
-/** Every act of the root stage. `about` arrives through a loader; the rest are components. */
+/** This site's own modules. One entry, loaded when the stage asks and not before. */
+export const site: Source = fromBundle({
+	'./site/About.tsx': () => import('./modules/About.tsx'),
+});
+
+/** Every act of the root stage. `about` is a module name; the rest are components. */
 export const acts: Record<string, Act> = {
 	'': Home,
 	docs: Docs,
 	'posts/:id': Post,
 	'tags/:tag': Tag,
-	about: { load: () => import('./about.tsx') },
+	about: 'site/About',
 	missing: NotFound,
 	dialog: Dialog as Component,
 };
@@ -155,7 +162,7 @@ export const urls: readonly { readonly url: string; readonly id: string; readonl
 ];
 
 export const Site = (props: { router: Router }): unknown => (
-	<StageContext router={props.router} acts={acts} template={Layout} fallback="missing">
+	<StageContext router={props.router} sources={[site]} acts={acts} template={Layout} fallback="missing">
 		<Stage />
 	</StageContext>
 );

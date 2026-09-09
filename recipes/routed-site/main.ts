@@ -90,14 +90,6 @@ console.log('  every page differs where it should and shares nothing with the ot
 
 // --- taking over the markup in place --------------------------------------------------------------
 
-const target = install;
-const light: LightDocument = createDocument();
-for (const node of parseHtml(target.body, light)) light.body.appendChild(node);
-// The page a server writes carries both: the theme's stylesheet and the head tags.
-for (const node of parseHtml(`<style data-aweft>${target.css}</style>${target.head}`, light)) {
-	light.head.appendChild(node);
-}
-
 /** Every element under a node, in order, by identity. */
 const elementsIn = (from: { firstChild: unknown; nextSibling: unknown; nodeType: number } | null): unknown[] => {
 	const found: unknown[] = [];
@@ -108,32 +100,55 @@ const elementsIn = (from: { firstChild: unknown; nextSibling: unknown; nodeType:
 	return found;
 };
 
-const before = elementsIn(light.body.firstChild as never);
-const headBefore = elementsIn(light.head.firstChild as never);
-assert.ok(before.length > 0 && headBefore.length > 0, 'the server wrote a page and a head');
+/**
+ * Hydrate one rendered page and answer what it took over.
+ *
+ * The act at `/about` is a module name, so it arrives after `hydrate` has returned. The
+ * hydration waits for it (aweft design 243), which is what makes the counts below match.
+ */
+const takeOver = async (page: typeof install, text: string): Promise<{ kept: number; of: number }> => {
+	const light: LightDocument = createDocument();
+	for (const node of parseHtml(page.body, light)) light.body.appendChild(node);
+	// The page a server writes carries both: the theme's stylesheet and the head tags.
+	for (const node of parseHtml(`<style data-aweft>${page.css}</style>${page.head}`, light)) {
+		light.head.appendChild(node);
+	}
 
-const made: string[] = [];
-const factory = light.createElement.bind(light);
-(light as unknown as Record<string, unknown>)['createElement'] = (tag: string) => {
-	made.push(tag);
-	return factory(tag);
+	const before = elementsIn(light.body.firstChild as never);
+	const headBefore = elementsIn(light.head.firstChild as never);
+	assert.ok(before.length > 0 && headBefore.length > 0, `${page.url}: the server wrote a page and a head`);
+
+	const made: string[] = [];
+	const factory = light.createElement.bind(light);
+	(light as unknown as Record<string, unknown>)['createElement'] = (tag: string) => {
+		made.push(tag);
+		return factory(tag);
+	};
+
+	const stop = hydrate(light.body as never, h(Site, { router: createRouter({ url: page.url }) }));
+	await stop.ready;
+
+	// Every element the server wrote is the same object it was: nothing was replaced, in the page
+	// or in the head. The head is the stricter half: a stamped tag is taken over in place, so no
+	// `title`, `meta` or `link` is made at all. (The page's own elements are a different story:
+	// `dom` builds the client tree and pairs it with the server's, so the element it made is
+	// discarded rather than inserted. What matters is which one stays.)
+	const after = elementsIn(light.body.firstChild as never);
+	assert.deepEqual(after, before, `${page.url}: every page element was adopted`);
+	assert.deepEqual(elementsIn(light.head.firstChild as never), headBefore, `${page.url}: every head tag was adopted`);
+	assert.deepEqual(made.filter((tag) => ['title', 'meta', 'link', 'script', 'style'].includes(tag)), [],
+		`${page.url}: no head tag was made, the stamped ones were taken over`);
+	assert.ok(light.body.textContent?.includes(text), `${page.url}: and the page is still the page`);
+	stop();
+	return { kept: after.filter((node) => before.includes(node)).length, of: before.length };
 };
 
-const stop = hydrate(light.body as never, h(Site, { router: createRouter({ url: target.url }) }));
-
-// Every element the server wrote is the same object it was: nothing was replaced, in the page or
-// in the head. The head is the stricter half, and it is the one this step added: a stamped tag is
-// taken over in place, so no `title`, `meta` or `link` is made at all. (The page's own elements
-// are a different story: `dom` builds the client tree and pairs it with the server's, so the
-// element it made is discarded rather than inserted. What matters is which one stays.)
-assert.deepEqual(elementsIn(light.body.firstChild as never), before, 'every page element was adopted');
-assert.deepEqual(elementsIn(light.head.firstChild as never), headBefore, 'every head tag was adopted');
-assert.deepEqual(made.filter((tag) => ['title', 'meta', 'link', 'script', 'style'].includes(tag)), [],
-	'and no head tag was made: the stamped ones were taken over');
-assert.ok(light.body.textContent?.includes('install'), 'and the page is still the page');
-stop();
-
-console.log('  the rendered page hydrates in place, adopting every element the server wrote');
+// One act is a component and one is a module name. The second is the one that used to throw a
+// hydration mismatch, because the pairing walk closed before the act arrived.
+const plain = await takeOver(install, 'install');
+const named = await takeOver(pages.find((page) => page.url === '/about')!, 'Loaded on demand');
+console.log(`  /docs/install adopted ${String(plain.kept)} of ${String(plain.of)} elements, `
+	+ `/about ${String(named.kept)} of ${String(named.of)}, none replaced`);
 
 // --- the same site, in a real browser ------------------------------------------------------------
 

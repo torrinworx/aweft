@@ -1,15 +1,23 @@
-// The proof for @aweftjs/client and the auth battery's client half: a page, in Node.
+// The proof for @aweftjs/client and the auth battery's client half: a small application.
 //
-// The job: someone opens an app. It shares a document and asks a module before the socket is
-// open, learns it is nobody, signs up, gets its own state document, and keeps working while
-// the server is restarted underneath it: the same document object comes back holding what the
-// server wrote meanwhile, and an ask made while it was down is answered on the new socket.
-// Then it signs out, is nobody again, and signs back in to the state it left.
+// Two halves, one server. In Node: someone opens an app, shares a document and asks a module
+// before the socket is open, learns it is nobody, signs up, gets its own state document, and
+// keeps working while the server is restarted underneath it. Then in Chromium: the same server
+// serves a real page whose every part is a module. A visit to a gated URL while anonymous shows
+// the battery's sign-in form, a sign-up through that form makes the page somebody, and the gated
+// act renders over the document the page shares.
 //
-// A browser needs no seams for any of this. Node needs two, and only two: a socket that
+// A browser needs no seams for the Node half. Node needs two, and only two: a socket that
 // carries the cookie header, and a fetch that keeps the cookie, because Node's keeps none.
 //
-// Run: node recipes/client/main.ts
+// Run: node --import @aweftjs/build/loader recipes/client/main.ts
+
+import { readFileSync, readdirSync } from 'node:fs';
+import { extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { build } from 'vite';
+import { chromium } from 'playwright';
 
 import { createAuth } from '@aweftjs/auth/client';
 import type { FetchInit, FetchResponse } from '@aweftjs/auth/client';
@@ -23,6 +31,8 @@ import type { Connection } from '@aweftjs/server';
 import { node } from '@aweftjs/server/node';
 import { createStore, memoryDriver } from '@aweftjs/store';
 import type { RequestError, SocketLike } from '@aweftjs/sync';
+
+const here = fileURLToPath(new URL('.', import.meta.url));
 
 let checks = 0;
 let failed = 0;
@@ -47,6 +57,30 @@ type Board = { title: string };
 // The application's own document, one copy for the whole server, offered to every connection.
 const board = createObject<Board>({ title: 'the notice board' });
 
+// --- the built page, served by the application's own server ---------------------------------
+
+// The page is served from the server it talks to, because a cookie belongs to an origin: a
+// sign-up on one origin sets nothing for a socket on another.
+console.log('building the page through aweft()');
+await build({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
+
+const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+
+/** Every route the built page needs: its assets by name, and the shell on each of its URLs. */
+const pageRoutes = (): Record<string, () => Promise<Response>> => {
+	const dist = join(here, 'dist');
+	const answer = (body: Buffer, type: string) => async (): Promise<Response> =>
+		new Response(new Uint8Array(body), { headers: { 'content-type': type } });
+	const routes: Record<string, () => Promise<Response>> = {};
+	for (const name of readdirSync(join(dist, 'assets'))) {
+		routes[`GET /assets/${name}`] = answer(readFileSync(join(dist, 'assets', name)), TYPES[extname(name)] ?? 'text/plain');
+	}
+	const shell = readFileSync(join(dist, 'index.html'));
+	// The application knows its own URLs, because they are the keys of its acts map.
+	for (const url of ['/', '/notes', '/join', '/nowhere']) routes[`GET ${url}`] = answer(shell, 'text/html');
+	return routes;
+};
+
 // --- the application's own modules ---------------------------------------------------------
 
 const app = fromBundle({
@@ -56,6 +90,8 @@ const app = fromBundle({
 	'./notes/Mine.ts': { default: () => ({ call: (_args: unknown, context: AuthContext) => `notes for ${String(context.user)}` }) },
 	// Public too, and it shares a document rather than answering a call.
 	'./notes/Board.ts': { default: () => ({ public: true, connection: ({ link }: Connection<AuthContext>) => { link.share('board', board, open); } }) },
+	// The page itself, so the browser half loads it from the same origin as its socket.
+	'./site/Files.ts': { default: () => ({ public: true, routes: pageRoutes() }) },
 });
 
 // --- the server, and the store both it and this program read ---------------------------------
@@ -181,6 +217,103 @@ check(await identity.check('ada@example.com') && !(await identity.check('nobody@
 
 identity.stop();
 client.close();
+
+// --- the same server, and a real page in a real browser ------------------------------------------
+
+console.log('\nthe page in Chromium');
+const browser = await chromium.launch();
+const view = await browser.newPage({ viewport: { width: 900, height: 700 } });
+const problems: string[] = [];
+view.on('pageerror', (error) => problems.push(String(error)));
+
+/** What the page's modules recorded, in order. */
+const trace = (): Promise<string[]> =>
+	view.evaluate(() => (globalThis as unknown as { aweftTrace?: string[] }).aweftTrace ?? []);
+
+const audit = async (what: string): Promise<void> => {
+	await view.addScriptTag({ path: fileURLToPath(import.meta.resolve('axe-core/axe.min.js')) });
+	const found = await view.evaluate(async () => await (globalThis as unknown as {
+		axe: { run(root: unknown, options: unknown): Promise<{ violations: { id: string; help: string; nodes: { html: string }[] }[] }> };
+		document: unknown;
+	}).axe.run((globalThis as unknown as { document: unknown }).document, {
+		runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
+	}));
+	for (const violation of found.violations) {
+		console.error(`  axe ${violation.id}: ${violation.help}`);
+		for (const node of violation.nodes) console.error(`    ${node.html}`);
+	}
+	check(found.violations.length === 0, `axe found nothing to fix on the sign-in form ${what}`);
+};
+
+try {
+	// A gated URL while nobody: the act's own gate module throws, and `refused` puts the
+	// battery's form on the page the visitor asked for. The address bar does not move.
+	await view.goto(`${http}/notes`);
+	await view.waitForSelector('form[aria-label="Sign in"]');
+	check(new URL(view.url()).pathname === '/notes', 'a gated page while anonymous keeps its URL');
+	check(await view.$('#notes') === null, 'and shows the sign-in act instead of the page');
+	await audit('in light mode');
+
+	// The whole form is one act, and signing up through it is the same call as signing in. The
+	// form still picks no URL: on success it calls the `retry` the stage handed it, so the act
+	// this URL chose is built again where it stands (designs 244, 245). Nobody navigates.
+	await view.fill('input[name="email"]', 'grace@example.com');
+	await view.fill('input[name="password"]', 'correct horse battery staple');
+	await view.click('form[aria-label="Sign in"] button');
+	await view.waitForSelector('#notes');
+	check(new URL(view.url()).pathname === '/notes', 'the gated page came back at the URL that was refused');
+	check(await view.$('form[aria-label="Sign in"]') === null, 'and the form is gone');
+	check(await view.textContent('#notes-title') === 'the notice board',
+		'the gated act loaded, over the document the page shares');
+	const grace = String(await view.textContent('#notes-user'));
+
+	// The public act reads the same auth/Session instance the gated one does.
+	await view.click('#to-home');
+	await view.waitForSelector('#home');
+	await view.waitForFunction(() => /^signed in as ./.test(
+		(globalThis as unknown as { document: { getElementById(id: string): { textContent: string } | null } })
+			.document.getElementById('who')?.textContent ?? ''));
+	check(await view.textContent('#who') === `signed in as ${grace}`,
+		'signing up through the form set the cookie, and both acts read the one session');
+
+	// The same URL again, this time by clicking a link.
+	await view.click('#to-notes');
+	await view.waitForSelector('#notes');
+	check(await view.textContent('#notes-user') === grace, 'the second visit is the same person');
+
+	// Leaving the act stops it. The document it depended on stays, because the next page may
+	// want it and it was never this act's to close (design 242).
+	await view.click('#to-home');
+	await view.waitForSelector('#home');
+	const afterLeaving = await trace();
+	check(afterLeaving.includes('notes/Page stopped'), 'leaving the act ran its stop');
+	check(!afterLeaving.includes('notes/Current stopped'), 'and the module it depended on stayed loaded');
+	check(afterLeaving.filter((line) => line === 'notes/Current opened').length === 1,
+		'so a second visit shares no second document');
+
+	await view.click('#to-notes');
+	await view.waitForSelector('#notes');
+	check((await trace()).filter((line) => line === 'notes/Current opened').length === 1,
+		'and the visit after that reused it');
+
+	// The page going away is what unloads the rest, in reverse load order.
+	await view.evaluate(() => { (globalThis as unknown as { unmountApp: () => void }).unmountApp(); });
+	const afterUnmount = await trace();
+	check(afterUnmount.includes('notes/Current stopped'), 'taking the page down closed the share');
+	check(afterUnmount.indexOf('notes/Page stopped') < afterUnmount.lastIndexOf('notes/Current stopped'),
+		'and it stopped the act before the module underneath it');
+
+	check(problems.length === 0, `the page threw nothing${problems.length === 0 ? '' : `: ${problems.join(', ')}`}`);
+
+	// The same form, with the operating system asking for dark.
+	await view.emulateMedia({ colorScheme: 'dark' });
+	await view.goto(`${http}/join`);
+	await view.waitForSelector('form[aria-label="Sign in"]');
+	await audit('in dark mode');
+} finally {
+	await browser.close();
+}
+
 await server.stop();
 await store.stop();
 
