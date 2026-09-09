@@ -57,8 +57,7 @@ export interface TooltipProps {
  * page is taken over from carries the anchor and the panel with no link between them and the link
  * appears on the first live mount. It is taken off again when this unmounts.
  *
- * Throws: the asserts `Popup` makes for a missing `PopupContext`, and the one `categories` makes for
- * a slot this component does not know.
+ * Throws: the assert `categories` makes for a slot this component does not know.
  *
  * Example:
  *   <Tooltip label="Delete this for good"><Button label="Delete" type="danger" /></Tooltip>

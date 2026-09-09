@@ -13,7 +13,8 @@ import type { ElementLike, LightElement, NodeLike } from '@aweftjs/dom';
 import type { Render } from '@aweftjs/ui';
 import { recordingDocument } from '@aweftjs/testing';
 import {
-	Button, Card, Checkbox, LoadingDots, Radio, Select, Slider, TextArea, TextField, Toggle,
+	Button, Card, Checkbox, LoadingDots, PopupContext, Radio, Select, Slider, TextArea, TextField,
+	Toggle,
 	context, h, hydrate, mount, render,
 } from '@aweftjs/ui';
 
@@ -139,7 +140,8 @@ const rulesOn = (render: Render, element: LightElement): string => {
 // --- what each control is ---------------------------------------------------------------------
 
 test('every control is found by its role and its accessible name', () => {
-	const { body, stop } = page([
+	// The sink a `Select`'s drawn list needs (design 224); every other control here needs nothing.
+	const { body, stop } = page(h(PopupContext as never, {}, [
 		h(Button as never, { label: 'Save' }),
 		h(TextField as never, { label: 'Email' }),
 		h(TextArea as never, { label: 'Notes' }),
@@ -148,7 +150,7 @@ test('every control is found by its role and its accessible name', () => {
 		h(Toggle as never, { label: 'Email me' }),
 		h(Slider as never, { label: 'Volume' }),
 		h(Select as never, { label: 'Size', options: ['small', 'large'] }),
-	]);
+	]));
 
 	// Every one of them by role and name, the textarea included: a textarea with a label is a
 	// textbox called what its label says, and it is the second textbox on the page.
@@ -706,7 +708,7 @@ const countingMade = (document: ReturnType<typeof createDocument>): NodeLike[] =
 	return made;
 };
 
-const everything = (): unknown => h('div', {},
+const everything = (): unknown => h(PopupContext as never, {}, h('div', {},
 	h(Button as never, { label: 'Save' }),
 	h(Button as never, { label: 'Docs', href: '/docs' }),
 	h(TextField as never, { label: 'Email', description: 'Work address' }),
@@ -717,7 +719,7 @@ const everything = (): unknown => h('div', {},
 	h(Slider as never, { label: 'Volume', min: 0, max: 10 }),
 	h(Select as never, { label: 'Size', options: ['small', 'large'], placeholder: 'Pick one' }),
 	h(Card as never, {}, 'a card'),
-	h(LoadingDots as never, {}));
+	h(LoadingDots as never, {})));
 
 test('every control renders to markup and hydrates onto the nodes the server wrote', async () => {
 	const server = context();

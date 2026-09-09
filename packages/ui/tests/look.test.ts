@@ -561,6 +561,30 @@ test('a select draws its own arrow, and there is no host picker left to ask for'
 	assert.doesNotMatch(arrow, /display: inline-flex/, 'and it is not the select itself');
 });
 
+test('the drawn list is the popup with rows in it, and a menu is that list again', () => {
+	// Designs 223 to 225. The list is the popup's own surface, so it extends `popup` rather than
+	// saying the fill, the border and the corner a second time.
+	const list = rulesFor(['listbox']);
+	assert.match(list, new RegExp(`background: ${valueOf('surface')}`), 'the popup\'s own fill');
+	assert.match(list, /overflow-y: auto/, 'a list longer than the screen scrolls inside itself');
+
+	const row = rulesFor(['listbox_item']);
+	assert.match(row, new RegExp(`min-height: ${valueOf('control')}`), 'a row is a control tall');
+	assert.match(row, /cursor: pointer/);
+	assert.match(rulesFor(['listbox_item', 'sm']), new RegExp(`min-height: ${valueOf('controlSm')}`));
+	// The active row paints the fill and leaves the row's own colour alone, so a danger row under
+	// the keyboard is still the danger colour.
+	const active = rulesFor(['listbox_item', 'active']);
+	assert.match(active, new RegExp(`background: ${valueOf('muted')}`));
+	assert.doesNotMatch(active, new RegExp(`color: ${valueOf('mutedForeground')}`),
+		'it paints the fill and leaves the row\'s own colour alone');
+
+	const danger = rulesFor(['menu_item', 'danger']);
+	assert.match(danger, new RegExp(`color: ${valueOf('danger')}`), 'the dangerous row says so');
+	assert.match(rulesFor(['menu_heading']), new RegExp(`color: ${valueOf('mutedForeground')}`));
+	assert.match(rulesFor(['menu_group']), /flex-direction: column/);
+});
+
 test('a tick box and a radio are drawn here, out of named values only', () => {
 	// Design 195: the host is told to draw nothing, and the box, the tick and the bar are rules.
 	const box = rulesFor(['checkbox']);

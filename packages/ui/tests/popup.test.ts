@@ -9,12 +9,22 @@ import { mutable } from '@aweftjs/core';
 import { createDocument, parseHtml, toHtml } from '@aweftjs/dom';
 import type { LightElement, NodeLike } from '@aweftjs/dom';
 import {
-	Detached, Popup, PopupContext, Stage, StageContext,
+	Detached, Menu, Popup, PopupContext, Select, Stage, StageContext,
 	context, h, hydrate, mark, mount, render, trackedMount,
 } from '@aweftjs/ui';
 import type { Rect } from '@aweftjs/ui';
 
 const somewhere = { mode: 'below-start' as const, left: 10, top: 20, maxWidth: 100, maxHeight: 60, transformOrigin: 'top left' };
+
+/** Every element at or under `node` and its siblings, in document order. */
+const elements = (node: NodeLike | null): LightElement[] => {
+	const found: LightElement[] = [];
+	for (let n = node; n !== null; n = n.nextSibling) {
+		if (n.nodeType === 1) found.push(n as unknown as LightElement);
+		found.push(...elements(n.firstChild));
+	}
+	return found;
+};
 
 test('a popup renders nothing where it is written and everything at the sink', () => {
 	const where = mutable<typeof somewhere | null>(somewhere);
@@ -56,12 +66,50 @@ test('a popup leaves the sink when it unmounts', () => {
 	stop();
 });
 
-test('a popup with no PopupContext above it asserts, and names what to wrap the page in', () => {
+test('a popup with no PopupContext above it goes in the element the page was mounted into', () => {
+	// It used to assert. A `Select`, a `Menu` and a `Tooltip` are all popups now, so that assert made
+	// the simplest page in the package a page that refuses to render (design 113, amended).
 	const document = createDocument();
-	assert.throws(
-		() => mount(document.body, h(Popup as never, { placement: somewhere }, 'inside')),
-		/needs a PopupContext above it/,
-	);
+	const stop = mount(document.body, h('main', {}, 'the page',
+		h(Popup as never, { placement: somewhere }, h('nav', {}, 'menu'))));
+
+	const markup = toHtml(document.body.childNodes);
+	assert.match(markup, /^<main>the page<\/main>/, 'the page still has no popup inside it');
+	assert.match(markup, /<nav>menu<\/nav>/, 'and the popup is on the page rather than refused');
+	stop();
+	assert.doesNotMatch(toHtml(document.body.childNodes), /menu/, 'and it comes back out again');
+});
+
+test('a popup inside a dialog goes in the dialog, whatever context is above it', () => {
+	// The dialog's top layer swallows every pointer event aimed outside it, so a list drawn at a sink
+	// beside the page cannot be clicked at all (design 113, amended).
+	const own = context();
+	const document = createDocument();
+	const stop = mount(document.body, h(PopupContext, {},
+		h('dialog', { id: 'sheet' }, 'the act',
+			h(Popup as never, { placement: somewhere }, h('nav', {}, 'menu')))), undefined, own);
+
+	assert.equal(own.popups.items.length, 0, 'the context sink was not asked for');
+	const dialog = document.body.firstChild as unknown as LightElement;
+	assert.equal(dialog.localName, 'dialog');
+	assert.match(toHtml(dialog.childNodes), /<nav>menu<\/nav>/, 'the popup is inside the dialog');
+	stop();
+});
+
+test('a Select and a Menu with no PopupContext still open their lists', () => {
+	// The two components that draw a list are popups (designs 224, 225), so the assert that used to
+	// stand here made a page with a `Select` on it a page that would not mount.
+	for (const [name, item, role] of [
+		['Select', h(Select as never, { options: ['a', 'b'] }), 'listbox'],
+		['Menu', h(Menu as never, { label: 'Actions', items: [{ label: 'Rename' }] }), 'menu'],
+	] as [string, unknown, string][]) {
+		const document = createDocument();
+		const stop = mount(document.body, item);
+		const found = elements(document.body.firstChild)
+			.filter((element) => element.getAttribute('role') === role);
+		assert.equal(found.length, 1, `${name} drew its list with no context above it`);
+		stop();
+	}
 });
 
 test('two PopupContexts keep their popups apart', () => {

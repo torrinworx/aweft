@@ -1,9 +1,9 @@
 // Walking the tree by hand, because the light tree has no `contains` and no bubbling.
 //
-// One walk, called from the four places that need it: the dialog deciding which top-level branch
-// to leave reachable, `dismiss` deciding whether a mousedown landed inside, the drop zone
-// deciding whether a click was already the input's own or a button's, and the tablist reading the
-// tabs out of the strip it was handed.
+// One walk, called from the places that need it: the dialog deciding which top-level branch to
+// leave reachable, `dismiss` deciding whether a mousedown landed inside, the drop zone deciding
+// whether a click was already the input's own or a button's, the tablist reading the tabs out of
+// the strip it was handed, and a popup looking for the `<dialog>` it belongs inside.
 //
 // This is not exported from the package.
 
@@ -23,14 +23,17 @@ export const within = (node: unknown, nodes: readonly unknown[]): boolean => {
 	return false;
 };
 
-/** Whether `node` is an element with this tag name, or sits under one. */
-export const under = (node: unknown, tag: string): boolean => {
+/** The nearest element at or above `node` with this tag name, or null for none. */
+export const closest = (node: unknown, tag: string): unknown => {
 	for (let at = node as Walkable | null; at !== null && at !== undefined;
 		at = (at.parentNode ?? null) as Walkable | null) {
-		if ((at as { localName?: string }).localName === tag) return true;
+		if ((at as { localName?: string }).localName === tag) return at;
 	}
-	return false;
+	return null;
 };
+
+/** Whether `node` is an element with this tag name, or sits under one. */
+export const under = (node: unknown, tag: string): boolean => closest(node, tag) !== null;
 
 /** The first element at or under `root` that `wanted` says yes to, walked depth first. */
 export const find = (root: unknown, wanted: (element: unknown) => boolean): unknown => {
@@ -60,6 +63,22 @@ export const findFrom = (target: unknown, wanted: (element: unknown) => boolean)
 		if (found !== null) return found;
 	}
 	return null;
+};
+
+/**
+ * The topmost node above `node`: the document it is in, or the root of the tree it hangs off.
+ *
+ * What a component reaches for when the thing it has to find is not under its own run. A popup
+ * renders at the sink at the end of the page rather than where it was written (design 113), so a
+ * component that has to find its own popup starts from the top.
+ */
+export const rootOf = (node: unknown): unknown => {
+	let at = node as Walkable | null | undefined;
+	for (;;) {
+		const up = at?.parentNode as Walkable | null | undefined;
+		if (up === null || up === undefined) return at ?? null;
+		at = up;
+	}
 };
 
 /** Every element at or under `root` that `wanted` says yes to, in document order. */

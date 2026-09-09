@@ -268,7 +268,19 @@ test('a real mousedown outside a popup closes it, and one inside does not', asyn
 		await view.goto(site.url);
 		await view.waitForSelector('#inside');
 
-		await view.mouse.move(60, 60);
+		// The host's own popover dressing is off the box: what it holds draws the surface.
+		const box = await view.evaluate(() => {
+			let held = document.querySelector('#inside')!.parentElement!;
+			while (held.getAttribute('popover') === null) held = held.parentElement!;
+			const cs = getComputedStyle(held);
+			return { border: cs.borderTopWidth, padding: cs.paddingTop, fill: cs.backgroundColor };
+		});
+		assert.deepEqual(box, { border: '0px', padding: '0px', fill: 'rgba(0, 0, 0, 0)' },
+			'the box the sink places wears none of the host\'s popover style');
+
+		// The middle of what the popup holds, wherever the box put it.
+		const inside = (await view.locator('#inside').boundingBox())!;
+		await view.mouse.move(inside.x + inside.width / 2, inside.y + inside.height / 2);
 		await view.mouse.down();
 		await view.mouse.up();
 		assert.notEqual(await view.evaluate(() => (window as unknown as { where: { get(): unknown } }).where.get()), null,
@@ -1501,14 +1513,14 @@ test('a Typography heading computes the theme\'s weight and the wrap the host re
 
 test('every control computes the one height, and a select lays its content out in a line', async () => {
 	const site = await page('control-heights', BLANK, `
-		import { Button, Checkbox, Icons, Select, TextField, h, mount } from '@aweftjs/ui';
+		import { Button, Checkbox, Icons, PopupContext, Select, TextField, h, mount } from '@aweftjs/ui';
 		${ANY_ICON}
-		mount(document.body, <Icons value={anyIcon}><div>
+		mount(document.body, <Icons value={anyIcon}><PopupContext><div>
 			<Button id="btn" label="Save" />
 			<TextField id="tf" placeholder="Something short" />
 			<Select id="sel" options={['a', 'b']} />
 			<Checkbox id="cb" label="Tick me" />
-		</div></Icons>);
+		</div></PopupContext></Icons>);
 	`);
 
 	const browser = await chromium.launch();
@@ -1675,7 +1687,8 @@ test('every control has three heights, and an icon button is a square at each of
 	// that name them.
 	await drive('control-sizes', `
 		import {
-			Button, Checkbox, Icon, Icons, Radio, Select, Slider, TextField, Toggle, h, mount,
+			Button, Checkbox, Icon, Icons, PopupContext, Radio, Select, Slider, TextField, Toggle,
+			h, mount,
 		} from '@aweftjs/ui';
 		${ANY_ICON}
 		const row = (suffix, size) => <div>
@@ -1689,9 +1702,9 @@ test('every control has three heights, and an icon button is a square at each of
 			<Toggle id={'tg' + suffix} size={size} />
 			<Slider id={'sl' + suffix} size={size} />
 		</div>;
-		mount(document.body, <Icons value={anyIcon}>
+		mount(document.body, <Icons value={anyIcon}><PopupContext>
 			{row('', undefined)}{row('-sm', 'sm')}{row('-lg', 'lg')}
-		</Icons>);
+		</PopupContext></Icons>);
 	`, async (view) => {
 		await view.waitForSelector('#sl-lg');
 		const seen = await view.evaluate(() => {
@@ -1918,11 +1931,13 @@ test('a select carries its own arrow inside its box, and the host draws none', a
 	// quarter turn, absolutely placed in a wrapper, so it is the same mark on every host, it costs
 	// the select no height, and the page needs no icon pack to have one.
 	await drive('select-arrow', `
-		import { Select, h, mount } from '@aweftjs/ui';
-		mount(document.body, <Select id="sel" options={['a', 'b']} />);
+		import { PopupContext, Select, h, mount } from '@aweftjs/ui';
+		mount(document.body, <PopupContext><Select id="sel" options={['a', 'b']} /></PopupContext>);
 	`, async (view) => {
 		await view.waitForSelector('#sel');
 		const seen = await view.evaluate(() => {
+			// The control is the button now, and the wrapper holds it, the arrow and the hidden
+			// element a form reads (design 224).
 			const select = document.querySelector('#sel')!;
 			const wrap = select.parentElement!;
 			const arrow = wrap.querySelector('span')!;

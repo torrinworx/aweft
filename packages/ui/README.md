@@ -300,18 +300,25 @@ spinner, `@aweftjs/icons` says which set to install and shows the one line that 
 </PopupContext>
 
 <Detached enabled={open}>
-	<button onClick={() => open.set(!open.get())}>menu</button>
-	<mark.popup><Menu /></mark.popup>
+	<button onClick={() => open.set(!open.get())}>details</button>
+	<mark.popup><Card>what floats</Card></mark.popup>
 </Detached>
 ```
 
-`PopupContext` renders its children and then the popups, so a popup is after the page in DOM
-order. The first one on a page takes the render's own sink; a second one, nested or beside it,
-makes its own, so a nested `PopupContext` renders its popups at the end of its own subtree rather
-than at the end of the page. That is what it is for: it is how a dialog keeps its own popups
-inside itself. `Popup` renders nothing where it is written and puts its element in that sink. `Detached`
-measures its own children, scores twelve placements and picks one, re-measures every animation
-frame, and closes when the anchor moves, on the reading that the page scrolled.
+Everything that floats is a popup: a `Tooltip`, a `Menu`, a `Select`, and `Popup` itself. Every one
+of them has somewhere to go without being told. A popup's sink is the nearest `<dialog>` above where
+it was written, then the sink a `PopupContext` gave it, then the element the page was mounted into.
+So a page needs no wrapper to open one, and a menu opened inside a modal draws inside that dialog,
+which is what makes its rows clickable: a dialog's top layer swallows every pointer event aimed at
+anything outside it.
+
+`PopupContext` is how a page chooses a sink on purpose. It renders its children and then the popups,
+so a popup is after the page in DOM order. The first one on a page takes the render's own sink; a
+second one, nested or beside it, makes its own, so a nested `PopupContext` renders its popups at the
+end of its own subtree rather than at the end of the page. `Popup` renders nothing where it is
+written and puts its element in whichever sink it found. `Detached` measures its own children,
+scores twelve placements and picks one, re-measures every animation frame, and closes when the
+anchor moves, on the reading that the page scrolled.
 
 **There is no `z-index` in this package.** A popup asks for the top layer with the `popover`
 attribute where the host has one, and falls back to DOM order where it does not. Below the top
@@ -574,10 +581,10 @@ writes that attribute for you; write it from the same cell you pass to `error` i
 
 ## Composites
 
-Seven more components, each built out of the controls above and the behaviours underneath them.
+Eight more components, each built out of the controls above and the behaviours underneath them.
 
 ```tsx
-import { ColorPicker, Default, DropDown, FileDrop, Modal, Tooltip, Validate, ValidateContext } from '@aweftjs/ui';
+import { ColorPicker, Default, DropDown, FileDrop, Menu, Modal, Tooltip, Validate, ValidateContext } from '@aweftjs/ui';
 ```
 
 | component | what it is | its own props | example |
@@ -654,8 +661,8 @@ prop bag means, and it is visible in the call.
 Escape (through the element's own `cancel` event), a mousedown on the backdrop and the close button
 all call the stage's `close()`, so a modal that owns a history entry goes down the same way whichever
 one you used (design 124). `noEsc` and `noClickEsc` turn the first two off. A `Modal` with no stage
-above it is an assert naming the call that shows one. The popup sink stays outside the dialog: wrap
-the modal's children in a `PopupContext` of their own to keep its popups inside it.
+above it is an assert naming the call that shows one. A popup opened inside the dialog goes in the
+dialog, so a `Select` or a `Menu` in a modal works with nothing else to write.
 
 **A sheet is a `Modal` with `type="sheet"`**, against an edge instead of in the middle, sliding in
 from it (design 202). `side` says which edge, `right` by default, and is read for no other type.

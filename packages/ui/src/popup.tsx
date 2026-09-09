@@ -1,9 +1,12 @@
 // Popups: where one goes in the tree, where it goes on the screen, and how it gets above
 // everything without a z-index (design 113).
 //
-// A popup renders nothing where it is written. It pushes its element into a sink `PopupContext`
-// renders after the rest of the page, and asks for the top layer with the `popover` attribute
-// where the host has one. There is no z-index in this file, or anywhere in this package.
+// A popup renders nothing where it is written. It pushes its element into a sink and asks for the
+// top layer with the `popover` attribute where the host has one. There is no z-index in this file,
+// or anywhere in this package.
+//
+// The sink is the nearest `<dialog>` above where the popup was written, then the one a
+// `PopupContext` renders after the rest of the page, then the element the page was mounted into.
 
 import { type MutableArray, mutable, mutableArray } from '@aweftjs/core';
 import {
@@ -11,7 +14,6 @@ import {
 	createElement, getFirst, mount,
 } from '@aweftjs/dom';
 
-import { assert } from './assert.ts';
 import { dismiss } from './dismiss.ts';
 import { h } from './h.ts';
 import { categories } from './mark.ts';
@@ -19,6 +21,7 @@ import { type Placed, type Placement, type Rect, CORNERS, place } from './placem
 import { type Registry, createRegistry } from './registry.ts';
 import { slotOf, use, withSlot } from './render.ts';
 import { isSource } from './source.ts';
+import { closest, rootOf } from './tree.ts';
 
 // --- reaching children a component does not own ---------------------------------------------
 
@@ -104,10 +107,11 @@ export const mountedElement = (from: Remove, to: Remove): (() => ElementLike | n
 const SINK: unique symbol = Symbol('aweft.ui.popups');
 
 /**
- * Where every popup below mounts.
+ * Where every popup below mounts, unless it is inside a `<dialog>`, which wins.
  *
  * Renders its children, then the popups, so a popup is after the page in DOM order. Together with
- * the `popover` attribute that is the whole of the stacking story: no z-index anywhere.
+ * the `popover` attribute that is the whole of the stacking story: no z-index anywhere. A page
+ * needs one of these only to choose where its popups go; a page with none still opens them.
  *
  * Params:
  *   popups: a registry to share with something else. Omitted, this render's own is used by the
@@ -172,6 +176,20 @@ interface Popoverish {
 const supportsPopover = (element: unknown): boolean =>
 	typeof (element as Popoverish).togglePopover === 'function';
 
+/** An anchor naming no node: what a popup mounted straight into an element goes in against. */
+const nowhere: Remove = (arg) => (arg === getFirst ? null : undefined);
+
+/**
+ * The element the page was mounted into: the body of the document the popup is in, or the top of
+ * its own tree when it is in no document. A node beside the body renders nothing, so the walk does
+ * not stop at `<html>`.
+ */
+const pageOf = (elem: unknown): unknown => {
+	const root = rootOf(elem) as { nodeType?: number; body?: unknown } | null;
+	if (root === null) return elem;
+	return root.nodeType === 9 ? root.body ?? elem : root;
+};
+
 const boxOf = (at: Placed): Record<string, unknown> => ({
 	position: 'fixed',
 	left: at.left,
@@ -192,13 +210,14 @@ const boxOf = (at: Placed): Record<string, unknown> => ({
  *   style: merged onto the popup's own box
  *   children: what is inside
  *
- * Returns: nothing where it is written. The element is in the sink until this unmounts.
+ * Returns: nothing where it is written. The element is in its sink until this unmounts.
  *
- * Throws: an assert, loud in development and stripped in a release build, when there is no
- * `PopupContext` above it, naming what to wrap the page in.
+ * Its sink is the nearest `<dialog>` above where it was written, then the sink a `PopupContext`
+ * gave, then the element the page was mounted into (design 113, amended). So a popup opened inside
+ * a modal is inside that dialog and can be clicked, and a page with no `PopupContext` still works.
  *
  * Example:
- *   <Popup placement={where}><Menu /></Popup>
+ *   <Popup placement={where}><Card>what floats</Card></Popup>
  */
 export const Popup = (props: {
 	placement?: unknown;
@@ -206,15 +225,22 @@ export const Popup = (props: {
 	style?: Record<string, unknown>;
 	ref?: (element: unknown) => void;
 	children?: unknown[];
-}): Mounter => (_elem, _item, _before, context) => {
-	const sink = (slotOf(context, SINK) as Registry | undefined) ?? null;
-	assert(sink !== null, 'a Popup needs a PopupContext above it; wrap the page in h(PopupContext, {}, app)');
-	if (sink === null) return () => undefined;
+}): Mounter => (elem, _item, _before, context) => {
+	// A dialog's top layer swallows every pointer event aimed at anything outside it, so a popup
+	// opened from inside one belongs inside it. The `<dialog>` is looked for by structure and not by
+	// whether it is showing: measured on this tree, a `Modal` opens its element one step after its
+	// children have mounted, so nothing here can read `open` yet.
+	const dialog = closest(elem, 'dialog');
+	const sink = dialog === null ? (slotOf(context, SINK) as Registry | undefined) ?? null : null;
 
 	const held = props.placement;
 	const at = (): PopupPlacement => (isSource(held) ? held.get() : held) as PopupPlacement;
 
 	const element = createElement('div');
+	// The host dresses a popover itself: a medium border, a little padding and a white fill, none of
+	// which this box wants, because what it holds draws its own surface. Written first, so the
+	// placement and a caller's own style win.
+	const bare = { border: 'none', padding: 0, margin: 0, background: 'transparent' };
 	const style = mutable<Record<string, unknown>>({ display: 'none' });
 	// Handed to `dom` rather than written here, as design 133 says everything on an element is. A
 	// host with no Popover API writes no attribute, so markup from one and a browser that has it
@@ -263,7 +289,7 @@ export const Popup = (props: {
 			toggle(false);
 			return;
 		}
-		style.set({ ...boxOf(where), ...(props.style ?? {}) });
+		style.set({ ...bare, ...boxOf(where), ...(props.style ?? {}) });
 		toggle(true);
 	};
 
@@ -284,7 +310,16 @@ export const Popup = (props: {
 		}));
 	}
 
-	const drop = sink.add(item);
+	// Straight into an element rather than through a sink's list, which is what the two ends of the
+	// order above are: a `<dialog>` and, with no context anywhere, the page itself.
+	const loose = (target: unknown): (() => void) => {
+		const off = item(target as ParentLike, undefined, nowhere, context);
+		return () => { off(); };
+	};
+
+	const drop = dialog !== null ? loose(dialog)
+		: sink !== null ? sink.add(item)
+			: loose(pageOf(elem));
 	return (arg) => {
 		// Asked for its first node rather than told to go: it has none here, because it renders
 		// nothing where it was written. Answering without checking would unmount it every time
@@ -333,12 +368,12 @@ const sameRect = (a: Rect | null, b: Rect | null): boolean =>
  * Returns: the anchor where it was written, and the popup at the sink. The anchor is an ordinary
  * mount, so a page taken over from a server adopts the nodes the server sent (design 153).
  *
- * Throws: the asserts `Popup` makes, and the one `categories` makes for a slot it does not know.
+ * Throws: the assert `categories` makes for a slot it does not know.
  *
  * Example:
  *   <Detached enabled={open}>
  *     <button onClick={() => open.set(!open.get())}>menu</button>
- *     <mark.popup><Menu /></mark.popup>
+ *     <mark.popup><Card>what floats</Card></mark.popup>
  *   </Detached>
  */
 export const Detached = (props: {
