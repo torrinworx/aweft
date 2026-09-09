@@ -525,3 +525,44 @@ test('an empty string in a reactive text slot hydrates, and the cell still fills
 	cell.set('too short');
 	assert.equal(doc.body.textContent, 'error: too short');
 });
+
+// --- mounting the same item twice, and a row's own values ----------------------------------
+
+test('a branch mounted again renders once, not on top of what its last mount left', () => {
+	const doc = createDocument();
+	const name = mutable('one');
+	const on = mutable(false);
+	const Line = ({ label }: { label: unknown }) => h('span', {}, label);
+	// Built once and mounted every time the condition comes back: what a slot component hands
+	// the binding when its branches are written inline rather than wrapped in a component.
+	const branch = [h('em', {}, name), h('i', {}, 'static'), h(Line, { label: name })];
+	mount(doc.body, on.map((shown) => (shown ? 'editing' : branch)));
+	assert.equal(toHtml(doc.body), '<body><em>one</em><i>static</i><span>one</span></body>');
+
+	on.set(true);
+	assert.equal(toHtml(doc.body), '<body>editing</body>');
+	on.set(false);
+	assert.equal(toHtml(doc.body), '<body><em>one</em><i>static</i><span>one</span></body>');
+
+	name.set('two');
+	assert.equal(toHtml(doc.body), '<body><em>two</em><i>static</i><span>two</span></body>');
+	on.set(true);
+	on.set(false);
+	assert.equal(toHtml(doc.body), '<body><em>two</em><i>static</i><span>two</span></body>');
+});
+
+test('a per-row function prop is called with its own row, on a nested component and on an element', () => {
+	const doc = createDocument();
+	const hits: string[] = [];
+	const Action = ({ onPick }: { onPick: () => void }) => h('b', { $onclick: onPick }, 'x');
+	const Row = (props: { each: string }) => h('li', {},
+		h(Action, { onPick: () => hits.push(`comp:${props.each}`) }),
+		h('em', { $onclick: () => hits.push(`elem:${props.each}`) }, props.each));
+	mount(doc.body, h('ul', {}, h(Row, { each: mutableArray(['r1', 'r2', 'r3']) })));
+	assert.equal(toHtml(doc.body),
+		'<body><ul><li><b>x</b><em>r1</em></li><li><b>x</b><em>r2</em></li><li><b>x</b><em>r3</em></li></ul></body>');
+
+	const list = doc.body.firstChild as LightElement;
+	for (const li of list.children) for (const part of li.children) part.dispatchEvent({ type: 'click' });
+	assert.deepEqual(hits, ['comp:r1', 'elem:r1', 'comp:r2', 'elem:r2', 'comp:r3', 'elem:r3']);
+});

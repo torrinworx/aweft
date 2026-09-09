@@ -576,7 +576,9 @@ export const componentHandle = (ctx: Ctx, component: Component, props: Record<st
 				complete(rec);
 				return;
 			}
-			if (eachValue !== undefined) props['each'] = eachValue;
+			// A row's own props object, so a function the body keeps reads this row's item and
+			// not whatever the last row left behind (design 205).
+			const own = eachValue === undefined ? props : { ...props, each: eachValue };
 			// A row of a list: record the first one's shape, then clone it for the rest
 			// (design 099). The props object is the call site, so it is the cache key.
 			const mode = eachValue === undefined ? 0 : beginRow(props, ctx.root.hydration !== null);
@@ -585,7 +587,7 @@ export const componentHandle = (ctx: Ctx, component: Component, props: Record<st
 			let result: unknown;
 			try {
 				const body = (): unknown => withRoot(ctx.root, scope, rec, () =>
-					component(props as Parameters<Component>[0], cleanup, mounted, pending));
+					component(own as Parameters<Component>[0], cleanup, mounted, pending));
 				result = body();
 				if (mode !== 0) {
 					result = endRow(props, mode, result);

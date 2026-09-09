@@ -131,6 +131,11 @@ written in, which is what makes a long list cheap. So the tags, their order, the
 and which children are present have to be the same for every item. What changes per row is
 values: text, attribute and property values, and what a scope or cell drives.
 
+**A function is a value like any other, and it belongs to its row.** Each row's body is called
+with a props object of its own, so a handler written in the body reads that row's `props.each`
+whenever it fires, whether it goes on a nested component or straight onto an element as
+`$onclick` (design 205).
+
 Most of this is unchecked, and breaking it is quiet. A tag that varies keeps the first row's
 tag, and a prop key or a child that only some rows have is dropped. Branch on the item inside a
 value, not around the markup:
