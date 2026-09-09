@@ -34,6 +34,17 @@ mount(document.body, html`
 | a scope, a cell or a derived value | its value, replaced in place as it changes |
 | a component's mounter (`h(Component)`) | the component's result |
 
+**An item may be mounted, unmounted and mounted again**, which is what a slot component whose
+branches are written out as markup hands the binding: the branch is built once and mounted every
+time it comes back. Unmounting takes what the mount put in back out, so the element is left
+holding the static nodes `h` built and the next mount renders once (design 204).
+
+**The one exception is a list.** A list edit takes a row's nodes out itself and then tells the row
+its nodes are already gone, which is what keeps a list edit to one write. So an element the page
+holds, put into a list, removed by an edit and put back, keeps what its last mount left in it, and
+the second mount renders its reactive parts on top: `<em>one</em>` comes back as `<em>oneone</em>`.
+Build list items per row, with a component under `each`, and there is no element to hand back.
+
 ## Elements: `h` and `html`
 
 `h(tag, props, ...children)` is what `html` compiles to at runtime, and what a JSX transform

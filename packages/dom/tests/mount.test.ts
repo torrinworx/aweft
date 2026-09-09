@@ -108,15 +108,20 @@ test('a plain array mounts in order, and an observed array reconciles by referen
 	assert.throws(() => items.set([a, a]), /already mounted/, 'one node cannot be in two places');
 });
 
-test('unmounting removes the top node only; what is below it goes with it', () => {
+test('unmounting takes the mounted children back out and leaves the static shape (design 204)', () => {
 	const { document, ops } = recordingDocument();
 	const inner = mutable<unknown>(h('b', {}, 'x'));
 	const rows = mutable(['r1', 'r2']);
-	const stop = mount(document.body, h('div', {}, inner, h('ul', {}, rows)));
+	const item = h('div', {}, inner, h('ul', {}, rows));
+	const stop = mount(document.body, item);
 	ops.length = 0;
 	stop();
-	assert.deepEqual(ops, ['remove <div> from <body>']);
+	// The static `<ul>` goes with the top node; what the mount put inside comes out, so the
+	// same element mounts again and renders once rather than on top of the last mount.
+	assert.deepEqual(ops, ['remove <b> from <div>', 'remove "r1" from <ul>', 'remove "r2" from <ul>', 'remove <div> from <body>']);
 	assert.equal(toHtml(document.body), '<body></body>');
+	mount(document.body, item);
+	assert.equal(toHtml(document.body), '<body><div><b>x</b><ul>r1r2</ul></div></body>');
 });
 
 test('a duck-typed target with only the three methods works, and so does a nested mount', () => {

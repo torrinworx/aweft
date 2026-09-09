@@ -316,9 +316,11 @@ const nodeHandle = (ctx: Ctx, fresh: NodeLike, signals: Signal[] | null, before:
 		remove: (gone) => {
 			for (const stop of stops) stop();
 			stops.length = 0;
-			// The children go with this node; they only need to let go of what they hold.
+			// A node leaving on its own can be mounted again, so what this mount put inside it
+			// comes back out and the element is left as `h` built it (design 204). With `gone`
+			// an ancestor is already out and the children only let go of what they hold.
 			for (const signal of children) {
-				signal.handle?.remove(true);
+				signal.handle?.remove(gone);
 				signal.handle = null;
 			}
 			if (!gone) remove();
