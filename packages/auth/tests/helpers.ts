@@ -1,9 +1,7 @@
 // What the suites share: a store with the battery's paths, the modules through the harness,
 // and a connection over an in-memory socket pair for the integration cases.
 
-import { createLoader } from '@aweftjs/modules';
-import type { Loader } from '@aweftjs/modules';
-import type { Gate, Listener, ListenerHandlers, Peer } from '@aweftjs/server';
+import type { Listener, ListenerHandlers, Peer } from '@aweftjs/server';
 import { createStore, memoryDriver } from '@aweftjs/store';
 import type { Store } from '@aweftjs/store';
 import { connect, fromWebSocket, requests } from '@aweftjs/sync';
@@ -11,7 +9,7 @@ import type { Link, Requests, SocketLike } from '@aweftjs/sync';
 import { loadModule } from '@aweftjs/testing';
 
 import type { Fetcher } from '../src/client.ts';
-import { auth, paths } from '../src/index.ts';
+import { paths } from '../src/index.ts';
 
 export const tick = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
 export const settle = async (rounds = 10): Promise<void> => { for (let i = 0; i < rounds; i++) await tick(); };
@@ -39,13 +37,6 @@ export const module = async <T>(
 	const loaded = await loadModule({ exports, imports, config, props: { store } });
 	return { instance: loaded.instance as T, stop: loaded.stop };
 };
-
-/** The whole battery over a store, as an application loads it. */
-export const battery = (store: Store, extra: Loader['load'] extends unknown ? Parameters<typeof createLoader>[0]['sources'] : never = []): Loader =>
-	createLoader({ sources: [...extra, auth], props: { store } });
-
-export const gateOf = async (loader: Loader): Promise<Gate> =>
-	(await loader.load(['auth/Gate']))['auth/Gate'] as Gate;
 
 // --- a connection with no port, for the integration cases -------------------------------------
 

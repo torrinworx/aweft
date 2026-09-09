@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createObject, observer } from '@aweftjs/core';
-import { createLoader, fromBundle } from '@aweftjs/modules';
+import { fromBundle } from '@aweftjs/modules';
 import { createServer, open } from '@aweftjs/server';
 import type { Connection } from '@aweftjs/server';
 import { node } from '@aweftjs/server/node';
@@ -21,20 +21,17 @@ type Board = Record<string, unknown>;
 test('the ordering, the reconnect with the same document, the held ask, and close', async () => {
 	const board = createObject<Board>({ title: 'first' });
 	const connections: Array<Connection<unknown>> = [];
-	const loader = createLoader({
-		sources: [fromBundle({
-			'app/Board': instance(() => ({
-				connection: (connection: Connection<unknown>) => {
-					connections.push(connection);
-					connection.link.share('board', board, open);
-				},
-				call: (args: unknown) => `answered ${JSON.stringify(args)}`,
-			})),
-		})],
+	const source = fromBundle({
+		'app/Board': instance(() => ({
+			connection: (connection: Connection<unknown>) => {
+				connections.push(connection);
+				connection.link.share('board', board, open);
+			},
+			call: (args: unknown) => `answered ${JSON.stringify(args)}`,
+		})),
 	});
-	await loader.load(['app/Board']);
 	const listener = node({ port: 0, host: '127.0.0.1' });
-	const server = createServer({ loader, gate: open, listener });
+	const server = createServer({ sources: [source], gate: open, listener });
 	await server.start();
 
 	const client = createClient({ url: `ws://127.0.0.1:${String(listener.port)}/` });

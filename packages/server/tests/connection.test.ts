@@ -12,18 +12,16 @@ import type { RequestError } from '@aweftjs/sync';
 import { createServer, open } from '../src/index.ts';
 import type { Connection, ServerError } from '../src/index.ts';
 
-import { asClient, connectTo, fakeListener, instance, loaderOf, settle, tick } from './helpers.ts';
+import { asClient, connectTo, fakeListener, instance, settle, sourceOf, tick } from './helpers.ts';
 
-const started = async (map: Parameters<typeof loaderOf>[0], failed: string[] = []) => {
-	const loader = loaderOf(map);
-	await loader.load(Object.keys(map));
+const started = async (map: Parameters<typeof sourceOf>[0], failed: string[] = []) => {
 	const listening = fakeListener();
 	const server = createServer({
-		loader, gate: open, listener: listening.listener,
+		sources: [sourceOf(map)], gate: open, listener: listening.listener,
 		handlers: { failed: (name, error) => failed.push(`${name}: ${(error as Error).message}`) },
 	});
 	await server.start();
-	return { loader, server, handlers: listening.handlers() };
+	return { server, handlers: listening.handlers() };
 };
 
 test('a hook shares a document on the link, and a share without accept is refused before anything crosses', async () => {
@@ -148,11 +146,10 @@ test('without a failed handler the error is raised where nothing catches it, and
 	const helpers = new URL('./helpers.ts', import.meta.url).href;
 	const script = `
 		import { createServer, open } from '@aweftjs/server';
-		import { asClient, connectTo, fakeListener, instance, loaderOf } from '${helpers}';
-		const loader = loaderOf({ 'app/Broken': instance(() => ({ connection: () => { throw new Error('loud and uncaught'); } })) });
-		await loader.load(['app/Broken']);
+		import { asClient, connectTo, fakeListener, instance, sourceOf } from '${helpers}';
+		const source = sourceOf({ 'app/Broken': instance(() => ({ connection: () => { throw new Error('loud and uncaught'); } })) });
 		const listening = fakeListener();
-		const server = createServer({ loader, gate: open, listener: listening.listener });
+		const server = createServer({ sources: [source], gate: open, listener: listening.listener });
 		await server.start();
 		asClient(await connectTo(listening.handlers()));
 		setTimeout(() => console.log('still alive'), 300);
@@ -199,15 +196,14 @@ test('a connection that ends while hooks are still running skips the rest', asyn
 
 test('a module that is not an object, or has no hooks, is never asked about', async () => {
 	const asked: string[] = [];
-	const loader = loaderOf({
+	const source = sourceOf({
 		'app/Number': instance(() => 42),
 		'app/Plain': instance(() => ({ helper: () => 1 })),
 		'app/Hooked': instance(() => ({ connection: () => {} })),
 	});
-	await loader.load(['app/Number', 'app/Plain', 'app/Hooked']);
 	const listening = fakeListener();
 	const server = createServer({
-		loader, listener: listening.listener,
+		sources: [source], listener: listening.listener,
 		gate: { identify: () => ({ context: {} }), access: ({ name }) => { asked.push(name); return []; } },
 	});
 	await server.start();

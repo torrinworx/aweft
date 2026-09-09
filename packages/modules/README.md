@@ -14,7 +14,7 @@ import { fromDirectory } from '@aweftjs/modules/node';
 
 const loader = createLoader({
 	sources: [fromDirectory('./modules'), fromDocument(plugins)],
-	props: { db, log },
+	props: { store },
 });
 
 const { 'posts/Create': create } = await loader.load(['posts/Create']);
@@ -24,6 +24,10 @@ await loader.unload('posts/Create');
 `load` instantiates what you name and everything it depends on, dependencies first, and hands
 back what you named. `unload` lets go of exactly one module, calling its `stop` if it has one.
 
+**`props` is for what the platform hands in**, such as the store an application made before
+there was a loader; anything the application itself makes is a module that others name in
+`deps`. `@aweftjs/server` builds its loader that way and hands in `store` alone.
+
 ## A module
 
 A module is a file, a bundle entry or a document entry that exports:
@@ -32,7 +36,7 @@ A module is a file, a bundle entry or a document entry that exports:
 export const deps = ['auth/Session', 'lib/Log'];   // what it needs, by name
 export const defaults = { maxLength: 80 };         // its configuration when nothing configures it
 
-export default ({ imports, config, extensions, db }) => ({
+export default ({ imports, config, extensions, store }) => ({
 	make: (title) => { imports.Log.log(imports.Session.userOf()); return title.slice(0, config.maxLength); },
 	stop: () => { /* let go of whatever this holds */ },
 });

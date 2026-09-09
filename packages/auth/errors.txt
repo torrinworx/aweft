@@ -5,6 +5,6 @@ invalid-config: Set sessionMs to a positive number of milliseconds, or leave it 
 leave-failed: Check the server is running and that auth/Session is loaded, then try again.
 malformed: Call it as { email: "someone@example.com" }.
 no-origin: Pass origin to createAuth; outside a page there is no origin to read one from.
-no-store: Build it as createLoader({ sources, props: { store } }).
+no-store: Pass store to createServer, or props: { store } to a loader you build yourself.
 not-gated: Put auth/Gate in front of the server, or make the module public.
 stopped: Make a new auth with createAuth; a stopped one follows no connection.

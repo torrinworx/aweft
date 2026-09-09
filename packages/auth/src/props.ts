@@ -13,7 +13,7 @@ export const storeOf = (props: Readonly<Record<string, unknown>>): Store => {
 	if (store === undefined || typeof store.open !== 'function') {
 		throw codecError(
 			'no-store', 'the loader needs a store in its props',
-			'Build it as createLoader({ sources, props: { store } }).',
+			'Pass store to createServer, or props: { store } to a loader you build yourself.',
 		);
 	}
 	return store;

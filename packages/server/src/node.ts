@@ -136,7 +136,7 @@ const refuseUpgrade = async (response: Response, socket: Duplex): Promise<void> 
  *
  * Example:
  *   const listener = node({ port: 8080, heartbeatMs: 30_000 });
- *   const server = createServer({ loader, gate, listener });
+ *   const server = createServer({ sources, store, gate, listener });
  */
 export const node = (options: NodeOptions): NodeListener => {
 	let server: HttpServer | undefined;

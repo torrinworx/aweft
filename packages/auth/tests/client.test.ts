@@ -12,10 +12,11 @@ import type { Client } from '@aweftjs/client';
 import { createServer } from '@aweftjs/server';
 import type { Store } from '@aweftjs/store';
 
+import { auth } from '../src/index.ts';
 import { createAuth } from '../src/client.ts';
 import type { Auth, FetchResponse } from '../src/client.ts';
 
-import { battery, fakeListener, gateOf, newStore, page, reasonOf, settle } from './helpers.ts';
+import { fakeListener, newStore, page, reasonOf, settle } from './helpers.ts';
 import type { Page } from './helpers.ts';
 
 const PASSWORD = 'correct horse battery staple';
@@ -32,10 +33,8 @@ interface Running {
 
 const running = async (): Promise<Running> => {
 	const store = newStore();
-	const loader = battery(store);
-	await loader.load(['auth/Gate', 'auth/Session', 'auth/Enter', 'auth/Check', 'auth/State']);
 	const listening = fakeListener();
-	const server = createServer({ loader, gate: await gateOf(loader), listener: listening.listener });
+	const server = createServer({ sources: [auth], store, gate: 'auth/Gate', listener: listening.listener });
 	await server.start();
 	return {
 		store,

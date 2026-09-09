@@ -10,7 +10,7 @@ import type { RequestError } from '@aweftjs/sync';
 import { createServer, open } from '../src/index.ts';
 import type { Connection, Gate, Named, ServerError } from '../src/index.ts';
 
-import { asClient, connectTo, fakeListener, instance, loaderOf, peer, reasonOf, request, settle } from './helpers.ts';
+import { asClient, connectTo, fakeListener, instance, peer, reasonOf, request, settle, sourceOf } from './helpers.ts';
 
 type Ctx = { user: string | null };
 
@@ -29,7 +29,7 @@ const byHeader: Gate<Ctx> = {
 
 const app = () => {
 	const trace: string[] = [];
-	const loader = loaderOf({
+	const source = sourceOf({
 		'app/Public': instance(() => ({
 			public: true,
 			connection: ({ context }: Connection<Ctx>) => { trace.push(`Public saw ${String(context.user)}`); },
@@ -43,22 +43,22 @@ const app = () => {
 			routes: { 'GET /secret': () => new Response('the secret') },
 		}), ['app/Public']),
 	});
-	return { loader, trace };
+	return { source, trace };
 };
 
-test('createServer refuses to be made without a loader, a gate or a listener', () => {
-	const { loader } = app();
+test('createServer refuses to be made without sources, a gate or a listener', () => {
+	const { source } = app();
+	const sources = [source];
 	const { listener } = fakeListener();
-	for (const options of [{ gate: open, listener }, { loader, listener }, { loader, gate: open }]) {
+	for (const options of [{ gate: open, listener }, { sources, listener }, { sources, gate: open }]) {
 		assert.throws(() => createServer(options as never), (e: ServerError) => e.reason === 'missing');
 	}
 });
 
 test('identify runs once per request and once per handshake, and a refusal is 401 with the reasons', async () => {
-	const { loader } = app();
-	await loader.load(['app/Public']);
+	const { source } = app();
 	const listening = fakeListener();
-	const server = createServer({ loader, gate: byHeader, listener: listening.listener });
+	const server = createServer({ sources: [source], gate: byHeader, listener: listening.listener });
 	await server.start();
 	const handlers = listening.handlers();
 
@@ -76,11 +76,11 @@ test('identify runs once per request and once per handshake, and a refusal is 40
 });
 
 test('a throw out of identify is a defect: 500, reported as gate, never a 401', async () => {
-	const { loader } = app();
+	const { source } = app();
 	const failed: string[] = [];
 	const listening = fakeListener();
 	const server = createServer({
-		loader, listener: listening.listener,
+		sources: [source], listener: listening.listener,
 		gate: { identify: () => { throw new Error('the store is down'); }, access: () => [] },
 		handlers: { failed: (name, error) => failed.push(`${name}: ${(error as Error).message}`) },
 	});
@@ -94,10 +94,9 @@ test('a throw out of identify is a defect: 500, reported as gate, never a 401', 
 });
 
 test('access decides which hooks run, which calls answer and which routes serve, per module', async () => {
-	const { loader, trace } = app();
-	await loader.load(['app/Public', 'app/Private']);
+	const { source, trace } = app();
 	const listening = fakeListener();
-	const server = createServer({ loader, gate: byHeader, listener: listening.listener });
+	const server = createServer({ sources: [source], gate: byHeader, listener: listening.listener });
 	await server.start();
 	const handlers = listening.handlers();
 
@@ -124,12 +123,11 @@ test('access decides which hooks run, which calls answer and which routes serve,
 });
 
 test('a throw out of access is reported against the module and closes the connection', async () => {
-	const { loader } = app();
-	await loader.load(['app/Public']);
+	const { source } = app();
 	const failed: string[] = [];
 	const listening = fakeListener();
 	const server = createServer({
-		loader, listener: listening.listener,
+		sources: [source], listener: listening.listener,
 		gate: { identify: () => ({ context: {} }), access: () => { throw new Error('cannot decide'); } },
 		handlers: { failed: (name, error) => failed.push(`${name}: ${(error as Error).message}`) },
 	});
@@ -145,10 +143,9 @@ test('a throw out of access is reported against the module and closes the connec
 });
 
 test('open identifies everyone with an empty context, allows every module, and accepts every commit', async () => {
-	const { loader, trace } = app();
-	await loader.load(['app/Public', 'app/Private']);
+	const { source, trace } = app();
 	const listening = fakeListener();
-	const server = createServer({ loader, gate: open, listener: listening.listener });
+	const server = createServer({ sources: [source], gate: open, listener: listening.listener });
 	await server.start();
 	const handlers = listening.handlers();
 
@@ -167,21 +164,20 @@ test('open identifies everyone with an empty context, allows every module, and a
 
 test('what identify resolved reaches every hook as an argument, and the server reads nothing off it', async () => {
 	const seen: unknown[] = [];
-	const loader = loaderOf({
+	const source = sourceOf({
 		'app/Thing': instance(() => ({
 			connection: ({ context }: Connection<unknown>) => { seen.push(context); },
 			call: (_args: unknown, context: unknown) => { seen.push(context); return null; },
 			routes: { 'GET /': (_req: Request, context: unknown) => { seen.push(context); return new Response(null, { status: 204 }); } },
 		})),
 	});
-	await loader.load(['app/Thing']);
 	// A context that is not an object at all, and one that is an observable: the server
 	// passes both through untouched.
 	const contexts: unknown[] = ['just a string', createObject({ role: 'admin' })];
 	let at = 0;
 	const listening = fakeListener();
 	const server = createServer({
-		loader, listener: listening.listener,
+		sources: [source], listener: listening.listener,
 		gate: { identify: () => ({ context: contexts[at++ % 2] }), access: () => [] },
 	});
 	await server.start();
@@ -196,8 +192,8 @@ test('what identify resolved reaches every hook as an argument, and the server r
 	await server.stop();
 });
 
-test('a gate is any object with the two functions, so a loaded module instance is one', async () => {
-	const loader = loaderOf({
+test('a gate is any object with the two functions, so a loaded module instance named as one is one', async () => {
+	const source = sourceOf({
 		'my/Gate': instance(() => ({
 			identify: (req: Request) => ({ context: { path: new URL(req.url).pathname } }),
 			access: ({ name }: Named) => (name.startsWith('hidden/') ? [{ code: 'hidden', message: 'no' }] : []),
@@ -205,9 +201,8 @@ test('a gate is any object with the two functions, so a loaded module instance i
 		'hidden/Thing': instance(() => ({ call: () => 1 })),
 		'shown/Thing': instance(() => ({ call: (_a: unknown, context: { path: string }) => context.path })),
 	});
-	const { 'my/Gate': gate } = await loader.load(['my/Gate', 'hidden/Thing', 'shown/Thing']);
 	const listening = fakeListener();
-	const server = createServer({ loader, gate: gate as Gate, listener: listening.listener });
+	const server = createServer({ sources: [source], gate: 'my/Gate', listener: listening.listener });
 	await server.start();
 	const client = asClient(await connectTo(listening.handlers()));
 	assert.equal(await client.asks.ask('shown/Thing'), '/ws');

@@ -16,7 +16,7 @@ import { createServer } from '../src/index.ts';
 import type { Connection, Gate, ServerError } from '../src/index.ts';
 import { node } from '../src/node.ts';
 
-import { instance, loaderOf, settle } from './helpers.ts';
+import { instance, settle, sourceOf } from './helpers.ts';
 
 const own = (): MadeListener => {
 	const listener = node({ port: 0, host: '127.0.0.1' });
@@ -105,7 +105,7 @@ test('a whole connection end to end: the handshake cookie identifies it, a share
 		access: ({ instance: held }, context) => ((held as { public?: boolean }).public === true || context.user !== null ? [] : [{ code: 'private', message: 'sign in' }]),
 	};
 	const boards = new Map<string, Record<string, unknown>>();
-	const loader = loaderOf({
+	const source = sourceOf({
 		'app/Board': instance(() => ({
 			connection: ({ link, context }: Connection<Ctx>) => {
 				let board = boards.get(context.user!);
@@ -116,9 +116,8 @@ test('a whole connection end to end: the handshake cookie identifies it, a share
 		})),
 		'app/Hello': instance(() => ({ public: true, call: () => 'hello', routes: { 'GET /hello': () => new Response('hi') } })),
 	});
-	await loader.load(['app/Board', 'app/Hello']);
 	const listener = node({ port: 0, host: '127.0.0.1' });
-	const server = createServer({ loader, gate, listener });
+	const server = createServer({ sources: [source], gate, listener });
 	await server.start();
 	const base = `127.0.0.1:${String(listener.port)}`;
 

@@ -3,14 +3,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createLoader, fromBundle } from '@aweftjs/modules';
+import { fromBundle } from '@aweftjs/modules';
 import { createServer } from '@aweftjs/server';
 import type { Connection } from '@aweftjs/server';
 
 import { auth } from '../src/index.ts';
 import type { AuthContext } from '../src/index.ts';
 
-import { asClient, connectTo, fakeListener, gateOf, jsonRequest, newStore, peer, reasonOf, request, settle } from './helpers.ts';
+import { asClient, connectTo, fakeListener, jsonRequest, newStore, peer, reasonOf, request, settle } from './helpers.ts';
 
 const started = async () => {
 	const store = newStore();
@@ -19,10 +19,8 @@ const started = async () => {
 		'./app/Private.ts': { default: () => ({ connection: ({ context }: Connection<AuthContext>) => { seen.push(`private saw ${String(context.user)}`); }, call: () => 'private' }) },
 		'./app/Public.ts': { default: () => ({ public: true, call: () => 'public' }) },
 	});
-	const loader = createLoader({ sources: [app, auth], props: { store } });
-	await loader.load(['auth/Gate', 'auth/Session', 'auth/Enter', 'auth/Check', 'auth/State', 'app/Private', 'app/Public']);
 	const listening = fakeListener();
-	const server = createServer({ loader, gate: await gateOf(loader), listener: listening.listener });
+	const server = createServer({ sources: [app, auth], store, gate: 'auth/Gate', listener: listening.listener });
 	await server.start();
 	return { store, seen, handlers: listening.handlers(), server };
 };

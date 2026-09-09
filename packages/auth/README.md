@@ -9,25 +9,29 @@ browser half: who the page is, signing in and out, and that state document.
 
 ```ts
 import { auth, paths } from '@aweftjs/auth';
-import { createLoader } from '@aweftjs/modules';
 import { fromDirectory } from '@aweftjs/modules/node';
 import { createServer } from '@aweftjs/server';
 import { node } from '@aweftjs/server/node';
 import { createStore, memoryDriver } from '@aweftjs/store';
-import type { Gate } from '@aweftjs/server';
 
 const store = createStore({ driver: memoryDriver(), declare: { ...paths, title: ['title'] } });
-const loader = createLoader({ sources: [fromDirectory('./modules'), auth], props: { store } });
-await loader.load(['auth/Gate', 'auth/Enter', 'auth/Check', 'auth/State']);
 
-const server = createServer({ loader, gate: loader.get('auth/Gate') as Gate, listener: node({ port: 8080 }) });
+const server = createServer({
+	sources: [fromDirectory('./modules'), auth],
+	store,
+	gate: 'auth/Gate',
+	listener: node({ port: 8080 }),
+});
+
 await server.start();
 ```
 
-`auth` is a source for the loader, and the modules read `store` from the loader's props.
-`paths` is the two store declarations they query: `email` on user documents, `user` on
-session documents. Your own source goes first, so a module of the same name in your directory
-replaces one of these.
+`auth` is a source, so `start` loads all five of these modules with everything else your
+sources list, and each reads the `store` the server handed in. `gate: 'auth/Gate'` names the
+gate; to keep this policy and add a rule of your own, write a module that `deps` on
+`auth/Gate` and name that instead. `paths` is the two store declarations they query: `email`
+on user documents, `user` on session documents. Your own source goes first, so a module of the
+same name in your directory replaces one of these.
 
 ## The modules
 

@@ -11,7 +11,8 @@ import type { Accepting, Gate } from './contract.ts';
  * to grep for. As share handlers, it accepts every commit: `link.share('doc', doc, open)`.
  *
  * Example:
- *   const server = createServer({ loader, gate: open, listener: node({ port: 8080 }) });
+ *   const sources = [fromDirectory('./modules')];
+ *   const server = createServer({ sources, gate: open, listener: node({ port: 8080 }) });
  */
 export const open: Gate<Record<string, never>> & Accepting = {
 	identify: () => ({ context: {} }),

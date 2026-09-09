@@ -1,7 +1,7 @@
 // What the suites share: sockets wired in memory so a whole connection runs with no port, and
 // a real server behind a listener that opens nothing.
 
-import { createLoader, fromBundle } from '@aweftjs/modules';
+import { fromBundle } from '@aweftjs/modules';
 import type { Factory, ModuleExports } from '@aweftjs/modules';
 import { createServer, open } from '@aweftjs/server';
 import type { Listener, ListenerHandlers, Server } from '@aweftjs/server';
@@ -81,9 +81,7 @@ export const serverOf = async (modules: Record<string, ModuleExports>): Promise<
 	handlers(): ListenerHandlers;
 }> => {
 	const { listener, handlers } = fakeListener();
-	const loader = createLoader({ sources: [fromBundle(modules)] });
-	await loader.load(Object.keys(modules));
-	const server = createServer({ loader, gate: open, listener });
+	const server = createServer({ sources: [fromBundle(modules)], gate: open, listener });
 	await server.start();
 	return { server, handlers };
 };

@@ -1,8 +1,8 @@
 // What the suites share: a listener that hands its handlers to the test, sockets wired in
-// memory so a whole connection runs with no port, and a loader over a bundle.
+// memory so a whole connection runs with no port, and a source over a bundle.
 
-import { createLoader, fromBundle } from '@aweftjs/modules';
-import type { Factory, Loader, ModuleExports } from '@aweftjs/modules';
+import { fromBundle } from '@aweftjs/modules';
+import type { Factory, ModuleExports, ModuleProps, Source } from '@aweftjs/modules';
 import { connect, fromWebSocket, requests } from '@aweftjs/sync';
 import type { Link, Requests, SocketLike } from '@aweftjs/sync';
 
@@ -52,27 +52,50 @@ export const socketPair = (): [Fake, Fake] => {
 	return [a, b];
 };
 
-/** A listener that opens nothing and hands the server's handlers to the test instead. */
-export const fakeListener = (): { listener: Listener; handlers(): ListenerHandlers; stopped(): number } => {
+/**
+ * A listener that opens nothing and hands the server's handlers to the test instead. Pass a
+ * trace and its stop writes `'listener'` into it, so a test that cares when the listener
+ * stopped relative to the module stops can assert one ordered list rather than two counts.
+ */
+export const fakeListener = (trace: string[] = []): {
+	listener: Listener; handlers(): ListenerHandlers; started(): number; stopped(): number;
+} => {
 	let held: ListenerHandlers | undefined;
+	let starts = 0;
 	let stops = 0;
 	return {
 		listener: {
-			start: async (handlers) => { held = handlers; },
-			stop: async () => { stops += 1; },
+			start: async (handlers) => { starts += 1; held = handlers; },
+			stop: async () => { stops += 1; trace.push('listener'); },
 		},
 		handlers: () => {
 			if (held === undefined) throw new Error('the server has not started');
 			return held;
 		},
+		started: () => starts,
 		stopped: () => stops,
 	};
 };
 
-export const loaderOf = (map: Record<string, ModuleExports>): Loader =>
-	createLoader({ sources: [fromBundle(map)] });
+export const sourceOf = (map: Record<string, ModuleExports>): Source => fromBundle(map);
 
-export const instance = (make: (props: Record<string, unknown>) => unknown, deps: string[] = []): ModuleExports =>
+/**
+ * A source that lists more later, so a test can hand the server a module after it started. A
+ * directory somebody drops a file into is this, over a real disk.
+ */
+export const growing = (
+	first: Record<string, ModuleExports>, later: Record<string, ModuleExports>,
+): { source: Source; grow(): void } => {
+	const listed = fromBundle(first);
+	const rest = fromBundle(later);
+	let grown = false;
+	return {
+		source: { candidates: async () => grown ? [...await listed.candidates(), ...await rest.candidates()] : listed.candidates() },
+		grow: () => { grown = true; },
+	};
+};
+
+export const instance = (make: (props: ModuleProps) => unknown, deps: string[] = []): ModuleExports =>
 	({ deps, default: make as Factory });
 
 export const request = (path = '/', init: RequestInit = {}): Request =>

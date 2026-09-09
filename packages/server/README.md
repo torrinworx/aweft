@@ -8,35 +8,52 @@ the modules the gate allows. It opens nothing, mints nothing, and knows no user.
 ## Quickstart
 
 ```ts
-import { createLoader } from '@aweftjs/modules';
+import { auth, paths } from '@aweftjs/auth';
 import { fromDirectory } from '@aweftjs/modules/node';
 import { createServer } from '@aweftjs/server';
 import { node } from '@aweftjs/server/node';
 import { createStore, memoryDriver } from '@aweftjs/store';
-import { auth, paths } from '@aweftjs/auth';
-import type { Gate } from '@aweftjs/server';
 
 const store = createStore({ driver: memoryDriver(), declare: { ...paths } });
-const loader = createLoader({ sources: [fromDirectory('./modules'), auth], props: { store } });
-await loader.load(['auth/Gate', 'auth/Enter', 'auth/Check', 'auth/State', 'notes/Export']);
 
-const gate = loader.get('auth/Gate') as Gate;
-const server = createServer({ loader, gate, listener: node({ port: 8080 }) });
+const server = createServer({
+	sources: [fromDirectory('./modules'), auth],
+	store,
+	gate: 'auth/Gate',
+	listener: node({ port: 8080 }),
+});
+
 await server.start();
 ```
 
-Three things, all required. **The loader** holds the modules; which ones load, and when, is
-yours, and the server reads them off the loader as they are, so a module loaded later is
-served without a restart. **The gate** says who may reach what; there is no default. **The
-listener** is where connections come from; `node()` ships, and the contract is small enough
-to write for another runtime.
+That is the whole boot, and everything else your application does is a module in
+`./modules`. **The sources** say where modules come from, and `start` loads every module every
+one of them lists, in dependency order: there is no load list, and a file you drop in that
+directory is running after the next boot. **The gate** says who may reach what, as an object
+or as the name of a module that is one; there is no default. **The listener** is where
+connections come from; `node()` ships, and the contract is small enough to write for another
+runtime. `store` is optional and is the only thing this package hands a module.
 
-A microservice that knows nothing about users installs no auth and types the one word:
+**The props rule, which is a guarantee, not a habit: the platform hands your factories `store`
+and nothing else.** There is no `props` option and no way to add one, so anything your
+application makes (a rules table, a scheduler, a document you hold open, a client of another
+service) is a module, and the modules that need it name it in `deps`. That is what gives you
+the ordering for free: a module that opens a document is built before the module that shares
+it, because it said so. `server.loader` is the loader this built, for `follow`, for a test, and
+for loading or unloading while the server runs.
+
+A microservice that knows nothing about users installs no auth, keeps no store, and types the
+one word:
 
 ```ts
 import { createServer, open } from '@aweftjs/server';
-const server = createServer({ loader, gate: open, listener: node({ port: 8081 }) });
+const server = createServer({ sources: [fromDirectory('./modules')], gate: open, listener: node({ port: 8081 }) });
 ```
+
+`stop()` ends every connection, stops the listener, and then unloads every module in reverse
+load order, so each module's `stop` runs after nothing can reach it. A `stop` that throws
+reaches `handlers.failed` under its module's name and the rest still unload, so one module that
+cannot let go does not strand the ones underneath it.
 
 ## The gate
 
@@ -56,6 +73,31 @@ answers 401 with the reasons, and for a handshake no socket is ever opened. `acc
 before a module sees a connection, a call or a request, and its reasons refuse the call, 403
 the request, or skip the hook. Both may be asynchronous. A throw out of either is a defect:
 500, and reported (see below), never a refusal.
+
+**A gate may be named instead of passed.** `gate: 'auth/Gate'` is the name of one of the
+modules your sources list, and `start` reads it off the loader. A name that is not loaded, or
+whose instance has no `identify` and `access`, is refused at `start` with reason `missing`.
+
+**A composed gate is a module.** To keep the battery's policy and add a rule of your own, write
+a module that `deps` on the gate you are wrapping and name yours:
+
+```ts
+export const deps = ['auth/Gate'];
+
+export default ({ imports }) => ({
+	identify: (request, peer) => imports.Gate.identify(request, peer),
+	access: async (module, context) => {
+		const reasons = await imports.Gate.access(module, context);
+		if (reasons.length > 0) return reasons;
+		return module.instance.admin === true && context.user !== admin
+			? [{ code: 'not-admin', message: `${module.name} is for the administrator` }]
+			: [];
+	},
+});
+```
+
+There is no `compose` and no chain of gates: two policies in a row is one function calling
+another, which a module already is.
 
 The server interprets nothing in the context and reads nothing off a module for the gate.
 `@aweftjs/auth`'s gate reads a module's `public: true` and treats absent as private; that is
@@ -105,6 +147,10 @@ reloaded while a connection is open keeps that connection's hook state on the in
 made it, and its end functions with it; calls and routes go to the new instance. **A share on a
 connection's link requires `accept`**: the hole where any signed-in client writes anywhere is
 refused before anything crosses (`no-accept`). `open` is the handlers for the trusted case.
+`accept` is handed the arriving commit before it applies, so the document still reads as it was
+and a rule reads `commit.deltas`; the delta shape and the `refused` payload the other end gets
+are in `@aweftjs/sync`'s README, under "Your rules go in `accept`", which is where that
+behaviour is tested.
 
 `call` answers `ask(name, args, { progress, timeout })` from the other end: `progress`
 streams back before the result, a throw answers with its `reason` and `message`. A module
@@ -187,12 +233,18 @@ Without a handler the error is raised where nothing catches it, and the process 
 ## What this package never decides
 
 Who is on a connection, whether it lives, and who may reach a module: the gate's. Who may
-write a commit: `accept`, per share. Which modules load, and when: the application's. Any
-limit or interval. Users, sessions, cookies: `@aweftjs/auth`, or whatever you load instead.
+write a commit: `accept`, per share. What a module is for and what it holds: the module's, and
+what it needs is `deps`. Any limit or interval. Users, sessions, cookies: `@aweftjs/auth`, or
+whatever you load instead.
+
+It does decide one thing about modules, and only one: everything your sources list is loaded
+at `start` and unloaded at `stop`. Which modules exist is still yours, and so is anything you
+load or unload through `server.loader` while it runs.
 
 When a client sends bytes that are not a frame, the link ends and the connection with it:
 the end functions run and the socket closes, so the client hears.
 
 Every error this package raises carries a `reason`: `missing` (`createServer` without one of
-its three), `route-conflict`, `no-accept`, `not-a-response`, `started`. The decisions are in
-`docs/design/` 071 to 073.
+its three, or a gate named that is not a loaded gate), `not-an-option` (`loader` or `props`
+passed to `createServer`, which builds its own loader), `route-conflict`, `no-accept`,
+`not-a-response`, `started`. The design notes are in `docs/design/` 071 to 073, 240 and 241.

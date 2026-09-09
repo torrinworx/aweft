@@ -1,20 +1,20 @@
-// The battery, as the loader takes it: one source over five server modules, and the two
-// store paths they query (design 074).
+// The battery, as a source of server modules: five of them, and the two store paths they
+// query (design 074).
 
 import { fromBundle } from '@aweftjs/modules';
 import type { Source } from '@aweftjs/modules';
 import type { Declaration } from '@aweftjs/store';
 
 /**
- * The auth modules, for a loader's `sources`.
+ * The auth modules, for `sources`.
  *
  * Put the application's own source first and a module of the same name there wins, which is
- * how one of these is replaced. Each module reads the store from the loader's props:
- * `createLoader({ sources: [own, auth], props: { store } })`.
+ * how one of these is replaced. Each module reads the `store` the platform handed in, which
+ * on a server is the `store` given to `createServer`.
  *
  * Example:
- *   const loader = createLoader({ sources: [fromDirectory('./modules'), auth], props: { store } });
- *   const gate = (await loader.load(['auth/Gate']))['auth/Gate'] as Gate;
+ *   const server = createServer({ sources: [own, auth], store, gate: 'auth/Gate', listener });
+ *   await server.start();
  */
 export const auth: Source = fromBundle({
 	'./auth/Gate.ts': () => import('./modules/Gate.ts'),

@@ -6,18 +6,16 @@ import assert from 'node:assert/strict';
 import { createServer, open } from '../src/index.ts';
 import type { ServerError } from '../src/index.ts';
 
-import { fakeListener, instance, loaderOf, peer, request } from './helpers.ts';
+import { fakeListener, growing, instance, peer, request, sourceOf } from './helpers.ts';
 
-const started = async (map: Parameters<typeof loaderOf>[0], failed: string[] = []) => {
-	const loader = loaderOf(map);
-	await loader.load(Object.keys(map));
+const started = async (map: Parameters<typeof sourceOf>[0], failed: string[] = []) => {
 	const listening = fakeListener();
 	const server = createServer({
-		loader, gate: open, listener: listening.listener,
+		sources: [sourceOf(map)], gate: open, listener: listening.listener,
 		handlers: { failed: (name, error) => failed.push(`${name}: ${(error as Error).message}`) },
 	});
 	await server.start();
-	return { loader, server, handlers: listening.handlers() };
+	return { server, handlers: listening.handlers() };
 };
 
 test('a route is matched by exact method and path; the query is not part of the key', async () => {
@@ -58,48 +56,45 @@ test('the response is handed back whole: status, headers and body', async () => 
 });
 
 test('two loaded modules declaring one route are refused at start, naming both', async () => {
-	const loader = loaderOf({
+	const source = sourceOf({
 		'app/One': instance(() => ({ routes: { 'GET /same': () => new Response('one') } })),
 		'app/Two': instance(() => ({ routes: { 'GET /same': () => new Response('two') } })),
 	});
-	await loader.load(['app/One', 'app/Two']);
-	const server = createServer({ loader, gate: open, listener: fakeListener().listener });
+	const server = createServer({ sources: [source], gate: open, listener: fakeListener().listener });
 	await assert.rejects(server.start(), (e: ServerError) => e.reason === 'route-conflict' && /app\/One and app\/Two both declare GET \/same/.test(e.message));
 });
 
 test('a module loaded after start serves its routes with no restart', async () => {
-	const map = {
-		'app/First': instance(() => ({ routes: { 'GET /first': () => new Response('first') } })),
-		'app/Later': instance(() => ({ routes: { 'GET /later': () => new Response('later') } })),
-	};
-	const loader = loaderOf(map);
-	await loader.load(['app/First']);
+	const source = growing(
+		{ 'app/First': instance(() => ({ routes: { 'GET /first': () => new Response('first') } })) },
+		{ 'app/Later': instance(() => ({ routes: { 'GET /later': () => new Response('later') } })) },
+	);
 	const listening = fakeListener();
-	const server = createServer({ loader, gate: open, listener: listening.listener });
+	const server = createServer({ sources: [source.source], gate: open, listener: listening.listener });
 	await server.start();
 	assert.equal((await listening.handlers().request(request('/later'), peer)).status, 404);
-	await loader.load(['app/Later']);
+	source.grow();
+	await server.loader.load(['app/Later']);
 	assert.equal(await (await listening.handlers().request(request('/later'), peer)).text(), 'later');
-	await loader.unload('app/First');
+	await server.loader.unload('app/First');
 	assert.equal((await listening.handlers().request(request('/first'), peer)).status, 404, 'an unloaded module\'s route is gone');
 	await server.stop();
 });
 
 test('a conflict met at request time is 500 and reported as routes', async () => {
 	const failed: string[] = [];
-	const map = {
-		'app/One': instance(() => ({ routes: { 'GET /same': () => new Response('one') } })),
-		'app/Two': instance(() => ({ routes: { 'GET /same': () => new Response('two') } })),
-	};
-	const loader = loaderOf(map);
-	await loader.load(['app/One']);
+	const source = growing(
+		{ 'app/One': instance(() => ({ routes: { 'GET /same': () => new Response('one') } })) },
+		{ 'app/Two': instance(() => ({ routes: { 'GET /same': () => new Response('two') } })) },
+	);
 	const listening = fakeListener();
 	const server = createServer({
-		loader, gate: open, listener: listening.listener,
+		sources: [source.source], gate: open, listener: listening.listener,
 		handlers: { failed: (name, error) => failed.push(`${name}: ${(error as Error).message}`) },
 	});
 	await server.start();
-	await loader.load(['app/Two']);
+	source.grow();
+	await server.loader.load(['app/Two']);
 	assert.equal((await listening.handlers().request(request('/same'), peer)).status, 500);
 	assert.deepEqual(failed, ['routes: route-conflict: app/One and app/Two both declare GET /same. Rename one of the two routes, or unload one of the modules.']);
 	await server.stop();
@@ -140,7 +135,7 @@ test('a routes field that is not an object, or an entry that is not a function, 
 
 test('start twice is refused, and stop twice is not an error', async () => {
 	const listening = fakeListener();
-	const server = createServer({ loader: loaderOf({}), gate: open, listener: listening.listener });
+	const server = createServer({ sources: [sourceOf({})], gate: open, listener: listening.listener });
 	await server.start();
 	await assert.rejects(server.start(), (e: ServerError) => e.reason === 'started');
 	await server.stop();

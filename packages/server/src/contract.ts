@@ -3,7 +3,7 @@
 
 import { codecError } from '@aweftjs/codec';
 import type { Refusal } from '@aweftjs/core';
-import type { Loader } from '@aweftjs/modules';
+import type { Loader, Source } from '@aweftjs/modules';
 import type { Commit, ShareHandlers, Shared, SocketLike, WireReason } from '@aweftjs/sync';
 
 /** Where a request or a connection came from, as far as the listener can tell. */
@@ -156,33 +156,54 @@ export interface ServerHandlers {
 }
 
 export interface ServerOptions {
-	readonly loader: Loader;
-	readonly gate: Gate;
+	/** Where the modules come from. `start` loads every module every source lists (design 240). */
+	readonly sources: readonly Source[];
+	/**
+	 * The application's store, handed to every module's factory as `store`, and the only thing
+	 * this package hands one. Typed `unknown` because `server` may not import `@aweftjs/store`;
+	 * a module that reads it types it itself. Left out, no factory is handed a `store` at all.
+	 */
+	readonly store?: unknown;
+	/** Who may reach what: a `Gate`, or the name of a module that is one (design 241). */
+	readonly gate: Gate | string;
 	readonly listener: Listener;
 	readonly handlers?: ServerHandlers | undefined;
 }
 
 export interface Server {
 	/**
-	 * Check the routes, then start the listener.
+	 * Load every module the sources list, resolve a gate named as a string, check the routes,
+	 * then start the listener.
 	 *
-	 * Throws: a `ServerError` with reason `route-conflict` when two loaded modules declare the
-	 * same `METHOD /path`, naming both, and `started` when this server is already started.
+	 * Throws: whatever the loader raised, unwrapped, when a module fails to load, leaving the
+	 * server not started; a `ServerError` with reason `missing` when `gate` names a module that
+	 * is not loaded or is not a gate, `route-conflict` when two loaded modules declare the same
+	 * `METHOD /path`, naming both, and `started` when this server is already started.
 	 */
 	start(): Promise<void>;
-	/** End every connection and stop the listener. */
+	/**
+	 * End every connection, stop the listener, then unload every loaded module in reverse load
+	 * order, so each module's `stop` runs after nothing can reach it. Safe after a `start` that
+	 * failed part way: what was made is still let go of.
+	 */
 	stop(): Promise<void>;
+	/**
+	 * The loader this server built from `sources`. Read an instance off it, `follow` a module
+	 * document with it, or load and unload while the server runs.
+	 */
+	readonly loader: Loader;
 }
 
 /**
  * An error this package raises, with a reason a caller can branch on.
  *
- * Reasons: `missing` (`createServer` without one of its three, or an ask naming a module that
- * is not loaded or has no `call`), `route-conflict`, `no-accept` (a share on a connection
- * without `accept`), `not-a-response` (a route answered with something else; reported, never
- * thrown to a caller), `started`, `over-bound` (a request body past the listener's
- * `maxPayload`), `refused` (the gate refused an ask) and `closed` (an ask on a connection that
- * has ended).
+ * Reasons: `missing` (`createServer` without one of its three, a gate named that is not a
+ * loaded gate, or an ask naming a module that is not loaded or has no `call`),
+ * `not-an-option` (`loader` or `props` passed to `createServer`, which builds its own),
+ * `route-conflict`, `no-accept` (a share on a connection without `accept`), `not-a-response`
+ * (a route answered with something else; reported, never thrown to a caller), `started`,
+ * `over-bound` (a request body past the listener's `maxPayload`), `refused` (the gate refused
+ * an ask) and `closed` (an ask on a connection that has ended).
  */
 export interface ServerError extends Error {
 	readonly reason: string;
