@@ -17,7 +17,9 @@ const isModuleFile = (file: string): boolean =>
  * A source over a directory tree.
  *
  * Params:
- *   path: the directory
+ *   path: the directory. A relative path is resolved by `node:fs` against the process's working
+ *         directory, not against the file that called this, so a program run from anywhere else
+ *         finds nothing; pass an absolute path built from `import.meta.url`, as the example does
  *
  * Returns: a source over every `.js`, `.mjs` and `.ts` file under the directory (never a
  * `.d.ts`), named by the file's path relative to the directory with `/` separators and no
@@ -29,7 +31,8 @@ const isModuleFile = (file: string): boolean =>
  * file whose name is nothing but an extension.
  *
  * Example:
- *   const loader = createLoader({ sources: [fromDirectory('./app/modules'), fromDirectory('./lib/modules')] });
+ *   const here = fileURLToPath(new URL('.', import.meta.url));
+ *   const loader = createLoader({ sources: [fromDirectory(join(here, 'modules'))] });
  */
 export const fromDirectory = (path: string): Source => {
 	const walk = async (dir: string): Promise<string[]> => {

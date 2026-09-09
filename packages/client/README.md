@@ -70,7 +70,11 @@ first re-shares that same object and pulls the server's state onto it in place, 
 watchers see a reconnect as ordinary commits and nothing is rebuilt. `handle.document` reads
 `undefined` until the first arrival and the same object forever after.
 
-`accept` and `refused` are `sync`'s, untouched. `fault` hears every fault except the `closed` a
+`accept` and `refused` are `sync`'s, untouched: `refused` is called with
+`{ mine, seq, reasons, commit, undo }` for a commit that did not apply at either end, and `undo`
+is the commit that takes yours back here, which the page applies itself or ignores to keep its
+version. `sync`'s README, under "A refusal is reported at both ends", is the whole of it.
+`fault` hears every fault except the `closed` a
 dropped socket raises on every topic, which is this package's own business and is answered by
 the next socket. A `root-mismatch` after a reconnect does reach `fault`: the server now holds a
 different document under that name, and the page has to hear so.

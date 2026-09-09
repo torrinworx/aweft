@@ -117,10 +117,10 @@ version in lockstep.
 | `sandbox` | The window: a loader on the far end of a link, the grants, calls as rows, and the runners that make a room | What the code it runs is for; what wall is around the room; who may load, grant or call; how many rooms and for how long |
 | `dom` | Mounting, hydration, static render, URL and history, and the prototype a hoisted template is instanced from | Storage, transport, components |
 | `client` | One connection to a server for the life of a page: the socket, the link and the requests attached before it opens, asks, share handles that keep one document object across reconnects, the retry | Who is on the connection, what a document means, which documents a page shares; users, sessions, cookies; components |
-| `ui` | Components, theming | Storage, transport, server |
+| `ui` | Components, theming, and the stage: the acts a URL reaches, and the loader it builds over the sources it was given so an act can be a module name | Storage, transport, server; what a connection is, and who is on it |
 | `icons` | Turning an installed icon set into modules a page imports: one icon, a whole set, the standard names, and a resolver for a name known only at run time | Which sets an application installs, whether a page fetches, what an icon looks like; any icon data of its own |
 | `server` | Building the loader from the sources the application names and loading every module they list; accepting connections and requests through a listener; one socket as a link and a call channel; running the modules' `connection`, `call` and `routes` hooks behind the gate the application supplies | Who is on a connection, who may reach a module, who may write a commit, what a module is for; users, sessions, storage; component internals |
-| `auth` | The gate that reads `public`, sessions as documents, sign-in and sign-up, the per-user state document, as server modules; and the client half over a `client` connection: `user` as a cell, `enter`, `leave`, `state` and `check` | Which application loads it; how a page renders any of it |
+| `auth` | The gate that reads `public`, sessions as documents, sign-in and sign-up, the per-user state document, as server modules; the client half over a `client` connection: `user` as a cell, `enter`, `leave`, `state` and `check`; and a source of two page modules, `auth/Session` and the `auth/SignIn` form | Which application loads it; which URL any of it is on; who may see a page |
 | `jobs` | When a row runs, over an observable array the application hands in: the timers, the cron arithmetic, `last` written onto the row | What a job does; who may add, edit or remove a row; storage; queues, retries, catch-up; modules; component internals |
 | `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom |
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
@@ -321,7 +321,7 @@ indexed by the job rather than the package, are not in this table.
 | icons | a page naming icons three ways (written out, a standard name, a name fetched when the page runs), with the bundle weighed: the icons it named and not the one it looked up |
 | server | a full-stack app on the rail (`sources`, `store`, a named gate, a listener): an authenticated connection syncs state through the application's rules to store and back; an anonymous one reaches only what the gate allows; `gate: open` reaches everything; a gate with no session in it works in its place |
 | client | a page against a real listener: a share and an ask made before the socket opens both arrive, the server is restarted underneath it, and the page comes back on its own with the same state document object holding what the server wrote while it was down, with an ask made while it was down answered on the new socket |
-| auth | inside the server recipe: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous; and, in the client recipe, the client half signs in, reads `user`, opens `state` and signs out |
+| auth | inside the server recipe: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous; and, in the client recipe, a page whose every part is a module signs up through `auth/SignIn`, reads `user`, opens `state` and signs out |
 | jobs | a scheduled job runs, persists an effect, and survives a restart |
 | ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM |
 | build | the transforms build a real page; assert stripping is verified in the output |
@@ -428,9 +428,10 @@ crosses the plane boundary, so these are integrators, not members of either plan
 ```
 
 `aweft`, the meta-package, bundles the common set, so `npm i aweft` gets auth, users, email
-and files working. `auth`'s server half is built (design 074) and its client half is built on
-`@aweftjs/client` (designs 183, 185); its sign-in and sign-up views wait for a components
-step.
+and files working. `auth`'s server half is built (design 074), its client half on
+`@aweftjs/client` (design 183, 185), and its views ship as page modules a stage loads by name
+(design 245): a battery's view is a module like any other, and the application puts it on a URL
+by naming it in its acts map. No battery picks a URL.
 
 They split per area rather than shipping as one package because an application that wants
 auth and not posts should not carry posts, and an agent reading `@aweftjs/auth` should find

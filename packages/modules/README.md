@@ -68,6 +68,15 @@ A **source** lists candidates and evaluates nothing until `load` asks for a name
 `fromDirectory` is on its own subpath because it reads the filesystem; the main entry loads in
 a browser. `fromBundle` takes the two shapes a bundler's glob import produces, eager or lazy.
 
+`fromDirectory` hands its path to `node:fs`, which resolves a relative one against the process's
+working directory rather than the file that called it, so `'./modules'` finds nothing when the
+program is started from anywhere else. Build an absolute path from `import.meta.url`:
+
+```ts
+const here = fileURLToPath(new URL('.', import.meta.url));
+const loader = createLoader({ sources: [fromDirectory(join(here, 'modules'))] });
+```
+
 **A module document** is an observable object whose keys are module names and whose values
 carry a `source` string. Every other field in an entry is yours: an author, a note, a list of
 earlier versions. The loader ignores them.
