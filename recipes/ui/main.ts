@@ -6,18 +6,18 @@
 // a real keystroke reach the handlers, that focus moves, that a popup is measured against its
 // anchor and placed, and that it asks for the top layer with `popover` rather than a z-index.
 //
-// It drives four pages. The gallery is every system the package ships. The preview is the look
-// itself, light and dark side by side, and it is where the look is judged. The controls page
-// is every control in every state, in both modes, written the way an application writes them, and
-// the composites page is everything built out of those. The assertions on the last three are about
-// the contract rather than about the systems, and axe-core runs over all three.
+// It drives three pages. The gallery is every system the package ships. The preview is the look
+// itself, light and dark side by side, and it is where the look is judged. The catalogue is
+// every component the package exports, in every state, in both modes, built from one example file
+// each (design 197). The assertions on the last two are about the contract rather than about the
+// systems, and axe-core runs over both.
 //
 // Run: node recipes/ui/main.ts
 // Serve it instead, to click around: npx vite recipes/ui
 
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -248,9 +248,8 @@ try {
 				backgroundImage: style.backgroundImage,
 				color: style.color,
 				borderColor: style.borderTopColor,
-				outlineWidth: style.outlineWidth,
 				outlineStyle: style.outlineStyle,
-				outlineColor: style.outlineColor,
+				boxShadow: style.boxShadow,
 				transitionDuration: style.transitionDuration,
 				fontSize: style.fontSize,
 				lineHeight: style.lineHeight,
@@ -274,8 +273,8 @@ try {
 	assert.equal(darkCard.background, rgb(roleOf(dark, 'surface')));
 	assert.notEqual(lightCard.borderColor, darkCard.borderColor, 'and so does the border');
 
-	// The smallest pointer target, and type in rem, both come out of the contract.
-	assert.equal(lightButton.minHeight, '24px', '$target is 24px');
+	// One control height, and type in rem, both come out of the contract.
+	assert.equal(lightButton.minHeight, '36px', '$control is 36px (design 192)');
 	const body = await paint('#body-light');
 	assert.equal(body.fontSize, '16px', '$textMd is one rem');
 	assert.equal(body.lineHeight, '24px', 'and it has its line height');
@@ -322,9 +321,16 @@ try {
 	const focused = await page.evaluate(() => document.activeElement?.getAttribute('id') ?? '');
 	assert.equal(focused, 'button-light', 'the first Tab reaches the first control');
 	const ringed = await paint('#button-light');
-	assert.equal(ringed.outlineStyle, 'solid', 'the focus ring is drawn');
-	assert.equal(ringed.outlineWidth, '2px', 'at $ringWidth');
-	assert.equal(ringed.outlineColor, rgb(roleOf(light, 'ring')), 'in $ring');
+	assert.equal(ringed.outlineStyle, 'none', 'the ring is not an outline any more (design 192)');
+	// A halo of `$ring` at half strength, `$ringWidth` wide. Chromium writes a mixed colour in its
+	// own notation, so what is checked is the spread and that the colour is the role at half alpha.
+	assert.match(ringed.boxShadow ?? '', /0px 0px 0px 3px/, 'a $ringWidth halo, drawn as a box shadow');
+	assert.ok((ringed.boxShadow ?? '').includes('0.5'), `the halo is $ring at half strength: ${String(ringed.boxShadow)}`);
+	// The border moves to `$ring` with it, so the control's own edge is part of the ring rather
+	// than something the ring covers. It transitions, so this waits for it to arrive.
+	await page.waitForFunction((want: string) =>
+		getComputedStyle(document.querySelector('#button-light')!).borderTopColor === want,
+		rgb(roleOf(light, 'ring')));
 
 	// Motion is declared once, inside the query that asks whether the person wants any.
 	assert.equal(ringed.transitionDuration, '0.12s', '$fast, when motion is welcome');
@@ -346,10 +352,69 @@ try {
 	assert.equal(audit.violations.length, 0, 'axe found nothing to fix on the preview page');
 	console.log(`recipes/ui: axe passed ${String(audit.passes.length)} rules with no violation`);
 
-	// --- the controls page: every control, in both modes -------------------------------------------
+	// --- the catalogue: every component, in both modes ---------------------------------------------
 
-	await page.goto(site.url + 'controls.html');
-	await page.waitForSelector('#controls');
+	await page.goto(site.url + 'catalogue.html');
+	await page.waitForSelector('#catalogue');
+	// Wide enough for the two panes to sit side by side, which is what the page is for. The gallery
+	// and the preview are read at the viewport the browser opened with.
+	await page.setViewportSize({ width: 1440, height: 900 });
+
+	// Every component the package exports has a section, and the ones that do not are named here
+	// with the reason (design 197). The list is read out of the surface file the gate regenerates,
+	// so a component added to `index.ts` and forgotten here turns this red.
+	const NO_EXAMPLE: Record<string, string> = {
+		Head: 'a head tag', Link: 'a head tag', Meta: 'a head tag', Script: 'a head tag',
+		Style: 'a head tag', Title: 'a head tag',
+		Theme: 'a provider', ThemeContext: 'a provider', Icons: 'a provider',
+		InputContext: 'a provider', LoaderContext: 'a provider', PopupContext: 'a provider',
+		StageContext: 'a provider', TextModifiers: 'a provider, shown in the Typography example',
+		ValidateContext: 'a provider, shown in the Validate example',
+		Shown: 'control flow, shown on the gallery page',
+		Switch: 'control flow, shown on the gallery page',
+		Stage: 'the stage, shown in the Modal example',
+		Default: 'the stage template that adds nothing, shown in the Modal example',
+		Detached: 'the mechanism under the Popup and Tooltip examples',
+		FieldGroup: 'shown in the Field example', FieldSet: 'shown in the Field example',
+	};
+
+	const exported = readFileSync(join(here, '..', '..', 'packages', 'ui', 'surface.txt'), 'utf8')
+		.split('\n')
+		.map((line) => /^value ([A-Z]\w*):/.exec(line)?.[1])
+		.filter((name): name is string => name !== undefined);
+
+	const shown = await page.evaluate(() =>
+		Array.from(document.querySelectorAll('#catalogue main > section')).map((node) => node.id));
+
+	const missing = exported.filter((name) => !(name in NO_EXAMPLE) && !shown.includes(name));
+	assert.deepEqual(missing, [],
+		`every exported component has an example file: ${missing.join(', ')} has none`);
+	const stray = shown.filter((name) => !exported.includes(name));
+	assert.deepEqual(stray, [], `and every example names a component the package exports: ${stray.join(', ')}`);
+
+	const files = readdirSync(join(here, 'examples')).filter((name) => name.endsWith('.example.tsx'));
+	assert.equal(files.length, shown.length,
+		`every file under examples/ is on the page: ${String(files.length)} files, ${String(shown.length)} sections`);
+	console.log(`recipes/ui: ${String(shown.length)} examples for ${String(exported.length)} exports, `
+		+ `${String(Object.keys(NO_EXAMPLE).length)} of them named as needing none`);
+
+	// The list down the left is the page's own order, and a link scrolls its section to the top.
+	const links = await page.evaluate(() =>
+		Array.from(document.querySelectorAll('#catalogue nav a')).map((node) => node.getAttribute('href')));
+	assert.deepEqual(links, shown.map((id) => `#${id}`), 'one link per example, in the page\'s order');
+
+	// A section with sections under it, so the scroll is not stopped by the end of the document.
+	const scrolledFrom = await page.evaluate(() => window.scrollY);
+	await page.click('#catalogue nav a[href="#Field"]');
+	await page.waitForFunction(() => window.scrollY > 0);
+	const scrolledTo = await page.evaluate(() => window.scrollY);
+	assert.ok(scrolledTo > scrolledFrom,
+		`a nav link scrolls its section into view: ${String(scrolledFrom)} to ${String(scrolledTo)}`);
+	const landed = await page.evaluate(() =>
+		Math.round(document.querySelector('#Field')!.getBoundingClientRect().top));
+	assert.ok(landed >= -1 && landed < 40,
+		`and the section is at the top of the viewport, under its scroll margin: ${String(landed)}px`);
+	await page.evaluate(() => window.scrollTo(0, 0));
 
 	// Every control is there, in both panes, and each is the element it claims to be.
 	const shapes = await page.evaluate(() => {
@@ -367,7 +432,7 @@ try {
 			radio: tagOf('radio-small-light'),
 			icon: tagOf('icon-check-light'),
 			darkButton: tagOf('button-dark'),
-			drawn: document.querySelectorAll('#controls div[role="slider"], #controls div[role="checkbox"]').length,
+			drawn: document.querySelectorAll('#catalogue div[role="slider"], #catalogue div[role="checkbox"]').length,
 		};
 	});
 	assert.deepEqual(shapes, {
@@ -417,9 +482,55 @@ try {
 		sheet: document.head.querySelector('style[data-aweft]')?.textContent ?? '',
 	}));
 	assert.equal(slider.appearance, 'none', 'the host is not drawing its own range input');
-	assert.equal(slider.height, '24px', 'and it is at least $target tall');
+	assert.equal(slider.height, '36px', 'and its hit area is $control tall');
 	assert.match(slider.sheet, new RegExp(`::-webkit-slider-thumb \\{[^}]*background: ${rgbHex(roleOf(light, 'accent'))}`),
 		'the thumb rule reached the page with $accent in it');
+
+	// The size axis: three heights on the button, and a square at each of them (design 194).
+	const axis = await page.evaluate(() => {
+		const of = (id: string): [number, number] => {
+			const box = document.querySelector(`#${id}`)!.getBoundingClientRect();
+			return [Math.round(box.width), Math.round(box.height)];
+		};
+		return {
+			sm: of('button-sm-light'), md: of('button-md-light'), lg: of('button-lg-light'),
+			squareSm: of('square-sm-light'), squareMd: of('square-md-light'), squareLg: of('square-lg-light'),
+			fieldSm: of('field-sm-light')[1], selectLg: of('select-lg-light')[1],
+		};
+	});
+	assert.equal(axis.sm[1], 32, '$controlSm is 32px');
+	assert.equal(axis.md[1], 36, '$control is 36px');
+	assert.equal(axis.lg[1], 40, '$controlLg is 40px');
+	assert.deepEqual(axis.squareSm, [32, 32], 'an icon button is a square at every size');
+	assert.deepEqual(axis.squareMd, [36, 36]);
+	assert.deepEqual(axis.squareLg, [40, 40]);
+	assert.equal(axis.fieldSm, 32, 'and the axis is one segment, so a field takes it too');
+	assert.equal(axis.selectLg, 40);
+
+	// The select draws its own arrow inside its own box (design 195), so the height is unchanged
+	// by it and the host's is nowhere on the page. The arrow is an empty box with two of its sides
+	// drawn, turned a quarter turn, so this page needs no icon pack to have one.
+	const arrows = await page.evaluate(() => {
+		const select = document.querySelector('#select-light')!;
+		const wrap = select.parentElement!;
+		const arrow = wrap.querySelector('span')!;
+		const mark = arrow.getBoundingClientRect();
+		const box = select.getBoundingClientRect();
+		return {
+			height: Math.round(box.height),
+			inset: getComputedStyle(arrow).right,
+			side: arrow.offsetWidth,
+			inside: mark.right <= box.right,
+			drawings: wrap.querySelectorAll('svg').length,
+			appearance: getComputedStyle(select).appearance,
+		};
+	});
+	assert.equal(arrows.height, 36, 'a select with its arrow in it is still $control tall');
+	assert.equal(arrows.inset, '12px', 'the arrow sits $space3 in from the right edge');
+	assert.equal(arrows.side, 8, 'and it is a $chevron box');
+	assert.ok(arrows.inside, 'and inside the control');
+	assert.equal(arrows.drawings, 0, 'nothing on the page asked the Icons stack for an arrow');
+	assert.equal(arrows.appearance, 'base-select', 'Chromium takes the second appearance');
 
 	// An icon is one svg element, sized in em so it follows the text beside it.
 	const icons = await page.evaluate(() => {
@@ -427,7 +538,7 @@ try {
 		const big = document.querySelector('#icon-big-light')!;
 		return {
 			children: one.querySelectorAll('svg').length,
-			hidden: document.querySelector('#icons-light svg:not([role])')?.getAttribute('aria-hidden') ?? null,
+			named: document.querySelector('#icon-named-light')?.tagName.toLowerCase() ?? null,
 			label: one.getAttribute('aria-label'),
 			size: getComputedStyle(one).width,
 			big: getComputedStyle(big).width,
@@ -437,24 +548,7 @@ try {
 	assert.equal(icons.label, 'done');
 	assert.equal(icons.size, '16px', '1em of the 16px body text around it');
 	assert.equal(icons.big, '32px', 'and a size prop overrides it');
-
-	// --- axe over the controls page -----------------------------------------------------------------
-
-	await page.addScriptTag({ path: fileURLToPath(import.meta.resolve('axe-core/axe.min.js')) });
-	const controlsAudit = await page.evaluate(async () => axe.run(document, {
-		runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
-	}));
-	for (const violation of controlsAudit.violations) {
-		console.error(`axe ${violation.id}: ${violation.help} (${String(violation.nodes.length)} node(s))`);
-		for (const node of violation.nodes) console.error(`  ${node.html}`);
-	}
-	assert.equal(controlsAudit.violations.length, 0, 'axe found nothing to fix on the controls page');
-	console.log(`recipes/ui: axe passed ${String(controlsAudit.passes.length)} rules on the controls page with no violation`);
-
-	// --- the composites page: everything built out of the controls ----------------------------------
-
-	await page.goto(site.url + 'composites.html');
-	await page.waitForSelector('#composites');
+	assert.equal(icons.named, 'svg', 'a bare name found its drawing in the set the page installed');
 
 	// A modal is opened by the stage, and every way of closing it is the stage's close.
 	assert.equal(await page.locator('dialog').count(), 0, 'no modal before anybody asked for one');
@@ -499,10 +593,10 @@ try {
 	await page.focus('#dropdown-light summary');
 	await page.keyboard.press('Space');
 	await page.waitForFunction(() => document.querySelector('#dropdown-light')!.hasAttribute('open'));
-	const shown = await page.evaluate(() =>
+	const shownHeight = await page.evaluate(() =>
 		document.querySelector('#dropdown-light')!.getBoundingClientRect().height);
-	assert.ok(shown > shut,
-		`an open disclosure pushes the page down rather than floating over it: ${String(shut)} to ${String(shown)}`);
+	assert.ok(shownHeight > shut,
+		`an open disclosure pushes the page down rather than floating over it: ${String(shut)} to ${String(shownHeight)}`);
 
 	// A real file, through the input the zone hides but keeps focusable.
 	await page.setInputFiles('#filedrop-light input[type=file]', {
@@ -519,14 +613,15 @@ try {
 	assert.notEqual(hidden.display, 'none', 'the input is off the screen, not out of the focus order');
 	assert.ok(hidden.width < 4, `and it takes no room: ${String(hidden.width)}px`);
 
-	// The signal is what starts the checking, and the context tallies the answers.
-	assert.equal(await page.locator('#composites [role="alert"]').count(), 0,
+	// The signal is what starts the checking, and the context tallies the answers. The count is
+	// taken inside the section, because a control elsewhere on the page may have a standing error.
+	assert.equal(await page.locator('#Validate [role="alert"]').count(), 0,
 		'a person typing is not a person who is wrong yet');
 	await page.click('#validate-email-light');
 	await page.keyboard.type('nope');
-	assert.equal(await page.locator('#composites [role="alert"]').count(), 0);
+	assert.equal(await page.locator('#Validate [role="alert"]').count(), 0);
 	await page.click('#submit-light');
-	await page.waitForSelector('#composites [role="alert"]');
+	await page.waitForSelector('#Validate [role="alert"]');
 	assert.equal(await page.textContent('#valid-light'), 'the form is not happy');
 	assert.equal(await page.getAttribute('#validate-email-light', 'aria-invalid'), 'true',
 		'and the control the wrapper holds says so itself');
@@ -536,7 +631,7 @@ try {
 	await page.keyboard.type('ada@example.com');
 	await page.click('#validate-phone-light');
 	await page.keyboard.type('5195551234');
-	await page.click('#composites-heading');
+	await page.click('#catalogue-title');
 	await page.waitForFunction(() => document.querySelector('#valid-light')!.textContent === 'the form is happy');
 	assert.equal(await page.evaluate(() => document.querySelector('#validate-phone-light')!.value),
 		'(519) 555-1234', 'a formatting validator wrote the value back punctuated');
@@ -554,6 +649,33 @@ try {
 	assert.match(await page.textContent('#picked-light') ?? '', /^rgb\(/,
 		'the cell is written back as rgb() text');
 
+	// A form laid out by the three layout components (design 196). A pane on this page is wider
+	// than 28rem, so the responsive field is a row here; the narrow case is measured in
+	// `packages/ui/tests/browser.test.ts`, where the group's width can be moved.
+	const form = await page.evaluate(() => {
+		const responsive = document.querySelector('#field-responsive-light')!;
+		const inline = document.querySelector('#field-inline-light')!;
+		const set = document.querySelector('#fieldset-light')!;
+		return {
+			group: getComputedStyle(document.querySelector('#form-light')!).containerType,
+			wide: Math.round(document.querySelector('#form-light')!.getBoundingClientRect().width),
+			responsive: getComputedStyle(responsive).flexDirection,
+			inline: getComputedStyle(inline).flexDirection,
+			role: responsive.getAttribute('role'),
+			legend: set.querySelector('legend')!.textContent,
+			border: getComputedStyle(set).borderTopStyle,
+			invalid: document.querySelector('#field-bad-light')!.getAttribute('data-invalid'),
+		};
+	});
+	assert.equal(form.group, 'inline-size', 'the group is the container a responsive field measures');
+	assert.ok(form.wide > 448, `and this pane is wider than 28rem: ${String(form.wide)}px`);
+	assert.equal(form.responsive, 'row', 'so the responsive field is a row at this width');
+	assert.equal(form.inline, 'row', 'and the inline one is a row at every width');
+	assert.equal(form.role, 'group', 'a field is a box of related things');
+	assert.equal(form.legend, 'Where to send it');
+	assert.equal(form.border, 'none', 'and the fieldset draws no frame of its own');
+	assert.equal(form.invalid, 'true', 'a field marks itself while a control in it says it is wrong');
+
 	// The two modes resolve their own roles, on the composites as on everything else.
 	const composedModes = await page.evaluate(() => ({
 		light: getComputedStyle(document.querySelector('#tip-anchor-light')!).backgroundColor,
@@ -561,18 +683,37 @@ try {
 	}));
 	assert.notEqual(composedModes.light, composedModes.dark, 'a composite resolves the mode of its pane');
 
-	// --- axe over the composites page --------------------------------------------------------------
+	// --- one button closes every section, and one opens every section ------------------------------
+
+	const panels = await page.evaluate(() => document.querySelectorAll('#catalogue details[id^="panel-"]').length);
+	assert.equal(panels, shown.length, 'one drop-down per section');
+	const openPanels = async (): Promise<number> => page.evaluate(() =>
+		document.querySelectorAll('#catalogue details[id^="panel-"][open]').length);
+	assert.equal(await openPanels(), panels, 'and every one of them starts open');
+
+	await page.click('#collapse-all');
+	await page.waitForFunction(() =>
+		document.querySelectorAll('#catalogue details[id^="panel-"][open]').length === 0);
+	const collapsed = await openPanels();
+	assert.equal(collapsed, 0, `the collapse button closed all ${String(panels)} sections`);
+
+	await page.click('#expand-all');
+	await page.waitForFunction((count: number) =>
+		document.querySelectorAll('#catalogue details[id^="panel-"][open]').length === count, panels);
+	assert.equal(await openPanels(), panels, `and the expand button opened all ${String(panels)} again`);
+
+	// --- axe over the catalogue, with both modes showing --------------------------------------------
 
 	await page.addScriptTag({ path: fileURLToPath(import.meta.resolve('axe-core/axe.min.js')) });
-	const composedAudit = await page.evaluate(async () => axe.run(document, {
+	const catalogueAudit = await page.evaluate(async () => axe.run(document, {
 		runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
 	}));
-	for (const violation of composedAudit.violations) {
+	for (const violation of catalogueAudit.violations) {
 		console.error(`axe ${violation.id}: ${violation.help} (${String(violation.nodes.length)} node(s))`);
 		for (const node of violation.nodes) console.error(`  ${node.html}`);
 	}
-	assert.equal(composedAudit.violations.length, 0, 'axe found nothing to fix on the composites page');
-	console.log(`recipes/ui: axe passed ${String(composedAudit.passes.length)} rules on the composites page with no violation`);
+	assert.equal(catalogueAudit.violations.length, 0, 'axe found nothing to fix on the catalogue');
+	console.log(`recipes/ui: axe passed ${String(catalogueAudit.passes.length)} rules on the catalogue with no violation`);
 
 	assert.deepEqual(problems, [], 'the page threw nothing');
 	console.log('recipes/ui: ok');

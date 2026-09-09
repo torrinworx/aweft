@@ -24,6 +24,7 @@ Theme.define({
 		$corner: '6px',
 		$menuWidth: '160px',
 		$demoRing: '3px',
+		$demoRingOffset: '2px',
 	},
 
 	page: {
@@ -47,7 +48,7 @@ Theme.define({
 		background: '$brand',
 		color: '$contrast_text($brand)',
 		cursor: 'pointer',
-		'_cssProp_focus-visible': { outline: '$demoRing solid $hue($brand, 180)', outlineOffset: '$ringOffset' },
+		'_cssProp_focus-visible': { outline: '$demoRing solid $hue($brand, 180)', outlineOffset: '$demoRingOffset' },
 	},
 	demo_hovered: { background: '$shiftBrightness($brand, -0.12)' },
 	demo_quiet: { background: 'transparent', color: '$brand' },

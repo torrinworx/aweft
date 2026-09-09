@@ -12,6 +12,7 @@ interface RecipeElement {
 	querySelector(selector: string): RecipeElement | null;
 	readonly outerHTML: string;
 	getAttribute(name: string): string | null;
+	setAttribute(name: string, value: string): void;
 	hasAttribute(name: string): boolean;
 	readonly id: string;
 	/** On a `<dialog>`: whether it is showing. */
@@ -24,6 +25,10 @@ interface RecipeElement {
 	focus(): void;
 	scrollIntoView(options?: { block?: string }): void;
 	readonly offsetTop: number;
+	/** The border box, which a transform does not move: `getBoundingClientRect` is the turned one. */
+	readonly offsetWidth: number;
+	readonly offsetHeight: number;
+	readonly childNodes: ArrayLike<unknown>;
 	readonly value: string;
 	readonly textContent: string | null;
 }
@@ -59,3 +64,17 @@ declare const location: { readonly href: string; readonly pathname: string; read
 declare const history: { back(): void; readonly length: number };
 
 declare function getComputedStyle(element: RecipeElement, pseudo?: string): Record<string, string>;
+
+declare function requestAnimationFrame(callback: () => void): number;
+
+/**
+ * The bundler's directory read, which `catalogue.tsx` uses to collect its examples (design 197).
+ * Declared here rather than by pulling in the bundler's own client types, because those bring the
+ * whole DOM library with them and this project deliberately compiles without it.
+ *
+ * It runs at build time and answers one module per matching file, so what a caller gets back is a
+ * map from the path to the module's exports.
+ */
+interface ImportMeta {
+	glob(pattern: string, options: { eager: true }): Readonly<Record<string, unknown>>;
+}

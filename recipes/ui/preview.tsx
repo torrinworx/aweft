@@ -45,13 +45,16 @@ Theme.define({
 		borderRadius: '$radius',
 		border: '$borderWidth solid $border',
 	},
-	swatch_background: { background: '$background' },
-	swatch_surface: { background: '$surface' },
-	swatch_muted: { background: '$muted' },
-	swatch_accentSubtle: { background: '$accentSubtle' },
-	swatch_accent: { background: '$accent' },
-	swatch_dangerSubtle: { background: '$dangerSubtle' },
-	swatch_danger: { background: '$danger' },
+	// Each swatch names the foreground its fill pairs with, which is the convention of design 115.
+	// Without it every swatch was measured against the `*` entry's `$foreground`, and against a
+	// monochrome `$accent` that is the foreground itself the dev warning read 1:1 (design 191).
+	swatch_background: { background: '$background', color: '$foreground' },
+	swatch_surface: { background: '$surface', color: '$surfaceForeground' },
+	swatch_muted: { background: '$muted', color: '$mutedForeground' },
+	swatch_accentSubtle: { background: '$accentSubtle', color: '$accentSubtleForeground' },
+	swatch_accent: { background: '$accent', color: '$accentForeground' },
+	swatch_dangerSubtle: { background: '$dangerSubtle', color: '$dangerSubtleForeground' },
+	swatch_danger: { background: '$danger', color: '$dangerForeground' },
 	field: { display: 'flex', flexDirection: 'column', gap: '$space' },
 });
 
