@@ -109,8 +109,8 @@ test('nothing is checked before the signal, and everything is after it', () => {
 });
 
 test('a signal written false again is not-yet-checked again', () => {
-	// The flow the builder run hit: a form that clears itself after a successful submit wrote
-	// every field back to empty and every field went red on the empty form (design 208).
+	// A form that clears itself after a successful submit wrote every field back to empty, and
+	// every field went red on the empty form (design 208).
 	const email = mutable('nope');
 	const submit = mutable(false);
 	const valid = mutable<unknown>(null);
@@ -143,8 +143,8 @@ test('a signal that starts truthy is checked from the start', () => {
 });
 
 test('a check that reads another field in the form runs again when that field moves', () => {
-	// Confirm-must-match, written the way the builder run wrote it: the confirm field's
-	// validator reads the other password's cell (design 208).
+	// Confirm-must-match, written the way a form writes it: the confirm field's validator reads
+	// the other password's cell (design 208).
 	const next = mutable('longenough1');
 	const again = mutable('longenough1');
 	const allValid = mutable(false);

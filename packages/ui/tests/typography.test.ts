@@ -51,10 +51,9 @@ const page = (item: unknown): {
 
 // --- every type string the four applications write ---------------------------------------------
 
-// Measured across four applications. The
-// expected element and segments are read off the grammar in design 180, not off a run: the first
-// segment is the element when it is a heading or a paragraph and a `<span>` otherwise, and every
-// segment including the first is a theme word after `text`.
+// Measured across four applications. The expected element and segments are read off the grammar in
+// design 180, not off a run: the first segment is the element when it is a heading or a paragraph
+// and a `<span>` otherwise, and every segment including the first is a theme word after `text`.
 const USED: readonly (readonly [type: string, element: string, segments: string[]])[] = [
 	['p1', 'p', ['text', 'p1']],
 	['p2', 'p', ['text', 'p2']],

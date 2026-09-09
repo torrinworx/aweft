@@ -2191,10 +2191,9 @@ test('a text field with an addon rings the box on a real Tab, and the input ring
 });
 
 test('a themed element given hidden computes display none', async () => {
-	// Design 207, and the third defect the builder run of found. Measured before the
-	// fix on the catalogue: a themed button given `hidden` computed `display: flex` and an
-	// unthemed one computed `none`, because the host's `[hidden]` rule is unlayered and every
-	// entry's `display` is inside `@layer aweft`.
+	// Design 207. Measured before the fix on the catalogue: a themed button given `hidden` computed
+	// `display: flex` and an unthemed one computed `none`, because the host's `[hidden]` rule is
+	// unlayered and every entry's `display` is inside `@layer aweft`.
 	await drive('hidden-rule', `
 		import { Button, h, mount } from '@aweftjs/ui';
 		mount(document.body, <div>
@@ -2218,9 +2217,9 @@ test('a themed element given hidden computes display none', async () => {
 });
 
 test('a success alert reaches its contrast in both modes', async () => {
-	// Design 216. The ratios are in that record, measured with this package's own `contrastRatio`
-	// and asserted in `contrast.test.ts`; what only a browser can say is that the two roles are
-	// what the element actually computes, in each mode.
+	// Design 216. The ratios are in that note, measured with this package's own `contrastRatio` and
+	// asserted in `contrast.test.ts`; what only a browser can say is that the two roles are what
+	// the element actually computes, in each mode.
 	await drive('success-tone', `
 		import { Alert, Theme, dark, h, light, mount } from '@aweftjs/ui';
 		mount(document.body, <div>
@@ -2640,8 +2639,8 @@ test('an underlined tab draws a $ringWidth rail in $accent and no fill at all', 
 });
 
 test('a hovered button transitions at the duration and the curve the theme says', async () => {
-	// Design 217. The expected values are the record's, not `motion.ts` read back: `$fast` is
-	// 150ms and `$ease` is the curve below.
+	// Design 217. The expected values are that note's, not `motion.ts` read back: `$fast` is 150ms
+	// and `$ease` is the curve below.
 	await drive('motion-tokens', `
 		import { Button, h, mount } from '@aweftjs/ui';
 		mount(document.body, <Button id="save" label="Save" />);

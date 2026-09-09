@@ -116,9 +116,9 @@ slack. A rising series is a leak, and it is invisible to every other script here
 
 ### What designs 154 to 157 moved
 
-Measured on this machine, before and after the pass on `core` and `dom` (designs 154 to 157),
-each script run three times and the best kept. The before column is the same scripts on the same
-machine minutes earlier.
+Measured on this machine, before and after designs 154 to 157 on `core` and `dom`, each script run
+three times and the best kept. The before column is the same scripts on the same machine minutes
+earlier.
 
 | Line | Before | After |
 |---|---|---|

@@ -1,5 +1,4 @@
-// The one helper that acts on its own, and only because you asked it to (design 063,
-//).
+// The one helper that acts on its own, and only because you asked it to (design 063).
 
 import { observer } from '@aweftjs/core';
 

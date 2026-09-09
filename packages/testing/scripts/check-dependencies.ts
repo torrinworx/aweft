@@ -27,23 +27,22 @@ const violations = checkManifests(manifests, [], {
 	// The frame runner's escape suite runs in a real browser, because no fake DOM enforces an
 	// iframe's isolation (design 070). Dev only, this package only.
 	'@aweftjs/sandbox': ['playwright'],
-	// The server side of the WebSocket protocol is hostile-input parsing this stack does not
-	// write itself (design 072). Its declaration file rides along as a dev
-	// dependency. This package only.
+	// The server side of the WebSocket protocol is hostile-input parsing this stack does not write
+	// itself (design 072). Its declaration file rides along as a dev dependency. This package only.
 	'@aweftjs/server': ['ws', '@types/ws'],
 	// One transform has to run in a bundler and in a browser, so it needs a parser that reads
-	// TypeScript and JSX and still fits a page: 89 KB gzipped against `typescript`'s 1,595 KB,
-	// and `acorn` cannot read TypeScript at all. `magic-string` edits the source in place so an
+	// TypeScript and JSX and still fits a page: 89 KB gzipped against `typescript`'s 1,595 KB, and
+	// `acorn` cannot read TypeScript at all. `magic-string` edits the source in place so an
 	// untouched line comes out byte for byte (design 088). This package only.
 	'@aweftjs/build': ['@babel/parser', 'magic-string'],
-	// The icon sets an application installs, as one family rather than one entry per set
-	// (design 140). They are optional peers, so nothing here installs one, and the
-	// check refuses a peer that is not marked optional. `@iconify-json/lucide` is a devDependency
-	// as well, because the suite and the recipe read a real set.
+	// The icon sets an application installs, as one family rather than one entry per set (design
+	// 140). They are optional peers, so nothing here installs one, and the check refuses a peer
+	// that is not marked optional. `@iconify-json/lucide` is a devDependency as well, because the
+	// suite and the recipe read a real set.
 	'@aweftjs/icons': ['@iconify-json/*'],
-	// The Postgres driver's obligations are transactional, and nothing but a real server
-	// enforces a row lock (design 160). Dev only, this package only: the driver
-	// takes a pool the application made and imports none of these.
+	// The Postgres driver's obligations are transactional, and nothing but a real server enforces a
+	// row lock (design 160). Dev only, this package only: the driver takes a pool the application
+	// made and imports none of these.
 	'@aweftjs/store': ['pg', '@types/pg', 'embedded-postgres'],
 });
 

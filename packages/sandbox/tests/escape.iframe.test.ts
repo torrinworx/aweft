@@ -1,7 +1,6 @@
-// The frame runner's own half of the escape suite, plus the window suite, run in a real
-// browser. No fake DOM enforces an iframe's isolation, so a fake one would prove nothing
-// (design 070). Playwright's Chromium is a dev dependency and `npm test`
-// installs it before this runs.
+// The frame runner's own half of the escape suite, plus the window suite, run in a real browser. No
+// fake DOM enforces an iframe's isolation, so a fake one would prove nothing (design 070).
+// Playwright's Chromium is a dev dependency and `npm test` installs it before this runs.
 //
 // The suites live in the browser: this file builds the emitted JS, serves it, drives one page
 // that imports @aweftjs/sandbox and @aweftjs/testing, and asserts what the page reports. The

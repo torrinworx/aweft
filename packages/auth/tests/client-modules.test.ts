@@ -264,9 +264,9 @@ test('auth/SignIn handed no retry signs in and does nothing more', async () => {
 });
 
 test('a static render of a gated act finishes, and the sign-in act is what its markup holds', async () => {
-	// The failure this replaced: over a client that never opened, a gate
-	// awaiting identity never returned, `render` waits on every promise a component handed
-	// `pending`, and this render was still running after six seconds (design 245).
+	// The failure this guards against: over a client that never opened, a gate awaiting identity
+	// never returned, `render` waits on every promise a component handed `pending`, and this
+	// render was still running after six seconds (design 245).
 	const site = extra({
 		'site/Gate.ts': {
 			deps: ['auth/Session'],

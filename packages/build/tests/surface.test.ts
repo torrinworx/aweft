@@ -1,5 +1,5 @@
-// The public surface, by name. Written fromdesigns 088 to 097, never from
-// the module, so an export that appears without being decided turns this red.
+// The public surface, by name. Written from designs 088 to 097, never from the module, so an
+// export that appears without being decided turns this red.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -113,8 +113,8 @@ commits landed, and the answer is usually in those two, but working it out is st
 It does not attach to anything on its own. There is no global, no auto-install, and no side
 effect from importing it.
 
-**It covers `@aweftjs/core`, and only that.** Documents, commits and refusals. It does not read
-a live scope, a mounted node, a link or a store row: those live inside packages that hand out no
-way to see them, and reaching in would have meant a new permanent export in each. Design 103
-records that seam being designed and then withdrawn unbuilt. `explain` on one of those objects
-tells you it cannot place it rather than guessing at it.
+**It covers `@aweftjs/core`, and only that.** Documents, commits and refusals. It does not read a
+live scope, a mounted node, a link or a store row: those live inside packages that hand out no way
+to see them, and reaching in would have meant a new permanent export in each. Design 103 is why
+that seam is not here. `explain` on one of those objects tells you it cannot place it rather than
+guessing at it.

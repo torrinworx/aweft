@@ -183,5 +183,5 @@ what its history is. Whether the code is safe to run.
 
 ## Reading on
 
-The decisions are in `docs/design/` 061 to 065. The contract this package is built to is
-the one every module in the applications it serves is already written to.
+The design notes are in `docs/design/` 061 to 065. The contract this package is built to is the
+one an application's own modules are written to.

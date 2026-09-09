@@ -32,9 +32,9 @@ defineTheme({
 		fontFamily: '$font',
 		// No `color` here. This entry is on every themed element, so a colour written here lands on
 		// an element inside a control as well as on the control, and an `Icon` inside a filled
-		// button took the page's foreground on the button's own fill: measured in Chromium on
-		//, `rgb(28, 32, 39)` on `rgb(28, 32, 39)`, an invisible icon. The page's colour
-		// belongs to the page's own entry, beside the background it already has to set (design 198).
+		// button took the page's foreground on the button's own fill: measured in Chromium,
+		// `rgb(28, 32, 39)` on `rgb(28, 32, 39)`, an invisible icon. The page's colour belongs to
+		// the page's own entry, beside the background it already has to set (design 198).
 
 		// The focus ring, set once for every themed element, so no component has to remember it
 		// and none can forget it (design 118). The key after `_cssProp_` is the pseudo-class as

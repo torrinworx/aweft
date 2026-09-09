@@ -43,11 +43,11 @@ driver with it; nothing can be opened afterwards.
 Three things, one job each.
 
 **Rows.** One per observable: its id, its kind, where it is attached, and its slots. A commit
-writes only the slots its deltas name, so the cost of a write follows the change rather than
-the document. Measured against writing the document whole, in the R1 research run behind design 047
-(embedded Postgres, outside this repo; no script here reproduces it): 0.054 ms and 3.9 KB of
-write-ahead log at a 620 KB document, against 34.98 ms and 571 KB. The rows are the source of truth, and a
-document opens by reading them.
+writes only the slots its deltas name, so the cost of a write follows the change rather than the
+document. Measured against writing the document whole, in an embedded Postgres outside this repo
+(design 047; no script here reproduces it): 0.054 ms and 3.9 KB of write-ahead log at a 620 KB
+document, against 34.98 ms and 571 KB. The rows are the source of truth, and a document opens by
+reading them.
 
 **A commit tail.** Every commit, in order, with a per-document sequence: the document's
 history, which an application reads through `since`. It is derived, so losing it costs a

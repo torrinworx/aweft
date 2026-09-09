@@ -532,9 +532,9 @@ page.
 
 ## Laying a form out
 
-There is no `Field` component. A form is the theme entries and a bare `<label>` (design 209): five
-builders out of five reached past the components, for the same reason each time, so the components
-went and the entries stayed.
+There is no `Field` component. A form is the theme entries and a bare `<label>` (design 209): every
+page that laid a form out reached past the components, for the same reason each time, so the
+components went and the entries stayed.
 
 ```tsx
 import { Checkbox, TextField } from '@aweftjs/ui';
@@ -1147,14 +1147,14 @@ element wears the entry. A `TextField` given `padding: '12px'` through a theme o
 sizes nothing in this theme: it is the number your own entries reach for.
 
 **Motion** is `$fast` (150ms), `$slow` (240ms), `$ease` (`cubic-bezier(0.4, 0, 0.2, 1)`) and
-`$easeOut`. The root sets one transition for every themed element, over
-`background-color, background-image, border-color, color, transform`, and `popup`, `dialog`, its
-`::backdrop` and `tooltip` each set one more for the opacity and scale they arrive with (record
-192). `box-shadow` is deliberately not on the list: the focus ring is drawn as one, and a ring that
-fades in is a ring that is not there yet (design 217). Every one of these is written inside
-`@media (prefers-reduced-motion: no-preference)`, so a person who asked for less motion gets none
-and no component has to remember the query. The default theme reads neither `$slow` nor `$easeOut`;
-they are there for you.
+`$easeOut`. The root sets one transition for every themed element, over `background-color,
+background-image, border-color, color, transform`, and `popup`, `dialog`, its `::backdrop` and
+`tooltip` each set one more for the opacity and scale they arrive with (design 192). `box-shadow`
+is deliberately not on the list: the focus ring is drawn as one, and a ring that fades in is a
+ring that is not there yet (design 217). Every one of these is written inside `@media
+(prefers-reduced-motion: no-preference)`, so a person who asked for less motion gets none and no
+component has to remember the query. The default theme reads neither `$slow` nor `$easeOut`; they
+are there for you.
 
 **Three things move that are not a colour.** A switch's thumb crosses its pill over `$fast`, a
 slider's thumb grows under the pointer over `$fast`, and a skeleton and the loading dots run their
