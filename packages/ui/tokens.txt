@@ -47,6 +47,7 @@ dangerSubtleForeground
 dialogWidth
 div
 dot
+dotCycle
 dotSize
 ease
 easeOut
@@ -89,6 +90,7 @@ neutral7
 neutral8
 neutral9
 pressTint
+pulseCycle
 radius
 radiusLg
 radiusSm
@@ -148,6 +150,8 @@ textXl
 textXlLine
 textXs
 textXsLine
+thumbHover
+thumbPress
 thumbSize
 tickHeight
 tickStroke

@@ -248,13 +248,24 @@ test('a disabled control dims rather than repaints', () => {
 	assert.match(rules, new RegExp(`background: ${valueOf('danger')}`), 'the danger fill is still there');
 });
 
+// The four durations and the one curve of design 217, written from the record and not read from
+// the sheet. `$fast` is 150ms and `$ease` is the curve below; a test that spelled either as a
+// variable would pass whatever `motion.ts` was changed to.
+const FAST = '150ms';
+const EASE = 'cubic-bezier\\(0\\.4, 0, 0\\.2, 1\\)';
+
 test('an overlay arrives from nothing, and only where motion is welcome', () => {
 	for (const entry of ['dialog', 'popup', 'tooltip']) {
 		const rules = rulesFor([entry]);
 		assert.match(rules, /@starting-style \{ [^}]*opacity: 0; transform: scale\(0\.96\);/,
 			`${entry} has a style to start from`);
-		assert.match(rules, /@media \(prefers-reduced-motion: no-preference\) \{[^}]*transition: opacity 120ms/,
-			`${entry} moves only where motion is welcome`);
+		// One duration and one curve for all three, at the tokens design 217 moved them to.
+		assert.match(
+			rules,
+			new RegExp(`@media \\(prefers-reduced-motion: no-preference\\) \\{[^}]*`
+				+ `transition: opacity ${FAST} ${EASE}, transform ${FAST} ${EASE}`),
+			`${entry} moves at $fast on $ease, and only where motion is welcome`,
+		);
 		const outside = rules.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/g, '');
 		assert.doesNotMatch(outside, /transition:/, `nothing outside the query gives ${entry} a transition`);
 	}
@@ -262,26 +273,57 @@ test('an overlay arrives from nothing, and only where motion is welcome', () => 
 	// A dialog that is no longer open is still on the screen while it goes, which is what the two
 	// discrete properties in its list are for.
 	const dialog = rulesFor(['dialog']);
-	assert.match(dialog, /display 120ms allow-discrete, overlay 120ms allow-discrete/);
+	assert.match(dialog, new RegExp(`display ${FAST} allow-discrete, overlay ${FAST} allow-discrete`));
 	assert.match(dialog, /:not\(\[open\]\) \{ opacity: 0; transform: scale\(0\.96\);/);
 
 	// And the scrim goes with it. The transition is on `.awN::backdrop` inside the reduced-motion
 	// query, which is a pseudo block inside a query block: the nesting design 190's amendment
 	// buys, and the reason the backdrop used to appear and go without fading.
-	assert.match(dialog,
-		/@media \(prefers-reduced-motion: no-preference\) \{ \.aw\d+::backdrop \{ transition: opacity 120ms/);
+	assert.match(dialog, new RegExp(
+		`@media \\(prefers-reduced-motion: no-preference\\) \\{ \\.aw\\d+::backdrop `
+		+ `\\{ transition: opacity ${FAST} ${EASE}, display ${FAST} allow-discrete`));
 	assert.match(dialog, /@starting-style \{ \.aw\d+::backdrop \{ opacity: 0; \} \}/);
 	assert.match(dialog, /:not\(\[open\]\)::backdrop \{ opacity: 0; \}/);
+
+	// A sheet declares no transition of its own: it replaces the base entry's scale with a
+	// translate and travels on the list above (design 217).
+	for (const side of ['left', 'right', 'top', 'bottom']) {
+		const rules = rulesFor(['dialog', 'sheet', side]);
+		assert.equal(rules.match(/transition:/g)?.length, 2,
+			`a ${side} sheet adds no third transition of its own`);
+	}
 });
 
 test('motion is declared only inside the query that asks whether the person wants any', () => {
 	const rules = rulesFor(['button']);
-	assert.match(rules, /@media \(prefers-reduced-motion: no-preference\) \{[^}]*transition-duration: 120ms/);
+	assert.match(rules, new RegExp(
+		'@media \\(prefers-reduced-motion: no-preference\\) \\{[^}]*'
+		+ `transition-duration: ${FAST}; transition-timing-function: ${EASE}`));
+	// The property list, in full (design 217). `transform` is on it so a page's own entry that
+	// scales something gets the root's transition; `box-shadow` is off it because the focus ring is
+	// drawn as one, and a ring that fades in is a ring that is not there yet.
+	assert.match(rules, /transition-property: background-color, background-image, border-color, color, transform;/);
+	assert.doesNotMatch(rules, /transition-property:[^;]*box-shadow/);
+
 	// Nothing outside the query sets a transition, so there is no rule for a reduce override to
 	// have to beat.
 	const outside = rules.split('@media')[0]!;
 	assert.doesNotMatch(outside, /transition/);
 	assert.doesNotMatch(rules, /prefers-reduced-motion: reduce/);
+});
+
+test('the toggle\'s thumb travels, and only where motion is welcome', () => {
+	// The thumb is `::before` and it moves with `left`. The root rule reaches neither, so the entry
+	// says its own duration (design 217); before it did, the thumb jumped.
+	const rules = rulesFor(['toggle']);
+	assert.match(rules, new RegExp(
+		`@media \\(prefers-reduced-motion: no-preference\\) \\{ \\.aw\\d+::before `
+		+ `\\{ transition: left ${FAST} ${EASE}; \\} \\}`));
+
+	const outside = rules.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/g, '');
+	assert.doesNotMatch(outside, /transition:/, 'the travel is inside the query and nowhere else');
+	// The travel itself is unchanged: the pill less the thumb and its two margins.
+	assert.match(rules, /:checked::before \{ left: calc\(100% - 4px - 18px\); \}/);
 });
 
 test('light and dark nested on one page each resolve their own roles', async () => {
@@ -548,10 +590,32 @@ test('the file input is hidden and still focusable, which is what offscreen mean
 
 test('the dots move only inside the query that asks whether the person wants motion', () => {
 	const rules = rulesFor(['dot']);
-	assert.match(rules, /@keyframes pulse-/, 'the keyframes are named after the entry that owns them');
+	// Named after the entry that owns the block (design 111). It is `wave` and not `dot` because
+	// `$dot` is already this theme's name for a radio's centre (design 218).
+	assert.match(rules, /@keyframes wave-/, 'the keyframes are named after the entry that owns them');
 	const outside = rules.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/g, '');
 	assert.doesNotMatch(outside, /animation:/, 'nothing animates outside the query');
 	assert.match(rules, /@media \(prefers-reduced-motion: no-preference\) \{[^}]*animation:/);
+});
+
+test('the three dots are a third of a cycle apart', () => {
+	// Design 218: one cycle named once, and the two delays worked out from it in the stylesheet.
+	const first = rulesFor(['dot']);
+	assert.match(first, /animation: wave-\w+ 1s ease-in-out infinite/);
+	assert.doesNotMatch(first, /animation-delay/, 'the first dot waits for nothing');
+
+	assert.match(rulesFor(['dot', 'second']),
+		/@media \(prefers-reduced-motion: no-preference\) \{[^}]*animation-delay: calc\(1s \/ 3\);/);
+	assert.match(rulesFor(['dot', 'third']),
+		/@media \(prefers-reduced-motion: no-preference\) \{[^}]*animation-delay: calc\(1s \/ 3 \* 2\);/);
+
+	// A delay of a whole cycle puts the third dot back in step with the first, which is the
+	// flicker design 218 was written about: the old delays were $fast and $slow, half a cycle and
+	// a whole one.
+	for (const list of [['dot', 'second'], ['dot', 'third']]) {
+		assert.doesNotMatch(rulesFor(list), /animation-delay: (?:150ms|240ms|1s);/,
+			`${list.join(' ')} is a fraction of the cycle, not a duration token`);
+	}
 });
 
 test('a card drops its padding when it is tight, and nothing else', () => {
@@ -735,6 +799,50 @@ test('the pulse is one definition, reached by the dots and by a skeleton', () =>
 	assert.doesNotMatch(outside, /animation:/, 'nothing animates outside the reduced-motion query');
 	assert.match(skeleton, new RegExp(`background: ${valueOf('muted')}`));
 	assert.match(rulesFor(['skeleton', 'round']), /border-radius: 50%/);
+});
+
+test('the slider draws its states on the thumb and the track, not over its own box', () => {
+	// Design 220. The root tint is a rectangle the width of the row around a 16px circle, so the
+	// slider is the one entry that answers `hovered` and `pressed` itself.
+	const hover = valueOf('hoverTint');
+	const press = valueOf('pressTint');
+
+	for (const [segment, tint, scale] of [['hovered', hover, '1.2'], ['pressed', press, '1.3']] as const) {
+		const rules = rulesFor(['slider', segment]);
+		// The root's gradient is still emitted; the two-segment entry is later in the chain and
+		// turns it off, which is what "opts out" means here. Both rules are `.awN` and the later
+		// one wins, so what is checked is which comes last on the element itself.
+		const tinted = /\.aw\d+ \{ background-image: linear-gradient/.exec(rules);
+		const cleared = /\.aw\d+ \{ background-image: none; \}/.exec(rules);
+		assert.ok(tinted !== null, `the root still writes its ${segment} gradient`);
+		assert.ok(cleared !== null && cleared.index > tinted.index,
+			`and the slider turns it off after it, under ${segment}`);
+
+		for (const track of ['::-webkit-slider-runnable-track', '::-moz-range-track']) {
+			assert.match(rules, new RegExp(`\\${track} \\{ background-image: `
+				+ `linear-gradient\\(${tint.replace(/[()]/g, (c) => `\\${c}`)}`),
+				`${segment} tints ${track}`);
+		}
+		for (const thumb of ['::-webkit-slider-thumb', '::-moz-range-thumb']) {
+			assert.match(rules, new RegExp(`\\${thumb} \\{ transform: scale\\(${scale}\\); \\}`),
+				`${segment} scales ${thumb}`);
+		}
+	}
+
+	// The scale travels rather than jumping, and the root's rule cannot do it: that one is written
+	// against the element and a thumb is a pseudo-element (design 217).
+	const base = rulesFor(['slider']);
+	for (const thumb of ['::-webkit-slider-thumb', '::-moz-range-thumb']) {
+		assert.match(base, new RegExp(
+			`@media \\(prefers-reduced-motion: no-preference\\) \\{ \\.aw\\d+\\${thumb} `
+			+ `\\{ transition: transform ${FAST} ${EASE}; \\} \\}`));
+	}
+	const outside = base.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/g, '');
+	assert.doesNotMatch(outside, /transition:/, 'the thumb moves only where motion is welcome');
+
+	// The room the scaled thumb grows into at either end, kept inside the width the row gave it.
+	assert.match(base, /box-sizing: border-box/);
+	assert.match(base, new RegExp(`padding: 0 ${valueOf('space')}`));
 });
 
 test('a card stacks only where the component asked it to, so the bare block is unchanged', () => {
@@ -935,4 +1043,16 @@ test('a tab is one control height, and the one showing is lifted or underlined b
 		true, 'and the colour of the rail is the last word on it');
 	assert.match(underlined, new RegExp(`margin-bottom: -${valueOf('borderWidth')}`),
 		'so the tab\'s rail covers the strip\'s hairline rather than sitting over it');
+});
+
+test('$slow and $easeOut are vocabulary the default theme does not read', () => {
+	// Design 217: the two are there for an application to name, and nothing shipped reaches them,
+	// so changing either moves nothing in this theme. The README says both; this is the check.
+	assert.equal(valueOf('slow'), '240ms');
+	assert.equal(valueOf('easeOut'), 'cubic-bezier(0, 0, 0.2, 1)');
+
+	const source = readFileSync(fileURLToPath(new URL('../src/defaults.ts', import.meta.url)), 'utf8');
+	const code = source.split('\n').filter((line) => !line.trimStart().startsWith('//')).join('\n');
+	assert.doesNotMatch(code, /\$slow\b/, 'no entry reads $slow');
+	assert.doesNotMatch(code, /\$easeOut\b/, 'no entry reads $easeOut');
 });

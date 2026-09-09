@@ -251,6 +251,7 @@ try {
 				outlineStyle: style.outlineStyle,
 				boxShadow: style.boxShadow,
 				transitionDuration: style.transitionDuration,
+				transitionTimingFunction: style.transitionTimingFunction,
 				fontSize: style.fontSize,
 				lineHeight: style.lineHeight,
 				minHeight: style.minHeight,
@@ -332,8 +333,10 @@ try {
 		getComputedStyle(document.querySelector('#button-light')!).borderTopColor === want,
 		rgb(roleOf(light, 'ring')));
 
-	// Motion is declared once, inside the query that asks whether the person wants any.
-	assert.equal(ringed.transitionDuration, '0.12s', '$fast, when motion is welcome');
+	// Motion is declared once, inside the query that asks whether the person wants any, at the
+	// tokens design 217 moved it to.
+	assert.equal(ringed.transitionDuration, '0.15s', '$fast, when motion is welcome');
+	assert.equal(ringed.transitionTimingFunction, 'cubic-bezier(0.4, 0, 0.2, 1)', '$ease');
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	const still = await paint('#button-light');
 	assert.equal(still.transitionDuration, '0s', 'and nothing at all when it is not');
@@ -483,15 +486,33 @@ try {
 	// The slider's thumb and track are drawn from the theme on the vendor pseudo-elements. Chromium
 	// does not report a vendor pseudo-element through getComputedStyle, so what is read here is that
 	// the host was told not to draw its own and that the rule reached the page with the role in it.
-	const slider = await page.evaluate(() => ({
-		appearance: getComputedStyle(document.querySelector('#slider-light')!).appearance,
-		height: getComputedStyle(document.querySelector('#slider-light')!).height,
-		sheet: document.head.querySelector('style[data-aweft]')?.textContent ?? '',
-	}));
+	const slider = await page.evaluate(() => {
+		const style = getComputedStyle(document.querySelector('#slider-light')!);
+		return {
+			appearance: style.appearance,
+			height: style.height,
+			image: style.backgroundImage,
+			padding: [style.paddingLeft, style.paddingRight],
+			sheet: document.head.querySelector('style[data-aweft]')?.textContent ?? '',
+		};
+	});
 	assert.equal(slider.appearance, 'none', 'the host is not drawing its own range input');
 	assert.equal(slider.height, '36px', 'and its hit area is $control tall');
 	assert.match(slider.sheet, new RegExp(`::-webkit-slider-thumb \\{[^}]*background: ${rgbHex(roleOf(light, 'accent'))}`),
 		'the thumb rule reached the page with $accent in it');
+	// Design 220: the state goes on the thumb and the track, so nothing is painted over the control
+	// itself, and the room at each end is what the thumb grows into.
+	assert.equal(slider.image, 'none', 'nothing is painted over the control at rest');
+	assert.deepEqual(slider.padding, ['4px', '4px'], '$space of room for the thumb at both ends');
+
+	await page.hover('#slider-light');
+	const hoveredSlider = await page.evaluate(() => ({
+		image: getComputedStyle(document.querySelector('#slider-light')!).backgroundImage,
+		sheet: document.head.querySelector('style[data-aweft]')?.textContent ?? '',
+	}));
+	assert.equal(hoveredSlider.image, 'none', 'and none over it under the pointer either');
+	assert.match(hoveredSlider.sheet, /::-webkit-slider-thumb \{ transform: scale\(1\.2\); \}/,
+		'the hovered chain scales the thumb instead');
 
 	// The size axis: three heights on the button, and a square at each of them (design 194).
 	const axis = await page.evaluate(() => {

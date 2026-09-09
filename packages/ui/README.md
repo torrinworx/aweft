@@ -1141,16 +1141,18 @@ ask for. Everything else is yours to define.
 | `field_label`, `field_hint`, `field_error` | a control's label, the line under it, and its message. Parts, so each is one class token. A label under a `[data-invalid]` field takes the message's colour |
 | `select_wrap`, `select_chevron` | the box a select's own arrow is placed in, and the arrow: a `$chevron` square with two sides drawn, turned a quarter turn |
 | `toggle` | a switch: a pill and a thumb drawn with `::before` |
-| `slider` | a range input: the track and the thumb on the vendor pseudo-elements |
+| `slider` | a range input: the track and the thumb on the vendor pseudo-elements, with `$space` of room at each end for the thumb |
+| `slider_hovered`, `slider_pressed` | the one entry pair that answers the two state segments itself: the root tint goes off the box, the track takes the tint and the thumb scales (design 220) |
 | `option` | one row of a select's open list, where the host draws it from the theme |
 | `card_tight` | that card with no padding |
 | `field`, `field_inline`, `field_responsive` | what a labelled control puts around itself, and what a form is laid out with: a column, a `$control`-tall row, or a column that turns into one from 28rem of its container |
 | `field_group`, `field_set`, `field_legend` | the stack a form is, a fieldset with the host's frame taken off, and its heading |
-| `dots`, `dot`, `pulse` | the three pulsing dots of `LoadingDots`, and the one keyframes block they and `skeleton` share |
+| `dots`, `dot` | the three dots of `LoadingDots`, and one of them: a 1s wave, the second and third a third of a cycle behind |
+| `pulse` | a slow breathe over `$pulseCycle`, which `skeleton` extends and any block of yours can |
 | `badge` and its `quiet`, `danger`, `success`, `outline`, `sm` and `lg` | a short label on a fill, sized by its padding and its text rather than by `$control` |
 | `alert`, `alert_lead`, `alert_danger`, `alert_success`, `alert_symbol`, `alert_title`, `alert_body` | a message about the page: a grid of one column, two when it was given an icon |
 | `avatar`, `avatar_image`, `avatar_fallback` and its `sm`, `lg`, `round` | a picture of a person and the letters shown without one; the part that is not showing carries `hidden`, and the letters are `$avatarLetter` of the box |
-| `skeleton`, `skeleton_round` | a grey box standing in for something that has not arrived, pulsing on `pulse` |
+| `skeleton`, `skeleton_round` | a grey box standing in for something that has not arrived, breathing on `pulse` |
 | `progress` and its `sm` and `lg` | a bar filling up, drawn on the three vendor pseudo-elements |
 | `empty`, `empty_symbol`, `empty_title`, `empty_description`, `empty_actions` | nothing here yet, and what to do about it |
 | `card_stack`, `card_head`, `card_title`, `card_description`, `card_body`, `card_foot` | what a `Card` adds when it was given a title, a description or a foot; one with none of the three reaches none of them |
@@ -1174,6 +1176,12 @@ ask for. Everything else is yours to define.
 yourself: `theme={['button', hovered.bool('hovered', null)]}`. They match anywhere, so they apply
 to any entry above. They are meant for the controls, `button` and its two variants, `input` and its
 variant, and `select`; `card`, `popup`, the `text` sizes and `muted` have no state to show.
+
+`slider` is the one entry that answers the first two itself. The tint is a rectangle the width of
+the row and a slider's thumb is a 16px circle inside it, so `slider_hovered` and `slider_pressed`
+turn the tint off the box and put the state where the control is: the track takes the tint and the
+thumb scales, on both vendor pseudo-elements (design 220). Write a `slider_hovered` of your own to
+have it back. Any entry of yours can do the same: two segments beat one in the chain.
 
 **Your root entry sets the page's background and its colour.** The root `*` entry of this theme
 sets neither, because it is on every themed element: a colour written there lands on an element

@@ -62,8 +62,9 @@ defineTheme({
 		// wants any. Written the other way round, as a reduce override, it would lose to a
 		// component's own transition: a media query adds no specificity and `*` is emitted first.
 		'_media_(prefers-reduced-motion: no-preference)': {
-			// Not the outline: a focus ring that fades in is a focus ring that is not there yet.
-			transitionProperty: 'background-color, background-image, border-color, color',
+			// Not `box-shadow`: the ring is drawn as one (design 192), and a focus ring that fades
+			// in is a focus ring that is not there yet. Design 217 says what that costs.
+			transitionProperty: 'background-color, background-image, border-color, color, transform',
 			transitionDuration: '$fast',
 			transitionTimingFunction: '$ease',
 		},
@@ -349,6 +350,11 @@ defineTheme({
 		// The thumb's travel is what is left of the pill once the thumb and its two margins are
 		// taken out of it, worked out in the stylesheet so a change of size needs one edit.
 		'_cssProp_:checked::before': { left: 'calc(100% - $space - $switchThumb)' },
+		// The root rule reaches neither the thumb nor `left`, so the travel says its own duration
+		// (design 217). One level of nesting inside the query is what design 190 allows.
+		'_media_(prefers-reduced-motion: no-preference)': {
+			_cssProp_before: { transition: 'left $fast $ease' },
+		},
 	},
 	// The pill and its thumb scale by their three names alone: the entry above reads them out of
 	// whichever entry in the chain last defined them (design 111), so a size is three values and
@@ -361,10 +367,16 @@ defineTheme({
 	slider: {
 		$trackHeight: '6px',
 		$thumbSize: '16px',
+		$thumbHover: 'scale(1.2)',
+		$thumbPress: 'scale(1.3)',
 		appearance: 'none',
+		// The padding is the room the thumb grows into at either end of its travel, and the box
+		// model is what keeps that room inside the width the row gave it (design 220).
+		boxSizing: 'border-box',
 		width: '100%',
 		height: '$control',
 		margin: 0,
+		padding: '0 $space',
 		background: 'transparent',
 		cursor: 'pointer',
 		'_cssProp_::-webkit-slider-runnable-track': {
@@ -393,6 +405,29 @@ defineTheme({
 			border: '$borderWidth solid $background',
 			background: '$accent',
 		},
+		// The root's transition is written against the element, so it never reaches a thumb.
+		'_media_(prefers-reduced-motion: no-preference)': {
+			'_cssProp_::-webkit-slider-thumb': { transition: 'transform $fast $ease' },
+			'_cssProp_::-moz-range-thumb': { transition: 'transform $fast $ease' },
+		},
+	},
+	// The one control that answers `hovered` and `pressed` itself (design 220). The root tint is a
+	// rectangle the width of the row around a 16px circle, so the state goes where the control is:
+	// the track takes the tint and the thumb grows. Two segments beat the one-segment `hovered`
+	// entry in the chain, which is what turns the root's gradient off.
+	slider_hovered: {
+		backgroundImage: 'none',
+		'_cssProp_::-webkit-slider-runnable-track': { backgroundImage: 'linear-gradient($hoverTint, $hoverTint)' },
+		'_cssProp_::-webkit-slider-thumb': { transform: '$thumbHover' },
+		'_cssProp_::-moz-range-track': { backgroundImage: 'linear-gradient($hoverTint, $hoverTint)' },
+		'_cssProp_::-moz-range-thumb': { transform: '$thumbHover' },
+	},
+	slider_pressed: {
+		backgroundImage: 'none',
+		'_cssProp_::-webkit-slider-runnable-track': { backgroundImage: 'linear-gradient($pressTint, $pressTint)' },
+		'_cssProp_::-webkit-slider-thumb': { transform: '$thumbPress' },
+		'_cssProp_::-moz-range-track': { backgroundImage: 'linear-gradient($pressTint, $pressTint)' },
+		'_cssProp_::-moz-range-thumb': { transform: '$thumbPress' },
 	},
 	// The hit area, the track and the thumb, the last two by name alone.
 	slider_sm: { $trackHeight: '4px', $thumbSize: '14px', height: '$controlSm' },
@@ -925,12 +960,17 @@ defineTheme({
 		userSelect: 'none',
 	},
 
-	// The pulse, defined once and reached by both the dots and a skeleton (design 199). A keyframes
-	// block is named after the entry that owns it (design 111), so one entry is one `@keyframes` in
-	// the sheet however many chains reach it.
+	// A slow breathe, with no flat stretch in it, for a block standing in for content that has not
+	// arrived (design 218). A keyframes block is named after the entry that owns it (design 111),
+	// so one entry is one `@keyframes` in the sheet however many chains reach it. The dots used to
+	// share this one and now have their own, because a skeleton wants to be barely noticed and
+	// three dots want to be read as a sequence.
 	pulse: {
-		_keyframes_pulse: '0%, 80%, 100% { opacity: 0.35 } 40% { opacity: 1 }',
-		'_media_(prefers-reduced-motion: no-preference)': { animation: '$pulse $slow infinite' },
+		$pulseCycle: '2s',
+		_keyframes_pulse: '0%, 100% { opacity: 1 } 50% { opacity: 0.5 }',
+		'_media_(prefers-reduced-motion: no-preference)': {
+			animation: '$pulse $pulseCycle ease-in-out infinite',
+		},
 	},
 
 	// A grey box standing in for something that has not arrived. It says nothing to a screen reader:
@@ -1228,21 +1268,31 @@ defineTheme({
 		height: '$iconSize',
 	},
 
-	// Three dots, pulsing in turn. The motion is declared only inside the query that asks whether
-	// the person wants any (design 118), so reduced motion leaves three still dots. The keyframes
-	// and the animation are the `pulse` entry above, which a skeleton also extends (design 199).
+	// Three dots rising and falling a third of a cycle apart, so the bright point travels along the
+	// row (design 218). The motion is declared only inside the query that asks whether the person
+	// wants any (design 118), so reduced motion leaves three still dots. The block is `wave` and
+	// not `dot` because `$dot` is already this theme's name for a radio's centre.
 	dots: { display: 'inline-flex', alignItems: 'center', gap: '$space' },
 	dot: {
-		extends: 'pulse',
 		$dotSize: '6px',
+		$dotCycle: '1s',
+		_keyframes_wave: '0%, 100% { opacity: 0.35 } 50% { opacity: 1 }',
 		display: 'inline-block',
 		width: '$dotSize',
 		height: '$dotSize',
 		borderRadius: '50%',
 		background: 'currentColor',
+		'_media_(prefers-reduced-motion: no-preference)': {
+			animation: '$wave $dotCycle ease-in-out infinite',
+		},
 	},
-	dot_second: { '_media_(prefers-reduced-motion: no-preference)': { animationDelay: '$fast' } },
-	dot_third: { '_media_(prefers-reduced-motion: no-preference)': { animationDelay: '$slow' } },
+	// The two delays are worked out from the one cycle, so moving the cycle is one edit.
+	dot_second: {
+		'_media_(prefers-reduced-motion: no-preference)': { animationDelay: 'calc($dotCycle / 3)' },
+	},
+	dot_third: {
+		'_media_(prefers-reduced-motion: no-preference)': { animationDelay: 'calc($dotCycle / 3 * 2)' },
+	},
 
 	// Laying things out in a line is an entry rather than a component (design 132). `center`,
 	// `start` and `end` all mean across the page, which is the main axis of a row and the cross

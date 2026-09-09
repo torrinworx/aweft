@@ -2346,3 +2346,181 @@ test('an underlined tab draws a $ringWidth rail in $accent and no fill at all', 
 		assert.equal(seen.ruled.quiet, 'rgba(0, 0, 0, 0)', 'and the tab beside it draws none');
 	});
 });
+
+test('a hovered button transitions at the duration and the curve the theme says', async () => {
+	// Design 217. The expected values are the record's, not `motion.ts` read back: `$fast` is
+	// 150ms and `$ease` is the curve below.
+	await drive('motion-tokens', `
+		import { Button, h, mount } from '@aweftjs/ui';
+		mount(document.body, <Button id="save" label="Save" />);
+	`, async (view) => {
+		await view.waitForSelector('#save');
+		const paint = async (): Promise<Record<string, string>> => view.evaluate(() => {
+			const style = getComputedStyle(document.querySelector('#save')!);
+			return {
+				duration: style.transitionDuration ?? '',
+				curve: style.transitionTimingFunction ?? '',
+				property: style.transitionProperty ?? '',
+				image: style.backgroundImage ?? '',
+			};
+		});
+
+		const quiet = await paint();
+		await view.hover('#save');
+		const hovered = await paint();
+		assert.notEqual(hovered.image, quiet.image, 'the pointer is really on it');
+
+		assert.equal(hovered.duration, '0.15s', '$fast');
+		assert.equal(hovered.curve, 'cubic-bezier(0.4, 0, 0.2, 1)', '$ease');
+		assert.equal(hovered.property,
+			'background-color, background-image, border-color, color, transform',
+			'the whole list, with transform on it and box-shadow off it (design 217)');
+
+		await view.emulateMedia({ reducedMotion: 'reduce' });
+		const still = await paint();
+		assert.equal(still.duration, '0s', 'and nothing at all when the person asked for less');
+	});
+});
+
+test('the toggle\'s thumb transitions its travel', async () => {
+	// The thumb is `::before` and it moves with `left`. The root rule is written against the
+	// element and names neither, so before design 217 the thumb jumped: the host's own default is
+	// `all` at `0s`, which is what this used to read.
+	await drive('toggle-motion', `
+		import { Toggle, h, mount } from '@aweftjs/ui';
+		mount(document.body, <Toggle id="switch" label="Notify me" />);
+	`, async (view) => {
+		await view.waitForSelector('#switch');
+		const thumb = async (): Promise<Record<string, string>> => view.evaluate(() => {
+			const style = getComputedStyle(document.querySelector('#switch')!, '::before');
+			return {
+				property: style.transitionProperty ?? '',
+				duration: style.transitionDuration ?? '',
+				curve: style.transitionTimingFunction ?? '',
+				left: style.left ?? '',
+			};
+		});
+
+		const resting = await thumb();
+		assert.equal(resting.property, 'left', 'the travel, and nothing else');
+		assert.equal(resting.duration, '0.15s');
+		assert.equal(resting.curve, 'cubic-bezier(0.4, 0, 0.2, 1)');
+		assert.equal(resting.left, '4px', '$space in from the edge of the pill');
+
+		// It really is the travel that moves: ticking the box takes the thumb to the far end, which
+		// is the pill less the thumb and its two margins.
+		await view.click('#switch');
+		await view.waitForFunction(() =>
+			getComputedStyle(document.querySelector('#switch')!, '::before').left !== '4px');
+		const travelled = await thumb();
+		assert.ok(Number.parseFloat(travelled.left!) > 4,
+			`the thumb crossed the pill: ${String(travelled.left)}`);
+
+		await view.emulateMedia({ reducedMotion: 'reduce' });
+		assert.equal((await thumb()).duration, '0s', 'and it jumps for a person who asked it to');
+	});
+});
+
+test('the pulse and the wave run at the durations they say', async () => {
+	// Design 218. Both were one 240ms block before, which is four cycles a second on a full-width
+	// grey box and three dots offset by half a cycle and a whole one.
+	await drive('pulse-motion', `
+		import { LoadingDots, Skeleton, h, mount } from '@aweftjs/ui';
+		mount(document.body, <div><Skeleton id="box" /><LoadingDots id="dots" /></div>);
+	`, async (view) => {
+		await view.waitForSelector('#box');
+		const read = async (): Promise<Record<string, string[]>> => view.evaluate(() => {
+			const of = (element: RecipeElement): string[] => {
+				const style = getComputedStyle(element);
+				return [
+					style.animationName ?? '',
+					style.animationDuration ?? '',
+					style.animationTimingFunction ?? '',
+					style.animationDelay ?? '',
+				];
+			};
+			const dots = Array.from(document.querySelectorAll('#dots > span'));
+			return {
+				box: of(document.querySelector('#box')!),
+				one: of(dots[0]!),
+				two: of(dots[1]!),
+				three: of(dots[2]!),
+			};
+		});
+
+		const moving = await read();
+		assert.match(moving.box![0]!, /^pulse-/, 'the skeleton is on its own block');
+		assert.equal(moving.box![1], '2s', 'a skeleton breathes over two seconds');
+		assert.equal(moving.box![2], 'ease-in-out', 'and turns around at both ends');
+
+		assert.match(moving.one![0]!, /^wave-/, 'and the dots are on theirs');
+		assert.equal(moving.one![1], '1s', 'a dot takes one second');
+		assert.equal(moving.one![3], '0s', 'the first waits for nothing');
+		// A third of the cycle each, worked out by the browser from the one named cycle.
+		assert.ok(Math.abs(Number.parseFloat(moving.two![3]!) - 1 / 3) < 0.01,
+			`the second is a third of a cycle behind: ${String(moving.two![3])}`);
+		assert.ok(Math.abs(Number.parseFloat(moving.three![3]!) - 2 / 3) < 0.01,
+			`and the third is two thirds: ${String(moving.three![3])}`);
+
+		await view.emulateMedia({ reducedMotion: 'reduce' });
+		const still = await read();
+		for (const [where, values] of Object.entries(still)) {
+			assert.equal(values[0], 'none', `${where} is still for a person who asked for less motion`);
+		}
+	});
+});
+
+test('the slider\'s hover is on its thumb and not over its own box', async () => {
+	// Design 220. Before it, `hovered` painted the root tint over the whole 36px input, which is a
+	// rectangle the width of the row around a 16px circle.
+	await drive('slider-hover', `
+		import { Slider, h, mount } from '@aweftjs/ui';
+		import { mutable } from '@aweftjs/core';
+		mount(document.body, <Slider id="volume" value={mutable(50)} />);
+	`, async (view) => {
+		await view.waitForSelector('#volume');
+		const paint = async (): Promise<Record<string, string>> => view.evaluate(() => {
+			const style = getComputedStyle(document.querySelector('#volume')!);
+			return {
+				image: style.backgroundImage ?? '',
+				left: style.paddingLeft ?? '',
+				right: style.paddingRight ?? '',
+				box: style.boxSizing ?? '',
+			};
+		});
+
+		const resting = await paint();
+		assert.equal(resting.image, 'none', 'nothing is painted over the control at rest');
+		assert.equal(resting.left, '4px', '$space of room for the thumb at the near end');
+		assert.equal(resting.right, '4px', 'and at the far one');
+		assert.equal(resting.box, 'border-box', 'so the room stays inside the width the row gave it');
+
+		// A band four pixels tall immediately above the resting thumb. Chromium reports no computed
+		// style of its own for `::-webkit-slider-thumb`, so what the thumb does is read off the
+		// pixels: blank at rest, painted once the thumb has grown into it.
+		const box = (await view.locator('#volume').boundingBox())!;
+		const band = {
+			x: Math.round(box.x + box.width / 2) - 12,
+			y: Math.round(box.y + box.height / 2) - 12,
+			width: 24,
+			height: 4,
+		};
+		const before = await view.screenshot({ clip: band });
+
+		// The theme generates one class per chain, so the hovered chain is a different class on the
+		// same element. This waits for that swap and then for the scale to finish travelling,
+		// rather than reading the frame in between.
+		const plain = await view.evaluate(() =>
+			document.querySelector('#volume')!.getAttribute('class') ?? '');
+		await view.hover('#volume');
+		await view.waitForFunction((was: string) =>
+			document.querySelector('#volume')!.getAttribute('class') !== was, plain);
+		await view.waitForTimeout(400);
+
+		const hovered = await paint();
+		assert.equal(hovered.image, 'none',
+			'the root tint is off: the state is on the thumb and the track, not over the box');
+		const after = await view.screenshot({ clip: band });
+		assert.ok(!before.equals(after), 'and the thumb really did grow into the room above it');
+	});
+});
