@@ -324,3 +324,10 @@ that slot when it opens the document rather than failing to open it at all. See 
 - **Decide who may write.** That is the application's rule, run before `receive`.
 - **Sweep on its own.** See above.
 
+## Known limits
+
+**A declared path that crosses an `alias` indexes what a reopened document no longer holds.**
+Every row is kept whether or not something attaches it, so the projection follows an `alias`
+into a detached row and indexes the value there, while opening the document drops that slot
+instead (design 050). A query can therefore answer with a document that has no such field once
+it is open; settling it means the projection and `open` agreeing about an aliased row.

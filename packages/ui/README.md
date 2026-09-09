@@ -1590,3 +1590,16 @@ the caller already holds: the tag identity behind each `<mark.name>`, what a the
 string, and the merge of a render's own theme with a provider's. A page's own state, its class
 cache and stylesheet, its id counter and its popup sink, is on the object each render makes.
 The render every default `mount` into a page shares is kept on that page's document, not here.
+
+## Known limits
+
+**A `Modal` in server markup does not hydrate.** `Modal` builds its `<dialog>` and hands that
+element to the control that opens it, so a static render writes the `open` attribute into the
+markup, the client has not written it when the pairing walk reaches the element, and `dom`
+reports the mismatch; and because a hydration keeps the server's element and drops the client's,
+the control would be left driving a node nobody can see. You meet it only when a page rendered
+on a server names `Modal` as a stage template, since a modal is otherwise opened by an
+interaction and is not in a page's markup at all. `Tooltip` and `Popup` avoid this by reading
+their element back out of the mount that put it in the document (design 153), which `Modal`
+cannot do until `dom` says which node a mount put in the document and lets a component write an
+attribute a hydration reconciles rather than compares.

@@ -326,3 +326,20 @@ slots they appear to touch.
 
 The wire format lives in `spec/`, the reasoning in `docs/design/`, and a complete
 program using all of the above in `recipes/core/`.
+
+## Known limits
+
+**Nothing records what a function read while it ran.** A transform is pure per input and what
+it reads besides its input is not tracked, and no scope here records reads and re-runs on a
+change to one of them. So anything reactive has to name what it follows, with `all([...])` or
+with the scope you mean, and a callback that reaches for a cell nobody handed it goes quiet
+when that cell changes. Settling it means a read-recording scope in this package, priced
+against what recording adds to every read.
+
+**`snapshot` can produce a document `fromSnapshot` refuses.** An `alias` may name an
+observable that a later edit takes out of the document: `snapshot` leaves the observable out,
+because nothing attaches it, and still writes the alias, so rebuilding that snapshot throws
+`unreachable: <id> is named but not in the snapshot`. You meet it when you alias an
+observable, detach it, and then save the document and build it again. `@aweftjs/store` drops
+the dangling slot as it opens a document (design 050); which answer holds in general, dropping
+the alias, carrying what is named as well as what is held, or refusing the detach, is open.

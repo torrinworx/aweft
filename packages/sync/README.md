@@ -221,3 +221,12 @@ try {
 - No messages on the link. A link carries commits and nothing else; an intent is state in
   the document, and a request is `requests`, beside the link and never inside it.
 - No storage. That is `@aweftjs/store`, on the same document, beside the link.
+
+## Known limits
+
+**One live topic per name on a link.** An arriving open is paired with the first share of that
+name that has no partner, so a second `share('state')` on a link that already has a live
+`state` never settles: its `ready` waits forever and no `fault` is raised. A share made after
+`stop()` waits the same way until the other end offers the name again. Share a name once per
+link and hand that one handle around; settling it means refusing a second share of a live name,
+or faulting an open for a name that is already paired.

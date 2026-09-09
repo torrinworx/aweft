@@ -356,3 +356,13 @@ document array a store persists or a link shares.
 `@aweftjs/dom` imports `@aweftjs/core` and nothing else. The complete program using all of
 the above, with its DOM operations asserted one by one against the recording host in
 `@aweftjs/testing`, is `recipes/dom/`.
+
+## Known limits
+
+**A hydration builds a tree it then throws away.** `h` makes an element the moment it runs, and
+the pairing walk copies each fresh element's attributes and properties onto the server's node
+and drops the fresh one, so taking over a page costs one `createElement` per element on it and
+every node those calls returned is garbage by the end of the mount. On a page of a few dozen
+elements that is a fraction of a frame; a page of hundreds has not been measured. Making it
+zero means claiming the server's node before building a fresh one, which changes the mounting
+model and the node factory every path here shares.
