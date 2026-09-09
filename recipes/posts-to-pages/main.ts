@@ -20,7 +20,7 @@ import WebSocket from 'ws';
 import { createArray, createObject } from '@aweftjs/core';
 import { createScheduler } from '@aweftjs/jobs';
 import type { Clock, Job } from '@aweftjs/jobs';
-import { createLoader, fromBundle } from '@aweftjs/modules';
+import { fromBundle } from '@aweftjs/modules';
 import type { ModuleExports, ModuleProps } from '@aweftjs/modules';
 import { createServer as createAweftServer, open } from '@aweftjs/server';
 import { node } from '@aweftjs/server/node';
@@ -69,32 +69,37 @@ const site = createSite({
 
 // --- the module that publishes -----------------------------------------------------------------------
 
+// Two things this program made before there was a server, and one module that needs both.
+// Anything the application makes is a module that others `deps` on (design 240): there is
+// nowhere else to put them, and the loader orders them for us.
 const app = fromBundle({
+	'./posts/Rows.ts': { default: () => rows } satisfies ModuleExports,
+	'./posts/Site.ts': { default: () => site } satisfies ModuleExports,
 	// Public, because this recipe has no accounts in it. A real one puts the gate in front.
 	'./posts/Publish.ts': {
-		default: ({ posts, pages }: ModuleProps) => ({
+		deps: ['posts/Rows', 'posts/Site'],
+		default: ({ imports }: ModuleProps) => ({
 			public: true,
 			call: async (args: unknown) => {
+				const posts = imports.Rows as Post[];
+				const pages = imports.Site as SiteHandle;
 				const { id, title, body } = args as Post;
-				(posts as Post[]).push(createObject<Post>({ id, title, body }) as Post);
+				posts.push(createObject<Post>({ id, title, body }) as Post);
 				writeRows();
 				// `posts/:id` matches any id, so `ssg` cannot tell a real slug from a typo: only this
 				// module knows which rows exist. The row went in above, so the page is a page.
-				assert.ok([...(posts as Post[])].some((row) => String(row.id) === id), 'the row is in the store');
+				assert.ok([...posts].some((row) => String(row.id) === id), 'the row is in the store');
 				// One page, not the site. A publish inside a request cannot afford to render
 				// everything the site has, and the sitemap is a full write's business (design 150).
-				const written = await (pages as SiteHandle).write([`/posts/${id}`]);
+				const written = await pages.write([`/posts/${id}`]);
 				return written.files;
 			},
 		}),
 	} satisfies ModuleExports,
 });
 
-const loader = createLoader({ sources: [app], props: { posts: rows, pages: site } });
-await loader.load(['posts/Publish']);
-
 const listener = node({ port: 0, host: '127.0.0.1' });
-const backend = createAweftServer({ loader, gate: open, listener });
+const backend = createAweftServer({ sources: [app], gate: open, listener });
 await backend.start();
 
 // --- publishing one post ------------------------------------------------------------------------------

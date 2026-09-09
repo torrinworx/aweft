@@ -7,12 +7,15 @@
 // Then the same server package runs a microservice with `gate: open`, and a ten-line
 // allowlist gate with no session in it stands where auth stood.
 //
+// Every boot here is the rail: sources, a store, a gate, a listener. Nothing builds a loader,
+// nobody lists what to load, and the gate is named (designs 240, 241).
+//
 // Run: node examples/server/main.ts
 
 import { auth, paths } from '@aweftjs/auth';
 import type { AuthContext } from '@aweftjs/auth';
 import { createArray, createObject } from '@aweftjs/core';
-import { createLoader, fromBundle } from '@aweftjs/modules';
+import { fromBundle } from '@aweftjs/modules';
 import type { ModuleExports, ModuleProps } from '@aweftjs/modules';
 import { createServer, open } from '@aweftjs/server';
 import type { Connection, Gate, Peer } from '@aweftjs/server';
@@ -85,11 +88,13 @@ const handshake = (port: number, cookie: string): Promise<number | 'opened'> => 
 console.log('a notes app behind auth');
 const driver = memoryDriver();
 const store = createStore({ driver, declare: { ...paths } });
-const loader = createLoader({ sources: [app, auth], props: { store } });
-await loader.load(['auth/Gate', 'auth/Session', 'auth/Enter', 'auth/Check', 'auth/State', 'notes/Export', 'notes/Notice']);
 const listener = node({ port: 0, host: '127.0.0.1' });
-const server = createServer({ loader, gate: loader.get('auth/Gate') as Gate, listener });
+const server = createServer({ sources: [app, auth], store, gate: 'auth/Gate', listener });
 await server.start();
+check(
+	server.loader.loaded().length === 7,
+	`start loaded all ${String(server.loader.loaded().length)} modules the two sources list, with no load list anywhere`,
+);
 const port = listener.port!;
 const http = `http://127.0.0.1:${port}`;
 
@@ -172,10 +177,10 @@ await store.stop();
 // --- a microservice: the same server package, no auth, gate: open -------------------------------
 
 console.log('\na microservice with gate: open');
-const service = createLoader({ sources: [app], props: { store: createStore({ driver: memoryDriver() }) } });
-await service.load(['notes/Export', 'notes/Notice']);
 const serviceListener = node({ port: 0, host: '127.0.0.1' });
-const microservice = createServer({ loader: service, gate: open, listener: serviceListener });
+const microservice = createServer({
+	sources: [app], store: createStore({ driver: memoryDriver() }), gate: open, listener: serviceListener,
+});
 await microservice.start();
 const trusted = client(serviceListener.port!);
 check(await trusted.asks.ask('notes/Notice') === 'welcome to notes', 'gate: open reaches a public module');
@@ -194,11 +199,10 @@ const allowlist = (addresses: string[]): Gate<{ address: string }> => ({
 	access: () => [],
 });
 const board = createObject<Record<string, unknown>>({ title: 'the office board' });
-const office = createLoader({ sources: [fromBundle({ './office/Board.ts': { default: () => ({ connection: ({ link }: Connection) => { link.share('board', board, open); } }) } })] });
-await office.load(['office/Board']);
+const office = fromBundle({ './office/Board.ts': { default: () => ({ connection: ({ link }: Connection) => { link.share('board', board, open); } }) } });
 for (const [addresses, expected] of [[['127.0.0.1', '::1', '::ffff:127.0.0.1'], 'opened'], [['10.0.0.1'], 401]] as const) {
 	const gated = node({ port: 0, host: '127.0.0.1' });
-	const guarded = createServer({ loader: office, gate: allowlist([...addresses]), listener: gated });
+	const guarded = createServer({ sources: [office], gate: allowlist([...addresses]), listener: gated });
 	await guarded.start();
 	const outcome = await handshake(gated.port!, 'session=irrelevant');
 	check(outcome === expected, `with ${addresses.join(', ')} on the list, a loopback connection is ${outcome === 'opened' ? 'accepted' : `refused with ${String(outcome)}`}`);

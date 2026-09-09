@@ -83,6 +83,9 @@ const plugins = createObject<Record<string, unknown>>({
 
 console.log('node one: the application');
 const trace: string[] = [];
+// `props` is the seam for what the platform hands every factory, and this recipe is the
+// platform. An application on `createServer` has no `props` at all: the server hands in `store`
+// and nothing else, and anything else shared is a module others name in `deps` (design 240).
 const near = createLoader({ sources: [fromDirectory(app), library, fromDocument(plugins)], props: { trace } });
 
 const announcer = (await near.load(['plugin/Announce']))['plugin/Announce'] as Announcer;

@@ -17,9 +17,9 @@ import { auth, paths } from '@aweftjs/auth';
 import type { AuthContext } from '@aweftjs/auth';
 import { createClient } from '@aweftjs/client';
 import { createObject, observer } from '@aweftjs/core';
-import { createLoader, fromBundle } from '@aweftjs/modules';
+import { fromBundle } from '@aweftjs/modules';
 import { createServer, open } from '@aweftjs/server';
-import type { Connection, Gate } from '@aweftjs/server';
+import type { Connection } from '@aweftjs/server';
 import { node } from '@aweftjs/server/node';
 import { createStore, memoryDriver } from '@aweftjs/store';
 import type { RequestError, SocketLike } from '@aweftjs/sync';
@@ -62,12 +62,9 @@ const app = fromBundle({
 
 const driver = memoryDriver();
 const store = createStore({ driver, declare: { ...paths } });
-const loader = createLoader({ sources: [app, auth], props: { store } });
-await loader.load(['auth/Gate', 'auth/Session', 'auth/Enter', 'auth/Check', 'auth/State', 'notes/Notice', 'notes/Mine', 'notes/Board']);
-
-const gate = loader.get('auth/Gate') as Gate;
+const boot = { sources: [app, auth], store, gate: 'auth/Gate' } as const;
 const first = node({ port: 0, host: '127.0.0.1' });
-let server = createServer({ loader, gate, listener: first });
+let server = createServer({ ...boot, listener: first });
 await server.start();
 const port = first.port!;
 const http = `http://127.0.0.1:${String(port)}`;
@@ -152,7 +149,7 @@ await store.close(away);
 const late = client.ask('notes/Notice');
 
 const second = node({ port, host: '127.0.0.1' });
-server = createServer({ loader, gate, listener: second });
+server = createServer({ ...boot, listener: second });
 await server.start();
 
 await until(() => client.status.get() === 'open', 'the reconnect');
