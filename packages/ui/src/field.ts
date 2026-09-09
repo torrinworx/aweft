@@ -28,6 +28,8 @@ export interface WiringProps {
 export interface Wiring {
 	/** The control's own id, which the label points at. */
 	readonly id: string;
+	/** The `<label>`'s id, for a part of the control that has to name it, or null with no label. */
+	readonly labelId: string | null;
 	/** Spread onto the control element. */
 	readonly aria: Record<string, unknown>;
 	/** Whether anything is wrapped around the control at all. */
@@ -93,6 +95,7 @@ export const wireField = (context: unknown, props: WiringProps): Wiring => {
 
 	return {
 		id,
+		labelId: hasLabel ? labelId : null,
 		aria: { id, 'aria-describedby': describedBy, 'aria-invalid': invalid },
 		// What the caller asked for, not what a `Validate` above lent us: an error borrowed from
 		// there is announced by the control and rendered by the `Validate`, so it wraps nothing.

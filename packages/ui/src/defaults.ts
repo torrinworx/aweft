@@ -523,28 +523,21 @@ defineTheme({
 	// A select is an input that opens, and unlike an input it lays out children of its own: the
 	// value it is showing and the arrow. As a block those stack (design 192).
 	//
-	// The appearance is said twice (design 195): `none` first, so every host stops drawing its own
-	// arrow, then `base-select`, which Chromium 135 and later takes and which is what lets the open
-	// list, the option rows and the picker be themed. A host that does not know the second keyword
-	// drops that declaration and keeps `none`. The arrow the closed control shows is drawn here, the
-	// way the tick and the dot are, so it is the same mark everywhere and the host's is hidden where
-	// there is one.
+	// The element wearing this is a `<button role="combobox">` since design 224, and the list it
+	// opens is drawn by this package on every host, so there is no host picker left to ask for and
+	// no `base-select` to ask for it with. `appearance: none` stays, because a button draws a border
+	// and a background of its own on some hosts. The arrow is drawn here the way the tick and the dot
+	// are (design 195), and the text sits on the left with room for it on the right.
 	select: {
 		extends: 'input',
-		appearance: ['none', 'base-select'],
+		appearance: 'none',
 		display: 'inline-flex',
 		alignItems: 'center',
+		justifyContent: 'flex-start',
+		textAlign: 'left',
 		width: '100%',
 		paddingRight: '$space8',
 		cursor: 'pointer',
-		'_cssProp_::picker-icon': { display: 'none' },
-		'_cssProp_::picker(select)': {
-			background: '$surface',
-			color: '$surfaceForeground',
-			border: '$borderWidth solid $border',
-			borderRadius: '$radius',
-			padding: '$space',
-		},
 	},
 	// The room for the chevron is said again in each size: a modifier of `select` does not extend
 	// the modifier of `input` on its own, and the `input_sm` that `extends` pulls in sits after
@@ -571,13 +564,6 @@ defineTheme({
 		transform: 'translateY(-50%) rotate(45deg)',
 		pointerEvents: 'none',
 	},
-	option: {
-		padding: '$space $space2',
-		borderRadius: '$radius',
-		background: 'transparent',
-		color: '$surfaceForeground',
-	},
-
 	// Raised things are told apart by a tint and a line, not by a blurred shadow.
 	card: {
 		background: '$surface',

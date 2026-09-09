@@ -535,17 +535,17 @@ test('a label under a marked field takes the colour its message already has', ()
 	assert.match(label, new RegExp(`color: ${valueOf('foreground')}`));
 });
 
-test('a select says the appearance twice and draws its own arrow', () => {
+test('a select draws its own arrow, and there is no host picker left to ask for', () => {
 	const rules = rulesFor(['select']);
 	// It lays out children of its own, so it cannot be the block an input is (design 192).
 	assert.match(rules, /display: inline-flex/);
 	assert.match(rules, /align-items: center/);
-	// `none` first, so every host stops drawing its arrow; `base-select` second, which Chromium 135
-	// and later takes and which is what lets the open list be themed (design 195). A host that does
-	// not know the second keyword drops that declaration and keeps the first.
-	assert.match(rules, /appearance: none; appearance: base-select/);
-	assert.match(rules, /::picker-icon \{ display: none; \}/, 'the host\'s own icon is hidden');
-	assert.match(rules, /::picker\(select\)/, 'and the list itself is styled by name');
+	// The element is a `<button role="combobox">` now and the list is drawn by this package on every
+	// host (design 224), so `base-select` and the picker rules are gone with the host's own list.
+	assert.match(rules, /appearance: none/);
+	assert.doesNotMatch(rules, /base-select/, 'nothing asks a host to theme a picker any more');
+	assert.doesNotMatch(rules, /::picker/);
+	assert.match(rules, /text-align: left/, 'the value sits where a select\'s value always sat');
 	// The two parts the component puts around the element. The arrow is the tick's trick again:
 	// an empty $chevron box with two of its sides drawn, turned a quarter turn (design 195,
 	// amended), so nothing here asks the `Icons` stack for a name.

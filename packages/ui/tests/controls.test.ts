@@ -160,7 +160,7 @@ test('every control is found by its role and its accessible name', () => {
 		['radio', 'Small', 'input'],
 		['switch', 'Email me', 'input'],
 		['slider', 'Volume', 'input'],
-		['combobox', 'Size', 'select'],
+		['combobox', 'Size', 'button'],
 	] as const) {
 		assert.equal(byRoleName(body.firstChild, role, name).localName, tag,
 			`the ${role} called ${name} is a <${tag}>`);
@@ -509,7 +509,9 @@ test('an element of the wrong tag is refused, naming the tag it wanted and the t
 	wrong((element) => h(Radio as never, { element, option: 'a' }), 'input', 'div');
 	wrong((element) => h(Toggle as never, { element }), 'input', 'div');
 	wrong((element) => h(Slider as never, { element }), 'input', 'span');
-	wrong((element) => h(Select as never, { element, options: ['a'] }), 'select', 'p');
+	// A `Select`'s element is its button now, not a `<select>` (design 224).
+	wrong((element) => h(PopupContext as never, {},
+		h(Select as never, { element, options: ['a'] })), 'button', 'p');
 });
 
 test('an element of the right tag is decorated rather than replaced', () => {

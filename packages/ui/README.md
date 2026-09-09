@@ -385,13 +385,13 @@ const problem = mutable(null);
 | `Radio` | `<input type="radio">` | `value` (the group's), `option` (this one's), `label`, `disabled`, `onChange` | `sm`, `lg` | `radio` |
 | `Toggle` | `<input type="checkbox" role="switch">` | `value`, `label`, `disabled`, `onChange`, `type` | `sm`, `lg` | `toggle` |
 | `Slider` | `<input type="range">` | `value` (a number), `min`, `max`, `step`, `disabled`, `track` | `sm`, `lg` | `slider` |
-| `Select` | `<select>` in a `<span>` with its arrow | `value`, `options`, `display`, `placeholder`, `disabled`, `onChange` | `sm`, `lg` | `select` |
+| `Select` | a `<button role="combobox">` in a `<span>` with its arrow, over a hidden `<select>` | `value`, `options`, `display`, `placeholder`, `open`, `disabled`, `name`, `autocomplete`, `onChange` | `sm`, `lg` | `select` |
 | `LoadingDots` | three dots | `type`, `size`, `label` | a CSS length | `loading-dots` |
 | `Icon` | `<svg>` | `name`, `size`, `label`, `rot` | a CSS length | `icon` |
 
 The last column is the file under `recipes/ui/examples/`, without its `.example.tsx` ending. Each
-one renders every state, type and size of its component, in both modes, on `catalogue.html`, and
-the recipe's driver reads it there (design 197).
+one renders every state, type and size of its component, in both modes, on a page of its own at
+`catalogue.html#/<Component>`, and the recipe's driver reads it there (designs 197 and 226).
 
 **`size` is one theme segment, right after `type`** (design 194): `sm` is 32px tall, nothing is
 36px and `lg` is 40px, and the entries are `button_sm`, `input_lg`, `checkbox_sm` and so on, the
@@ -441,16 +441,32 @@ there.
 <TextField label="Search" leading={<Icon name="search" />} value={query} />
 ```
 
-**`Select` holds items, not the text the element carries.** The chosen row is the one that says it
-is chosen, and a change is read back as the position it happened at, so what the cell holds is
-always the item you put in `options` and adding, removing or reordering the list leaves the choice
-on the item it was on. An item that is a string or a number carries itself as the option's `value`,
-so a form the select is in posts something readable. Two things the element cannot do, and this
-component will not fake: outside Chromium the open list is drawn by the host and is not themed, and
-there is no way to know whether it is open. Design 130 has both.
+**`Select` draws its own list, on every host** (design 224). The closed control is a
+`<button role="combobox">`; the open list is a `<div role="listbox">` of `<div role="option">` rows
+in a popup placed under the control at the control's width. So it looks the same everywhere, the
+theme reaches every part of it, and `open` is a cell you can read and write. The list goes where
+every popup in this package goes, so it needs no wrapper above it.
+
+It opens on a click, on ArrowDown, ArrowUp, Enter and Space, and on typing a letter, which opens it
+and jumps to the first row beginning with that letter in the one press. Inside it the arrows move
+and wrap, Home and End go to the ends, typing keeps searching, Enter and Space choose, and Escape
+closes and gives the keyboard back to the control. The focus stays on the control the whole time
+and `aria-activedescendant` says which row the keys are on.
+
+**A hidden `<select>` sits under it**, off the screen and out of the reading order, carrying the
+same options and the same choice. It takes `name` and `autocomplete`, so a form the control is in
+posts the value and autofill has a real control to find; anything that writes it writes your cell.
+What autofill cannot do is draw its own highlight over the button, because the element it filled is
+one pixel square.
+
+**`Select` holds items, not the text a row reads as.** `options` is a list of anything, `display`
+says what a person reads, and the cell holds the item you put in the list, so adding, removing or
+reordering leaves the choice on its own item. An item that is a string or a number carries itself as
+the hidden option's `value`; an object carries none, and the platform then posts what the row reads
+as.
 
 **`Select` draws its own arrow** (design 195). Every host draws a different one and no theme can
-reach any of them, so the entry tells every host to draw none and the component renders the element
+reach any of them, so the entry tells every host to draw none and the component renders the control
 inside a `<span>` with an empty box at the right of it. The `select_chevron` entry draws the arrow the
 way `checkbox` draws its tick: a `$chevron` square with two of its sides in `$mutedForeground`,
 turned a quarter turn. So it needs no icon pack, and an application that wants another arrow gives
@@ -1143,10 +1159,10 @@ native element: `appearance: none` takes the host's drawing and leaves the keybo
 the label. A tick box is a `$box` square with `$radiusSm` corners and the `$input` edge, filled
 `$accent` when it is ticked, and the tick is two sides of an empty `::before` turned 45 degrees in
 `$accentForeground`. Indeterminate is a bar. A radio is the same box as a circle with a centred
-dot. A `<select>` says `appearance: none` and then `base-select`, so every host stops drawing an
-arrow and Chromium still themes the open list, and the component puts an empty box at the right of
-the control for `select_chevron` to draw the arrow in, the same way: a `$chevron` square with two of
-its sides turned a quarter turn. Nothing here is an image, an icon pack or a name asked of one.
+dot. A select's control says `appearance: none`, so no host draws an arrow on it, and the component
+puts an empty box at the right of the control for `select_chevron` to draw one in, the same way: a
+`$chevron` square with two of its sides turned a quarter turn. Nothing here is an image, an icon
+pack or a name asked of one.
 
 **The entries it ships.** These are the theme names a component of this package, or of yours, can
 ask for. Everything else is yours to define.
@@ -1160,7 +1176,7 @@ ask for. Everything else is yours to define.
 | `button_danger` | the same control in the danger colours |
 | `input` | a text field: the surface fill, the `$input` edge, the hairline, a placeholder in `$mutedForeground` |
 | `input_invalid` | that field with a danger edge |
-| `select` | `input` again, laid out in a line, with room on the right for its own arrow |
+| `select` | `input` again on a `<button>`, laid out in a line, with room on the right for its own arrow |
 | `card` | a raised block: the surface fill, a border, the larger radius, `$space4` of padding |
 | `popup` | the same block at popup size: the smaller radius, tighter padding |
 | `text` | body copy at `$textMd`, with no margin, and a newline kept as a line break |

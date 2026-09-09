@@ -527,44 +527,238 @@ test('Enter in a text field calls onEnter and does not submit the form it is in'
 	});
 });
 
-test('a real change on a select hands the caller back the object it put in the list', async () => {
-	await drive('select-change', `
-		import { Icons, Select, h, mount } from '@aweftjs/ui';
+test('the drawn list opens under the control, and a real key picks an item', async () => {
+	// Design 224: the list is this package's on every host, so all of this is markup a real browser
+	// lays out rather than a picker only one host would theme.
+	await drive('select-list', `
+		import { PopupContext, Select, h, mount } from '@aweftjs/ui';
 		import { mutable } from '@aweftjs/core';
-		${ANY_ICON}
-		const users = [{ id: 7, name: 'Ada' }, { id: 9, name: 'Grace' }];
+		const users = [{ id: 7, name: 'Ada' }, { id: 9, name: 'Grace' }, { id: 11, name: 'Katherine' }];
 		const chosen = mutable(null);
 		globalThis.read = () => chosen.get();
-		globalThis.pick = (at) => chosen.set(users[at]);
 		mount(document.body, (
-			<Icons value={anyIcon}>
+			<PopupContext>
 				<Select id="user" label="Owner" value={chosen} options={users}
 					display={(user) => user.name} placeholder="Pick someone" />
-			</Icons>
+			</PopupContext>
 		));
 	`, async (view) => {
 		await view.waitForSelector('#user');
-		assert.deepEqual(await view.evaluate(() => (globalThis as never as { read(): unknown }).read()), null);
+		assert.equal(await view.getAttribute('#user', 'aria-expanded'), 'false');
+		assert.equal(await view.getAttribute('#user', 'role'), 'combobox');
 
-		await view.selectOption('#user', { label: 'Grace' });
+		await view.click('#user');
+		await view.waitForFunction(() => document.querySelector('#user')!.getAttribute('aria-expanded') === 'true');
+		// One frame for the placement solver, and then the arrival animation: a box still scaling
+		// reports a scaled rectangle, which is 96% of the width it is settling on.
+		await view.waitForFunction(() => {
+			const list = document.querySelector('[role="listbox"]');
+			return list !== null && list.getBoundingClientRect().width > 0
+				&& getComputedStyle(list)['transform'] === 'none';
+		});
+
+		const boxes = await view.evaluate(() => {
+			const control = document.querySelector('#user')!.getBoundingClientRect();
+			const list = document.querySelector('[role="listbox"]')!.getBoundingClientRect();
+			return {
+				below: Math.round(list.top) >= Math.round(control.top + control.height) - 1,
+				width: Math.round(list.width),
+				control: Math.round(control.width),
+				rows: document.querySelectorAll('[role="option"]').length,
+			};
+		});
+		assert.equal(boxes.below, true, `the list sits under the control: ${JSON.stringify(boxes)}`);
+		assert.equal(boxes.width, boxes.control, 'and it is the control\'s own width');
+		assert.equal(boxes.rows, 3, 'the placeholder is not a row anybody can land on');
+
+		// ArrowDown twice from nothing is the second item, and Enter takes it.
+		await view.keyboard.press('ArrowDown');
+		await view.keyboard.press('ArrowDown');
+		await view.keyboard.press('Enter');
 		assert.deepEqual(
 			await view.evaluate(() => (globalThis as never as { read(): unknown }).read()),
 			{ id: 9, name: 'Grace' },
-			'the cell holds the object, not the string the element carried',
+			'the cell holds the object, not the text the row read as',
+		);
+		assert.equal(await view.getAttribute('#user', 'aria-expanded'), 'false', 'and picking closed it');
+		assert.equal(await view.evaluate(() => document.activeElement?.id), 'user',
+			'with the focus back on the control');
+
+		// Type-ahead, and Escape, both on the control because that is where the focus stays.
+		await view.keyboard.press('ArrowDown');
+		await view.keyboard.press('k');
+		const named = await view.evaluate(() => {
+			const at = document.querySelector('#user')!.getAttribute('aria-activedescendant') ?? '';
+			return document.querySelector(`[id="${at}"]`)?.textContent ?? null;
+		});
+		assert.equal(named, 'Katherine', 'a letter moved to the first row beginning with it');
+
+		await view.keyboard.press('Escape');
+		assert.equal(await view.getAttribute('#user', 'aria-expanded'), 'false');
+		assert.equal(await view.evaluate(() => document.activeElement?.id), 'user',
+			'Escape leaves the focus where the person was');
+
+		// The hidden element is what a form reads, and it followed every one of those.
+		const posted = await view.evaluate(() => {
+			const native = document.querySelector('select')!;
+			return { value: native.value, offscreen: native.getBoundingClientRect().width < 2 };
+		});
+		assert.equal(posted.value, 'Grace',
+			'an object writes no value attribute, so the platform posts what the row reads as');
+		assert.equal(posted.offscreen, true, 'and the element a form reads is off the screen');
+	});
+});
+
+test('the drawn list sits under the control in dark as well as in light', async () => {
+	await drive('select-list-dark', `
+		import { PopupContext, Select, Theme, dark, h, mount } from '@aweftjs/ui';
+		mount(document.body, (
+			<Theme value={dark}>
+				<PopupContext>
+					<Select id="sel" label="Owner" options={['Ada', 'Grace']} />
+				</PopupContext>
+			</Theme>
+		));
+	`, async (view) => {
+		await view.waitForSelector('#sel');
+		await view.click('#sel');
+		await view.waitForFunction(() => {
+			const list = document.querySelector('[role="listbox"]');
+			return list !== null && list.getBoundingClientRect().width > 0
+				&& getComputedStyle(list)['transform'] === 'none';
+		});
+		const seen = await view.evaluate(() => {
+			const control = document.querySelector('#sel')!.getBoundingClientRect();
+			const list = document.querySelector('[role="listbox"]')!;
+			const box = list.getBoundingClientRect();
+			return {
+				below: Math.round(box.top) >= Math.round(control.top + control.height) - 1,
+				width: Math.round(box.width) === Math.round(control.width),
+				fill: getComputedStyle(list).backgroundColor,
+			};
+		});
+		assert.equal(seen.below, true);
+		assert.equal(seen.width, true);
+		// `$surface` is `$neutral2`, which is `#161a20` in dark and `#f5f6f8` in light.
+		assert.equal(seen.fill, 'rgb(22, 26, 32)', 'the list is the dark surface, not the light one');
+	});
+});
+
+test('a menu flips above its anchor when there is no room below it', async () => {
+	await drive('menu-flip', `
+		import { Menu, PopupContext, h, mount } from '@aweftjs/ui';
+		mount(document.body, (
+			<PopupContext>
+				<div style={{ height: '200vh' }} />
+				<Menu id="quick" label="Quick Actions" items={[{
+					heading: 'Conversation',
+					items: [
+						{ label: 'Mute Conversation' },
+						{ label: 'Mark as Read' },
+						{ label: 'Block User' },
+						{ label: 'Delete Conversation', type: 'danger' },
+					],
+				}]} />
+			</PopupContext>
+		));
+	`, async (view) => {
+		await view.waitForSelector('#quick');
+		await view.evaluate(() => { document.querySelector('#quick')!.scrollIntoView({ block: 'end' }); });
+		await view.click('#quick');
+		await view.waitForFunction(() => {
+			const menu = document.querySelector('[role="menu"]');
+			return menu !== null && menu.getBoundingClientRect().height > 0
+				&& getComputedStyle(menu)['transform'] === 'none';
+		});
+
+		const seen = await view.evaluate(() => {
+			const anchor = document.querySelector('#quick')!.getBoundingClientRect();
+			const menu = document.querySelector('[role="menu"]')!.getBoundingClientRect();
+			const rows = Array.from(document.querySelectorAll('[role="menuitem"]'));
+			const danger = rows[rows.length - 1]!;
+			return {
+				above: Math.round(menu.top + menu.height) <= Math.round(anchor.top) + 1,
+				anchorTop: Math.round(anchor.top),
+				menuTop: Math.round(menu.top),
+				rows: rows.length,
+				dangerInk: getComputedStyle(danger).color,
+				plainInk: getComputedStyle(rows[0]!).color,
+			};
+		});
+		assert.equal(seen.above, true,
+			`the menu is above the anchor at the foot of the page: ${JSON.stringify(seen)}`);
+		assert.equal(seen.rows, 4);
+		// `$danger` is `$danger9`, `#c32430` in light, which is the one non-neutral role the default
+		// theme has.
+		assert.equal(seen.dangerInk, 'rgb(195, 36, 48)', 'the dangerous row computes $danger');
+		assert.notEqual(seen.plainInk, seen.dangerInk, 'and the others do not');
+	});
+});
+
+test('a menu inside a modal opens inside the dialog, and its rows can be clicked', async () => {
+	// A dialog's top layer swallows every pointer event aimed at anything outside it, so a menu
+	// drawn at a sink beside the page was a menu nobody could click. The popup's sink is the nearest
+	// `<dialog>` above it now (design 113, amended).
+	await drive('menu-in-modal', `
+		import { createRouter } from '@aweftjs/dom/router';
+		import { Icons, Menu, Modal, PopupContext, Stage, StageContext, h, mount } from '@aweftjs/ui';
+
+		${ANY_ICON}
+		let stage = null;
+		const picked = [];
+		globalThis.picked = () => picked;
+		const Home = (props) => { stage = props.stage; return <main id="home">home</main>; };
+		const Edit = () => (
+			<div id="editing">
+				<Menu id="quick" label="Quick Actions" items={[
+					{ label: 'Mute', onSelect: () => picked.push('mute') },
+					{ label: 'Delete', onSelect: () => picked.push('delete') },
+				]} />
+			</div>
 		);
 
-		// And the other direction, which only a real select can answer: the cell moves what the
-		// element shows, through the row that says it is the chosen one.
-		const shown = await view.evaluate(() => {
-			(globalThis as never as { pick(at: number): void }).pick(0);
-			const element = document.querySelector('#user') as never as { selectedIndex: number; value: string };
-			return { at: element.selectedIndex, text: document.querySelector('#user option:checked')?.textContent };
-		});
-		assert.deepEqual(shown, { at: 1, text: 'Ada' }, 'the placeholder is row 0, so Ada is row 1');
+		const router = createRouter();
+		mount(document.body, (
+			<Icons value={anyIcon}>
+				<PopupContext>
+					<StageContext router={router} acts={{ '': Home, edit: Edit }}><Stage /></StageContext>
+				</PopupContext>
+			</Icons>
+		));
+		globalThis.openIt = () => stage.open({ name: 'edit', template: Modal });
+	`, async (view) => {
+		await view.waitForSelector('#home');
+		await view.evaluate(() => (globalThis as never as { openIt(): void }).openIt());
+		await view.waitForSelector('#quick');
 
-		// The appearance Chromium draws the open list from, which is what design 130 asks for.
-		const drawn = await view.evaluate(() => getComputedStyle(document.querySelector('#user')!).appearance);
-		assert.equal(drawn, 'base-select', 'the host took the base appearance');
+		await view.click('#quick');
+		await view.waitForFunction(() => {
+			const menu = document.querySelector('[role="menu"]');
+			return menu !== null && menu.getBoundingClientRect().height > 0
+				&& getComputedStyle(menu)['transform'] === 'none';
+		});
+
+		const seen = await view.evaluate(() => {
+			const rows = Array.from(document.querySelectorAll('[role="menuitem"]'));
+			const row = rows[rows.length - 1]!;
+			const box = row.getBoundingClientRect();
+			const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+			return {
+				inDialog: document.querySelector('dialog')!.contains(row),
+				hitsRow: hit !== null && (hit === row || row.contains(hit)),
+				hit: hit === null ? null : hit.tagName.toLowerCase(),
+				focused: document.activeElement?.getAttribute('role') ?? null,
+			};
+		});
+		assert.equal(seen.inDialog, true, 'the list is inside the dialog rather than beside the page');
+		assert.equal(seen.hitsRow, true,
+			`the middle of a row belongs to the row: ${JSON.stringify(seen)}`);
+		assert.equal(seen.focused, 'menu', 'and opening it put the focus on the menu itself');
+
+		await view.click('[role="menuitem"]:last-child');
+		assert.deepEqual(
+			await view.evaluate(() => (globalThis as never as { picked(): string[] }).picked()),
+			['delete'], 'a real click on a row ran that row\'s own onSelect');
 	});
 });
 
@@ -1771,8 +1965,8 @@ test('a select carries its own arrow inside its box, and the host draws none', a
 		assert.equal(seen.turn, 'matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, -4)',
 			'up half its height and turned 45 degrees, so the drawn corner points down');
 		assert.equal(seen.offCentre, 0, 'and on the middle line');
-		assert.equal(seen.appearance, 'base-select',
-			'Chromium takes the second appearance, so the open list is themed');
+		assert.equal(seen.appearance, 'none',
+			'the host draws nothing of its own, and the list is this package\'s (design 224)');
 		assert.equal(seen.events, 'none', 'a click on the arrow reaches the select under it');
 		assert.equal(seen.hidden, 'true', 'the control beside it is what a screen reader reads');
 		assert.equal(seen.drawings, 0, 'nothing was asked of the Icons stack');
