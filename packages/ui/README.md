@@ -28,6 +28,28 @@ mount(document.body, <Counter />);
 
 `recipes/ui/` is the whole of this README as a running page. `npx vite recipes/ui` serves it.
 
+## Five rules
+
+Each is stated again where it belongs. They are here together because each is easy to get wrong
+and the symptom does not name the cause.
+
+1. **A theme value is a list of segments.** `theme={['button', 'quiet']}` reaches `button` and
+   `button_quiet`. `theme="button_quiet"` is one token naming one entry, which is how a part is
+   reached: the element gets the variant's colours and none of `button`'s box. (The theme.)
+2. **`each` builds one shape per list.** The row component under `each` renders the same tags in
+   the same order on every row; a button on some rows and nothing on others is wrong, with no
+   message. Vary a value, not the shape. `Table`'s `cell` is not under that rule: it may answer
+   a button on one row and `null` on the next. (Navigation and data.)
+3. **The root entry paints nothing.** Your own page entry sets `background`, `color` and a
+   `minHeight` of the viewport, and the page's HTML carries `<style>body { margin: 0 }</style>`,
+   because a theme entry cannot reach `body` and the host's white margin shows as a band around
+   a dark page. (The look.)
+4. **`validate` is handed the cell, not its value.** Read it with `cell.get()`; a formatter
+   writes back with `cell.set()`. (Composites, under `Validate`.)
+5. **`theme` appends, on every component.** `<Card theme="tight">` is the card entry plus
+   `card_tight`; the segments you pass never replace the component's own. (What every component
+   takes.)
+
 ## Source is `.tsx`
 
 This package's own source is `.tsx`, compiled by this stack's own transform. JSX becomes plain
@@ -1288,10 +1310,10 @@ own entry says both, once, and everything under it inherits:
 ```ts
 Theme.define({
 	page: {
-		// The host's own body margin shows as a band of its default colour around your entry, which
-		// is white against a dark page. Take it off, and make the entry as tall as the viewport so
-		// a short page is painted to the bottom.
-		'_elem_body': { margin: 0 },
+		// As tall as the viewport, so a short page is painted to the bottom. The host's own body
+		// margin still shows as a band of its default colour around the entry, white against a dark
+		// page, and a theme entry cannot reach `body`: the page's HTML takes it off with one line,
+		// `<style>body { margin: 0 }</style>`.
 		minHeight: '100vh',
 		background: '$background',
 		color: '$foreground',
