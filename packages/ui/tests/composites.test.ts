@@ -458,6 +458,41 @@ test('a modal labels itself, and every close goes through the stage', () => {
 	held.stop();
 });
 
+test('a modal reads the props it names and writes none of the act\'s own on the dialog', () => {
+	// Design 213: an `open` hands its props to the template and the act both. A `Modal` that spread
+	// what it did not name wrote the act's row on the element, `session="[object Object]"`.
+	let held: StageHandle | null = null;
+	const seen: Record<string, unknown>[] = [];
+	const session = { id: 7 };
+	const found = page(h(StageContext as never, {
+		acts: {
+			'': (props: { stage?: unknown }): unknown => {
+				held = props.stage as StageHandle;
+				return h('p', {}, 'the page');
+			},
+			edit: (props: Record<string, unknown>): unknown => {
+				seen.push(props);
+				return h('p', {}, 'editing');
+			},
+		},
+		initial: '',
+	}, h(Stage as never, {})));
+
+	const stage = (): StageHandle => held!;
+	stage().open({ name: 'edit', template: Modal, label: 'Sign out?', session, extra: 'x' });
+
+	const dialog = byRole(found.body.firstChild, 'dialog');
+	assert.equal(dialog.getAttribute('session'), null, 'the act\'s row is not an attribute');
+	assert.equal(dialog.getAttribute('extra'), null);
+	assert.equal(byTag(found.body.firstChild, 'h2').textContent, 'Sign out?',
+		'and the one prop the Modal names is still read');
+
+	assert.equal(seen.length, 1);
+	assert.equal(seen[0]!['session'], session, 'the act was handed both of them');
+	assert.equal(seen[0]!['extra'], 'x');
+	found.stop();
+});
+
 test('the close button closes a modal, and a backdrop mousedown does too', () => {
 	for (const [name, close] of [
 		['the close button', (root: NodeLike | null) => {

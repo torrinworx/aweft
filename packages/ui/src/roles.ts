@@ -1,4 +1,4 @@
-// The eighteen colour roles, and the scale step each one takes (design 115).
+// The twenty-two colour roles, and the scale step each one takes (designs 115, 216).
 //
 // A component of this library uses a role. It never uses a step and never writes a colour, and
 // `check-theme.ts` is what says so out loud.
@@ -42,6 +42,16 @@ const rolesFrom = (scale: Scale): Readonly<Record<string, string>> => ({
 	$dangerSubtle: scale.$danger3,
 	$dangerSubtleForeground: scale.$danger11,
 
+	// the solid success, and the text on it. Read against `$danger`: the same two steps of another
+	// scale, so a message about what went right is the same shape as one about what went wrong
+	// (design 216).
+	$success: scale.$success9,
+	$successForeground: scale.$neutral1,
+
+	// a tinted success fill, and the text on it
+	$successSubtle: scale.$success3,
+	$successSubtleForeground: scale.$success11,
+
 	// the line around a block, the edge of a control, and the focus ring
 	$border: scale.$neutral6,
 	$input: scale.$neutral7,
@@ -65,6 +75,8 @@ export const foregroundFor: Readonly<Record<string, string>> = {
 	accentSubtle: 'accentSubtleForeground',
 	danger: 'dangerForeground',
 	dangerSubtle: 'dangerSubtleForeground',
+	success: 'successForeground',
+	successSubtle: 'successSubtleForeground',
 };
 
 /**

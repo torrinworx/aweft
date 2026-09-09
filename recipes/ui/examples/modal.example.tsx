@@ -1,6 +1,11 @@
 // Modal: an act on a stage, inside a native `<dialog>`. Opening one is the stage's job, because
 // that is what makes the back button close it (design 134), so the example brings its own stage.
 //
+// The dialog is named at the call: the props an `open` carries past `name`, `template`, `history`
+// and `children` reach the template as well as the act (design 213), so `Modal` goes in as the
+// template itself rather than inside a closure written per open. `Modal` reads the ones it names
+// and writes none of the others on the element.
+//
 // A sheet is this same component with `type="sheet"`, so it is shown here rather than in a section
 // of its own: there is no `Sheet` export to name one after (design 202).
 
@@ -25,14 +30,6 @@ export const Example: ExampleComponent = (props) => {
 		</div>
 	);
 
-	const Titled = (inner: { children?: unknown[] }): unknown =>
-		h(Modal, { label: 'Edit the thing', id: at('modal') }, ...(inner.children ?? []));
-
-	// The same component against an edge. `side` is read for no other type (design 202).
-	const Sheet = (inner: { children?: unknown[] }): unknown =>
-		h(Modal, { label: 'Filters', type: 'sheet', side: 'right', id: at('sheet') },
-			...(inner.children ?? []));
-
 	const Filters = (): unknown => (
 		<div theme="column">
 			<p theme="text" id={at('filtering')}>A sheet: the same dialog, against the right edge.</p>
@@ -47,13 +44,23 @@ export const Example: ExampleComponent = (props) => {
 			<Button
 				label="Edit the thing"
 				id={at('open-modal')}
-				onClick={() => { stage?.open({ name: 'edit', template: Titled }); }}
+				onClick={() => {
+					// Nothing here but what the Modal and the act read: a prop this open carried
+					// would reach both, and the Modal writes none of them on the element (design 213).
+					stage?.open({ name: 'edit', template: Modal, label: 'Edit the thing' });
+				}}
 			/>
 			<Button
 				label="Open a sheet"
 				type="quiet"
 				id={at('open-sheet')}
-				onClick={() => { stage?.open({ name: 'filters', template: Sheet }); }}
+				onClick={() => {
+					// The same component against an edge. `side` is read for no other type (design 202).
+					stage?.open({
+						name: 'filters', template: Modal, label: 'Filters',
+						type: 'sheet', side: 'right',
+					});
+				}}
 			/>
 		</div>
 	));

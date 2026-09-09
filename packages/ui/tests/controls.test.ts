@@ -106,6 +106,36 @@ const page = (item: unknown): { body: ElementLike; stop: () => void } => {
 	return { body: document.body, stop: () => { stop(); } };
 };
 
+/** The same, into a render of this test's own, so the sheet holds only what this page asked for. */
+const styled = (item: unknown): { render: Render; body: ElementLike; stop: () => void } => {
+	const render = context();
+	const document = createDocument();
+	const stop = mount(document.body, item, undefined, render);
+	return { render, body: document.body, stop: () => { stop(); } };
+};
+
+const byTag = (root: NodeLike | null, tag: string): LightElement => {
+	const found = elements(root).find((element) => element.localName === tag);
+	assert.ok(found !== undefined, `no <${tag}> on the page`);
+	return found;
+};
+
+/** What a role holds in the theme this package ships, so an expectation names a role. */
+const themeSheet = context().theme;
+const themeRole = (name: string): string => {
+	const held = themeSheet.variable(themeSheet.base(), [], name);
+	assert.ok(held !== null, `the theme defines $${name}`);
+	return held;
+};
+
+/** The rules this element's generated class was given, which is what says its entry landed. */
+const rulesOn = (render: Render, element: LightElement): string => {
+	const name = element.getAttribute('class') ?? '';
+	assert.notEqual(name, '', 'the element was given a generated class');
+	const wanted = new RegExp(`\\.${name}\\b`);
+	return render.theme.markup().split('\n').filter((line) => wanted.test(line)).join('\n');
+};
+
 // --- what each control is ---------------------------------------------------------------------
 
 test('every control is found by its role and its accessible name', () => {

@@ -1,4 +1,4 @@
-// A place to drop files, with a real file input in it (design 137).
+// A place to drop files, with a real file input in it (designs 137, 214).
 //
 // The input is what opens the file dialog, what the keyboard reaches and what a form sees, so it is
 // visually hidden rather than `display: none`: an input nobody can focus is a picker only a mouse
@@ -9,6 +9,10 @@
 // event's `dataTransfer.files`; the input listens for `change` and reads its own `files`. Those four
 // are everything that reaches this component from the host.
 //
+// `FileDrop.Button` is two things decided by where it is: inside a zone it opens that zone's input,
+// and outside one it is the picker with no chrome, running the same checks over an input of its own
+// (design 214). Which one it is is never a prop.
+//
 // No upload happens here and none ever will. An entry carries the platform `File` and
 // the application takes it from there.
 
@@ -16,6 +20,7 @@ import { type ElementLike, type Mounter, createElement, mount } from '@aweftjs/d
 import { type MutableArray, isMutableArray, mutable, mutableArray } from '@aweftjs/core';
 
 import { Button, type ButtonProps } from './button.tsx';
+import { type FileDropEntry, type Limits, promptFor, readyValue, sortFiles } from './file-checks.ts';
 import { Icon } from './icon.tsx';
 import { assert } from './assert.ts';
 import { controlStates, elementFor } from './control.ts';
@@ -24,17 +29,7 @@ import { h } from './h.ts';
 import { isWritable, through } from './source.ts';
 import { slotOf, use, withSlot } from './render.ts';
 
-/** One file the zone was given, as the application reads it. */
-export interface FileDropEntry {
-	/** The file's own name. */
-	readonly name: string;
-	/** The platform `File`. Upload it however you like. */
-	readonly file: unknown;
-	/** `ready` for one the zone accepted, `error` for one it refused, `loading` while you upload. */
-	readonly status: 'ready' | 'loading' | 'error';
-	/** Why it was refused, on an entry that was. */
-	readonly error?: string;
-}
+export type { FileDropEntry } from './file-checks.ts';
 
 /** How the zone tells `FileDrop.Button` where the input is. Not exported: it is not API. */
 const OPENER: unique symbol = Symbol('aweft.ui.filedrop');
@@ -50,27 +45,71 @@ const filesIn = (source: unknown): unknown[] => {
 	return Array.from(held as ArrayLike<unknown>);
 };
 
-const nameOf = (file: unknown): string => String((file as { name?: unknown }).name ?? '');
-const sizeOf = (file: unknown): number => Number((file as { size?: unknown }).size ?? 0);
-const typeOf = (file: unknown): string => String((file as { type?: unknown }).type ?? '').toLowerCase();
+const idOf = (element: unknown): string | null =>
+	(element as { getAttribute?(name: string): string | null }).getAttribute?.('id') ?? null;
 
-/** Whether one of the declared extensions or MIME types covers this file. */
-const covers = (wanted: readonly string[], file: unknown): boolean => {
-	if (wanted.length === 0) return true;
-	const name = nameOf(file).toLowerCase();
-	const mime = typeOf(file);
-	return wanted.some((raw) => {
-		const want = raw.trim().toLowerCase();
-		if (want === '') return false;
-		if (want.startsWith('.')) return name.endsWith(want);
-		if (want.endsWith('/*')) return mime.startsWith(want.slice(0, -1));
-		return mime === want;
-	});
+/** What either shape was told to accept. */
+const limitsOf = (props: Record<string, unknown>): Limits => ({
+	wanted: Array.isArray(props['extensions']) ? props['extensions'].map((one) => String(one)) : [],
+	many: props['multiple'] !== false,
+	cap: props['limit'] === undefined || props['limit'] === null ? null : Number(props['limit']),
+});
+
+/** The list either shape writes into: the caller's, or one of its own. */
+const listOf = (files: unknown): MutableArray<FileDropEntry> => {
+	// A state prop is a cell or absent. A plain value looks as though it was honoured and is not,
+	// so it is a loud assert rather than a silent fallback, as `Validate`'s `value` already was.
+	assert(files === undefined || isMutableArray(files),
+		'FileDrop files takes a cell, not a value; pass files={mutableArray()}, or leave it out and '
+		+ 'the component keeps its own');
+	return (isMutableArray(files) ? files : mutableArray<FileDropEntry>()) as MutableArray<FileDropEntry>;
+};
+
+/**
+ * Sort a run of files into the list and tell the caller.
+ *
+ * The one place either shape adds files, so a zone and a standalone button cannot come to disagree
+ * about what happens to a refused one.
+ */
+const adder = (
+	limits: Limits,
+	list: MutableArray<FileDropEntry>,
+	onDrop: ((files: unknown[]) => void) | undefined,
+	blocked: () => boolean,
+): ((given: readonly unknown[]) => void) => (given) => {
+	if (given.length === 0 || blocked()) return;
+	const { rows, taken } = sortFiles(limits, given);
+	if (limits.many) list.push(...rows);
+	else list.splice(0, list.length, ...rows);
+	if (taken.length === 0) return;
+	// A handler the page wrote is reported where `Detached` reports one, and the list keeps the
+	// edit it has already made.
+	try {
+		onDrop?.(taken);
+	} catch (error) {
+		queueMicrotask(() => { throw error; });
+	}
+};
+
+/** Follow the list and write `ready`, until the component goes. */
+const settler = (list: MutableArray<FileDropEntry>, ready: unknown, many: boolean): (() => void) => {
+	const settle = (): void => {
+		if (!isWritable(ready)) return;
+		ready.set(readyValue([...list], many));
+	};
+	const stop = list.watch(() => { settle(); });
+	settle();
+	return stop;
 };
 
 /** What `FileDrop` takes. Everything not named here goes to the zone. */
 export interface FileDropProps {
-	/** The entries, a `mutableArray`. Absent, the component keeps its own. */
+	/**
+	 * The entries, a `mutableArray`. Absent, the component keeps its own.
+	 *
+	 * With `multiple` false a second pick replaces the entry that is already there, in place, so a
+	 * `watch` on this list hears a `replace` and never a second `add`.
+	 */
 	readonly files?: unknown;
 	/** MIME types (`image/png`, `image/*`) or dotted extensions (`.csv`). */
 	readonly extensions?: unknown;
@@ -97,18 +136,97 @@ export interface FileDropProps {
 	readonly [prop: string]: unknown;
 }
 
-/** `FileDrop`, with the button that opens its dialog from inside its own children. */
-export interface FileDropComponent {
-	(props: FileDropProps): Mounter;
-	/** A `Button` that opens the file dialog. Only inside a `FileDrop`. */
-	Button(props: ButtonProps): Mounter;
+/** What `FileDrop.Button` takes: the `Button` props, and the checks when it stands on its own. */
+export interface FileDropButtonProps extends ButtonProps {
+	/** The entries, a `mutableArray`. Read only outside a `FileDrop`. */
+	readonly files?: unknown;
+	/** MIME types or dotted extensions. Read only outside a `FileDrop`. */
+	readonly extensions?: unknown;
+	/** Take more than one. Read only outside a `FileDrop`. */
+	readonly multiple?: unknown;
+	/** The largest file, in bytes. Read only outside a `FileDrop`. */
+	readonly limit?: unknown;
+	/** Called with the accepted platform `File`s. Read only outside a `FileDrop`. */
+	readonly onDrop?: (files: unknown[]) => void;
+	/** A cell written the file or the files. Read only outside a `FileDrop`. */
+	readonly ready?: unknown;
 }
 
-const openButton = (props: ButtonProps): Mounter => (elem, _item, before, context) => {
+/** `FileDrop`, with the button that opens a file dialog. */
+export interface FileDropComponent {
+	(props: FileDropProps): Mounter;
+	/** A `Button` that opens a file dialog: the zone's input inside one, its own outside one. */
+	Button(props: FileDropButtonProps): Mounter;
+}
+
+/** The props only the standalone shape reads, so a zone can say they were wasted. */
+const CHECKS = ['files', 'extensions', 'multiple', 'limit', 'onDrop', 'ready'] as const;
+
+/** The button on its own: a `Button`, a hidden input beside it, and the same checks. */
+const picker = (props: FileDropButtonProps): Mounter => (elem, _item, before, context) => {
+	const { files, extensions, multiple, limit, onDrop, ready, onClick, ...rest } = props;
+
+	const limits = limitsOf(props);
+	const list = listOf(files);
+	const id = use(context).ids.next('filedrop');
+	const input = createElement('input') as ElementLike;
+	const states = controlStates(props['disabled'], props);
+	const add = adder(limits, list, onDrop, () => states.isDisabled());
+
+	// The button shows the words and the input is what the keyboard lands on, so the input needs a
+	// name of its own. A `<label for>` is how the zone names its input and how `wireField` names a
+	// control; this one is offscreen, because the button beside it already says the same thing.
+	const name = props['label'] ?? props['aria-label'] ?? null;
+
+	const node = [
+		h(Button, {
+			...rest,
+			onClick: (event: unknown) => {
+				onClick?.(event);
+				// The input is the picker and the button is what a person sees. A hydration adopts
+				// the server's node and drops the one built here (design 133), so the click walks to
+				// the id this render minted rather than holding the node.
+				const found = findFrom((event as { target?: unknown }).target,
+					(element) => idOf(element) === id) as { click?(): void } | null;
+				found?.click?.();
+			},
+		}),
+		name === null ? null : h('label', { for: id, theme: ['offscreen'] }, name),
+		h(input, {
+			id,
+			type: 'file',
+			theme: ['filedrop_picker'],
+			accept: limits.wanted.length === 0 ? null : limits.wanted.join(','),
+			multiple: limits.many ? '' : null,
+			$multiple: limits.many,
+			disabled: props['disabled'],
+			onChange: (event: unknown) => {
+				const target = (event as { target?: unknown }).target;
+				add(filesIn(target));
+				// Cleared so choosing the same file twice in a row is two changes and not one.
+				(target as { value?: unknown }).value = '';
+			},
+		}),
+	];
+
+	const stop = settler(list, ready, limits.many);
+	const remove = mount(elem, node, before, context);
+	return (arg) => {
+		if (arg !== undefined) return remove(arg);
+		stop();
+		return remove();
+	};
+};
+
+const openButton = (props: FileDropButtonProps): Mounter => (elem, item, before, context) => {
 	const opener = slotOf(context, OPENER) as Opener | undefined;
-	assert(opener !== undefined,
-		'a FileDrop.Button needs a FileDrop above it; write it inside the children of a FileDrop');
-	if (opener === undefined) return () => undefined;
+	// Outside a zone this is the picker, with no chrome and no listing (design 214).
+	if (opener === undefined) return picker(props)(elem, item, before, context);
+
+	assert(CHECKS.every((name) => props[name] === undefined),
+		'a FileDrop.Button inside a FileDrop takes no files, extensions, multiple, limit, onDrop or '
+		+ 'ready: the zone around it already has them. Put them on the FileDrop, or take the button '
+		+ 'out of the zone to make it a picker of its own');
 
 	const { onClick, ...rest } = props;
 	return mount(elem, h(Button, {
@@ -126,15 +244,8 @@ const zone = (props: FileDropProps): Mounter => (elem, _item, before, context) =
 		type, element, theme, children, ...rest
 	} = props;
 
-	// A state prop is a cell or absent. A plain value looks as though it was honoured and is not,
-	// so it is a loud assert rather than a silent fallback, as `Validate`'s `value` already was.
-	assert(files === undefined || isMutableArray(files),
-		'FileDrop files takes a cell, not a value; pass files={mutableArray()}, or leave it out and '
-		+ 'the component keeps its own');
-	const list = (isMutableArray(files) ? files : mutableArray<FileDropEntry>()) as MutableArray<FileDropEntry>;
-	const wanted = Array.isArray(extensions) ? extensions.map((one) => String(one)) : [];
-	const many = multiple !== false;
-	const cap = limit === undefined || limit === null ? null : Number(limit);
+	const limits = limitsOf(props);
+	const list = listOf(files);
 	const states = controlStates(disabled, props);
 	const dragging = mutable(false);
 	const id = use(context).ids.next('filedrop');
@@ -142,64 +253,16 @@ const zone = (props: FileDropProps): Mounter => (elem, _item, before, context) =
 	const input = createElement('input') as ElementLike;
 	const prompt = createElement('label') as ElementLike;
 
-	const attributeOf = (element: unknown, name: string): string | null =>
-		(element as { getAttribute?(name: string): string | null }).getAttribute?.(name) ?? null;
-
 	// The two nodes above are what a fresh mount puts on the page, and a hydration adopts the
 	// server's markup and drops both (design 133). So every path that needs one finds it from the
 	// event instead, by the id this render minted, which both copies carry.
 	const inputFrom = (target: unknown): { click?(): void } | null =>
-		findFrom(target, (element) => attributeOf(element, 'id') === id) as { click?(): void } | null;
+		findFrom(target, (element) => idOf(element) === id) as { click?(): void } | null;
 	const promptFrom = (target: unknown): unknown =>
-		findFrom(target, (element) => attributeOf(element, 'for') === id);
+		findFrom(target, (element) =>
+			((element as { getAttribute?(name: string): string | null }).getAttribute?.('for') ?? null) === id);
 
-	const settle = (): void => {
-		if (!isWritable(ready)) return;
-		const rows = [...list];
-		if (rows.some((row) => row.status === 'loading')) {
-			ready.set(null);
-			return;
-		}
-		const kept = rows.filter((row) => row.status !== 'error').map((row) => row.file);
-		ready.set(many ? kept : kept[0] ?? null);
-	};
-
-	const refusal = (file: unknown): string | null => {
-		if (!covers(wanted, file)) return `${nameOf(file)} is not one of the accepted types`;
-		if (cap !== null && sizeOf(file) > cap) return `${nameOf(file)} is over the ${String(cap)} byte limit`;
-		return null;
-	};
-
-	const add = (given: readonly unknown[]): void => {
-		if (given.length === 0 || states.isDisabled()) return;
-		const rows: FileDropEntry[] = [];
-		const taken: unknown[] = [];
-		for (const file of given) {
-			const why = refusal(file);
-			if (why !== null) {
-				rows.push({ name: nameOf(file), file, status: 'error', error: why });
-				continue;
-			}
-			if (!many && taken.length > 0) {
-				// A refused file stays in the list with its reason, so a person who dragged eight of
-				// them can see which ones did not land (design 137).
-				rows.push({ name: nameOf(file), file, status: 'error', error: 'only one file is accepted' });
-				continue;
-			}
-			rows.push({ name: nameOf(file), file, status: 'ready' });
-			taken.push(file);
-		}
-		if (many) list.push(...rows);
-		else list.splice(0, list.length, ...rows);
-		if (taken.length === 0) return;
-		// A handler the page wrote is reported where `Detached` reports one, and the list keeps the
-		// edit it has already made.
-		try {
-			onDrop?.(taken);
-		} catch (error) {
-			queueMicrotask(() => { throw error; });
-		}
-	};
+	const add = adder(limits, list, onDrop, () => states.isDisabled());
 
 	// A counter rather than a flag: a `dragleave` fires at the zone every time the pointer crosses
 	// onto one of its own children, and a flag turns the highlight off there.
@@ -227,22 +290,18 @@ const zone = (props: FileDropProps): Mounter => (elem, _item, before, context) =
 			}));
 	};
 
-	const promptText = wanted.length === 0
-		? (many ? 'Drop files here, or choose them' : 'Drop a file here, or choose one')
-		: `${many ? 'Drop files here, or choose them' : 'Drop a file here, or choose one'}: ${wanted.join(', ')}`;
-
 	const replaced = children !== undefined && children.length > 0;
 
 	const inside = [
 		h(prompt, { for: id, theme: ['filedrop_prompt', replaced ? 'offscreen' : null] },
-			replaced ? null : h(Icon, { name: 'upload' }), promptText),
+			replaced ? null : h(Icon, { name: 'upload' }), promptFor(limits)),
 		h(input, {
 			id,
 			type: 'file',
 			theme: ['filedrop_picker'],
-			accept: wanted.length === 0 ? null : wanted.join(','),
-			multiple: many ? '' : null,
-			$multiple: many,
+			accept: limits.wanted.length === 0 ? null : limits.wanted.join(','),
+			multiple: limits.many ? '' : null,
+			$multiple: limits.many,
 			disabled,
 			onChange: (event: unknown) => {
 				const target = (event as { target?: unknown }).target;
@@ -297,8 +356,7 @@ const zone = (props: FileDropProps): Mounter => (elem, _item, before, context) =
 		open: (from: unknown) => { inputFrom(from)?.click?.(); },
 	} satisfies Opener);
 
-	const stop = list.watch(() => { settle(); });
-	settle();
+	const stop = settler(list, ready, limits.many);
 
 	const remove = mount(elem, node, before, own);
 	return (arg) => {
@@ -321,22 +379,33 @@ const zone = (props: FileDropProps): Mounter => (elem, _item, before, context) =
  * zone listens for `dragenter`, `dragleave` and `drop` (reading `dataTransfer.files`), and the input
  * for `change` (reading `files`).
  *
- * An entry is `{ name, file, status, error }`. A file the zone accepted starts as `ready` and one it
- * refused as `error`, with `error` saying why: the wrong type, over `limit`, or a second file while
- * `multiple` is false. Move `status` to `loading` while you upload by writing the entry back into
- * the list (`files[0] = { ...files[0], status: 'loading' }`), which is the edit the list can hear.
+ * An entry is `{ name, file, status, error, reason }`. A file the zone accepted starts as `ready`
+ * and one it refused as `error`, with `error` the sentence a person reads and `reason` the code a
+ * page branches on: `type` for a file the `extensions` do not cover, `size` for one over `limit`,
+ * and `count` for a second file while `multiple` is false (design 214). A refused file stays in the
+ * list. Move `status` to `loading` while you upload by writing the entry back into the list
+ * (`files[0] = { ...files[0], status: 'loading' }`), which is the edit the list can hear.
+ *
+ * `limit` is bytes, and every sentence naming it writes it in KB, MB or GB, so a `limit` of
+ * 4_000_000 reads as 3.8 MB. The prompt names the accepted types the way a person says them, so
+ * `image/png` reads as `png` and `image/*` reads as `image`.
  *
  * `ready` is written null while any entry is loading, and otherwise the file, or the array of files
  * when `multiple` is true, counting every entry that is not in error.
  *
- * `FileDrop.Button` is a `Button` that opens the dialog, for use inside your own children. It
- * asserts, loud in development and stripped in a release build, when it is not inside a `FileDrop`.
+ * `FileDrop.Button` is a `Button` that opens a file dialog. Inside a `FileDrop` it opens that zone's
+ * input and takes no checking props of its own; outside one it is the picker with no chrome, taking
+ * `files`, `extensions`, `multiple`, `limit`, `onDrop` and `ready` itself.
  *
  * There is no upload here: the entry carries the platform `File` and the rest is yours.
  *
- * Throws: the assert `elementFor` makes for an `element` that is not a `<div>`.
+ * Throws: the assert `elementFor` makes for an `element` that is not a `<div>`, the assert `files`
+ * makes for a value that is not a cell, and the assert a `FileDrop.Button` inside a zone makes when
+ * it was given a checking prop the zone already owns. All three are loud in development and
+ * stripped in a release build.
  *
  * Example:
  *   <FileDrop files={picked} extensions={['image/png', 'image/jpeg']} limit={4_000_000} />
+ *   <FileDrop.Button label="Change photo" extensions={['image/*']} multiple={false} ready={photo} />
  */
 export const FileDrop: FileDropComponent = Object.assign(zone, { Button: openButton });

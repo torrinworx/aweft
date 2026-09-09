@@ -1898,6 +1898,91 @@ test('a text field with an addon rings the box on a real Tab, and the input ring
 	});
 });
 
+test('a themed element given hidden computes display none', async () => {
+	// Design 207, and the third defect the builder run of found. Measured before the
+	// fix on the catalogue: a themed button given `hidden` computed `display: flex` and an
+	// unthemed one computed `none`, because the host's `[hidden]` rule is unlayered and every
+	// entry's `display` is inside `@layer aweft`.
+	await drive('hidden-rule', `
+		import { Button, h, mount } from '@aweftjs/ui';
+		mount(document.body, <div>
+			<Button id="gone" label="Gone" hidden={true} />
+			<Button id="here" label="Here" />
+			<button id="plain" hidden>Plain</button>
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#here');
+		const seen = await view.evaluate(() => ({
+			themed: getComputedStyle(document.querySelector('#gone')!)['display'],
+			showing: getComputedStyle(document.querySelector('#here')!)['display'],
+			plain: getComputedStyle(document.querySelector('#plain')!)['display'],
+			laidOut: Math.round(document.querySelector('#gone')!.getBoundingClientRect().width),
+		}));
+		assert.equal(seen.themed, 'none', 'a themed element honours the attribute');
+		assert.equal(seen.plain, 'none', 'the same as an unthemed one always did');
+		assert.equal(seen.showing, 'inline-flex', 'and one without the attribute is laid out');
+		assert.equal(seen.laidOut, 0, 'so the hidden one takes no room');
+	});
+});
+
+test('a success alert reaches its contrast in both modes', async () => {
+	// Design 216. The ratios are in that record, measured with this package's own `contrastRatio`
+	// and asserted in `contrast.test.ts`; what only a browser can say is that the two roles are
+	// what the element actually computes, in each mode.
+	await drive('success-tone', `
+		import { Alert, Theme, dark, h, light, mount } from '@aweftjs/ui';
+		mount(document.body, <div>
+			<Theme value={light}><Alert id="pale" type="success" title="Saved" /></Theme>
+			<Theme value={dark}><Alert id="deep" type="success" title="Saved" /></Theme>
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#pale');
+		const seen = await view.evaluate(() => {
+			const read = (id: string) => {
+				const style = getComputedStyle(document.querySelector(`#${id}`)!);
+				return { ink: style['color'], paper: style['backgroundColor'], edge: style['borderTopColor'] };
+			};
+			return { light: read('pale'), dark: read('deep') };
+		});
+		// $success11 and $success3 in light, and the same two roles in dark.
+		assert.deepEqual(seen.light, {
+			ink: 'rgb(4, 89, 58)', paper: 'rgb(216, 244, 226)', edge: 'rgb(13, 122, 76)',
+		});
+		assert.deepEqual(seen.dark, {
+			ink: 'rgb(98, 215, 155)', paper: 'rgb(18, 43, 31)', edge: 'rgb(53, 168, 112)',
+		});
+	});
+});
+
+test('an avatar sized by a length is that size, and its letters come off the box', async () => {
+	// Design 215. The letters are `40cqw` of the avatar, which is a container, so only a browser
+	// can say what font size that resolves to at each box size.
+	await drive('avatar-length', `
+		import { Avatar, h, mount } from '@aweftjs/ui';
+		mount(document.body, <div>
+			<Avatar id="big" fallback="AB" size="120px" />
+			<Avatar id="normal" fallback="AB" />
+		</div>);
+	`, async (view) => {
+		await view.waitForSelector('#big');
+		const seen = await view.evaluate(() => {
+			const read = (id: string) => {
+				const box = document.querySelector(`#${id}`)!;
+				const letters = box.querySelector('span')!;
+				return {
+					side: Math.round(box.getBoundingClientRect().height),
+					font: getComputedStyle(letters)['fontSize'],
+				};
+			};
+			return { big: read('big'), normal: read('normal') };
+		});
+		assert.equal(seen.big.side, 120, 'the length is the box');
+		assert.equal(seen.big.font, '48px', '40% of 120');
+		assert.equal(seen.normal.side, 36, '$control for one with no size');
+		assert.equal(seen.normal.font, '14.4px', 'and 40% of 36');
+	});
+});
+
 test('an avatar swaps its letters for a picture that really loads', async () => {
 	// Design 199. The light tree can dispatch `load`; only a browser fires it, and only a browser
 	// says what the two children measure once one of them carries `hidden`.

@@ -21,7 +21,7 @@ export interface ValidateProps {
 	readonly value?: unknown;
 	/** The check: a function of the cell, or the name of one of the eight built-in validators. */
 	readonly validate?: unknown;
-	/** A cell. Until it changes for the first time nothing is checked; after that, everything is. */
+	/** A cell. While it holds something falsy nothing is checked, and while it is truthy everything is. */
 	readonly signal?: unknown;
 	/** A cell written true while there is no problem. */
 	readonly valid?: unknown;
@@ -68,8 +68,14 @@ const names = Object.keys(VALIDATORS).join(', ');
  * around two of them marks both invalid and points both at the same message; two controls want two
  * `Validate`s.
  *
- * With a `signal`, nothing is checked until that cell changes for the first time, and every change
- * to `value` is checked after that. With none, checking is live from the start.
+ * With a `signal`, checking follows what that cell holds: nothing is checked while it is falsy, and
+ * every change to `value` is checked while it is truthy (design 208). A form that clears itself and
+ * writes its signal back to false is quiet again until the next submit, and going quiet clears the
+ * message, writes `valid` true and writes `error` null. With no `signal`, checking is live from the
+ * start.
+ *
+ * Under a `ValidateContext`, this check runs again when any cell that form is checking changes, so
+ * a validator that compares its cell with another field's follows that other field.
  *
  * `showError` false takes the message off the screen and leaves it announced, because a control that
  * says it is invalid and then says nothing else is a dead end.
@@ -108,14 +114,29 @@ export const Validate = (
 	const id = use(context).ids.next('validate');
 	const group = groupAt(context);
 
-	// Nothing is checked before the signal has moved; with no signal there is nothing to wait for.
-	let live = !isSource(signal);
-	// A formatting validator writes the cell it was given, which lands back here through the same
-	// effect. One pass at a time, so the write does not start a second check inside the first.
+	// The signal says whether anybody has asked yet, and it is read rather than counted, so a form
+	// that clears itself goes quiet again (design 208). With no signal there is nothing to wait for.
+	const live = (): boolean => !isSource(signal) || Boolean(signal.get());
+	// A formatting validator writes the cell it was given, and on the mount that write comes back
+	// into the check that made it: `value.effect` calls back as it registers, and that first call is
+	// not a delivery, so `core` has nothing to queue it behind. Every write after the mount is a
+	// delivery and is queued. One pass at a time, so the mount is one check like the rest.
 	let running = false;
 
+	const quiet = (): void => {
+		message.set('');
+		// True, not false: a form nobody has submitted does not hold itself back.
+		if (isWritable(valid)) valid.set(true);
+		if (isWritable(error)) error.set(null);
+		group?.settle();
+	};
+
 	const check = (): void => {
-		if (!live || run === undefined || running) return;
+		if (run === undefined || running) return;
+		if (!live()) {
+			quiet();
+			return;
+		}
 		running = true;
 		let said = '';
 		try {
@@ -136,22 +157,15 @@ export const Validate = (
 		group?.settle();
 	};
 
-	if (isSource(signal)) {
-		let first = true;
-		cleanup(signal.effect(() => {
-			// An effect calls back with what the cell holds now, and that first call is not a change.
-			if (first) {
-				first = false;
-				return;
-			}
-			live = true;
-			check();
-		}));
-	}
+	if (isSource(signal)) cleanup(signal.effect(() => { check(); }));
 	if (isSource(value)) cleanup(value.effect(() => { check(); }));
 
 	if (group !== null) {
-		const member: Member = { isValid: () => message.get() === '' };
+		const member: Member = {
+			isValid: () => message.get() === '',
+			value,
+			recheck: () => { check(); },
+		};
 		cleanup(group.join(member));
 	}
 
@@ -177,12 +191,28 @@ export const Validate = (
  * Returns: the children. Each `Validate` under it registers when it mounts and leaves when it
  * unmounts, so a field that goes away stops holding the form invalid.
  *
+ * It also follows every cell those `Validate`s are checking, and runs all their checks again when
+ * any one of them changes (design 208). That is what a validator comparing its cell with another
+ * field's needs: confirm-must-match reads the other password, and nothing else would tell it that
+ * the other password moved.
+ *
  * Example:
  *   <ValidateContext value={allValid}><Form /></ValidateContext>
  */
 export const ValidateContext = (props: ValidateContextProps): Mounter =>
 	(elem, _item, before, context) => {
 		const members = new Set<Member>();
+
+		// One round per write, and nothing here guards a second: `core` queues a write made during
+		// a delivery rather than delivering it inside that one. Measured with a cell written from
+		// inside another cell's effect: the second effect runs after the first returns, so a check
+		// that writes its own cell back, which four of the eight do, cannot start a round inside
+		// the round it is in. The mount is the one call that is not a delivery, and each `Validate`
+		// holds that one off itself.
+		const sweep = (from: Member): void => {
+			// Not the member that fired: its own effect on that cell has already run it.
+			for (const member of members) if (member !== from) member.recheck();
+		};
 
 		const settle = (): void => {
 			if (!isWritable(props.value)) return;
@@ -198,8 +228,22 @@ export const ValidateContext = (props: ValidateContextProps): Mounter =>
 		const group: Group = {
 			join: (member) => {
 				members.add(member);
+				// An effect calls back with what the cell holds now, and that first call is a
+				// mount rather than a change; a sweep on it would check every field before
+				// anybody had typed.
+				let first = true;
+				const stop = isSource(member.value)
+					? member.value.effect(() => {
+						if (first) {
+							first = false;
+							return;
+						}
+						sweep(member);
+					})
+					: null;
 				settle();
 				return () => {
+					stop?.();
 					members.delete(member);
 					settle();
 				};

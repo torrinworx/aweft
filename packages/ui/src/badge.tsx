@@ -10,7 +10,7 @@ import { sizeSegments } from './control.ts';
 export interface BadgeProps {
 	/** The text inside it. Children work too, and both together put the label first. */
 	readonly label?: unknown;
-	/** The theme variant: nothing, `quiet`, `danger` or `outline`. */
+	/** The theme variant: nothing, `quiet`, `danger`, `success` or `outline`. */
 	readonly type?: unknown;
 	/** How big it is: `sm`, `lg`, or nothing. A value or a cell. */
 	readonly size?: unknown;
@@ -31,9 +31,9 @@ export interface BadgeProps {
  *   props: `label`, `type`, `size`, `icon`, `element`, and anything else, which goes to the
  *          element
  *
- * Returns: a `<span>` on the `badge` entry: the accent fill at `$textXs`, or the `quiet`, `danger`
- * and `outline` variants of it. Its size axis is padding and text rather than a control height,
- * because a badge is not a control and a row of 36px blocks is not what a caller asked for.
+ * Returns: a `<span>` on the `badge` entry: the accent fill at `$textXs`, or the `quiet`, `danger`,
+ * `success` and `outline` variants of it. Its size axis is padding and text rather than a control
+ * height, because a badge is not a control and a row of 36px blocks is not what a caller asked for.
  *
  * It is never interactive. A badge somebody presses is a `Button` with `size="sm"`.
  *

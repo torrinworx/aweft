@@ -30,15 +30,10 @@ type DropDownProps: interface DropDownProps { readonly open?: unknown; readonly 
 value Empty: (props: EmptyProps) => unknown
 type EmptyProps: interface EmptyProps { readonly icon?: unknown; readonly title?: unknown; readonly description?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type Entry: type Entry = Readonly<Record<string, unknown>>;
-value Field: (props: FieldProps, cleanup: (...fns: (() => void)[]) => void) => Mounter
-value FieldGroup: (props: FieldGroupProps) => unknown
-type FieldGroupProps: interface FieldGroupProps { readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
-type FieldProps: interface FieldProps { readonly orientation?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
-value FieldSet: (props: FieldSetProps) => unknown
-type FieldSetProps: interface FieldSetProps { readonly legend?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value FileDrop: FileDropComponent
-type FileDropComponent: interface FileDropComponent { (props: FileDropProps): Mounter; Button(props: ButtonProps): Mounter; }
-type FileDropEntry: interface FileDropEntry { readonly name: string; readonly file: unknown; readonly status: 'ready' | 'loading' | 'error'; readonly error?: string; }
+type FileDropButtonProps: interface FileDropButtonProps extends ButtonProps { readonly files?: unknown; readonly extensions?: unknown; readonly multiple?: unknown; readonly limit?: unknown; readonly onDrop?: (files: unknown[]) => void; readonly ready?: unknown; }
+type FileDropComponent: interface FileDropComponent { (props: FileDropProps): Mounter; Button(props: FileDropButtonProps): Mounter; }
+type FileDropEntry: interface FileDropEntry { readonly name: string; readonly file: unknown; readonly status: 'ready' | 'loading' | 'error'; readonly error?: string; readonly reason?: 'type' | 'size' | 'count'; }
 type FileDropProps: interface FileDropProps { readonly files?: unknown; readonly extensions?: unknown; readonly multiple?: unknown; readonly limit?: unknown; readonly clickable?: unknown; readonly disabled?: unknown; readonly onDrop?: (files: unknown[]) => void; readonly ready?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Head: (props: { children?: unknown[] | undefined; }) => unknown
 type HeadKind: type HeadKind = 'title' | 'meta' | 'link' | 'script' | 'style';
@@ -67,12 +62,10 @@ type MarkMaker: type MarkMaker = ((props?: Record<string, unknown>, ...children:
 type Marked: interface Marked { readonly [MARKED]: string; readonly name: string; readonly props: Record<string, unknown> & { readonly children: unknown[]; }; }
 value Meta: (props: TagProps) => unknown
 value Modal: (props: ModalProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
-type ModalProps: interface ModalProps { readonly label?: unknown; readonly noEsc?: unknown; readonly noClickEsc?: unknown; readonly type?: unknown; readonly side?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
+type ModalProps: interface ModalProps { readonly label?: unknown; readonly noEsc?: unknown; readonly noClickEsc?: unknown; readonly type?: unknown; readonly side?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly class?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type OpenOptions: interface OpenOptions { readonly name: string; readonly template?: Component; readonly history?: boolean; readonly [prop: string]: unknown; }
 value Pagination: (props: PaginationProps, cleanup: (...fns: (() => void)[]) => void) => Mounter
 type PaginationProps: interface PaginationProps { readonly page?: unknown; readonly count?: unknown; readonly siblings?: number; readonly onChange?: (page: number, event: unknown) => void; readonly size?: unknown; readonly label?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
-value Paper: (props: PaperProps) => unknown
-type PaperProps: interface PaperProps { readonly type?: unknown; readonly tight?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type Placed: interface Placed { readonly mode: Placement; readonly left: number; readonly top: number; readonly maxWidth: number; readonly maxHeight: number; readonly transformOrigin: string; }
 type Placement: type Placement = 'below-start' | 'below-end' | 'above-start' | 'above-end' | 'right-start' | 'right-end' | 'left-start' | 'left-end' | 'below' | 'above' | 'right' | 'left';
 value Popup: (props: { placement?: unknown; canClose?: ((event: unknown) => boolean) | undefined; style?: Record<string, unknown> | undefined; ref?: ((element: unknown) => void) | undefined; children?: unknown[] | undefined; }) => Mounter

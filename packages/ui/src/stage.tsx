@@ -290,7 +290,12 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 		assert(act !== undefined, `the stage has no act named ${JSON.stringify(name)}; declare it in acts`);
 		const held = opened.get();
 		const mine = held !== null && held.name === name;
-		const template = (mine ? held.template : null) ?? props.template ?? Default;
+		const own = (mine ? held.template : null) ?? props.template ?? Default;
+		// What the open carried past `name`, `template` and `history`. It goes to the template as
+		// well as to the act (design 213), so a `Modal` opened with a `label` is named at the call
+		// rather than in a closure written per open. An act reached from the URL carried nothing,
+		// so the template the stage was given is called with nothing.
+		const outer = mine ? held.props : {};
 		// The stage goes to the act as a prop, so an act reads `params` and `query` without
 		// reaching into the context. It is written after the open's props, because the stage an act
 		// is in is not a thing an open gets to name.
@@ -300,9 +305,9 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 		if (isLazy(act!)) {
 			const lazy = suspend<Record<string, unknown>>(null, async () =>
 				h(Ready, report, h(componentOf(await act!.load()), given)));
-			return h(template, {}, h(lazy, {}));
+			return h(own, outer, h(lazy, {}));
 		}
-		return h(template, {}, h(Ready, report, h(act as Component, given)));
+		return h(own, outer, h(Ready, report, h(act as Component, given)));
 	};
 
 	const content = signature.map(() => build());

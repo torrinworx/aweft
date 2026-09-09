@@ -26,6 +26,10 @@ export interface FieldError {
 /** One member of a form's tally: a `Validate` that has an answer. */
 export interface Member {
 	isValid(): boolean;
+	/** The cell this member is checking, so the form can follow it (design 208). */
+	readonly value: unknown;
+	/** Run this member's check again, because another field in the form moved. */
+	recheck(): void;
 }
 
 /** The tally a `ValidateContext` keeps. */

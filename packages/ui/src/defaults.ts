@@ -50,6 +50,14 @@ defineTheme({
 			boxShadow: '0 0 0 $ringWidth color-mix(in srgb, $ring 50%, transparent)',
 		},
 
+		// The attribute the host hides an element with, said again inside the layer (design 207).
+		// Every entry that lays an element out declares a `display` in here, and an unlayered rule
+		// loses to a layered one whatever its specificity, so the host's own `[hidden]` never
+		// reached a themed element: a themed button given `hidden` computed `display: flex` while
+		// an unthemed one computed `none`. `:is()` keeps this at one attribute above the generated
+		// class, so it beats every `display` a chain declares.
+		'_cssProp_:is([hidden])': { display: 'none' },
+
 		// The only motion this package declares, inside the query that asks whether the person
 		// wants any. Written the other way round, as a reduce override, it would lose to a
 		// component's own transition: a media query adds no specificity and `*` is emitted first.
@@ -824,6 +832,7 @@ defineTheme({
 	},
 	badge_quiet: { background: '$muted', color: '$mutedForeground' },
 	badge_danger: { background: '$danger', color: '$dangerForeground' },
+	badge_success: { background: '$success', color: '$successForeground' },
 	badge_outline: { background: 'transparent', borderColor: '$border', color: '$foreground' },
 	badge_sm: { padding: '0 $space' },
 	badge_lg: { padding: '$space $space3', fontSize: '$textSm', lineHeight: '$textSmLine' },
@@ -852,6 +861,13 @@ defineTheme({
 		color: '$dangerSubtleForeground',
 		borderColor: '$danger',
 	},
+	// The mirror of the one above (design 216). The role names are the only difference, which is
+	// what says the two tones are one shape read two ways.
+	alert_success: {
+		background: '$successSubtle',
+		color: '$successSubtleForeground',
+		borderColor: '$success',
+	},
 	// The part is `symbol` and not `icon`, because `icon` is an entry of this theme and no segment
 	// may name one (design 193, amended). It spans both rows so the title and the body place
 	// themselves in the second column rather than wrapping under it.
@@ -866,14 +882,18 @@ defineTheme({
 	alert_body: { color: '$mutedForeground' },
 
 	// A picture of a person, and the letters shown while it is not there. Both children stay in the
-	// tree and one of them carries `hidden`, which also takes it out of the accessibility tree; each
-	// part declares a `display` of its own, so the host's `[hidden]` rule loses and this says it.
+	// tree and one of them carries `hidden`, which the root entry hides and which also takes it out
+	// of the accessibility tree (design 207).
+	//
+	// The box is a container so the fallback's letters can be a fraction of it (design 215), which
+	// is what makes `size` take a length as well as the two steps.
 	avatar: {
 		boxSizing: 'border-box',
 		position: 'relative',
 		display: 'inline-block',
 		flexShrink: 0,
 		overflow: 'hidden',
+		containerType: 'inline-size',
 		width: '$control',
 		height: '$control',
 		borderRadius: '$radius',
@@ -886,7 +906,6 @@ defineTheme({
 		width: '100%',
 		height: '100%',
 		objectFit: 'cover',
-		'_cssProp_:is([hidden])': { display: 'none' },
 	},
 	avatar_fallback: {
 		display: 'flex',
@@ -897,11 +916,13 @@ defineTheme({
 		background: '$muted',
 		color: '$mutedForeground',
 		fontFamily: '$font',
-		fontSize: '$textXs',
-		lineHeight: '$textXsLine',
+		// A fraction of the box rather than a text step, so the letters are right at every size
+		// including a length the theme never heard of (design 215).
+		$avatarLetter: '40cqw',
+		fontSize: '$avatarLetter',
+		lineHeight: '$avatarLetter',
 		fontWeight: 500,
 		userSelect: 'none',
-		'_cssProp_:is([hidden])': { display: 'none' },
 	},
 
 	// The pulse, defined once and reached by both the dots and a skeleton (design 199). A keyframes

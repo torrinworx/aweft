@@ -451,8 +451,8 @@ through the `Icons` context.
 
 **This package ships no drawings** (design 144). `Icons` starts empty, and an application supplies
 a pack, a resolver, or both. This is not only about the `Icon` you write yourself: `DropDown`,
-`Accordion` (which is a stack of `DropDown`s), `FileDrop`, `Modal` and `Validate` each mount one of
-their own, by name, so a page that mounts any of them and has no `Icons` provider above it asserts
+`FileDrop`, `Modal` and `Validate` each mount one of their own, by name, so a page that mounts any
+of them and has no `Icons` provider above it asserts
 on its first render rather than rendering without the glyph. `Validate` is the one that surprises people, because its icon is a default
 nobody asked for. Give the page a provider, or give the component its own `icon` prop. (`Select`
 needs none: its arrow is drawn by the theme, design 195.)
@@ -572,12 +572,22 @@ using them answers those five through `Icons`; `@aweftjs/icons/<set>/+standard` 
 stage.open({ name: 'edit', history: true, template: Modal });
 ```
 
-A stage calls a template as `h(template, {}, act)`, so there is no way to pass `label` through
-`open`. Name the props by writing the template yourself:
+A stage calls a template as `h(template, props, act)`, where `props` is what the `open` carried past
+`name`, `template`, `history` and `children` (design 213). So the dialog is named at the call, and
+`Modal` goes in as the template itself:
 
 ```tsx
-stage.open({ name: 'edit', history: true, template: (p) => <Modal label="Edit">{p.children}</Modal> });
+stage.open({ name: 'edit', history: true, template: Modal, label: 'Edit the thing' });
 ```
+
+The act is handed the same props, plus the `stage` after them. An act reached from the URL carried
+nothing, so the template the stage was given is called with nothing.
+
+**`Modal` reads the props it names and forwards none of the others.** `label`, `noEsc`, `noClickEsc`,
+`type`, `side`, `element`, `theme` and `class` are its own; anything else an `open` carried goes to
+the act and no further, so a row handed to the act is not written on the `<dialog>` as an attribute.
+A prop the act wants that is spelled like one of the eight is read by `Modal` too: that is what one
+prop bag means, and it is visible in the call.
 
 Escape (through the element's own `cancel` event), a mousedown on the backdrop and the close button
 all call the stage's `close()`, so a modal that owns a history entry goes down the same way whichever
@@ -590,14 +600,12 @@ from it (design 202). `side` says which edge, `right` by default, and is read fo
 Everything else is the same: the same stage, the same three ways to close it, the same backdrop.
 
 ```tsx
-stage.open({ name: 'filters', template: (p) => <Modal label="Filters" type="sheet">{p.children}</Modal> });
+stage.open({ name: 'filters', template: Modal, label: 'Filters', type: 'sheet' });
 ```
 
-**An `Accordion` is a stack of `DropDown`s that keeps one of them open**, which is the platform's
-own behaviour for a group of `<details>` sharing one `name` (design 202). Give it `items` and it
-renders the drop-downs for you; pass your own children instead and give each of them the same `name`
-and `theme="accordion_item"`. With no `name` it mints one off the render, so a server page and the
-hydration that adopts it stay one group.
+**A stack of disclosures that keeps one open is a run of `DropDown`s sharing one `name`**, which is
+the platform's own behaviour for a group of `<details>`. There is no component for it (design 212):
+give each drop-down the same `name` and you have one.
 
 **A tip is on hover and on focus, and the anchor names it.** The children are the anchor, and a
 `<mark.popup>` replaces the label with markup. The panel sits inside the box `Detached` placed and
@@ -626,23 +634,45 @@ const picked = mutableArray();
 <FileDrop files={picked} extensions={['image/png', '.csv']} limit={4_000_000} ready={file} />
 ```
 
-An entry is `{ name, file, status, error }`. A file the zone accepted starts as `ready` and one it
-refused as `error`, with `error` saying why: the wrong type, over `limit`, or a second file while
-`multiple` is false. A refused file stays in the list with its reason rather than disappearing.
-Move `status` to `loading` while you upload by writing the entry back, `files[0] = { ...files[0],
-status: 'loading' }`, which is the edit a list can hear. `ready` is written null while anything is
-loading, and otherwise the file, or the array of files when `multiple` is true, counting every entry
-that is not in error. The transport is yours: the entry carries the platform `File`.
+An entry is `{ name, file, status, error, reason }`. A file the zone accepted starts as `ready` and
+one it refused as `error`, with `error` the sentence a person reads and `reason` the code you branch
+on: `type` for a file the `extensions` do not cover, `size` for one over `limit`, and `count` for a
+second file while `multiple` is false (design 214). An accepted entry carries neither. A refused
+file stays in the list rather than disappearing. Move `status` to `loading` while you upload by
+writing the entry back, `files[0] = { ...files[0], status: 'loading' }`, which is the edit a list
+can hear. `ready` is written null while anything is loading, and otherwise the file, or the array of
+files when `multiple` is true, counting every entry that is not in error. The transport is yours:
+`ui` decides nothing about storage, transport or the server, so the entry carries the platform
+`File`.
+
+**With `multiple` false, a second pick replaces the entry that is there**, in place, so a `watch` on
+the list hears a `replace` and not an `add`. A page listening for `add` alone sees the first file and
+none of the ones after it.
+
+**`limit` is bytes, and every sentence naming it is written for a person**: KB, MB or GB, 1024 to a
+step, so a `limit` of `4_000_000` reads as 3.8 MB. The prompt names the accepted types the same way,
+so `image/png` reads as `png`, `image/*` reads as `image` and `.csv` reads as `csv`.
 
 The zone listens for `dragenter`, `dragleave` and `drop`, and reads the dropped files off the
 event's `dataTransfer.files`; the input listens for `change` and reads its own `files`. Those four
 are the whole of what reaches this component from the host.
 
-Children replace the prompt line and the listing. `FileDrop.Button` is a `Button` that opens the file
-dialog, for use inside those children; one outside a `FileDrop` is an assert. The input itself is
-visually hidden rather than `display: none`, so it is still focusable, and its label is the zone's
-prompt whichever chrome is showing. `look.test.ts` reads the `filedrop_picker` rule and fails if it
-ever becomes `display: none`.
+Children replace the prompt line and the listing. The input itself is visually hidden rather than
+`display: none`, so it is still focusable, and its label is the zone's prompt whichever chrome is
+showing. A `FileDrop.Button` standing on its own names its own input the same way, with an offscreen
+`<label>` carrying the button's `label` or its `aria-label`, because the button beside it is what
+shows the words. `look.test.ts` reads the `filedrop_picker` rule and fails if it ever becomes
+`display: none`.
+
+**`FileDrop.Button` is two things, decided by where it is** (design 214). Inside a `FileDrop` it is
+a `Button` that opens that zone's input, and it takes no checking props of its own, because the zone
+already has them; giving it one is an assert. Outside a zone it is the picker with no chrome: its
+own hidden input, the same checks, and `files`, `extensions`, `multiple`, `limit`, `onDrop` and
+`ready` on the button itself.
+
+```tsx
+<FileDrop.Button label="Change photo" extensions={['image/*']} multiple={false} ready={photo} />
+```
 
 **A check is given the cell, not the value.**
 
@@ -654,16 +684,31 @@ ever becomes `display: none`.
 </ValidateContext>
 ```
 
-`validate` is a function of the cell returning the problem, `''` or `null`, or the name of one of
-eight built-ins: `phone`, `email`, `pan`, `expDate`, `postalCode`, `date`, `number` and `float`. Four
+**`validate` is handed the cell, not what the cell holds.** So a check reads it with `cell.get()`,
+and one that formats what was typed writes it back with `cell.set(...)`, which is how four of the
+eight built-ins work. It returns the problem as a string, or `''` or `null` for no problem.
+
+```tsx
+<Validate value={confirm} validate={(cell) => (cell.get() === password.get() ? '' : 'They do not match.')}>
+```
+
+`validate` is that function, or the name of one of eight built-ins: `phone`, `email`, `pan`, `expDate`, `postalCode`, `date`, `number` and `float`. Four
 of them write a formatted value back into the cell: `phone`, `pan`, `expDate` and `postalCode`. Each
 answers nothing for an empty value, so a field is not invalid before anybody has typed in it. They
 are small on purpose, each doing what its name promises and no more: `email` is a shape check,
 `date` is `YYYY-MM-DD`, `postalCode` is the Canadian one, and `pan` is a Luhn check on thirteen to
 nineteen digits. Write a function for anything else.
 
-With a `signal`, nothing is checked until that cell changes for the first time, and every change to
-`value` is checked after that. With none, checking is live from the start.
+**A `signal` is read, not counted.** While that cell holds something falsy nothing is checked, and
+while it is truthy every change to `value` is checked (design 208). So a form that clears itself
+after a successful submit writes `submitted` back to false and goes quiet again, rather than marking
+every emptied field. Going quiet clears the message, writes `valid` true and writes `error` null.
+With no `signal`, checking is live from the start.
+
+**Under a `ValidateContext`, a check runs again when any cell that form is checking changes.** That
+is what confirm-must-match needs: the validator above reads the other password's cell, and nothing
+else would tell it that the other password moved. A validator that reads a cell no `Validate` in the
+same form is checking is not re-run for it; put that control in a `Validate` too.
 
 The message is rendered once, after the children, as a live region. It also reaches the control:
 a control of this package that was given no `error` of its own goes `aria-invalid` and its
@@ -770,27 +815,34 @@ and `@import` from your own theme's directives.
 
 ## Display
 
-Seven things a page shows and nobody operates (design 199). Each is one native element with a theme
+Six things a page shows and nobody operates (design 199). Each is one native element with a theme
 on it, none takes a handler, and none takes a value the way a control does.
 
 ```tsx
-import { Alert, Avatar, Badge, Empty, Kbd, Progress, Skeleton } from '@aweftjs/ui';
+import { Alert, Avatar, Badge, Empty, Progress, Skeleton } from '@aweftjs/ui';
 ```
 
 | component | the element | its own props | `size` | example |
 |---|---|---|---|---|
-| `Badge` | `<span>` on `badge` | `label`, `type` (`quiet`, `danger`, `outline`), `icon`, `element` | `sm`, `lg` | `badge` |
-| `Alert` | `<div role="alert">` or `<div role="status">` on `alert` | `title`, `icon`, `type` (`danger`), `element`, children as the body | | `alert` |
-| `Avatar` | `<span>` on `avatar`, holding an `<img>` and a `<span>` | `src`, `alt`, `fallback`, `round` | `sm`, `lg` | `avatar` |
+| `Badge` | `<span>` on `badge` | `label`, `type` (`quiet`, `danger`, `success`, `outline`), `icon`, `element` | `sm`, `lg` | `badge` |
+| `Alert` | `<div role="alert">` or `<div role="status">` on `alert` | `title`, `icon`, `type` (`danger`, `success`), `element`, children as the body | | `alert` |
+| `Avatar` | `<span>` on `avatar`, holding an `<img>` and a `<span>` | `src`, `alt`, `fallback`, `round` | `sm`, `lg`, or any CSS length | `avatar` |
 | `Skeleton` | `<div aria-hidden="true">` on `skeleton` | `width`, `height`, `round` | | `skeleton` |
-| `Kbd` | `<kbd>` on `kbd` | `label`, children | | `kbd` |
 | `Progress` | `<progress max="1">` on `progress` | `value` (0 to 1, or nothing), `label`, `element` | `sm`, `lg` | `progress` |
 | `Empty` | `<div>` on `empty` | `icon`, `title`, `description`, `element`, children as the actions | | `empty` |
 
 **An avatar shows its letters until its picture loads, and again if it fails.** Both children stay
 in the tree and whichever is not showing carries `hidden`, so it is out of the accessibility tree as
-well as off the screen. With no `src` there is no `<img>` at all. `round` is true unless you set it
-false.
+well as off the screen. `round` is true unless you set it false.
+
+With a plain `src` of nothing there is no `<img>` at all. With a `src` that is a cell the `<img>` is
+in the markup from the first paint whatever the cell holds, and its `src` follows the cell: a cell
+that has not resolved yet is not the same as no picture.
+
+**`size` takes a CSS length as well as `sm` and `lg`** (design 215), the way `Icon`'s does. A step
+name is a theme segment; a length is written as the element's width and height. The fallback letters
+are 40% of the box, through a container query on the `avatar` entry, so they follow it at every size
+and at any length. Move `$avatarLetter` to change the proportion.
 
 **A progress with no value is indeterminate.** `value` is a fraction of 1, so nothing has to divide;
 `null` or nothing leaves the attribute off, which is what the platform reads as waiting and draws as
@@ -957,11 +1009,11 @@ id that is not on the page, which no browser reports.
 A default theme ships in light and dark. It is what makes `theme="button"` a button, and it is the
 contract a component of this package is allowed to use. Designs 115 to 120 are the whole of it.
 
-**Three colour scales**, `neutral`, `accent` and `danger`, twelve steps each, `$neutral1` to
-`$neutral12` and so on. The steps follow one job list: 1 and 2 are backgrounds, 3 to 5 component
+**Four colour scales**, `neutral`, `accent`, `danger` and `success`, twelve steps each, `$neutral1`
+to `$neutral12` and so on. The steps follow one job list: 1 and 2 are backgrounds, 3 to 5 component
 fills by state, 6 to 8 lines, 9 and 10 solids, 11 and 12 text.
 
-**Eighteen roles**, each set from one step. A component uses a role, never a step:
+**Twenty-two roles**, each set from one step. A component uses a role, never a step:
 
 | role | pairs with | what it is for |
 |---|---|---|
@@ -972,6 +1024,8 @@ fills by state, 6 to 8 lines, 9 and 10 solids, 11 and 12 text.
 | `$accentSubtle` | `$accentSubtleForeground` | a tinted control |
 | `$danger` | `$dangerForeground` | a destructive control |
 | `$dangerSubtle` | `$dangerSubtleForeground` | a warning block |
+| `$success` | `$successForeground` | a thing that went right |
+| `$successSubtle` | `$successSubtleForeground` | a block saying so |
 | `$border` | | the line around a block |
 | `$input` | | the edge of a control |
 | `$ring` | | the focus ring |
@@ -986,7 +1040,8 @@ the other way round in dark. `$ring` and `$accentSubtle` are neutral too. The ac
 still defined, all twelve steps of it, and `$link` is the one role that uses it. Colour is a
 decision your application makes: one provider at the root redefining `$accent` and
 `$accentForeground` puts it back on every filled control, because no component names a step.
-`$danger` is unchanged and still red.
+`$danger` is unchanged and still red, and `$success` is its counterpart in green (design 216): the
+two tones are for a message about what happened, and no control here is coloured by either.
 
 **Type** is `$textXs`, `$textSm`, `$textMd`, `$textLg`, `$textXl`, `$text2xl`, `$text3xl` and
 `$text4xl`, in `rem`, each with `$textXsLine` and so on beside it. `$font` and `$fontMono` are the
@@ -1127,11 +1182,26 @@ foreground on the button's own fill, which is an icon nobody can see (design 198
 own entry says both, once, and everything under it inherits:
 
 ```ts
-Theme.define({ page: { background: '$background', color: '$foreground' } });
+Theme.define({
+	page: {
+		// The host's own body margin shows as a band of its default colour around your entry, which
+		// is white against a dark page. Take it off, and make the entry as tall as the viewport so
+		// a short page is painted to the bottom.
+		'_elem_body': { margin: 0 },
+		minHeight: '100vh',
+		background: '$background',
+		color: '$foreground',
+	},
+});
 ```
 
 Without one the page reads in the host's own default colours, which is right in light and wrong in
 dark, so a page that offers dark mode needs this entry.
+
+**Every themed element honours `hidden`** (design 207). The root entry carries the rule inside
+`@layer aweft`, because an unlayered rule loses to a layered one whatever its specificity and every
+entry that lays an element out declares a `display` in there. So `hidden` on a themed element takes
+it off the screen and out of the accessibility tree, the way it does on an unthemed one.
 
 **Dark is a theme.** `dark` and `light` are partial themes handed to the provider:
 

@@ -115,6 +115,42 @@ test('open props do not accumulate across opens', async () => {
 	stop();
 });
 
+test('a stage calls its template with the props the open carried', async () => {
+	// Design 213. Before this, a template was called with `{}`, so a `Modal` opened with a `label`
+	// had to be named in a closure written per open.
+	const document = createDocument();
+	let stage: StageValue | null = null;
+	const Grab = StageContext.use((found) => () => {
+		stage = found;
+		return null;
+	});
+
+	const seen: Record<string, unknown>[] = [];
+	const Frame = (props: { children?: unknown[]; [prop: string]: unknown }): unknown => {
+		const { children, ...rest } = props;
+		seen.push(rest);
+		return h('section', {}, ...(children ?? []));
+	};
+	const Act = (props: { label?: unknown; stage?: unknown }): unknown =>
+		h('main', {}, `${String(props.label ?? '-')}/${props.stage === null ? 'no' : 'yes'}`);
+
+	const stop = mount(document.body as never, h(StageContext, {
+		acts: { panel: Act, blank: page('blank') },
+		initial: 'blank',
+		template: Frame,
+	} as never, h(Stage, {}), h(Grab, {})));
+
+	assert.deepEqual(seen[0], {}, 'an act reached with no open carried nothing');
+
+	stage!.open({ name: 'panel', template: Frame, label: 'Sign out?', history: false });
+	await settle();
+	assert.deepEqual(seen[seen.length - 1], { label: 'Sign out?' },
+		'the template sees what the open carried, and none of name, template or history');
+	assert.equal(textOf(document), '<section><main>Sign out?/yes</main></section>',
+		'and the act sees the same props, with the stage after them');
+	stop();
+});
+
 test('an open with a history entry leaves the URL alone, and back dismisses it', async () => {
 	const router = createRouter({ url: '/' });
 	const document = createDocument();

@@ -81,15 +81,13 @@ export { Table } from './table.tsx';
 export type { TableColumn, TableProps } from './table.tsx';
 export { Tab, TabPanel, Tabs } from './tabs.tsx';
 export type { TabItem, TabPanelProps, TabProps, TabsProps } from './tabs.tsx';
-export { ToggleGroup } from './toggle-group.tsx';
-export type { ToggleGroupProps } from './toggle-group.tsx';
 
 export { ColorPicker } from './color-picker.tsx';
 export type { ColorPickerProps } from './color-picker.tsx';
 export { DropDown } from './drop-down.tsx';
 export type { DropDownProps } from './drop-down.tsx';
 export { FileDrop } from './file-drop.tsx';
-export type { FileDropComponent, FileDropEntry, FileDropProps } from './file-drop.tsx';
+export type { FileDropButtonProps, FileDropComponent, FileDropEntry, FileDropProps } from './file-drop.tsx';
 export { Modal } from './modal.tsx';
 export type { ModalProps } from './modal.tsx';
 export { Tooltip } from './tooltip.tsx';

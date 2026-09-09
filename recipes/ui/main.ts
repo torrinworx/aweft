@@ -557,12 +557,15 @@ try {
 	assert.equal(icons.big, '32px', 'and a size prop overrides it');
 	assert.equal(icons.named, 'svg', 'a bare name found its drawing in the set the page installed');
 
-	// A modal is opened by the stage, and every way of closing it is the stage's close.
+	// A modal is opened by the stage, and every way of closing it is the stage's close. The dialog
+	// is found by its element rather than by an id: a `Modal` writes only the props it names, so an
+	// id carried through `open` reaches the act and not the element (design 213), and one modal is
+	// open at a time.
 	assert.equal(await page.locator('dialog').count(), 0, 'no modal before anybody asked for one');
 	await page.click('#open-modal-light');
 	await page.waitForSelector('#editing-light');
 	const modal = await page.evaluate(() => {
-		const dialog = document.querySelector('#modal-light')!;
+		const dialog = document.querySelector('dialog')!;
 		return {
 			tag: dialog.tagName.toLowerCase(),
 			modal: dialog.matches(':modal'),
@@ -571,7 +574,7 @@ try {
 	});
 	assert.deepEqual(modal, { tag: 'dialog', modal: true, named: 'Edit the thing' },
 		'a real <dialog>, showing as a modal, with a name a screen reader can read');
-	await page.click('#modal-light button[aria-label="Close"]');
+	await page.click('dialog button[aria-label="Close"]');
 	await page.waitForFunction(() => document.querySelector('#editing-light') === null);
 
 	// A tip on a real hover, and the anchor points at the panel. The box the solver placed is what
@@ -825,7 +828,7 @@ try {
 	await page.click('#open-sheet-light');
 	await page.waitForSelector('#filtering-light');
 	const edge = await page.evaluate(() => {
-		const panel = document.querySelector('#sheet-light')!;
+		const panel = document.querySelector('dialog')!;
 		const box = panel.getBoundingClientRect();
 		return {
 			tag: panel.tagName.toLowerCase(),

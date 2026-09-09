@@ -1,5 +1,5 @@
-// `FileDrop` in the light tree (design 137): what it accepts, what it refuses and why, what it
-// tells the page through `ready`, and the two ways of opening the file dialog.
+// `FileDrop` in the light tree (designs 137, 214): what it accepts, what it refuses and why, what
+// it tells the page through `ready`, and the two ways of opening the file dialog.
 //
 // The platform `File` never appears here. What the component holds is whatever the host handed it,
 // so a plain object with a name, a type and a size is exactly as much as it reads.
@@ -45,6 +45,7 @@ interface Entry {
 	readonly file: unknown;
 	readonly status: string;
 	readonly error?: string;
+	readonly reason?: string;
 }
 
 /** A zone, its input and its list, ready to be given files. */
@@ -94,6 +95,7 @@ test('a file of the wrong type is refused, and stays in the list saying why', ()
 	assert.equal(held.files.length, 1, 'a refused file is not dropped in silence');
 	assert.equal(held.files[0]!.status, 'error');
 	assert.match(held.files[0]!.error ?? '', /notes\.pdf is not one of the accepted types/);
+	assert.equal(held.files[0]!.reason, 'type', 'and a code a page can branch on (design 214)');
 	held.stop();
 });
 
@@ -120,15 +122,50 @@ test('with no extensions declared, anything is taken', () => {
 	held.stop();
 });
 
-test('a file over the limit is refused, and the limit is in the reason', () => {
-	const held = zone({ limit: 100 });
-	held.give(file('big.png', 'image/png', 101));
+test('a file over the limit is refused, and the limit is written for a person', () => {
+	const held = zone({ limit: 4_000_000 });
+	held.give(file('big.png', 'image/png', 4_000_001));
 	assert.equal(held.files[0]!.status, 'error');
-	assert.match(held.files[0]!.error ?? '', /over the 100 byte limit/);
+	// 4_000_000 / 1024 / 1024 is 3.8146…, worked out by hand from design 214's 1024 to a step.
+	assert.match(held.files[0]!.error ?? '', /over the 3\.8 MB limit/);
+	assert.equal(held.files[0]!.reason, 'size');
 
-	held.give(file('small.png', 'image/png', 100));
+	held.give(file('small.png', 'image/png', 4_000_000));
 	assert.equal(held.files[1]!.status, 'ready', 'exactly the limit is inside it');
 	held.stop();
+});
+
+test('a byte count is written in the unit a person would say it in', () => {
+	// Every expectation is 1024 to a step, worked out by hand: 1 KB, 1 MB, 1 GB, and one that
+	// rounds. Under a kilobyte it stays in bytes, because "0.5 KB" is rounder than the truth.
+	for (const [bytes, said] of [
+		[512, '512 bytes'], [1024, '1 KB'], [1536, '1.5 KB'], [1_048_576, '1 MB'],
+		[4_000_000, '3.8 MB'], [1_073_741_824, '1 GB'],
+	] as const) {
+		const held = zone({ limit: bytes });
+		held.give(file('big.png', 'image/png', bytes + 1));
+		assert.match(held.files[0]!.error ?? '', new RegExp(`over the ${said.replace('.', '\\.')} limit`),
+			`${String(bytes)} bytes reads as ${said}`);
+		held.stop();
+	}
+});
+
+test('the prompt names the accepted types and the limit the way a person says them', () => {
+	const held = zone({ extensions: ['image/png', 'image/*', '.csv'], limit: 4_000_000 });
+	const said = byTag(held.body.firstChild, 'label').textContent ?? '';
+	assert.match(said, /Drop files here, or choose them/);
+	assert.match(said, /png, image, csv/, 'a MIME type loses its family and an extension its dot');
+	assert.match(said, /up to 3\.8 MB/);
+	held.stop();
+
+	const bare = zone();
+	assert.equal(byTag(bare.body.firstChild, 'label').textContent, 'Drop files here, or choose them',
+		'with nothing declared there is nothing to add');
+	bare.stop();
+
+	const one = zone({ multiple: false });
+	assert.match(byTag(one.body.firstChild, 'label').textContent ?? '', /Drop a file here, or choose one/);
+	one.stop();
 });
 
 test('multiple false keeps one file and replaces the one before it', () => {
@@ -144,6 +181,8 @@ test('multiple false keeps one file and replaces the one before it', () => {
 		[['three.png', 'ready'], ['four.png', 'error']],
 		'and a second file in one batch is refused rather than taken quietly');
 	assert.match(held.files[1]!.error ?? '', /only one file is accepted/);
+	assert.equal(held.files[1]!.reason, 'count');
+	assert.equal(held.files[0]!.reason, undefined, 'an accepted entry carries neither');
 	held.stop();
 });
 
@@ -242,11 +281,76 @@ test('FileDrop.Button opens the input, and one outside a zone asserts with the f
 	assert.equal(clicks, 1, 'the button reached the input through the zone');
 	held.stop();
 
+	// Inside a zone it takes no checking props: the zone already has them (design 214).
 	const document = createDocument();
 	assert.throws(
-		() => { mount(document.body, h(FileDrop.Button as never, { label: 'Choose' })); },
-		/FileDrop.Button needs a FileDrop above it/,
+		() => {
+			mount(document.body, answered(h(FileDrop as never, { files: mutableArray() },
+				h(FileDrop.Button as never, { label: 'Choose', extensions: ['image/png'] }))));
+		},
+		/inside a FileDrop takes no files, extensions/,
 	);
+});
+
+test('a FileDrop.Button outside a zone is the picker, with the same checks and no chrome', () => {
+	const list = mutableArray<Entry>();
+	const ready = mutable<unknown>(null);
+	const document = createDocument();
+	const stop = mount(document.body, answered(h(FileDrop.Button as never, {
+		label: 'Change photo', files: list, extensions: ['image/png'], multiple: false, ready,
+	})));
+
+	const tags = elements(document.body.firstChild).map((element) => element.localName);
+	assert.deepEqual(tags, ['button', 'label', 'input'],
+		'a button, the name for its input, and no zone and no listing');
+
+	const input = byTag(document.body.firstChild, 'input');
+	assert.equal(input.getAttribute('type'), 'file');
+	assert.equal(input.getAttribute('accept'), 'image/png');
+
+	// The button opens the input it is beside.
+	let clicks = 0;
+	(input as unknown as Record<string, unknown>)['click'] = (): void => { clicks += 1; };
+	fire(byTag(document.body.firstChild, 'button'), 'click');
+	assert.equal(clicks, 1);
+
+	const picked = file('shot.png', 'image/png');
+	(input as unknown as Record<string, unknown>)['files'] = [picked];
+	fire(input, 'change');
+	assert.equal(ready.get(), picked, 'it writes ready the way the zone does');
+
+	(input as unknown as Record<string, unknown>)['files'] = [file('notes.pdf', 'application/pdf')];
+	fire(input, 'change');
+	assert.equal([...list][0]!.reason, 'type', 'and refuses with the same reason');
+	stop();
+});
+
+test('a standalone FileDrop.Button names its own input, and the label stays offscreen', () => {
+	// The input is focusable, so a screen reader lands on it and has to be told what it is. The
+	// button beside it shows the words already, so the label that carries them is offscreen.
+	for (const [why, props] of [
+		['the button\'s label', { label: 'Change photo' }],
+		['an icon button\'s aria-label', { 'aria-label': 'Change photo' }],
+	] as [string, Record<string, unknown>][]) {
+		const document = createDocument();
+		// The reference is mounted beside it: one render mints one class per theme list, so an
+		// element known to be offscreen says what the label's class should read.
+		const stop = mount(document.body, answered([
+			h(FileDrop.Button as never, props),
+			h('span', { id: 'reference', theme: ['offscreen'] }, 'offscreen'),
+		]));
+
+		const input = byTag(document.body.firstChild, 'input');
+		const label = byTag(document.body.firstChild, 'label');
+		assert.equal(label.getAttribute('for'), input.getAttribute('id'), why);
+		assert.equal(label.textContent, 'Change photo', why);
+
+		const reference = elements(document.body.firstChild)
+			.find((element) => element.getAttribute('id') === 'reference')!;
+		assert.equal(label.getAttribute('class'), reference.getAttribute('class'),
+			'the words are the button\'s to show, so the label carrying them is off the screen');
+		stop();
+	}
 });
 
 test('the input is named by the label, whether or not the chrome was replaced', () => {

@@ -8,7 +8,7 @@ export interface AlertProps {
 	readonly title?: unknown;
 	/** Something in the first column. Anything mountable; usually an `Icon`. */
 	readonly icon?: unknown;
-	/** The theme variant: nothing, or `danger`. */
+	/** The theme variant: nothing, `danger` or `success`. */
 	readonly type?: unknown;
 	/** Decorate this node instead of building one. */
 	readonly element?: unknown;
@@ -27,8 +27,9 @@ export interface AlertProps {
  *
  * Returns: a `<div>` on the `alert` entry, `role="alert"` when `type` is `danger` and
  * `role="status"` otherwise, so a message that matters interrupts a screen reader and a message
- * that does not waits its turn. The title is on `alert_title`, the body on `alert_body`, and an
- * icon on `alert_symbol` in a first column the box grows only when it was given one.
+ * that does not waits its turn. `success` is one of the latter: a thing that went right waits
+ * (design 216). The title is on `alert_title`, the body on `alert_body`, and an icon on
+ * `alert_symbol` in a first column the box grows only when it was given one.
  *
  * The icon is yours. This package ships no drawings (design 144), so an `Icon` by name needs an
  * `Icons` provider above it, and there is no default icon here.
@@ -36,6 +37,7 @@ export interface AlertProps {
  * Example:
  *   <Alert title="Saved" icon={<Icon name="check" />}>Everything went through.</Alert>
  *   <Alert type="danger" title="Nothing was saved">The server refused the write.</Alert>
+ *   <Alert type="success" title="Saved">Your changes are live.</Alert>
  */
 export const Alert = (props: AlertProps): unknown => {
 	const { title, icon, type, element, theme, children, ...rest } = props;

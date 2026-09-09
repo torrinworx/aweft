@@ -105,6 +105,10 @@ test('each badge type resolves its own pair of roles, and outline has no fill', 
 	assert.match(rulesOn(danger.render, danger.root), new RegExp(`background: ${roleOf('danger')}`), '$danger');
 	danger.stop();
 
+	const good = page(h(Badge as never, { label: 'a', type: 'success' }));
+	assert.match(rulesOn(good.render, good.root), new RegExp(`background: ${roleOf('success')}`), '$success');
+	good.stop();
+
 	const outline = page(h(Badge as never, { label: 'a', type: 'outline' }));
 	const outlineRules = rulesOn(outline.render, outline.root);
 	assert.match(outlineRules, /background: transparent/);
@@ -125,6 +129,12 @@ test('an alert is a status, and a danger alert interrupts', () => {
 	assert.equal(bad.root.getAttribute('role'), 'alert', 'and one that does interrupts');
 	assert.match(rulesOn(bad.render, bad.root), new RegExp(`background: ${roleOf('dangerSubtle')}`), '$dangerSubtle');
 	bad.stop();
+
+	// A thing that went right waits its turn too, so `success` keeps the status role (design 216).
+	const good = page(h(Alert as never, { type: 'success', title: 'Saved' }));
+	assert.equal(good.root.getAttribute('role'), 'status');
+	assert.match(rulesOn(good.render, good.root), new RegExp(`background: ${roleOf('successSubtle')}`), '$successSubtle');
+	good.stop();
 });
 
 test('an alert grows its icon column only when it was given an icon', () => {
@@ -181,7 +191,38 @@ test('an avatar with no src renders no image at all, and takes the size axis', (
 	const rules = rulesOn(square.render, square.root);
 	assert.match(rules, /width: 32px; height: 32px/, '$controlSm');
 	assert.doesNotMatch(rules, /border-radius: 50%/);
+	assert.equal(square.root.getAttribute('style'), null, 'a step name is a segment and nothing else');
 	square.stop();
+});
+
+test('an avatar sized by a cell src has its image from the first paint', () => {
+	// Design 215, correcting design 199's sentence: a cell that has not resolved yet is not the
+	// same as no picture, so the image is built and its `src` follows the cell.
+	const photo = mutable<unknown>(null);
+	const { root, stop } = page(h(Avatar as never, { src: photo, fallback: 'AB' }));
+	assert.deepEqual(childrenOf(root).map((node) => node.localName), ['img', 'span']);
+	photo.set('/me.png');
+	assert.equal(byTag(root.firstChild, 'img').getAttribute('src'), '/me.png');
+	stop();
+});
+
+test('an avatar size that is a length goes into the style, not into a segment', () => {
+	const length = page(h(Avatar as never, { fallback: 'AB', size: '120px' }));
+	const style = length.root.getAttribute('style') ?? '';
+	assert.match(style, /width: 120px/);
+	assert.match(style, /height: 120px/);
+	assert.match(rulesOn(length.render, length.root), /width: 36px; height: 36px/,
+		'the entry still says $control, and the inline style is what beats it');
+	length.stop();
+
+	// A cell may hold either kind, and both halves follow it.
+	const size = mutable<unknown>('sm');
+	const moving = page(h(Avatar as never, { fallback: 'AB', size }));
+	assert.equal(moving.root.getAttribute('style'), null, 'a step writes no style');
+	assert.match(rulesOn(moving.render, moving.root), /width: 32px/, '$controlSm');
+	size.set('96px');
+	assert.match(moving.root.getAttribute('style') ?? '', /width: 96px/, 'and a length writes one');
+	moving.stop();
 });
 
 // --- Skeleton ------------------------------------------------------------------------------

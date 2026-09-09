@@ -60,10 +60,15 @@ const PAIRS: readonly (readonly [string, string, number])[] = [
 	['accentSubtleForeground', 'background', 4.5],
 	['dangerForeground', 'danger', 4.5],
 	['dangerSubtleForeground', 'dangerSubtle', 4.5],
+	// The success tone, the same two pairs read the other way round (design 216).
+	['successForeground', 'success', 4.5],
+	['successSubtleForeground', 'successSubtle', 4.5],
 	['accent', 'background', 3],
 	['accent', 'surface', 3],
 	['danger', 'background', 3],
 	['danger', 'surface', 3],
+	['success', 'background', 3],
+	['success', 'surface', 3],
 	['border', 'background', 3],
 	['border', 'surface', 3],
 	// A line on a quiet fill is the tightest pair the default theme ships. `disabled` used to make

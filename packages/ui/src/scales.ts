@@ -1,7 +1,7 @@
-// The three colour scales, twelve steps each, written out light and dark.
+// The four colour scales, twelve steps each, written out light and dark.
 //
 // Every step is a named value, so a page reaches one as `$neutral7` and the roles in `roles.ts`
-// are built from them. The steps follow one job list, the same for all three scales (design 116):
+// are built from them. The steps follow one job list, the same for all four scales (design 116):
 //
 //   1, 2      backgrounds: the page, and a raised surface
 //   3, 4, 5   component fills, at rest, hovered and pressed
@@ -56,9 +56,22 @@ export const lightScale = {
 	$danger10: '#a91b26',
 	$danger11: '#97141f',
 	$danger12: '#4d0d13',
+
+	$success1: '#f6fdf8',
+	$success2: '#ebfaf0',
+	$success3: '#d8f4e2',
+	$success4: '#c0ebd0',
+	$success5: '#a2debb',
+	$success6: '#7aca9d',
+	$success7: '#4bb17d',
+	$success8: '#1e9460',
+	$success9: '#0d7a4c',
+	$success10: '#076741',
+	$success11: '#04593a',
+	$success12: '#062d1f',
 } as const;
 
-/** Thirty-six named steps: the three scales of one mode. */
+/** Forty-eight named steps: the four scales of one mode. */
 export type Scale = Readonly<Record<keyof typeof lightScale, string>>;
 
 /** The dark scales. Same names, same jobs, read against a dark page. */
@@ -101,4 +114,17 @@ export const darkScale: Scale = {
 	$danger10: '#f07d83',
 	$danger11: '#ff9ea3',
 	$danger12: '#ffdcde',
+
+	$success1: '#0b1712',
+	$success2: '#0f1f18',
+	$success3: '#122b1f',
+	$success4: '#153726',
+	$success5: '#18442d',
+	$success6: '#1f603f',
+	$success7: '#277a51',
+	$success8: '#2f9764',
+	$success9: '#35a870',
+	$success10: '#46bd82',
+	$success11: '#62d79b',
+	$success12: '#ccf6de',
 };

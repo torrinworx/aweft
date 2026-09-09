@@ -1,7 +1,8 @@
-// A picture of a person, and the letters shown while it is not there (design 199).
+// A picture of a person, and the letters shown while it is not there (designs 199, 215).
 //
 // Both children stay in the tree and one of them carries `hidden`, so the image is loading while
-// the fallback shows and a screen reader is never handed both.
+// the fallback shows and a screen reader is never handed both. The root entry is what hides the
+// one carrying it (design 207).
 
 import { mutable } from '@aweftjs/core';
 
@@ -17,7 +18,7 @@ export interface AvatarProps {
 	readonly alt?: unknown;
 	/** What to show until the picture arrives, and again if it never does. Usually initials. */
 	readonly fallback?: unknown;
-	/** How big it is: `sm`, `lg`, or nothing. A value or a cell. */
+	/** How big it is: `sm`, `lg`, nothing, or a CSS length. A value or a cell. */
 	readonly size?: unknown;
 	/** A circle. True unless it is set false, which gives the `$radius` corner instead. */
 	readonly round?: unknown;
@@ -28,6 +29,12 @@ export interface AvatarProps {
 
 const empty = (value: unknown): boolean =>
 	value === undefined || value === null || value === false || value === '';
+
+// The two names the size axis has here. Anything else a caller wrote is a length, which goes into
+// the element's `style` the way `Icon`'s `size` does (design 215): a segment for a name the theme
+// never heard of would be a class matching nothing.
+const STEPS: ReadonlySet<string> = new Set(['sm', 'lg']);
+const isStep = (held: unknown): boolean => empty(held) || STEPS.has(String(held));
 
 /**
  * A picture of a person.
@@ -42,12 +49,18 @@ const empty = (value: unknown): boolean =>
  * the two is not showing carries `hidden`, so it is out of the accessibility tree as well as off
  * the screen.
  *
- * `size` is `sm` (`$controlSm`), nothing (`$control`) or `lg` (`$controlLg`), the same axis every
- * control has.
+ * `size` is `sm` (`$controlSm`), nothing (`$control`), `lg` (`$controlLg`), or any CSS length,
+ * which is written as the element's width and height (design 215). The fallback's letters are a
+ * fraction of the box, so they follow it at every size.
+ *
+ * A `src` that is a cell builds the `<img>` from the first paint, whatever the cell holds, and the
+ * image's `src` follows it: a cell that has not resolved yet is not the same as no picture. A plain
+ * `src` of nothing builds no `<img>` at all.
  *
  * Example:
  *   <Avatar src={person.photo} alt={person.name} fallback="TL" />
  *   <Avatar fallback="AB" size="sm" round={false} />
+ *   <Avatar src={photo} fallback="AB" size="120px" />
  */
 export const Avatar = (props: AvatarProps): unknown => {
 	const { src, alt, fallback, size, round, theme, ...rest } = props;
@@ -68,7 +81,16 @@ export const Avatar = (props: AvatarProps): unknown => {
 
 	return h('span', {
 		...rest,
-		theme: ['avatar', sizeSegments(size), round === false ? null : 'round', theme],
+		theme: [
+			'avatar',
+			through(size, (held) => (isStep(held) ? sizeSegments(held) : null)),
+			round === false ? null : 'round',
+			theme,
+		],
+		style: {
+			width: through(size, (held) => (isStep(held) ? null : held)),
+			height: through(size, (held) => (isStep(held) ? null : held)),
+		},
 	},
 	picture,
 	// No `aria-hidden` on it: while it is showing it is the only thing there is to read, and while

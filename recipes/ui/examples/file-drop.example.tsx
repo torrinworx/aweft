@@ -1,5 +1,6 @@
 // FileDrop: a zone a file can be dropped on, with a real file input in it that stays focusable,
-// and the same component wearing chrome of the page's own.
+// the same component wearing chrome of the page's own, and the button standing on its own as the
+// picker with no zone at all (design 214).
 
 import { mutable, mutableArray } from '@aweftjs/core';
 import { FileDrop, h } from '@aweftjs/ui';
@@ -15,6 +16,7 @@ export const Example: ExampleComponent = (props) => {
 	const files = mutableArray();
 	const ready = mutable<unknown>(null);
 	const own = mutableArray();
+	const picked = mutableArray();
 
 	return (
 		<div theme="column">
@@ -27,6 +29,9 @@ export const Example: ExampleComponent = (props) => {
 			</FileDrop>
 
 			<FileDrop files={mutableArray()} disabled={true} id={at('filedrop-disabled')} />
+
+			<FileDrop.Button label="Change photo" files={picked} multiple={false}
+				extensions={['image/png', 'image/jpeg']} id={at('filedrop-picker')} />
 		</div>
 	);
 };

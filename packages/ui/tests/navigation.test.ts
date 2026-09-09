@@ -14,7 +14,7 @@ import { mutable, mutableArray } from '@aweftjs/core';
 import { createDocument } from '@aweftjs/dom';
 import type { LightElement, NodeLike } from '@aweftjs/dom';
 import {
-	Accordion, Breadcrumb, Icons, Modal, Pagination, Stage, StageContext, Table, ToggleGroup,
+	Breadcrumb, Icons, Modal, Pagination, Stage, StageContext, Table,
 	context, h, mount,
 } from '@aweftjs/ui';
 import type { Render } from '@aweftjs/ui';

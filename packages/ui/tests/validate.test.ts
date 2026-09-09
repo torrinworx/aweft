@@ -108,6 +108,124 @@ test('nothing is checked before the signal, and everything is after it', () => {
 	stop();
 });
 
+test('a signal written false again is not-yet-checked again', () => {
+	// The flow the builder run hit: a form that clears itself after a successful submit wrote
+	// every field back to empty and every field went red on the empty form (design 208).
+	const email = mutable('nope');
+	const submit = mutable(false);
+	const valid = mutable<unknown>(null);
+	const error = mutable<unknown>(null);
+	const { body, stop } = field({ value: email, validate: 'email', signal: submit, valid, error });
+
+	submit.set(true);
+	assert.match(textOf(body.firstChild), /email address/, 'the signal starts the checking');
+	assert.equal(valid.get(), false);
+
+	submit.set(false);
+	email.set('');
+	assert.equal(messageOf(body.firstChild), null, 'and writing it back leaves the form quiet');
+	assert.equal(valid.get(), true, 'a form nobody has submitted does not hold itself back');
+	assert.equal(error.get(), null);
+
+	email.set('still nope');
+	assert.equal(messageOf(body.firstChild), null, 'typing into the quiet form says nothing');
+
+	submit.set(true);
+	assert.match(textOf(body.firstChild), /email address/, 'and the next submit checks it again');
+	stop();
+});
+
+test('a signal that starts truthy is checked from the start', () => {
+	const email = mutable('nope');
+	const { body, stop } = field({ value: email, validate: 'email', signal: mutable(true) });
+	assert.match(textOf(body.firstChild), /email address/);
+	stop();
+});
+
+test('a check that reads another field in the form runs again when that field moves', () => {
+	// Confirm-must-match, written the way the builder run wrote it: the confirm field's
+	// validator reads the other password's cell (design 208).
+	const next = mutable('longenough1');
+	const again = mutable('longenough1');
+	const allValid = mutable(false);
+	const matches = (cell: { get(): unknown }): string =>
+		(cell.get() === next.get() ? '' : 'The two passwords do not match.');
+
+	const { body, stop } = page(h(ValidateContext as never, { value: allValid },
+		h(Validate as never, { value: next, validate: () => '' }, h('input', {})),
+		h(Validate as never, { value: again, validate: matches }, h('input', {}))));
+
+	assert.equal(messageOf(body.firstChild), null, 'two matching passwords is nothing to say');
+	assert.equal(allValid.get(), true);
+
+	next.set('longenough2');
+	assert.match(textOf(body.firstChild), /do not match/,
+		'editing the other field is what makes this one wrong');
+	assert.equal(allValid.get(), false, 'and the form knows');
+
+	next.set('longenough1');
+	assert.equal(messageOf(body.firstChild), null, 'and editing it back makes it right again');
+	assert.equal(allValid.get(), true);
+	stop();
+});
+
+test('a Validate outside a form follows only its own cell', () => {
+	const other = mutable('a');
+	const mine = mutable('a');
+	const { body, stop } = page(h(Validate as never, {
+		value: mine,
+		validate: (cell: { get(): unknown }) => (cell.get() === other.get() ? '' : 'no match'),
+	}, h('input', {})));
+
+	assert.equal(messageOf(body.firstChild), null);
+	other.set('b');
+	assert.equal(messageOf(body.firstChild), null,
+		'nothing above it knows about the other cell, so nothing re-runs the check');
+	mine.set('c');
+	assert.equal(textOf(body.firstChild), 'no match', 'its own cell still runs it');
+	stop();
+});
+
+test('one round per write, even when a check writes its own cell back', () => {
+	const phone = mutable('5195551234');
+	const other = mutable('');
+	const rounds: number[] = [];
+	const { stop } = page(h(ValidateContext as never, { value: mutable(true) },
+		h(Validate as never, { value: phone, validate: 'phone' }, h('input', {})),
+		h(Validate as never, {
+			value: other,
+			validate: () => { rounds.push(1); return ''; },
+		}, h('input', {}))));
+
+	const before = rounds.length;
+	phone.set('5195559999');
+	// `core` queues a write made during a delivery, so the formatter's write is a delivery of its
+	// own after this one rather than a round inside it.
+	assert.equal(rounds.length - before, 1, 'one write is one round for every other field');
+	stop();
+});
+
+test('a check that writes its own cell as it mounts does not run again inside itself', () => {
+	// The mount is the one place a write reaches the check that made it: `value.effect` calls back
+	// as it registers, and that first call is not a delivery, so `core` has nothing to queue it
+	// behind. With the guard taken out this validator ran twice on one mount.
+	const phone = mutable('5195551234');
+	let calls = 0;
+	const { stop } = page(h(Validate as never, {
+		value: phone,
+		validate: (cell: { get(): unknown; set(value: unknown): void }) => {
+			calls += 1;
+			const held = String(cell.get());
+			if (!held.startsWith('(')) cell.set(`(${held.slice(0, 3)}) ${held.slice(3)}`);
+			return '';
+		},
+	}, h('input', {})));
+
+	assert.equal(calls, 1, 'one check on the mount, not a second one on the value it just wrote');
+	assert.equal(phone.get(), '(519) 5551234', 'and the write it made still landed');
+	stop();
+});
+
 test('with no signal, checking is live from the start', () => {
 	const email = mutable('nope');
 	const { body, stop } = field({ value: email, validate: 'email' });

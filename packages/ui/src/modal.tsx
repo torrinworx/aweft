@@ -17,7 +17,11 @@ import { empty } from './field.ts';
 import { h } from './h.ts';
 import { use } from './render.ts';
 
-/** What `Modal` takes. Everything not named here goes to the `<dialog>`. */
+/**
+ * What `Modal` takes. A stage hands its template the props the `open` carried (design 213), so this
+ * component reads the ones it names and passes nothing else to the `<dialog>`: an `open` carrying a
+ * row for the act would otherwise write it on the element as an attribute.
+ */
 export interface ModalProps {
 	/** A heading inside the dialog, and the dialog's accessible name. A value or a cell. */
 	readonly label?: unknown;
@@ -33,7 +37,10 @@ export interface ModalProps {
 	readonly element?: unknown;
 	/** Extra theme segments, appended to this component's own. */
 	readonly theme?: unknown;
+	/** Written on the `<dialog>` beside the theme's own class list. */
+	readonly class?: unknown;
 	readonly children?: unknown[];
+	/** Anything else an `open` carried. It goes to the act and this component ignores it. */
 	readonly [prop: string]: unknown;
 }
 
@@ -41,8 +48,8 @@ export interface ModalProps {
  * The act, in a modal dialog.
  *
  * Params:
- *   props: `label`, `noEsc`, `noClickEsc`, `type`, `side`, `element`, and anything else, which goes
- *          to the `<dialog>`
+ *   props: `label`, `noEsc`, `noClickEsc`, `type`, `side`, `element`, `theme` and `class`. A prop
+ *          this does not name reaches the act and goes no further here
  *
  * Returns: a `<dialog>`, opened as this mounts, holding a heading, a close button and the act.
  *
@@ -53,16 +60,16 @@ export interface ModalProps {
  * on the backdrop, and the close button. So a modal opened with `history: true` is taken down by the
  * history entry going away, whichever of the three the person used (design 124).
  *
- * A stage calls a template as `h(template, {}, act)`, so props are named by writing the template as
- * a function of your own.
+ * A stage calls a template as `h(template, props, act)`, where `props` is what the `open` carried
+ * past `name`, `history`, `template` and `children` (design 213). The act is handed the same props,
+ * so a prop this component names, `label` or `type` or `side`, is read here as well as there.
  *
  * Throws: an assert, loud in development and stripped in a release build, when there is no stage
  * above it, and the one `elementFor` makes for an `element` that is not a `<dialog>`.
  *
  * Example:
- *   stage.open({ name: 'edit', history: true, template: Modal });
- *   stage.open({ name: 'edit', history: true, template: (p) => h(Modal, { label: 'Edit' }, ...p.children) });
- *   stage.open({ name: 'filters', template: (p) => h(Modal, { label: 'Filters', type: 'sheet' }, ...p.children) });
+ *   stage.open({ name: 'edit', history: true, template: Modal, label: 'Edit' });
+ *   stage.open({ name: 'filters', template: Modal, label: 'Filters', type: 'sheet' });
  */
 export const Modal = (
 	props: ModalProps,
@@ -74,7 +81,10 @@ export const Modal = (
 	let show = (): void => undefined;
 	mounted(() => { show(); });
 	return (elem, _item, before, context) => {
-		const { label, noEsc, noClickEsc, type, side, element, theme, children, ...rest } = props;
+		// Nothing is spread onto the element: the props are the act's as much as this component's,
+		// so an act's own `session` row would land on the `<dialog>` as `session="[object Object]"`
+		// (design 213).
+		const { label, noEsc, noClickEsc, type, side, element, theme, class: className, children } = props;
 
 		const stage = StageContext.read(context);
 		assert(stage !== null,
@@ -105,7 +115,7 @@ export const Modal = (
 		});
 
 		const item = h(node, {
-			...rest,
+			class: className,
 			// The side is a second segment after the type, so `type="sheet" side="left"` reaches
 			// `dialog`, `dialog_sheet` and `dialog_sheet_left` (design 202). It is written only for a
 			// sheet, because no other type has an edge to sit on.

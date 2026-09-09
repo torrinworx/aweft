@@ -537,7 +537,10 @@ test('the file input is hidden and still focusable, which is what offscreen mean
 	// true while the rule stays a clipped one-pixel box.
 	const rules = rulesFor(['filedrop_picker']);
 	assert.ok(rules.length > rulesFor([]).length, 'the default theme has a filedrop_picker entry');
-	assert.doesNotMatch(rules, /display: *none/, 'display: none would take it off the keyboard');
+	// Every chain carries the root entry's `[hidden]` rule (design 207), and that one is meant to
+	// hide; what this test is about is the entry's own rest-state display.
+	const resting = rules.replace(/[^{}]*:is\(\[hidden\]\)[^{}]*\{[^}]*\}/g, '');
+	assert.doesNotMatch(resting, /display: *none/, 'display: none would take it off the keyboard');
 	assert.match(rules, /clip-path: inset\(50%\)/);
 	assert.match(rules, /width: 1px/);
 	assert.match(rules, /height: 1px/);
@@ -653,10 +656,15 @@ test('each display piece resolves its fills and its text from roles alone', () =
 	assert.match(rulesFor(['alert', 'danger']),
 		new RegExp(`background: ${valueOf('dangerSubtle')}`));
 
-	const kbd = rulesFor(['kbd']);
-	assert.match(kbd, new RegExp(`font-family: ${valueOf('fontMono')}`));
-	assert.match(kbd, new RegExp(`min-width: ${valueOf('target')}`));
-	assert.match(kbd, new RegExp(`color: ${valueOf('mutedForeground')}`));
+	// The success tone, the mirror of the danger one (design 216).
+	assert.match(rulesFor(['alert', 'success']),
+		new RegExp(`background: ${valueOf('successSubtle')}`));
+	assert.match(rulesFor(['alert', 'success']),
+		new RegExp(`color: ${valueOf('successSubtleForeground')}`));
+	assert.match(rulesFor(['badge', 'success']),
+		new RegExp(`background: ${valueOf('success')}`));
+	assert.match(rulesFor(['badge', 'success']),
+		new RegExp(`color: ${valueOf('successForeground')}`));
 
 	const empty = rulesFor(['empty']);
 	assert.match(empty, /flex-direction: column/);
@@ -665,7 +673,21 @@ test('each display piece resolves its fills and its text from roles alone', () =
 		new RegExp(`color: ${valueOf('mutedForeground')}`));
 });
 
-test('an avatar is one of the three control heights, and each part hides on hidden', () => {
+test('every themed element hides on hidden, and no entry says it twice', () => {
+	// Design 207. Every entry that lays an element out declares a `display` inside `@layer aweft`,
+	// and an unlayered rule loses to a layered one whatever its specificity, so the host's own
+	// `[hidden]` never reached a themed element. The root entry says it once for all of them.
+	for (const entry of ['button', 'card', 'avatar', 'avatar_image', 'avatar_fallback']) {
+		assert.match(rulesFor([entry]), /:is\(\[hidden\]\) \{ display: none; \}/,
+			`a ${entry} carries the rule`);
+	}
+
+	// Once, from the root, not once per part: two rules saying the same thing is what this replaced.
+	const image = rulesFor(['avatar_image']).match(/:is\(\[hidden\]\) \{ display: none; \}/g) ?? [];
+	assert.equal(image.length, 1, 'avatar_image no longer carries a rule of its own beside it');
+});
+
+test('an avatar is one of the three control heights, and its letters come off the box', () => {
 	const heights: readonly (readonly [readonly string[], string])[] = [
 		[['avatar'], '36px'], [['avatar', 'sm'], '32px'], [['avatar', 'lg'], '40px'],
 	];
@@ -675,11 +697,10 @@ test('an avatar is one of the three control heights, and each part hides on hidd
 	}
 	assert.match(rulesFor(['avatar', 'round']), /border-radius: 50%/);
 
-	// Each part declares a display of its own, so the host's `[hidden]` rule loses to it and the
-	// theme has to say the same thing at a specificity that wins.
-	for (const part of ['avatar_image', 'avatar_fallback']) {
-		assert.match(rulesFor([part]), /:is\(\[hidden\]\) \{ display: none/, `${part} hides on hidden`);
-	}
+	// The box is a container and the letters are a fraction of it, so a `size` that is a length
+	// sizes them too (design 215).
+	assert.match(rulesFor(['avatar']), /container-type: inline-size/);
+	assert.match(rulesFor(['avatar_fallback']), /font-size: 40cqw/);
 	assert.match(rulesFor(['avatar_fallback']), new RegExp(`background: ${valueOf('muted')}`));
 });
 
