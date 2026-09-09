@@ -12,6 +12,10 @@ it ran on, a session, a date in prose and not inside a quoted value. Each patter
 against the spelling the process used, not the bare word, so `batch` in a delivery loop and
 `session` in `auth` are left alone.
 
+The list names spellings, not people or products. A rule against a name would have to carry the
+name to match it, which puts in the tree the thing it is there to keep out; a name that belongs
+in the tree, as the licence holder's does, belongs there under its own reason.
+
 Four tracked files are not read: `spec/CHANGELOG.md`, because a changelog carries dates on
 purpose; `package-lock.json`, which is not prose; and the two files that define and test the
 check, which have to spell the words to look for them.
