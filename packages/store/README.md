@@ -323,3 +323,4 @@ that slot when it opens the document rather than failing to open it at all. See 
 - **Talk to a network.** `sync` moves commits between documents; this one keeps them.
 - **Decide who may write.** That is the application's rule, run before `receive`.
 - **Sweep on its own.** See above.
+
