@@ -6,17 +6,19 @@
 /**
  * The parameter sets an act should be rendered at.
  *
- * Declared on an act, and read by a static walk. Nothing in this package calls it.
+ * Declared on an act, or exported by an act module beside its `deps`, and read by a static walk.
+ * Nothing in this package calls it. `null` means the act cannot say what its URLs are, which is
+ * what an act module that exports no `entries` answers (design 242).
  */
-export type ActEntries = () => Promise<readonly Readonly<Record<string, string>>[]>;
+export type ActEntries = () => Promise<readonly Readonly<Record<string, string>>[] | null>;
 
 /** One declared act, as the registry reports it. */
 export interface StageAct {
 	/** The key it was declared under. */
 	readonly name: string;
-	/** Whether it arrives through a loader rather than being the component itself. */
+	/** Whether it was declared as a module name rather than as the component itself. */
 	readonly loader: boolean;
-	/** Its own parameter source, or null. */
+	/** Its own parameter source, or null. A named act always has one, which may answer null. */
 	readonly entries: ActEntries | null;
 }
 

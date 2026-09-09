@@ -11,6 +11,7 @@ export type { Category, Mark, Marked, MarkMaker } from './mark.ts';
 
 export { context, hydrate, mount, render, use } from './render.ts';
 export type { Render } from './render.ts';
+export type { Hydrated } from '@aweftjs/dom';
 export type { Ids, Registry } from './registry.ts';
 
 export { dark, light } from './modes.ts';
@@ -19,8 +20,11 @@ export type { TagProps } from './head.tsx';
 export type { HeadKind, HeadList, HeadTag } from './head-list.ts';
 
 export { Default, Stage, StageContext } from './stage.tsx';
-export type { Act, ActComponent, LazyAct, OpenOptions, StageContextComponent, StageProps, StageValue } from './stage.tsx';
+export type { Act, ActComponent, ActInstance, OpenOptions, StageContextComponent, StageProps, StageValue } from './stage.tsx';
 export type { ActEntries, StageAct, StageEntry } from './stage-entry.ts';
+// `StageProps.sources` names it, so an application annotates its own sources without reaching
+// past this package for the type, the way `Hydrated` is re-exported from dom.
+export type { Source } from '@aweftjs/modules';
 
 export { Theme } from './theme-api.ts';
 export type { ThemeApi } from './theme-api.ts';

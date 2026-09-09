@@ -11,6 +11,7 @@ import {
 	getFirst, h as domH, mount,
 } from '@aweftjs/dom';
 import type { Router } from '@aweftjs/dom/router';
+import { type Loader, type Source, createLoader } from '@aweftjs/modules';
 
 import { assert } from './assert.ts';
 import type { Component } from './component.ts';
@@ -24,16 +25,16 @@ import { suspend } from './suspend.tsx';
 /** An act that is the component itself, with the static walk's parameter source on it. */
 export type ActComponent = Component<Record<string, unknown>> & { entries?: ActEntries };
 
-/** An act that arrives later: `{ load: () => import('./page.tsx') }`. */
-export interface LazyAct {
-	/** Resolves to the component, or to a module whose `default` is one. */
-	load(): Promise<unknown>;
-	/** The static walk's parameter source. */
-	entries?: ActEntries;
+/** What an act module's factory answers (design 242). */
+export interface ActInstance {
+	/** The component the stage renders. */
+	readonly component: Component<Record<string, unknown>>;
+	/** What the live region says when this act arrives. The head's title is not touched. */
+	readonly title?: string;
 }
 
-/** What an act key maps to: the component, or a loader for it. */
-export type Act = ActComponent | LazyAct;
+/** What an act key maps to: the component itself, or the name of a module that makes one. */
+export type Act = ActComponent | string;
 
 /** What `open` takes. Everything past the three named fields is props for the act. */
 export interface OpenOptions {
@@ -76,6 +77,23 @@ export interface StageProps {
 	readonly initial?: string;
 	/** The router this stage takes its URL from. Without one it is a content swapper. */
 	readonly router?: Router;
+	/**
+	 * Where a named act comes from, in precedence order. The stage builds one loader over these
+	 * for the whole routing tree; a stage inside an act inherits it and takes none of its own.
+	 */
+	readonly sources?: readonly Source[];
+	/**
+	 * The page's connection, handed to every module as its `client` prop. Typed `unknown`
+	 * because this package may not import `@aweftjs/client`; pass what `createClient` answered.
+	 * A static render names none, and a module that wants one decides what its absence means.
+	 */
+	readonly client?: unknown;
+	/**
+	 * The act shown when loading a named act is refused: a name in `acts` (design 244). It is
+	 * handed the refusal as `refusal` and a `retry` that builds the act the URL chose again, and
+	 * its key takes no parameters: it renders under the URL that was refused.
+	 */
+	readonly refused?: string;
 	readonly children?: unknown[];
 }
 
@@ -92,6 +110,10 @@ interface Opened {
 /** What a child stage reaches on its parent. Not exported: it is how nesting works, not API. */
 interface StageInner {
 	readonly router: Router | null;
+	/** The one loader of a routing tree, or null when no stage in it was given sources. */
+	readonly loader: Loader | null;
+	/** The sources that loader was built over, for reading an act module's `entries`. */
+	readonly sources: readonly Source[] | null;
 	/** The one query cell of a routing tree: every stage under one router shares it. */
 	readonly query: Derived<Record<string, string>>;
 	/** The tail this stage did not take, for the one child stage that claims it. */
@@ -112,17 +134,24 @@ interface StageInner {
 const Value = createContext<StageValue | null>(null);
 const Inner = createContext<StageInner | null>(null);
 
-const isLazy = (act: Act): act is LazyAct =>
-	typeof act === 'object' && act !== null && typeof (act as LazyAct).load === 'function';
+/**
+ * The refusal inside a rejected load, or null when there is none (design 244).
+ *
+ * The loader wraps a factory that threw as `failed` and carries the throw as its cause, so the
+ * refusal is that cause, and only when it names a reason. Every other rejection is a defect in
+ * the page: a name no source lists, a cycle, or a factory that threw a bare error.
+ */
+const refusalOf = (error: unknown): unknown => {
+	const held = error as { reason?: unknown; cause?: unknown } | null;
+	if (held === null || held === undefined || held.reason !== 'failed') return null;
+	const cause = held.cause as { reason?: unknown } | null | undefined;
+	if (cause === null || cause === undefined || typeof cause.reason !== 'string') return null;
+	return cause;
+};
 
-const entriesOf = (act: Act | undefined): ActEntries | null =>
-	(act === undefined ? null : (act as { entries?: ActEntries }).entries ?? null);
-
-const componentOf = (loaded: unknown): Component => {
-	const found = typeof loaded === 'function' ? loaded : (loaded as { default?: unknown })?.default;
-	assert(typeof found === 'function',
-		'a lazy act resolved to something that is not a component; make the module\'s default export the component, or resolve to the component itself');
-	return found as Component;
+/** Report something nobody is waiting on where the host already looks. */
+const escaped = (error: unknown): void => {
+	queueMicrotask(() => { throw error; });
 };
 
 /**
@@ -165,14 +194,38 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 	const render = use(context);
 	const keys = Object.keys(props.acts);
 	checkActKeys(keys);
-	for (const named of [props.fallback, props.initial]) {
+	for (const named of [props.fallback, props.initial, props.refused]) {
 		assert(named === undefined || props.acts[named] !== undefined,
 			`the stage names ${JSON.stringify(named)} as an act and acts has no such key; declare it in acts or take the name off`);
 	}
+	// A refusal is not a route: the refused act renders under the refusing URL, so it would be
+	// handed that URL's `:name` values, which are another act's parameters (design 244).
+	assert(props.refused === undefined || !/(^|\/)[:*]/.test(props.refused),
+		`the stage names ${JSON.stringify(props.refused)} as its refused act and that key takes parameters; a refused act renders under the URL that was refused, so name an act key with no :name or *name segment`);
 
 	const above = Inner.read(context);
+	assert(props.sources === undefined || above === null,
+		'a stage inside another stage cannot take sources of its own; one loader is built for a routing tree and every stage under it shares it, so declare sources on the outermost StageContext');
+	assert(props.client === undefined || props.sources !== undefined,
+		'the stage was given a client and no sources, so nothing would ever read it; pass sources too, or take the client off');
 	const router = props.router ?? above?.router ?? null;
 	const owns = props.router !== undefined;
+
+	// One loader per mount, over the sources this stage was given, mirroring what the server does
+	// with its own (designs 240, 242). `client` is the one prop the platform hands a page module,
+	// and the key is absent when the caller named none, so a factory can tell the two apart.
+	const ownsLoader = props.sources !== undefined;
+	const loader: Loader | null = ownsLoader
+		? createLoader({
+			sources: props.sources!,
+			...(props.client === undefined ? {} : { props: { client: props.client } }),
+		})
+		: above?.loader ?? null;
+	const sources = props.sources ?? above?.sources ?? null;
+	for (const name of keys) {
+		assert(typeof props.acts[name] !== 'string' || loader !== null,
+			`the act ${JSON.stringify(name)} names the module ${JSON.stringify(props.acts[name])} and no stage above it was given sources; pass sources to the StageContext at the top of the routing tree`);
+	}
 
 	// A stage with a router of its own reads the URL. One without takes what its parent did not
 	// match, and there is one claimant (design 123).
@@ -198,14 +251,21 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 
 	const opened = mutable<Opened | null>(null);
 	let opens = 0;
-	// Every derived thing below follows these two, and everything else follows one of them.
-	const source = all([opened, path]);
+	// Counts up per `retry`, so a refused act can ask for the act the URL chose to be built again
+	// without the URL moving (design 244). Nothing else writes it.
+	const rebuilds = mutable(0);
+	// Every derived thing below follows these three, and everything else follows one of them.
+	const source = all([opened, path, rebuilds]);
 	const nameNow = (): string | null => opened.get()?.name ?? decide();
 	const current = source.map(() => nameNow());
-	// What decides whether the act is rebuilt: which act, the parameters it was matched with, and
-	// which open it is. Not the tail, which belongs to the child stage: a move from
-	// `/posts/3/edit` to `/posts/3/comments` changes the child's act and leaves this one alone.
-	const signature = source.map(() => `${nameNow() ?? ''}|${writeQuery(params.get())}|${opened.get()?.id ?? 0}`);
+	// What decides whether the act is rebuilt: which act, the parameters it was matched with,
+	// which open it is, and how many times something asked for it again. Not the tail, which
+	// belongs to the child stage: a move from `/posts/3/edit` to `/posts/3/comments` changes the
+	// child's act and leaves this one alone.
+	const signature = source.map(() =>
+		`${nameNow() ?? ''}|${writeQuery(params.get())}|${opened.get()?.id ?? 0}|${rebuilds.get()}`);
+	/** Build the act the URL chose again, in place. What a refused act is handed as `retry`. */
+	const retry = (): void => { rebuilds.set(rebuilds.get() + 1); };
 
 	// --- the query -----------------------------------------------------------------------------
 
@@ -282,10 +342,67 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 	const value: StageValue = { current, params, query, open, close };
 
 	let ready = (): void => undefined;
+	/** What the live region says next: the act module's `title`, or the head's when it has none. */
+	let announced: string | null = null;
+	/** The act module loaded right now, so the stage knows what to let go of when it leaves. */
+	let loaded: string | null = null;
+
+	const drop = (name: string): void => {
+		if (loader === null) return;
+		loader.unload(name).catch(escaped);
+	};
+
+	// The outgoing act goes after the incoming one is showing, so a module both of them depend on
+	// is never torn down and rebuilt between two pages that hold it (design 242).
+	const retire = (leaving: string | null): void => {
+		if (leaving !== null && leaving !== loaded) drop(leaving);
+	};
+
+	/** Counts up per build, so a load that lands after a later navigation knows it was abandoned. */
+	let builds = 0;
+
+	/**
+	 * Load a named act and answer its component, called with the props the act was given.
+	 *
+	 * Answers null when the build that asked for it has been abandoned, and nothing is mounted.
+	 */
+	const instantiate = async (name: string, given: Record<string, unknown>, round: number): Promise<unknown> => {
+		const instance = (await loader!.load([name]))[name] as Partial<ActInstance> | null;
+		const component = instance?.component;
+		assert(typeof component === 'function',
+			`the act module ${JSON.stringify(name)} answered with no component; return { component, title? } from its factory`);
+		// A later navigation abandoned this load, so this instance is never going on screen. The
+		// stage must not record it as loaded: doing so made the stage let go of an act it had
+		// never shown on the next move, and hold the one it was actually showing until unmount.
+		if (round !== builds) {
+			if (name !== loaded) drop(name);
+			return null;
+		}
+		loaded = name;
+		const title = instance?.title;
+		announced = typeof title === 'string' && title !== '' ? title : null;
+		return h(component as Component, given);
+	};
+
+	const mountAct = async (act: Act, given: Record<string, unknown>, round: number): Promise<unknown> =>
+		(typeof act === 'string' ? await instantiate(act, given, round) : h(act as Component, given));
+
+	/** The act, ready to mount, or null when the build that asked for it was abandoned. */
+	const wrap = (report: { ready: () => void }, built: unknown): unknown =>
+		(built === null ? null : h(Ready, report, built));
 
 	const build = (): unknown => {
 		const name = nameNow();
-		if (name === null) return null;
+		builds += 1;
+		const round = builds;
+		const leaving = loaded;
+		loaded = null;
+		announced = null;
+		if (name === null) {
+			// Nothing is coming to hang the unload on, so it happens as soon as the stage knows.
+			retire(leaving);
+			return null;
+		}
 		const act = props.acts[name];
 		assert(act !== undefined, `the stage has no act named ${JSON.stringify(name)}; declare it in acts`);
 		const held = opened.get();
@@ -300,14 +417,29 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 		// reaching into the context. It is written after the open's props, because the stage an act
 		// is in is not a thing an open gets to name.
 		const given = { ...(mine ? held.props : {}), stage: value };
-		const report = { ready: () => { ready(); } };
+		const report = { ready: () => { ready(); retire(leaving); } };
 
-		if (isLazy(act!)) {
-			const lazy = suspend<Record<string, unknown>>(null, async () =>
-				h(Ready, report, h(componentOf(await act!.load()), given)));
-			return h(own, outer, h(lazy, {}));
-		}
-		return h(own, outer, h(Ready, report, h(act as Component, given)));
+		if (typeof act !== 'string') return h(own, outer, h(Ready, report, h(act as Component, given)));
+
+		// A name is the lazy form, so it goes through the same `suspend` path (design 242). Under a
+		// hydration that shows nothing at all and the server's markup stays (design 243).
+		const lazy = suspend<Record<string, unknown>>(null, async () => {
+			try {
+				return wrap(report, await instantiate(act, given, round));
+			} catch (error) {
+				const refusal = props.refused === undefined ? null : refusalOf(error);
+				if (refusal === null) {
+					retire(leaving);
+					throw error;
+				}
+				// The URL does not move: what changed is what the act it names rendered (design 244).
+				// `retry` is how the refused act asks for the act the URL chose once the reason has
+				// stopped holding, and it is written after the open's props so an open cannot shadow it.
+				return wrap(report, await mountAct(
+					props.acts[props.refused!]!, { ...given, refusal, retry }, round));
+			}
+		});
+		return h(own, outer, h(lazy, {}));
 	};
 
 	const content = signature.map(() => build());
@@ -360,7 +492,9 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 		const win = browser();
 		if (win === null) return;
 		focusAct();
-		const title = render.head.title()
+		// An act module's own `title` wins, because the head may still say what the last page did.
+		const title = announced
+			?? render.head.title()
 			?? (globalThis as { document?: { title?: string } }).document?.title ?? null;
 		if (title !== null && title !== '') announce(title);
 		restoreScroll(win);
@@ -368,9 +502,36 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 
 	// --- the registry entry ------------------------------------------------------------------------
 
+	// Read once per name and no sooner: a plain mount evaluates no module it does not show.
+	const declared = new Map<string, Promise<ActEntries | null>>();
+	const exported = async (name: string): Promise<ActEntries | null> => {
+		for (const source of sources ?? []) {
+			for (const candidate of await source.candidates()) {
+				if (candidate.name !== name) continue;
+				const found = (await candidate.exports() as { entries?: ActEntries }).entries;
+				if (typeof found === 'function') return found;
+			}
+		}
+		return null;
+	};
+
+	/** An act's parameter source: its own for a component, its module's `entries` for a name. */
+	const entriesOf = (act: Act | undefined): ActEntries | null => {
+		if (act === undefined) return null;
+		if (typeof act !== 'string') return act.entries ?? null;
+		return async () => {
+			let held = declared.get(act);
+			if (held === undefined) declared.set(act, held = exported(act));
+			const found = await held;
+			// A module that exports none says nothing about its URLs, which is what null means to
+			// a walk: the same answer a parameterised component act with no `entries` gives.
+			return found === null ? null : await found();
+		};
+	};
+
 	const acts: StageAct[] = keys.map((name) => ({
 		name,
-		loader: isLazy(props.acts[name]!),
+		loader: typeof props.acts[name] === 'string',
 		entries: entriesOf(props.acts[name]),
 	}));
 	const entry: StageEntry = {
@@ -391,6 +552,8 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 	let taken = false;
 	const inner: StageInner = {
 		router,
+		loader,
+		sources,
 		query,
 		claimTail: () => {
 			if (taken) return null;
@@ -412,11 +575,22 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 	const inside = h(Value, { value }, h(Inner, { value: inner }, ...(props.children ?? [])));
 	const remove = mount(elem, region === null ? inside : [region, inside], before, context);
 
+	/** The page is going away, so everything it built goes with it: nothing else holds this loader. */
+	const closeLoader = async (own: Loader): Promise<void> => {
+		// Reverse load order is a dependency order reversed, so a module stops before what it
+		// depends on, which is what `server.stop()` does with its own (design 240).
+		for (const name of [...own.loaded()].reverse()) await own.unload(name);
+	};
+
 	return (arg) => {
 		if (arg !== undefined) return remove(arg);
 		for (const stop of stops) stop();
 		claim?.release();
 		forget();
+		const held = loaded;
+		loaded = null;
+		if (ownsLoader) closeLoader(loader!).catch(escaped);
+		else if (held !== null) drop(held);
 		return remove();
 	};
 };
@@ -437,25 +611,38 @@ export interface StageContextComponent {
  *
  * Params:
  *   acts: the acts, by path. `''` is the index, `:name` takes one segment, one trailing `*name`
- *         takes the rest. A value is the component, or `{ load: () => import('./page.tsx') }`
+ *         takes the rest. A value is the component, or the name of a module whose factory answers
+ *         `{ component, title? }` (design 242)
  *   template: what wraps the act. A pass-through when it is left off
  *   fallback: the act shown when nothing matched. This is the 404, and it is matched last
  *   initial: the act shown when no URL decides: no router, or a parent that took the whole path
  *   router: the router this stage reads. Without one the stage is a content swapper driven by
  *           `open` and `close`, and a stage inside an act takes what its parent did not match
+ *   sources: where a named act comes from. The stage builds one loader over these for the whole
+ *            routing tree, so a stage inside an act inherits it and takes no `sources`
+ *   client: the page's connection, handed to every module as its `client` prop
+ *   refused: the act shown when loading a named act rejects with a refusal (design 244)
  *   children: the page, with a `Stage` somewhere in it
  *
  * Returns: the subtree, with the stage in scope for everything under it. Reach it with
  * `StageContext.read(context)` or `StageContext.use(stage => ...)`. Every act is also handed the
  * stage as its `stage` prop, so an act that only wants `params` or `query` takes it as an argument.
  *
+ * A named act is loaded, with its dependencies first, when the stage decides it, and unloaded
+ * once the next act is showing; the modules it depended on stay loaded for the page, and go when
+ * the stage is removed.
+ *
  * Throws: an assert, loud in development and stripped in a release build, for an act key that is
  * not relative, has an empty segment, has a `:` or `*` with no name, has a `*rest` anywhere but
- * last, or cannot be told apart from another key; and for a `fallback` or `initial` naming an act
- * that is not declared.
+ * last, or cannot be told apart from another key; for a `fallback`, `initial` or `refused` naming
+ * an act that is not declared; for a `refused` naming a key with a `:name` or `*name` segment,
+ * which would render under another act's parameters; for a nested stage given `sources`; for a
+ * `client` with no `sources`; for a named act with no `sources` anywhere above it; and for an act
+ * module whose instance carries no `component`.
  *
  * Example:
- *   <StageContext router={router} acts={{ '': Home, 'posts/:id': Post }} fallback="404">
+ *   <StageContext router={router} sources={[app]} client={client}
+ *     acts={{ '': Home, 'posts/:id': 'posts/Page' }} fallback="404" refused="join">
  *     <Nav /><Stage />
  *   </StageContext>
  */
@@ -470,9 +657,10 @@ export const StageContext: StageContextComponent = Object.assign(
  * Params:
  *   nothing
  *
- * Returns: the act `current` names, inside the template chosen for it. A lazy act runs through
- * `suspend`, so it shows the `LoaderContext`'s loading component while it arrives and its failed
- * component if it never does.
+ * Returns: the act `current` names, inside the template chosen for it. An act named as a module
+ * runs through `suspend`, so it shows the `LoaderContext`'s loading component while it arrives
+ * and its failed component if it never does. Inside a hydration it shows neither: the server's
+ * markup stays until the act arrives (design 243).
  *
  * Throws: an assert, loud in development and stripped in a release build, when there is no
  * `StageContext` above it.

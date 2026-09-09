@@ -9,12 +9,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { mutable } from '@aweftjs/core';
-import { createDocument, toHtml } from '@aweftjs/dom';
+import { fromBundle } from '@aweftjs/modules';
+import type { Source } from '@aweftjs/modules';
+import { createDocument, parseHtml, toHtml } from '@aweftjs/dom';
 import { createRouter } from '@aweftjs/dom/router';
 import type { LightDocument } from '@aweftjs/dom';
 import {
 	LoaderContext, Shown, Stage, StageContext, Title,
-	context, h, mount, render,
+	context, h, hydrate, mount, render,
 } from '@aweftjs/ui';
 import type { Render, StageValue } from '@aweftjs/ui';
 
@@ -30,6 +32,16 @@ const textOf = (document: LightDocument): string =>
 		.replace(/<!--.?-->/g, '');
 
 const page = (name: string) => (): unknown => h('main', { id: name }, name);
+
+/** A source over modules written out here, named the way an acts map names them. */
+// The map is written out here rather than imported, so an entry may carry an `entries` export
+// beside the three the contract names.
+const source = (map: Readonly<Record<string, Record<string, unknown>>>): Source =>
+	fromBundle(map as never, { prefix: '' });
+
+/** An act module that answers with one component and nothing else. */
+const act = (name: string, extra: Record<string, unknown> = {}): Record<string, unknown> =>
+	({ ...extra, default: () => ({ component: page(name) }) });
 
 test('a stage that was given no router does not follow one that exists', async () => {
 	const router = createRouter({ url: '/about' });
@@ -312,7 +324,7 @@ test('one child stage claims the tail and a second runs on initial', async () =>
 	stop();
 });
 
-test('a lazy act arrives through suspend, with the LoaderContext fallback while it does', async () => {
+test('a named act arrives through suspend, with the LoaderContext fallback while it does', async () => {
 	const router = createRouter({ url: '/late' });
 	const document = createDocument();
 	const Spinner = (): unknown => h('p', {}, 'loading');
@@ -321,11 +333,12 @@ test('a lazy act arrives through suspend, with the LoaderContext fallback while 
 		h(LoaderContext, { value: { loading: Spinner } },
 			h(StageContext, {
 				router,
-				acts: { late: { load: async () => ({ default: page('late') }) } },
+				sources: [source({ 'site/Late.ts': act('late') })],
+				acts: { late: 'site/Late' },
 			} as never, h(Stage, {}))));
 
 	assert.equal(textOf(document), '<p>loading</p>');
-	await settle();
+	await loaded();
 	assert.equal(textOf(document), '<main id="late">late</main>');
 	stop();
 });
@@ -341,7 +354,8 @@ test('each stage puts one entry in the render registry, with its acts, prefix an
 
 	const item = h(StageContext, {
 		router,
-		acts: { '': Listing, 'posts/:id': Post, about: { load: async () => ({ default: page('about') }) } },
+		sources: [source({ 'site/About.ts': act('about') })],
+		acts: { '': Listing, 'posts/:id': Post, about: 'site/About' },
 		fallback: 'about',
 	} as never, h(Stage, {}));
 
@@ -354,7 +368,8 @@ test('each stage puts one entry in the render registry, with its acts, prefix an
 		parent: entry.parent,
 	}));
 	assert.equal(seen.length, 2, 'the root stage and the one nested in the act');
-	assert.deepEqual(seen[0]!.acts, [':act:entries', 'posts/:id:act:-', 'about:lazy:-']);
+	// A named act always has an `entries` to ask; what it answers is the module's own, or null.
+	assert.deepEqual(seen[0]!.acts, [':act:entries', 'posts/:id:act:-', 'about:lazy:entries']);
 	assert.equal(seen[0]!.prefix, '');
 	assert.equal(seen[0]!.parent, null);
 	assert.deepEqual(seen[1]!.acts, [':act:-', 'edit:act:-']);
@@ -480,17 +495,18 @@ test('an act is handed the stage as a prop, so it reads params and query without
 	stop();
 });
 
-test('a lazy act is handed the stage too, once it has arrived', async () => {
+test('a named act is handed the stage too, once it has arrived', async () => {
 	const router = createRouter({ url: '/posts/late' });
 	const document = createDocument();
 	const Post = (props: { stage?: StageValue }): unknown => h('main', {}, String(props.stage!.params.get()['id']));
 
 	const stop = mount(document.body as never, h(StageContext, {
 		router,
-		acts: { 'posts/:id': { load: async () => ({ default: Post }) } },
+		sources: [source({ 'posts/Page.ts': { default: () => ({ component: Post }) } })],
+		acts: { 'posts/:id': 'posts/Page' },
 	} as never, h(Stage, {})));
 
-	await settle();
+	await loaded();
 	assert.equal(textOf(document), '<main>late</main>');
 	stop();
 });
@@ -525,4 +541,441 @@ test('a second history open replaces the first, so one back closes it and lands 
 	assert.equal(textOf(document), '<main id="home">home</main>', 'one back closed whatever was open');
 	assert.equal(router.key.get(), home, 'and landed on the page, with no entry of the stage left behind');
 	stop();
+});
+
+// --- acts as modules (designs 242, 244) --------------------------------------------------------
+
+/** Long enough for a load: several awaits down the loader, not a fixed number of microtasks. */
+const loaded = async (): Promise<void> => { await new Promise((done) => setTimeout(done, 0)); };
+
+test('a named act is loaded with its dependencies first, and the stage renders its component', async () => {
+	const order: string[] = [];
+	const router = createRouter({ url: '/notes' });
+	const document = createDocument();
+
+	const stop = mount(document.body as never, h(StageContext, {
+		router,
+		sources: [source({
+			'notes/Current.ts': { default: () => { order.push('Current'); return { title: 'the board' }; } },
+			'notes/Page.ts': {
+				deps: ['notes/Current'],
+				default: ({ imports }: { imports: Readonly<Record<string, unknown>> }) => {
+					order.push('Page');
+					const current = imports['Current'] as { title: string };
+					return { component: (): unknown => h('main', { id: 'notes' }, current.title) };
+				},
+			},
+		})],
+		acts: { notes: 'notes/Page' },
+	} as never, h(Stage, {})));
+
+	await loaded();
+	assert.deepEqual(order, ['Current', 'Page'], 'the dependency was built before the act that names it');
+	assert.equal(textOf(document), '<main id="notes">the board</main>');
+	stop();
+});
+
+test('leaving a named act unloads it, after the next act is showing, and keeps its dependencies', async () => {
+	const order: string[] = [];
+	const router = createRouter({ url: '/one' });
+	const document = createDocument();
+	const shared = { stop: () => { order.push('shared stopped'); } };
+
+	const named = (name: string) => ({
+		deps: ['app/Shared'],
+		default: () => {
+			order.push(`${name} loaded`);
+			return { component: page(name), stop: () => { order.push(`${name} stopped`); } };
+		},
+	});
+
+	const stop = mount(document.body as never, h(StageContext, {
+		router,
+		sources: [source({
+			'app/Shared.ts': { default: () => { order.push('shared loaded'); return shared; } },
+			'app/One.ts': named('one'),
+			'app/Two.ts': named('two'),
+		})],
+		acts: { one: 'app/One', two: 'app/Two' },
+	} as never, h(Stage, {})));
+
+	await loaded();
+	assert.equal(textOf(document), '<main id="one">one</main>');
+
+	router.push('/two');
+	await loaded();
+	assert.equal(textOf(document), '<main id="two">two</main>');
+	assert.deepEqual(order, ['shared loaded', 'one loaded', 'two loaded', 'one stopped'],
+		'the outgoing act stopped after the incoming one was showing, and the shared module was built once');
+
+	// The dependency both of them name is still loaded, which is what makes it worth being a
+	// module: it is opened by the first page that needs it and is still there on the second.
+	assert.ok(!order.includes('shared stopped'), 'the module they both depend on stayed loaded');
+
+	stop();
+	await loaded();
+	assert.deepEqual(order.slice(-2), ['two stopped', 'shared stopped'],
+		'and the page going away unloaded everything, in reverse load order');
+});
+
+test('a named act refused shows the act refused names, with the reason on it', async () => {
+	const router = createRouter({ url: '/notes' });
+	const document = createDocument();
+	const Join = (props: { refusal?: unknown }): unknown =>
+		h('main', { id: 'join' }, String((props.refusal as { reason?: string } | undefined)?.reason ?? 'none'));
+
+	const stop = mount(document.body as never, h(StageContext, {
+		router,
+		sources: [source({
+			'app/Gate.ts': {
+				default: () => { throw Object.assign(new Error('nobody'), { reason: 'anonymous' }); },
+			},
+			'notes/Page.ts': { deps: ['app/Gate'], default: () => ({ component: page('notes') }) },
+		})],
+		acts: { notes: 'notes/Page', join: Join },
+		refused: 'join',
+	} as never, h(Stage, {})));
+
+	await loaded();
+	assert.equal(textOf(document), '<main id="join">anonymous</main>', 'the refused act, holding the reason');
+	assert.equal(new URL(String(router.url.get()), 'http://x').pathname, '/notes', 'and the URL did not move');
+	stop();
+});
+
+test('an error with no reason, and a name no source lists, are defects rather than refusals', async () => {
+	const Broken = (props: { error?: unknown }): unknown => h('main', { id: 'broke' }, String(props.error));
+	const Join = (): unknown => h('main', { id: 'join' }, 'join');
+
+	const run = async (map: Record<string, Record<string, unknown>>, name: string): Promise<string> => {
+		const document = createDocument();
+		const stop = mount(document.body as never,
+			h(LoaderContext, { value: { failed: Broken } },
+				h(StageContext, {
+					router: createRouter({ url: `/${name}` }),
+					sources: [source(map)],
+					acts: { [name]: `app/${name}`, join: Join },
+					refused: 'join',
+				} as never, h(Stage, {}))));
+		await loaded();
+		const text = textOf(document);
+		stop();
+		return text;
+	};
+
+	const bare = await run({ 'app/bare.ts': { default: () => { throw new Error('a bug'); } } }, 'bare');
+	assert.match(bare, /id="broke"/, 'a factory that threw a bare error is a defect, not a refusal');
+	assert.match(bare, /a bug/, 'and the error reaches the failed component');
+
+	const gone = await run({ 'app/other.ts': { default: () => ({ component: page('other') }) } }, 'gone');
+	assert.match(gone, /id="broke"/, 'a name no source lists is a defect too');
+	assert.match(gone, /missing|not/, 'and it says what was wrong');
+});
+
+test('a nested stage shares the loader, and one with sources of its own is refused', async () => {
+	const router = createRouter({ url: '/docs/install' });
+	const document = createDocument();
+	const outer = source({
+		'docs/Shell.ts': {
+			default: () => ({
+				component: (): unknown => h('main', { id: 'docs' },
+					h(StageContext, { acts: { ':page': 'docs/Page' }, initial: ':page' } as never, h(Stage, {}))),
+			}),
+		},
+		'docs/Page.ts': { default: () => ({ component: page('page') }) },
+	});
+
+	const stop = mount(document.body as never, h(StageContext, {
+		router, sources: [outer], acts: { docs: 'docs/Shell' },
+	} as never, h(Stage, {})));
+	await loaded();
+	assert.match(textOf(document), /id="docs".*id="page"/, 'the child stage resolved a name through its parent\'s loader');
+	stop();
+
+	assert.throws(
+		() => mount(createDocument().body as never, h(StageContext, {
+			sources: [outer],
+			acts: { '': (): unknown => h(StageContext, { sources: [outer], acts: { '': page('x') } } as never, h(Stage, {})) },
+			initial: '',
+		} as never, h(Stage, {}))),
+		/cannot take sources of its own/,
+	);
+});
+
+test('a stage refuses a named act it has no sources for, and a client with no sources', () => {
+	assert.throws(
+		() => mount(createDocument().body as never, h(StageContext, {
+			acts: { late: 'site/Late' }, initial: 'late',
+		} as never, h(Stage, {}))),
+		/no stage above it was given sources/,
+	);
+	assert.throws(
+		() => mount(createDocument().body as never, h(StageContext, {
+			client: {}, acts: { '': page('home') }, initial: '',
+		} as never, h(Stage, {}))),
+		/given a client and no sources/,
+	);
+});
+
+test('an act module that answers with no component is refused, naming what to return', async () => {
+	const Broken = (props: { error?: unknown }): unknown => h('main', {}, String((props.error as Error).message));
+	const document = createDocument();
+	const stop = mount(document.body as never,
+		h(LoaderContext, { value: { failed: Broken } },
+			h(StageContext, {
+				router: createRouter({ url: '/late' }),
+				sources: [source({ 'site/Late.ts': { default: () => ({ title: 'no component' }) } })],
+				acts: { late: 'site/Late' },
+			} as never, h(Stage, {}))));
+
+	await loaded();
+	assert.match(textOf(document), /answered with no component/, 'the assert names what went wrong');
+	assert.match(textOf(document), /return \{ component, title\? \}/, 'and what to return instead');
+	stop();
+});
+
+test('the client the stage was given reaches every module, and its absence is an absent key', async () => {
+	const seen: { held: boolean; key: boolean }[] = [];
+	const map = {
+		'site/Home.ts': {
+			default: (props: Record<string, unknown>) => {
+				seen.push({ held: props['client'] === here, key: 'client' in props });
+				return { component: page('home') };
+			},
+		},
+	};
+	const here = { name: 'the connection' };
+
+	for (const client of [here, undefined]) {
+		const document = createDocument();
+		const stop = mount(document.body as never, h(StageContext, {
+			sources: [source(map)],
+			...(client === undefined ? {} : { client }),
+			acts: { '': 'site/Home' },
+			initial: '',
+		} as never, h(Stage, {})));
+		await loaded();
+		stop();
+	}
+	assert.deepEqual(seen, [{ held: true, key: true }, { held: false, key: false }],
+		'the client is a prop when there is one, and there is no key at all when there is not');
+});
+
+test('an act module\'s entries are read from its exports, without its factory running', async () => {
+	let built = 0;
+	const own: Render = context();
+	const document = createDocument();
+	const stop = mount(document.body as never, h(StageContext, {
+		sources: [source({
+			'posts/Page.ts': {
+				entries: async () => [{ id: 'one' }, { id: 'two' }],
+				default: () => { built += 1; return { component: page('post') }; },
+			},
+			'tags/Page.ts': { default: () => { built += 1; return { component: page('tag') }; } },
+		})],
+		acts: { 'posts/:id': 'posts/Page', 'tags/:tag': 'tags/Page', '': page('home') },
+		initial: '',
+	} as never, h(Stage, {})), undefined, own);
+
+	await loaded();
+	const acts = own.stage.items[0]!.acts;
+	assert.deepEqual(await acts[0]!.entries!(), [{ id: 'one' }, { id: 'two' }], 'the module\'s own entries');
+	assert.equal(await acts[1]!.entries!(), null, 'a module that exports none cannot say what its URLs are');
+	assert.equal(built, 0, 'and neither factory ran');
+	stop();
+});
+
+test('an act module\'s title is what the live region says, and the head\'s title when it has none', async () => {
+	const router = createRouter({ url: '/' });
+	const document = createDocument();
+	const held = (globalThis as { window?: unknown }).window;
+	(globalThis as { window?: unknown }).window = { scrollTo: () => undefined };
+
+	try {
+		const stop = mount(document.body as never, h(StageContext, {
+			router,
+			sources: [source({
+				'site/Named.ts': { default: () => ({ title: 'The notes', component: page('named') }) },
+				'site/Plain.ts': { default: () => ({ component: () => [h(Title, {}, 'From the head'), h('main', {}, 'plain')] }) },
+			})],
+			acts: { '': page('home'), named: 'site/Named', plain: 'site/Plain' },
+		} as never, h(Stage, {})));
+		const region = document.body.firstChild as unknown as { textContent: string | null };
+
+		router.push('/named');
+		await loaded();
+		assert.equal(region.textContent, 'The notes', 'the act module said what to announce');
+
+		router.push('/plain');
+		await loaded();
+		assert.equal(region.textContent, 'From the head', 'and an act with no title falls back to the head\'s');
+		stop();
+	} finally {
+		if (held === undefined) delete (globalThis as { window?: unknown }).window;
+		else (globalThis as { window?: unknown }).window = held;
+	}
+});
+
+/** Every element under a node, in order, by identity. */
+const elementsIn = (from: { firstChild: unknown; nextSibling: unknown; nodeType: number } | null): unknown[] => {
+	const found: unknown[] = [];
+	for (let node = from; node !== null; node = node.nextSibling as typeof node) {
+		if (node.nodeType === 1) found.push(node);
+		found.push(...elementsIn(node.firstChild as never));
+	}
+	return found;
+};
+
+test('a page whose act is a module name hydrates with every element adopted', async () => {
+	const acts = { '': page('home'), about: 'site/About' };
+	const sources = [source({ 'site/About.ts': act('about') })];
+	// The page names a loading component, which is the case that used to replace the markup: a
+	// spinner over what the server sent is an element the server sent no pair for (design 243).
+	const Spinner = (): unknown => h('p', { id: 'waiting' }, 'loading');
+	const Site = (props: { url: string }): unknown => h(LoaderContext, { value: { loading: Spinner } },
+		h(StageContext, {
+			router: createRouter({ url: props.url }), sources, acts,
+		} as never, h(Stage, {})));
+
+	const markup = await render(h(Site, { url: '/about' }), { context: context() });
+	assert.match(markup, /id="about"/, 'the server waited for the act and rendered it');
+
+	const document = createDocument();
+	for (const node of parseHtml(markup, document)) document.body.appendChild(node);
+	const before = elementsIn(document.body.firstChild as never);
+	assert.ok(before.length > 0, 'the server wrote a page');
+
+	const stop = hydrate(document.body as never, h(Site, { url: '/about' }));
+	assert.doesNotMatch(toHtml(document.body.childNodes), /id="waiting"/,
+		'the loading component was not put over the markup the server already wrote');
+	await stop.ready;
+	assert.deepEqual(elementsIn(document.body.firstChild as never), before,
+		'every element the server wrote is the same object it was');
+	stop();
+});
+
+// --- a load a later navigation abandoned, and the way back from a refusal ----------------------
+
+/** What the stage's loader is holding, read off a trace: every act loaded and not yet stopped. */
+const holding = (order: readonly string[]): string[] => {
+	const held: string[] = [];
+	for (const line of order) {
+		const [name, what] = line.split(' ');
+		if (what === 'loaded') held.push(name!);
+		else if (what === 'stopped') held.splice(held.indexOf(name!), 1);
+	}
+	return held;
+};
+
+test('a load a later navigation abandoned is dropped, and never becomes what the stage holds', async () => {
+	// A fast, B slow, A again, then B lands. Without the staleness check the stage believed B was
+	// loaded, so the next move stopped an act that was never shown and left A loaded until unmount.
+	const order: string[] = [];
+	let release = (): void => undefined;
+	const slow = new Promise<void>((done) => { release = () => done(); });
+
+	const named = (name: string, wait?: Promise<void>): Record<string, unknown> => ({
+		default: async () => {
+			if (wait !== undefined) await wait;
+			order.push(`${name} loaded`);
+			return { component: page(name), stop: () => { order.push(`${name} stopped`); } };
+		},
+	});
+
+	const router = createRouter({ url: '/a' });
+	const document = createDocument();
+	const stop = mount(document.body as never, h(StageContext, {
+		router,
+		sources: [source({ 'app/A.ts': named('a'), 'app/B.ts': named('b', slow), 'app/C.ts': named('c') })],
+		acts: { a: 'app/A', b: 'app/B', c: 'app/C' },
+	} as never, h(Stage, {})));
+
+	await loaded();
+	assert.equal(textOf(document), '<main id="a">a</main>');
+
+	router.push('/b');
+	await loaded();
+	assert.equal(textOf(document), '', 'B has not arrived');
+
+	router.push('/a');
+	await loaded();
+	assert.equal(textOf(document), '<main id="a">a</main>', 'and the stage is back on A');
+
+	release();
+	await loaded();
+	assert.deepEqual(order, ['a loaded', 'b loaded', 'b stopped'],
+		'B was built, and dropped where it landed, because nothing is showing it');
+	assert.deepEqual(holding(order), ['a'], 'the loader holds exactly the act on screen');
+	assert.equal(textOf(document), '<main id="a">a</main>', 'and the page did not change under it');
+
+	router.push('/c');
+	await loaded();
+	assert.equal(textOf(document), '<main id="c">c</main>');
+	assert.deepEqual(order, ['a loaded', 'b loaded', 'b stopped', 'c loaded', 'a stopped'],
+		'the act that was showing is what C\'s arrival retired, and B was never retired twice');
+	assert.deepEqual(holding(order), ['c']);
+	stop();
+});
+
+test('a refused act is handed a retry that builds the act the URL chose, at the same URL', async () => {
+	const router = createRouter({ url: '/notes' });
+	const document = createDocument();
+	let allowed = false;
+	let again: (() => void) | null = null;
+	let joins = 0;
+
+	const Join = (props: { refusal?: unknown; retry?: () => void }): unknown => {
+		joins += 1;
+		again = props.retry ?? null;
+		return h('main', { id: 'join' }, String((props.refusal as { reason?: string } | undefined)?.reason ?? 'none'));
+	};
+
+	const stop = mount(document.body as never, h(StageContext, {
+		router,
+		sources: [source({
+			'app/Gate.ts': {
+				default: () => {
+					if (!allowed) throw Object.assign(new Error('nobody'), { reason: 'anonymous' });
+					return {};
+				},
+			},
+			'notes/Page.ts': { deps: ['app/Gate'], default: () => ({ component: page('notes') }) },
+		})],
+		acts: { notes: 'notes/Page', join: Join },
+		refused: 'join',
+	} as never, h(Stage, {})));
+
+	await loaded();
+	assert.equal(textOf(document), '<main id="join">anonymous</main>');
+	assert.equal(typeof again, 'function', 'the refused act was handed a retry');
+
+	// The reason stops holding, and the act asks for the page the visitor asked for. Nothing
+	// pushes, replaces or otherwise moves the URL.
+	allowed = true;
+	again!();
+	await loaded();
+	assert.equal(textOf(document), '<main id="notes">notes</main>', 'the act the URL chose is showing');
+	assert.equal(new URL(String(router.url.get()), 'http://x').pathname, '/notes', 'at the address asked for');
+	assert.equal(joins, 1, 'and the refused act was built once');
+	stop();
+});
+
+test('a refused act key that takes parameters is refused, naming the rule', () => {
+	assert.throws(
+		() => mount(createDocument().body as never, h(StageContext, {
+			router: createRouter({ url: '/notes' }),
+			sources: [source({ 'notes/Page.ts': act('notes') })],
+			acts: { notes: 'notes/Page', 'join/:from': page('join') },
+			refused: 'join/:from',
+		} as never, h(Stage, {}))),
+		/refused act and that key takes parameters/,
+	);
+	assert.throws(
+		() => mount(createDocument().body as never, h(StageContext, {
+			router: createRouter({ url: '/notes' }),
+			sources: [source({ 'notes/Page.ts': act('notes') })],
+			acts: { notes: 'notes/Page', '*rest': page('join') },
+			refused: '*rest',
+		} as never, h(Stage, {}))),
+		/refused act and that key takes parameters/,
+	);
 });

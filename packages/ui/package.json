@@ -14,7 +14,8 @@
 	},
 	"dependencies": {
 		"@aweftjs/core": "*",
-		"@aweftjs/dom": "*"
+		"@aweftjs/dom": "*",
+		"@aweftjs/modules": "*"
 	},
 	"devDependencies": {
 		"@aweftjs/build": "*",

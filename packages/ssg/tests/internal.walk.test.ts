@@ -125,3 +125,16 @@ test('an entries that answers something other than an array is refused by name',
 			return true;
 		});
 });
+
+test('an entries that answers null says only that it cannot list its URLs', async () => {
+	// `typeof null === 'object'`, so without the branch that reads null before the array check
+	// this is refused as `bad-entries`: a defect in the site rather than an act module that
+	// exports no `entries` at all, which is what the stage answers null for (design 242).
+	const found = await walkSite(async () => [placeStage('posts/:id', null)]);
+	assert.deepEqual(found.unenumerated, [{ prefix: '', name: 'posts/:id' }]);
+
+	// A plain key answers the same way a component act with no entries does: it is one page.
+	const plain = await walkSite(async () => [placeStage('about', null)]);
+	assert.deepEqual([...plain.urls].sort(), ['/', '/about']);
+	assert.deepEqual(plain.unenumerated, []);
+});

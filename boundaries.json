@@ -10,7 +10,7 @@
 		"dom":     { "tier": 6, "plane": "client", "imports": ["codec", "core"] },
 		"client":  { "tier": 6, "plane": "client", "imports": ["codec", "core", "sync"] },
 		"server":  { "tier": 6, "plane": "server", "imports": ["codec", "core", "modules", "sync"] },
-		"ui":      { "tier": 7, "plane": "client", "imports": ["core", "dom"] },
+		"ui":      { "tier": 7, "plane": "client", "imports": ["core", "dom", "modules"] },
 		"icons":   { "tier": 7, "plane": "client", "imports": ["codec", "core", "ui"] },
 		"jobs":    { "tier": 7, "plane": "server", "imports": ["codec", "core"] },
 		"auth":    { "tier": "integrator", "plane": "isomorphic", "imports": "*" },

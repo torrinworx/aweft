@@ -60,10 +60,15 @@ const urlsOfAct = async (prefix: string, act: StageAct): Promise<string[] | null
 		return parameterised(act.name) ? null : [urlOf(prefix, act.name)];
 	}
 	const rows = await act.entries();
+	// An act module that exports no `entries` answers null, which says exactly what a component
+	// act with no `entries` says: it cannot tell a walk what its URLs are (design 242).
+	if (rows === null) {
+		return parameterised(act.name) ? null : [urlOf(prefix, act.name)];
+	}
 	if (!Array.isArray(rows)) {
-		const said = rows === null ? 'null' : typeof rows === 'object' ? 'an object' : `a ${typeof rows}`;
+		const said = typeof rows === 'object' ? 'an object' : `a ${typeof rows}`;
 		throw codecError('bad-entries', `${act.name} answered ${said}`,
-			'Answer an array of objects from entries(), one per page, and an empty array for none.');
+			'Answer an array of objects from entries(), one per page, an empty array for none, or null to say you cannot list them.');
 	}
 	// An empty answer is a site saying it has no posts yet, for a plain key as much as for a
 	// parameterised one, so nothing is written either way.

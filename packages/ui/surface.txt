@@ -1,6 +1,7 @@
-type Act: type Act = ActComponent | LazyAct;
+type Act: type Act = ActComponent | string;
 type ActComponent: type ActComponent = Component<Record<string, unknown>> & { entries?: ActEntries; };
-type ActEntries: type ActEntries = () => Promise<readonly Readonly<Record<string, string>>[]>;
+type ActEntries: type ActEntries = () => Promise<readonly Readonly<Record<string, string>>[] | null>;
+type ActInstance: interface ActInstance { readonly component: Component<Record<string, unknown>>; readonly title?: string; }
 value Alert: (props: AlertProps) => unknown
 type AlertProps: interface AlertProps { readonly title?: unknown; readonly icon?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Avatar: (props: AvatarProps) => unknown
@@ -39,6 +40,7 @@ value Head: (props: { children?: unknown[] | undefined; }) => unknown
 type HeadKind: type HeadKind = 'title' | 'meta' | 'link' | 'script' | 'style';
 type HeadList: interface HeadList extends Registry<HeadTag> { markup(): string; title(): string | null; }
 type HeadTag: interface HeadTag { readonly kind: HeadKind; readonly group: string | null; readonly depth: number; readonly attrs: Readonly<Record<string, unknown>>; readonly text?: unknown; }
+type Hydrated: type Hydrated = Remove & { readonly ready: Promise<void>; }; (from @aweftjs/dom)
 value Icon: (props: IconProps, cleanup: (...fns: (() => void)[]) => void, _mounted: unknown, pending: (promise: Promise<unknown>) => void) => Mounter
 type IconAlias: interface IconAlias { readonly parent: string; readonly rotate?: number; readonly hFlip?: boolean; readonly vFlip?: boolean; }
 type IconData: interface IconData { readonly body: string; readonly width?: number; readonly height?: number; readonly left?: number; readonly top?: number; readonly rotate?: number; readonly hFlip?: boolean; readonly vFlip?: boolean; }
@@ -50,7 +52,6 @@ value Icons: Context<IconSource[]>
 type Ids: interface Ids { next(prefix?: string): string; }
 type Input: interface Input { readonly meta?: Readonly<Record<string, unknown>>; readonly on?: (event: Record<string, unknown>) => void; readonly [handler: string]: unknown; }
 value InputContext: Context<Input> & { fire: (context: unknown, type: string, payload?: Record<string, unknown>) => void; }
-type LazyAct: interface LazyAct { load(): Promise<unknown>; entries?: ActEntries; }
 value Link: (props: TagProps) => unknown
 type Loader: type Loader<P> = (props: P, cleanup: (...fns: (() => void)[]) => void) => unknown;
 value LoaderContext: Context<Loaders>
@@ -88,12 +89,13 @@ value Skeleton: (props: SkeletonProps) => unknown
 type SkeletonProps: interface SkeletonProps { readonly width?: unknown; readonly height?: unknown; readonly round?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value Slider: (props: SliderProps) => Mounter
 type SliderProps: interface SliderProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly min?: unknown; readonly max?: unknown; readonly step?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly track?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type Source: interface Source { candidates(): Promise<readonly Candidate[]>; } (from @aweftjs/modules)
 value Stage: () => Mounter
 type StageAct: interface StageAct { readonly name: string; readonly loader: boolean; readonly entries: ActEntries | null; }
 value StageContext: StageContextComponent
 type StageContextComponent: interface StageContextComponent { (props: StageProps): unknown; read(context: unknown): StageValue | null; node(context: unknown): ContextNode<StageValue | null> | null; use<P extends Record<string, unknown>>(build: (stage: StageValue | null) => Component<P>): Component<P>; }
 type StageEntry: interface StageEntry { readonly acts: readonly StageAct[]; readonly prefix: string; readonly parent: StageEntry | null; readonly fallback: string | null; readonly current: string | null; }
-type StageProps: interface StageProps { readonly acts: Readonly<Record<string, Act>>; readonly template?: Component; readonly fallback?: string; readonly initial?: string; readonly router?: Router; readonly children?: unknown[]; }
+type StageProps: interface StageProps { readonly acts: Readonly<Record<string, Act>>; readonly template?: Component; readonly fallback?: string; readonly initial?: string; readonly router?: Router; readonly sources?: readonly Source[]; readonly client?: unknown; readonly refused?: string; readonly children?: unknown[]; }
 type StageValue: interface StageValue { readonly current: Derived<string | null>; readonly params: Derived<Readonly<Record<string, string>>>; readonly query: Derived<Record<string, string>>; open(options: OpenOptions): void; close(): void; }
 value Style: (props: TagProps) => unknown
 value Switch: (props: { value?: unknown; cases?: Record<string, unknown> | undefined; children?: unknown[] | undefined; }) => unknown
@@ -138,7 +140,7 @@ value createContext: <T>(def: T, transform?: Transform<T>) => Context<T>
 value dark: Readonly<Record<string, Readonly<Record<string, unknown>>>>
 value h: (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown
 value html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown
-value hydrate: (target: ParentLike, item: unknown, render?: Render | undefined) => Remove
+value hydrate: (target: ParentLike, item: unknown, render?: Render | undefined) => Hydrated
 value light: Readonly<Record<string, Readonly<Record<string, unknown>>>>
 value mark: Mark
 value mount: (target: ParentLike, item: unknown, before?: Remove | undefined, render?: Render | undefined) => Remove

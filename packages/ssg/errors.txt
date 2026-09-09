@@ -1,4 +1,4 @@
-bad-entries: Answer an array of objects from entries(), one per page, and an empty array for none.
+bad-entries: Answer an array of objects from entries(), one per page, an empty array for none, or null to say you cannot list them.
 bad-entry-value: Answer a value with no empty, . or .. segment in it; those name a place rather than a page.
 missing-parameter: Answer every :name and *name in the act key from entries(), as a string.
 not-a-page: Ask for a URL the site has; walk() answers the list, and the fallback is written once as 404.html.

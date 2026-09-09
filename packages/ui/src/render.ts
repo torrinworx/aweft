@@ -10,7 +10,7 @@
 
 import type { Derived } from '@aweftjs/core';
 import {
-	type ElementLike, type ParentLike, type Remove,
+	type ElementLike, type Hydrated, type ParentLike, type Remove,
 	createElement, hydrate as domHydrate, mount as domMount, render as domRender,
 } from '@aweftjs/dom';
 
@@ -315,19 +315,23 @@ export const render = async (item: unknown, options: { context?: Render } = {}):
  *   render: the systems to use. Omitted, the target's document is asked for the one every
  *           default mount into it shares, as `mount` does
  *
- * Returns: the remove function, as `dom` does. The `<style data-aweft>` the server wrote is
- * adopted rather than replaced, so a hydration makes no element for the theme.
+ * Returns: the remove function with `ready` on it, as `dom` does. The `<style data-aweft>` the
+ * server wrote is adopted rather than replaced, so a hydration makes no element for the theme.
+ * `ready` resolves once every act, page or panel the page was still loading has arrived and the
+ * markup has been checked (design 243).
  *
  * Example:
- *   hydrate(document.body, h(App, {}));
+ *   const page = hydrate(document.body, h(App, {}));
+ *   await page.ready;
  */
-export const hydrate = (target: ParentLike, item: unknown, render?: Render): Remove => {
+export const hydrate = (target: ParentLike, item: unknown, render?: Render): Hydrated => {
 	const own = render ?? documentRender(target);
 	const remove = domHydrate(target, item, rooted(own));
 	const detach = attachFor(target, own, true);
-	return (arg) => {
+	const stop: Remove = (arg) => {
 		if (arg !== undefined) return remove(arg);
 		detach();
 		return remove();
 	};
+	return Object.assign(stop, { ready: remove.ready });
 };

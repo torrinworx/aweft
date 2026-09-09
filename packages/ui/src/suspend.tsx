@@ -4,7 +4,7 @@
 // render waits for it. What it has no story for is a rejection, and leaving the fallback on
 // screen forever is the one answer this package will not give.
 
-import { type Mounter, mount } from '@aweftjs/dom';
+import { type Mounter, hydrating, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';
 
 import type { Component } from './component.ts';
@@ -45,8 +45,10 @@ export type Loader<P> = (props: P, cleanup: (...fns: (() => void)[]) => void) =>
  *           `LoaderContext`'s `failed` is used; with neither, the slot goes empty and the
  *           rejection is rethrown on a fresh task so the host reports it
  *
- * Returns: a component. It declares its promise `pending`, so a static render waits for it, and
- * a suspend removed before its loader settles mounts nothing and reports nothing.
+ * Returns: a component. It declares its promise `pending`, so a static render waits for it and a
+ * hydration keeps its pairing walk open for it, and a suspend removed before its loader settles
+ * mounts nothing and reports nothing. Inside a hydration no fallback is shown at all: the
+ * server's markup stays until the loader answers (design 243).
  *
  * Example:
  *   const Article = suspend(Spinner, async ({ id }) => {
@@ -65,7 +67,10 @@ export const suspend = <P extends Record<string, unknown>>(
 	pending: (promise: Promise<unknown>) => void,
 ): Mounter => (elem, _item, before, context) => {
 	const loaders = LoaderContext.read(context);
-	const waiting = fallback ?? loaders.loading ?? null;
+	// Under a hydration the server already wrote what this is loading, and the pairing walk stays
+	// open until it arrives (design 243). Showing a spinner over that markup would build elements
+	// the server sent no pair for, which is the mismatch the waiting is there to avoid.
+	const waiting = hydrating() ? null : fallback ?? loaders.loading ?? null;
 	const shown = mutable<unknown>(waiting === null ? null : h(waiting, {}));
 
 	let dead = false;

@@ -1291,14 +1291,23 @@ import { Stage, StageContext, mount } from '@aweftjs/ui';
 const acts = {
 	'': Home,
 	'posts/:id': Post,
-	docs: Docs,                                 // renders a StageContext of its own
-	about: { load: () => import('./about.tsx') },
+	docs: Docs,               // renders a StageContext of its own
+	about: 'site/About',      // a module, loaded when the URL reaches it
+	join: 'auth/SignIn',      // a module from a battery, on the URL you chose
 	missing: NotFound,
 };
 
 const router = createRouter();
 mount(document.body, (
-	<StageContext router={router} acts={acts} template={Layout} fallback="missing">
+	<StageContext
+		router={router}
+		sources={[app, authClient]}
+		client={client}
+		acts={acts}
+		template={Layout}
+		fallback="missing"
+		refused="join"
+	>
 		<Nav /><Stage />
 	</StageContext>
 ));
@@ -1309,15 +1318,93 @@ router.links(document.body);
 current, inside the template. They are two components because one that did template selection, URL
 matching, child coordination and the accessibility work at once would be unchangeable.
 
+`stage.current` names the act the URL chose, from the moment it matches. When that act is refused,
+the `refused` act's component is what shows under that name, so a test asking what a page is
+showing reads the page rather than `current`.
+
 **An act key** is a path with no leading slash. `''` is the index and matches `/` only. `:name`
 takes one segment, and one trailing `*name` takes the rest. A key whose whole text is the path wins
 outright, and otherwise a literal segment beats `:name`, `:name` beats `*name`, and the longer
 pattern breaks a tie. There are no optional segments and no patterns.
 
-**An act** is the component, or `{ load: () => import('./page.tsx') }` for one that arrives later.
-A lazy act runs through the same `suspend` everything slow goes through, with the `LoaderContext`'s
-loading and failed components. Either kind may carry `entries()`, an async function returning the
-parameter sets a static walk should render it at; nothing calls it yet.
+**An act** is the component, or the name of a module. A component act may carry `entries()`, an
+async function returning the parameter sets a static walk should render it at; nothing in this
+package calls it.
+
+**An act module** is an ordinary module: `deps`, `defaults`, and a factory answering
+`{ component, title? }`. It is the only form of act that can declare what it needs.
+
+**A module an act depends on is built once per page and reused on every later visit**, so its
+factory must hand back live cells and handles rather than an awaited snapshot: the value it
+returned on the first visit is the value the fifth visit reads.
+
+```ts
+// A getter over the handle, not `const document = await handle.ready`.
+export default ({ client }) => {
+	const handle = client.share('board');
+	return { ready: handle.ready, get document() { return handle.document; }, stop: handle.stop };
+};
+```
+
+```ts
+// modules/notes/Page.tsx
+export const deps = ['auth/Session', 'notes/Current'];
+export const entries = async () => (await listNotes()).map((note) => ({ id: note.id }));
+
+export default ({ imports }) => ({
+	title: 'Notes',
+	component: () => <Notes user={imports.Session.user} notes={imports.Current.document} />,
+});
+```
+
+- **`component`** is what the stage renders, handed the same props a component act gets, `stage`
+  included. An instance with no `component` function is a loud assert.
+- **`title`** is what the live region announces when the act arrives, and nothing else. The
+  browser tab still follows the `<Title>` the component writes.
+- **`entries`** is an export beside `deps`, so a static walk reads it without running the factory:
+  listing a site's URLs opens no connection and builds no page. A module that exports none answers
+  `null`, which tells a walk it cannot say what its URLs are.
+
+**`sources` and `client`.** `sources` is where named acts come from, in precedence order, as
+`createLoader` takes them. The stage builds one loader over them for the whole routing tree, and a
+stage inside an act inherits it and takes no `sources` of its own. `client` is the page's
+connection, handed to every module as its `client` prop.
+
+That is the page mirroring the server: the platform hands a factory `client` and nothing else, and
+everything the application makes is a module that others name in `deps`. A shared document, a
+session, a rules table, a gate: each is a module, built in dependency order, and none of them is
+built in the boot file and threaded around by hand.
+
+**When a named act is loaded and unloaded.** It is loaded, with its dependencies first, when the
+stage decides it, and it goes through the same `suspend` everything slow goes through, with the
+`LoaderContext`'s loading and failed components. It is unloaded once the next act is showing, so a
+module both of them depend on is never torn down between them, and the instance's own `stop` runs
+there. The modules it depended on stay loaded for the page; when the stage that built the loader is
+removed, everything it loaded is unloaded in reverse load order.
+
+**`refused`** is an act name, shown when loading a named act rejects with a refusal: an error a
+factory threw that carries a `reason`. The refused act reads the error as its `refusal` prop, and
+gets a `retry` beside it: call it and the act the URL chose is built again, in place, with the
+address exactly where it was. `auth/SignIn` calls it after a successful `enter`, so a gated page
+appears once the visitor signs in without anyone navigating. The URL never moves, so the visitor
+keeps the address they asked for, and `refused` must name a key with no `:name` or `*name` segment,
+since the refused act renders under the refusing URL's parameters. Anything else that goes wrong (a
+name no source lists, a cycle, a factory that threw a bare `Error`) propagates as before.
+
+**A static render has no `client`**, so the loader's props carry no `client` key at all and a
+module that wants one decides what its absence means. What it must not do is wait for an answer
+that will never come: `render` waits on every pending promise, so a factory awaiting one hangs the
+render. `auth/Session` is anonymous at once instead, so a static render of a gated page is a gated
+act refused and the sign-in act in the markup, while a module reading a document with no client
+renders its waiting state.
+
+**`{ load }` is gone.** A name is the lazy form. `about: { load: () => import('./about.tsx') }`
+becomes `about: 'site/About'` in the acts map, a source that lists it, and a small module:
+
+```ts
+// modules/site/About.tsx
+export default () => ({ title: 'About', component: About });
+```
 
 **The stage value** is `StageContext.read(context)`, or `StageContext.use(stage => ...)`, and every
 act is handed it as its **`stage` prop**, so `const Post = (props) => <h1>{props.stage.params.get().id}</h1>`
@@ -1342,12 +1429,13 @@ open and lands on the page.
 is what shows when no URL decides: no router, or a parent that took the whole path.
 
 **On every act change, in a browser**, focus moves to the act's root element (given `tabindex="-1"`
-if it cannot take focus), a visually hidden live region announces the new title, and the page goes
+if it cannot take focus), a visually hidden live region announces the act module's `title` or, with
+none, the new head title, and the page goes
 to the top, or to the URL's hash, unless the router has a position saved for this entry. The first
 act is not a change: a page load should not steal focus. All three are no-ops with no `window`.
 
 `context().stage` holds one entry per live `StageContext`: its declared `acts` with a `loader` flag
-and each act's `entries`, its `prefix` (what its parent actually matched, `posts/3` and not
+saying which were declared as module names, and each act's `entries`, its `prefix` (what its parent actually matched, `posts/3` and not
 `posts/:id`) and its `parent`. That is what a static walk reads to know which URLs a site has. The
 acts come in the order the `acts` object itself lists them, which puts a whole-number name such as
 `404` first however it was written.
