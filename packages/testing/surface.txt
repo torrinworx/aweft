@@ -28,7 +28,6 @@ type Violation: interface Violation { readonly from: string; readonly to: string
 value applyCommit: (doc: DocumentJson, commit: Commit) => DocumentJson
 value aweftPackageOf: (specifier: string) => string | undefined
 value canonicalJson: (value: unknown) => string
-value checkDecisionHeader: (text: string, concepts: ReadonlySet<string>, calls: ReadonlySet<string>) => string[]
 value checkEdge: (from: string, to: string, table: Readonly<Record<string, PackageInfo>>) => Violation | null
 value checkFixture: (f: Fixture, applier?: Applier) => void
 value checkGraph: (edges: readonly (readonly [string, string])[], table: Readonly<Record<string, PackageInfo>>) => Violation[]
