@@ -70,6 +70,7 @@ if
 input
 invert
 link
+listMax
 luminance
 max
 min
