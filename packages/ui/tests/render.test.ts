@@ -16,7 +16,7 @@ import { Stage, StageContext, Theme, context, h, hydrate, mount, render, use } f
 // value, is a refusal (design 111), so a test theme picks names the library does not use.
 Theme.define({
 	slab: { padding: 8 },
-	badge: { color: 'red' },
+	crimson: { color: 'red' },
 });
 
 /** Count what a document was asked to make, so "zero createElement" is a number, not a claim. */
@@ -77,7 +77,7 @@ test('mount puts the stylesheet in the head and takes it back out', () => {
 test('two default mounts into one page get different classes and share one stylesheet', () => {
 	const document = createDocument();
 	const one = mount(document.body, h('p', { theme: 'slab' }, 'one'));
-	const two = mount(document.body, h('p', { theme: 'badge' }, 'two'));
+	const two = mount(document.body, h('p', { theme: 'crimson' }, 'two'));
 
 	assert.equal(toHtml(document.body.childNodes), '<p class="aw0">one</p><p class="aw1">two</p>');
 	assert.equal(document.head.childNodes.length, 1, 'one <style>, not one per mount');
@@ -133,14 +133,14 @@ test('a theme change on a cell is exactly one class write', () => {
 	const stop = mount(document.body, h('p', { theme: tone }, 'x'));
 	ops.length = 0;
 
-	tone.set('badge');
+	tone.set('crimson');
 	assert.deepEqual(ops.filter((line) => !line.includes('<style>')), ['attr class="aw1" on <p>']);
 	stop();
 });
 
 test('a page renders to markup, and the CSS comes off the render', async () => {
 	const own = context();
-	const markup = await render(h('main', { theme: 'slab' }, h('span', { theme: 'badge' }, 'hi')), { context: own });
+	const markup = await render(h('main', { theme: 'slab' }, h('span', { theme: 'crimson' }, 'hi')), { context: own });
 	// A themed element is a component, so a static render brackets it and a hydration reads the
 	// brackets to know where the dynamic mount sits (design 107).
 	assert.equal(markup, '<!--[--><main class="aw0"><span class="aw1">hi</span></main><!--]-->');
@@ -150,7 +150,7 @@ test('a page renders to markup, and the CSS comes off the render', async () => {
 
 test('hydration of a rendered page makes no element and adopts every one', async () => {
 	const item = (): unknown => h('main', { theme: 'slab' },
-		h('span', { theme: 'badge' }, 'hi'),
+		h('span', { theme: 'crimson' }, 'hi'),
 		h('p', {}, mutable('live')),
 	);
 
@@ -219,7 +219,7 @@ test('a theme cell that moves twice writes once each time, and stops when the el
 	const page = (): string[] => ops.filter((line) => !line.includes('<style>'));
 
 	ops.length = 0;
-	tone.set('badge');
+	tone.set('crimson');
 	assert.deepEqual(page(), ['attr class="aw1" on <p>']);
 
 	// The tracker rebuilds its subscriptions on every pass. If it did not drop the old ones first,
@@ -230,7 +230,7 @@ test('a theme cell that moves twice writes once each time, and stops when the el
 
 	stop();
 	ops.length = 0;
-	tone.set('badge');
+	tone.set('crimson');
 	assert.deepEqual(page(), [], 'nothing is written to an element that has been unmounted');
 });
 
