@@ -79,17 +79,105 @@ test('two default mounts into one page get different classes and share one style
 	const one = mount(document.body, h('p', { theme: 'slab' }, 'one'));
 	const two = mount(document.body, h('p', { theme: 'crimson' }, 'two'));
 
+	// One render, so one class sequence: the second mount is aw1 rather than a second aw0 whose
+	// rules would have to fight the first one's.
 	assert.equal(toHtml(document.body.childNodes), '<p class="aw0">one</p><p class="aw1">two</p>');
-	assert.equal(document.head.childNodes.length, 1, 'one <style>, not one per mount');
-	const css = document.head.firstChild!.textContent ?? '';
-	assert.match(css, /\.aw0 \{ padding: 8px; \}/);
-	assert.match(css, /\.aw1 \{ color: red; \}/, 'both mounts\' rules are in the one sheet');
+	// One sheet, in two elements: the second mount compiles after the first was written, so its
+	// rules go beside it rather than into it (design 257). What is refused is a whole sheet per
+	// mount, which is what made both mounts mint aw0.
+	const css = (): string => document.head.childNodes.map((node) => node.textContent ?? '').join('\n');
+	assert.equal(document.head.childNodes.length, 2, 'the page\'s sheet, and the one class compiled after it');
+	assert.match(css(), /\.aw0 \{ padding: 8px; \}/);
+	assert.match(css(), /\.aw1 \{ color: red; \}/, 'both mounts\' rules are in the one sheet');
 
 	// The sheet belongs to both, so the first to go takes nothing away from the second.
 	one();
-	assert.equal(document.head.childNodes.length, 1);
+	assert.match(css(), /\.aw1 \{ color: red; \}/, 'the second mount still has its rules');
 	two();
+	assert.equal(toHtml(document.head.childNodes), '', 'and the last one out takes every element with it');
+});
+
+test('a class compiled after the mount goes beside the first element, never into it', () => {
+	const document = createDocument();
+	const which = mutable('slab');
+	const stop = mount(document.body, h('p', { theme: which }, 'x'));
+	assert.equal(document.head.childNodes.length, 1, 'the mount writes one element');
+	const first = document.head.firstChild!.textContent ?? '';
+	assert.match(first, /\.aw0 \{ padding: 8px; \}/);
+
+	which.set('crimson');
+	assert.equal(document.head.childNodes.length, 2, 'and the class compiled after it lands in one of its own');
+	assert.equal(document.head.firstChild!.textContent, first, 'while the first one is left exactly as it was');
+	assert.match(toHtml(document.head.childNodes), /<style data-aweft data-aweft-grown>/,
+		'the grown element carries both marks, so a reader after the whole sheet finds it');
+	const grown = document.head.childNodes[1]!.textContent ?? '';
+	assert.match(grown, /^@layer aweft \{\n/, 'it stands alone, layer and all');
+	assert.match(grown, /\.aw1 \{ color: red; \}/);
+	assert.doesNotMatch(grown, /padding: 8px/, 'and holds only what that compile added');
+
+	stop();
+	assert.equal(toHtml(document.head.childNodes), '', 'both come out with the mount');
+});
+
+test('a page whose mount compiled no class leaves its empty element empty and grows another', () => {
+	// Even an empty element is a stylesheet the document holds, and writing into one drops every
+	// font face the page has registered, wherever they were declared (design 257). So the sheet's
+	// first CSS arrives the way all later CSS does, in an element written before it goes in.
+	const document = createDocument();
+	const plain = mount(document.body, h('p', {}, 'x'));
+	assert.equal(document.head.childNodes.length, 1, 'the element is there, holding nothing');
+	assert.equal(document.head.firstChild!.textContent, '');
+
+	const themed = mount(document.body, h('p', { theme: 'slab' }, 'y'));
+	assert.equal(document.head.childNodes.length, 2, 'and the first CSS lands beside it, not in it');
+	assert.equal(document.head.firstChild!.textContent, '', 'which is still empty');
+	assert.match(document.head.childNodes[1]!.textContent ?? '', /\.aw0 \{ padding: 8px; \}/);
+	themed();
+	plain();
 	assert.equal(toHtml(document.head.childNodes), '');
+});
+
+test('a class compiled after a hydration leaves the served stylesheet alone', async () => {
+	const which = mutable('slab');
+	const item = (): unknown => h('p', { theme: which }, 'x');
+
+	const server = context();
+	const markup = await render(h(item), { context: server });
+	const css = server.theme.markup();
+
+	const document = createDocument();
+	for (const node of parseHtml(markup, document)) document.body.appendChild(node);
+	for (const node of parseHtml(`<style data-aweft>${css}</style>`, document)) document.head.appendChild(node);
+
+	const stop = hydrate(document.body, item);
+	assert.equal(document.head.childNodes.length, 1, 'the hydration adopted the served element');
+	assert.equal(document.head.firstChild!.textContent, css, 'and left its text alone');
+
+	which.set('crimson');
+	assert.equal(document.head.firstChild!.textContent, css, 'which is still true after a class compiles');
+	assert.equal(document.head.childNodes.length, 2, 'because that class went into an element of its own');
+	stop();
+});
+
+test('a hydration whose theme disagrees with the server rewrites the adopted stylesheet once', async () => {
+	// The README says a theme mismatch is not reported: the client rewrites the element the server
+	// wrote and says nothing. That first write is the one write the element ever takes, so the
+	// claim has to keep holding now that nothing else rewrites it (design 257).
+	const item = (): unknown => h('p', { theme: 'slab' }, 'x');
+	const server = context();
+	const markup = await render(h(item), { context: server });
+
+	const document = createDocument();
+	for (const node of parseHtml(markup, document)) document.body.appendChild(node);
+	for (const node of parseHtml('<style data-aweft>.aw0 { padding: 0; }</style>', document)) {
+		document.head.appendChild(node);
+	}
+
+	const stop = hydrate(document.body, item);
+	assert.equal(document.head.childNodes.length, 1, 'the served element was adopted, not doubled');
+	assert.equal(document.head.firstChild!.textContent, server.theme.markup(),
+		'and the client wrote its own sheet over what it disagreed with');
+	stop();
 });
 
 test('a mount given its own context is not adopted into the document\'s', () => {

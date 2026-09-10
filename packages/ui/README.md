@@ -212,6 +212,20 @@ both after the page has been taken down. A render object is therefore for one pa
 `hydrate` adopts the one the server wrote rather than making a second. `render` returns the item's
 markup only; the CSS is `context.theme.markup()`, which the page puts in its own head.
 
+The element the mount puts there carries the sheet as it stood then, and nothing writes it again.
+A class compiled later (a hover state the pointer reaches, a theme cell that moves) arrives as a
+`<style>` of its own holding only what that compile added, and every one of them comes out with the
+mount. So reading the sheet back out of the DOM means every `style[data-aweft]`, each carrying its
+own `@layer aweft` wrapper, while `theme.markup()` is the same rules as one stylesheet without
+reading the DOM at all. `theme.watch(fn)` hears each compile's CSS as it is added.
+
+The reason is webfonts. A browser registers an `@font-face` by name when it parses the sheet that
+declares it. Change a stylesheet the document already holds and Chromium drops every face on the
+page and registers them again, whether the change is a rewrite, a rule put in through the CSSOM, or
+a write to a different element entirely; Firefox does the same when a sheet's text changes. Until
+the data is back, the page's text falls back to a system font. Nothing in this package declares a
+face, so nothing here showed it; an application that does hits it on the first hover (design 257).
+
 Two `mount` calls into one page share that page's render, so two widgets on one page cannot mint
 the same class name for two different themes. Passing a `context()` by name asks for a render of
 your own instead, which is what a static render wants; two named renders in one page each count

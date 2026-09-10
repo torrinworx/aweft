@@ -8,7 +8,6 @@
 // Nothing in this package holds mutable state at module scope except the theme definitions,
 // which are data written once at import and never per render.
 
-import type { Derived } from '@aweftjs/core';
 import {
 	type ElementLike, type Hydrated, type ParentLike, type Remove,
 	createElement, hydrate as domHydrate, mount as domMount, render as domRender,
@@ -114,6 +113,9 @@ export const slotOf = (value: unknown, key: symbol): unknown =>
 // --- the stylesheet element ----------------------------------------------------------------
 
 const MARKER = 'data-aweft';
+// The elements a class compiled after the mount goes into (design 257). Beside MARKER, not
+// instead of it: a reader after the whole sheet wants both, and `existingSheet` wants the first.
+const GROWN = 'data-aweft-grown';
 
 interface WithHead {
 	readonly head?: { firstChild: unknown; insertBefore(node: unknown, before: unknown): unknown } | null;
@@ -138,6 +140,18 @@ const existingSheet = (head: ElementLike): ElementLike | null => {
 	return null;
 };
 
+// A `<style>` written before it enters the head. A stylesheet the document already holds cannot be
+// changed, even an empty one and even one that is not the sheet declaring a face, without dropping
+// every `@font-face` on the page and registering it again (design 257); writing the text first
+// leaves no moment where this element is one of those.
+const appended = (head: ElementLike, css: string, ...markers: readonly string[]): ElementLike => {
+	const element = createElement('style');
+	for (const marker of markers) element.setAttribute(marker, '');
+	element.textContent = css;
+	head.insertBefore(element, null);
+	return element;
+};
+
 /**
  * Put the render's stylesheet in the document head and keep it up to date.
  *
@@ -146,26 +160,41 @@ const existingSheet = (head: ElementLike): ElementLike | null => {
  * node keeps this out of the mount entirely: the sheet is not part of the item, and a page that
  * renders to markup puts the CSS in its own head with `theme.markup()`.
  *
- * Called after the mount, never before, so the first write is the whole stylesheet rather than
- * one write per class the page asked for. On an adopted sheet that first write usually finds the
- * text already right and does nothing at all. A mount is synchronous, so nothing is painted
- * unstyled in between.
+ * Called after the mount, never before, so the element carries the whole stylesheet rather than
+ * one write per class the page asked for. A mount is synchronous, so nothing is painted unstyled
+ * in between.
+ *
+ * Every class compiled after that goes into a `<style>` of its own, and no element the document
+ * holds is ever written (design 257). A browser registers an `@font-face` by name when it parses
+ * the sheet declaring it, and changing a sheet the document holds drops every face on the page and
+ * registers them again, so its text has no webfont until the data is back. That is true of an
+ * empty element as much as a full one, and of a face declared somewhere else entirely, which is
+ * why even the sheet's first CSS arrives in an element of its own.
+ *
+ * The one exception is an adopted element whose text the client disagrees with, which the client
+ * owns and overwrites once, saying nothing (`README.md`, The per-render object).
  */
 const attachSheet = (target: ParentLike, sheet: Sheet, adopt: boolean): (() => void) => {
 	const head = headOf(target);
 	if (head === null) return () => undefined;
 
 	const found = adopt ? existingSheet(head) : null;
-	const element = found ?? createElement('style');
-	if (found === null) {
-		element.setAttribute(MARKER, '');
-		head.insertBefore(element, null);
-	}
-	const stop = (sheet.text as Derived<string>).effect((css) => {
-		if (element.textContent !== css) element.textContent = css;
+	const css = sheet.markup();
+	const element = found ?? appended(head, css, MARKER);
+	if (found !== null && found.textContent !== css) found.textContent = css;
+	const grown: ElementLike[] = [];
+	// Subscribed after the sheet is read rather than before. Nothing can compile in between, the
+	// three DOM calls above being all that separates them, and this way round the element holds
+	// every rule that existed when it was written.
+	const stop = sheet.watch((added) => {
+		// A grown element carries MARKER as well, because that attribute is how the rest of this
+		// stack tells its own style elements from a page's head tags, and the second one is beside
+		// it so `existingSheet` still takes the element the page loaded with.
+		grown.push(appended(head, added, MARKER, GROWN));
 	});
 	return () => {
 		stop();
+		for (const own of grown) own.parentNode?.removeChild(own);
 		if (found === null) element.parentNode?.removeChild(element);
 	};
 };

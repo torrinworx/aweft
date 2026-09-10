@@ -73,9 +73,12 @@ try {
 
 	// --- the stylesheet is real, and it applies ------------------------------------------------
 
+	// A render's sheet is the element the page loaded with plus one per class compiled after the
+	// mount, all marked (design 257), so the whole sheet is every one of them.
 	const sheet = await page.evaluate(() => {
-		const style = document.head.querySelector('style[data-aweft]');
-		return { text: style?.textContent ?? '', layers: (style?.textContent ?? '').includes('@layer aweft') };
+		const text = Array.from(document.head.querySelectorAll('style[data-aweft]'))
+			.map((style) => style.textContent ?? '').join('\n');
+		return { text, layers: text.includes('@layer aweft') };
 	});
 	assert.ok(sheet.layers, 'every rule ui emits sits inside @layer aweft');
 	assert.ok(!sheet.text.includes('!important'), 'ui ships zero !important');
@@ -235,8 +238,8 @@ try {
 	await page.goto(site.url + 'preview.html');
 	await page.waitForSelector('#preview');
 
-	const previewSheet = await page.evaluate(() =>
-		document.head.querySelector('style[data-aweft]')?.textContent ?? '');
+	const previewSheet = await page.evaluate(() => Array.from(document.head.querySelectorAll('style[data-aweft]'))
+		.map((style) => style.textContent ?? '').join('\n'));
 	assert.ok(previewSheet.includes('@layer aweft'), 'the preview page carries the theme sheet');
 	assert.ok(!previewSheet.includes('!important'), 'and still no !important');
 
@@ -999,7 +1002,8 @@ try {
 			height: style.height,
 			image: style.backgroundImage,
 			padding: [style.paddingLeft, style.paddingRight],
-			sheet: document.head.querySelector('style[data-aweft]')?.textContent ?? '',
+			sheet: Array.from(document.head.querySelectorAll('style[data-aweft]'))
+				.map((style) => style.textContent ?? '').join('\n'),
 		};
 	});
 	assert.equal(slider.tag, 'input', 'a Slider is a real range input');
@@ -1015,7 +1019,8 @@ try {
 	await page.hover('#slider-light');
 	const hoveredSlider = await page.evaluate(() => ({
 		image: getComputedStyle(document.querySelector('#slider-light')!).backgroundImage,
-		sheet: document.head.querySelector('style[data-aweft]')?.textContent ?? '',
+		sheet: Array.from(document.head.querySelectorAll('style[data-aweft]'))
+			.map((style) => style.textContent ?? '').join('\n'),
 	}));
 	assert.equal(hoveredSlider.image, 'none', 'and none over it under the pointer either');
 	assert.match(hoveredSlider.sheet, /::-webkit-slider-thumb \{ transform: scale\(1\.2\); \}/,

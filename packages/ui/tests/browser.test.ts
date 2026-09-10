@@ -22,15 +22,18 @@ const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const space = mkdtempSync(join(tmpdir(), 'aweft-ui-browser-'));
 after(() => rmSync(space, { recursive: true, force: true }));
 
-const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2' };
 
 /** Build one page with the bundler plugin and serve it. */
-const page = async (name: string, html: string, entry: string): Promise<{ url: string; close(): Promise<void> }> => {
+const page = async (name: string, html: string, entry: string, files: Record<string, string | Buffer> = {}): Promise<{ url: string; close(): Promise<void> }> => {
 	const root = join(space, name);
 	const out = join(root, 'dist');
 	mkdirSync(root, { recursive: true });
 	writeFileSync(join(root, 'index.html'), html);
 	writeFileSync(join(root, 'entry.tsx'), entry);
+	// Served beside the page as they are: the bundler copies `public/` into the output untouched.
+	mkdirSync(join(root, 'public'), { recursive: true });
+	for (const [file, text] of Object.entries(files)) writeFileSync(join(root, 'public', file), text);
 
 	await build({
 		root,
@@ -131,13 +134,18 @@ test('two mounts into one page compute the colour each of them asked for', async
 			two: getComputedStyle(document.querySelector('#two')!).color,
 			classes: [document.querySelector('#one')!.getAttribute('class'), document.querySelector('#two')!.getAttribute('class')],
 			sheets: document.head.querySelectorAll('style[data-aweft]').length,
+			grown: document.head.querySelectorAll('style[data-aweft-grown]').length,
 		}));
 		// Two mounts with no context of their own share the page's render, so the second cannot
 		// mint a class the first already used and redefine it underneath.
 		assert.equal(seen['one'], 'rgb(255, 0, 0)');
 		assert.equal(seen['two'], 'rgb(0, 0, 255)');
 		assert.notEqual(seen['classes'][0], seen['classes'][1]);
-		assert.equal(seen['sheets'], 1);
+		// One sheet in two elements, because the second mount compiles after the first was
+		// written (design 257). What is refused is a whole sheet per mount, which is what let
+		// both mounts mint the same class and fight over what it means.
+		assert.equal(seen['sheets'], 2);
+		assert.equal(seen['grown'], 1, 'the second element is a growth of the first mount\'s sheet');
 	} finally {
 		await browser.close();
 		await site.close();
@@ -2999,6 +3007,197 @@ test('the longest subdivision list opens and searches inside one frame budget', 
 		assert.ok(held.opened < 250, `opening the grid took ${held.opened.toFixed(1)}ms`);
 		assert.ok(held.searched < 250, `and filtering it took ${held.searched.toFixed(1)}ms`);
 		console.log(`country: 217 rows open in ${held.opened.toFixed(1)}ms, filter in ${held.searched.toFixed(1)}ms`);
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
+
+// --- the sheet grows into an element of its own (design 257) ----------------------------------
+
+test('a class compiled after the mount keeps every font face registered', async () => {
+	// The sheet used to be rewritten whole whenever a class was compiled at runtime, and an
+	// application's @font-face rules are in that element. A browser registers a face by name when
+	// it parses the sheet holding it, so changing that sheet drops every face and registers it
+	// again: for as long as the data takes to come back, the page's text has no webfont. Only a
+	// real browser has an opinion about this; the light tree has no font set at all. Against the
+	// old path this reads a loaded face before the compile and an unloaded one in the same task.
+	const site = await page('font-faces', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { mutable } from '@aweftjs/core';
+		import { Theme, h, mount } from '@aweftjs/ui';
+		Theme.define({
+			faced: {
+				_fontFace_probe: { fontFamily: '"Probe"', src: 'url("/probe.woff2") format("woff2")' },
+				fontFamily: '"Probe", monospace',
+			},
+			faced_one: { paddingTop: 1 },
+			faced_two: { paddingTop: 2 },
+		});
+		const which = mutable('one');
+		mount(document.body, <p id="box" theme={['faced', which]}>x</p>);
+		window.flip = () => { which.set('two'); };
+	`, { 'probe.woff2': readFileSync(join(repo, 'packages/ui/tests/fixtures/probe.woff2')) });
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForSelector('#box');
+		// A loaded face is what a re-registration costs: the same name is registered again with no
+		// data behind it, so the count reads 1 either way and `check` is what says the glyphs are
+		// there to paint with.
+		await view.evaluate(() => (document as unknown as { fonts: { load(font: string): Promise<unknown> } }).fonts.load('16px "Probe"'));
+		await view.waitForFunction(() => (document as unknown as { fonts: { check(font: string): boolean } }).fonts.check('16px "Probe"'));
+		const seen = await view.evaluate(() => {
+			const element = document.head.querySelector('style[data-aweft]')!;
+			const fonts = document as unknown as { fonts: Iterable<{ family: string }> & { size: number; check(font: string): boolean } };
+			const face = (): unknown => [...fonts.fonts][0];
+			const box = document.querySelector('#box')!;
+			const before = { faces: fonts.fonts.size, loaded: fonts.fonts.check('16px "Probe"'), face: face(), text: element.textContent ?? '' };
+			// In the same task as the compile: the moment the old path had no face to paint with.
+			(window as unknown as { flip(): void }).flip();
+			return {
+				before: { faces: before.faces, loaded: before.loaded, text: before.text },
+				facesAfter: fonts.fonts.size,
+				loadedAfter: fonts.fonts.check('16px "Probe"'),
+				sameFace: face() === before.face,
+				textAfter: element.textContent ?? '',
+				// Padding rather than colour: the base entry transitions colour, so a colour read
+				// in the same task is the old one whichever way the rule arrived.
+				padding: getComputedStyle(box).paddingTop,
+				grown: document.head.querySelectorAll('style[data-aweft-grown]').length,
+				marked: document.head.querySelectorAll('style[data-aweft]').length,
+			};
+		});
+
+		assert.equal(seen.before.faces, 1, 'the face the theme declared is registered');
+		assert.equal(seen.before.loaded, true, 'and loaded');
+		assert.equal(seen.facesAfter, 1, 'and only the one, so a compile does not declare it again');
+		assert.equal(seen.loadedAfter, true, 'it is still loaded in the same task as the compile');
+		assert.ok(seen.sameFace, 'because it is the same registration, not a fresh one under the same name');
+		assert.equal(seen.textAfter, seen.before.text, 'the element the page loaded with was not rewritten');
+		assert.equal(seen.grown, 1, 'the new class went into an element of its own');
+		assert.equal(seen.marked, 2, 'which carries the marker too, so a reader after the whole sheet finds it');
+		assert.equal(seen.padding, '2px', 'and it applies in the same task, so nothing measured is measured too early');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
+
+test('a font face the page declared itself survives the mount and every class after it', async () => {
+	// The face is the page's own, in the page's own <style>, which is where an application that
+	// loads a font without going through the theme puts it. A browser drops every face on the page
+	// when any stylesheet the document holds is changed, so this fails if `ui` writes into an
+	// element that is already in the head, even an empty one, and even one that is not the sheet
+	// holding the face (design 257).
+	const site = await page('page-face', `<!doctype html><html><head><style>
+		@font-face { font-family: "Probe"; src: url("/probe.woff2") format("woff2"); }
+		#box { font-family: "Probe", monospace; }
+	</style></head><body><script type="module" src="./entry.tsx"></script></body></html>`, `
+		import { mutable } from '@aweftjs/core';
+		import { Theme, h, mount } from '@aweftjs/ui';
+		Theme.define({ own: { paddingTop: 1 }, own_two: { paddingTop: 2 } });
+		const which = mutable(null);
+		// Mounted on demand, so the face is loaded first and every write that follows is under
+		// test. The unthemed mount first, because that leaves the sheet empty and its element
+		// holding nothing, which is the state that most looks safe to write into.
+		window.plain = () => mount(document.body, <p id="plain">y</p>);
+		window.start = () => mount(document.body, <p id="box" theme={['own', which]}>x</p>);
+		window.flip = () => { which.set('two'); };
+	`, { 'probe.woff2': readFileSync(join(repo, 'packages/ui/tests/fixtures/probe.woff2')) });
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForFunction(() => (window as unknown as { start?: unknown }).start !== undefined);
+		await view.evaluate(() => (document as unknown as { fonts: { load(font: string): Promise<unknown> } }).fonts.load('16px "Probe"'));
+		await view.waitForFunction(() => (document as unknown as { fonts: { check(font: string): boolean } }).fonts.check('16px "Probe"'));
+		const seen = await view.evaluate(() => {
+			const fonts = document as unknown as { fonts: Iterable<unknown> & { check(font: string): boolean } };
+			const face = (): unknown => [...fonts.fonts][0];
+			const first = face();
+			const held = window as unknown as { plain(): void; start(): void; flip(): void };
+			const loaded = (): boolean => fonts.fonts.check('16px "Probe"');
+			const before = loaded();
+			held.plain();
+			const afterPlain = { loaded: loaded(), same: face() === first };
+			held.start();
+			const afterMount = { loaded: loaded(), same: face() === first };
+			held.flip();
+			const afterFlip = { loaded: loaded(), same: face() === first };
+			return {
+				before,
+				afterPlain,
+				afterMount,
+				afterFlip,
+				padding: getComputedStyle(document.querySelector('#box')!).paddingTop,
+				elements: document.head.querySelectorAll('style[data-aweft]').length,
+			};
+		});
+
+		assert.equal(seen.before, true, 'the page loaded its own face');
+		assert.equal(seen.afterPlain.loaded, true, 'a mount that compiled nothing left it alone');
+		assert.equal(seen.afterMount.loaded, true, 'and so did the sheet\'s first CSS arriving');
+		assert.ok(seen.afterMount.same, 'the same registration, not a fresh one under the same name');
+		assert.equal(seen.afterFlip.loaded, true, 'and so did the class compiled after that');
+		assert.ok(seen.afterFlip.same, 'still the same registration');
+		assert.equal(seen.padding, '2px', 'while that class applies in the same task');
+		assert.equal(seen.elements, 3, 'the empty element, the sheet, and the class compiled after it');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
+
+test('a face, a keyframes and an import compiled at runtime land in an element of their own', async () => {
+	const site = await page('runtime-at-rules', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { mutable } from '@aweftjs/core';
+		import { Theme, h, mount } from '@aweftjs/ui';
+		Theme.define({
+			late: { paddingTop: 1 },
+			late_on: {
+				_fontFace_second: { fontFamily: '"Second"', src: 'url("/probe.woff2") format("woff2")' },
+				_keyframes_turn: 'to { transform: rotate(1turn); }',
+				_import_extra: { url: '/extra.css' },
+				animationName: '$turn',
+				animationDuration: '1s',
+			},
+		});
+		const on = mutable(false);
+		mount(document.body, <p id="box" class="extra" theme={['late', on.map((held) => held ? 'on' : null)]}>x</p>);
+		window.flip = () => { on.set(true); };
+	`, {
+		'extra.css': '.extra { margin-top: 7px; }',
+		'probe.woff2': readFileSync(join(repo, 'packages/ui/tests/fixtures/probe.woff2')),
+	});
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForSelector('#box');
+		const seen = await view.evaluate(() => {
+			const fonts = (document as unknown as { fonts: { size: number } }).fonts;
+			const before = fonts.size;
+			(window as unknown as { flip(): void }).flip();
+			const grown = document.head.querySelector('style[data-aweft-grown]')!;
+			return {
+				before,
+				after: fonts.size,
+				// An @import is only accepted at the top of a sheet, which is where a fresh element
+				// puts it however late the compile was.
+				leads: (grown.textContent ?? '').startsWith('@import url("/extra.css") layer(aweft);\n@layer aweft {'),
+				animation: String(getComputedStyle(document.querySelector('#box')!).animationName),
+			};
+		});
+		assert.equal(seen.before, 0, 'nothing was registered before the compile');
+		assert.equal(seen.after, 1, 'the face it declared is registered, in the same task');
+		assert.ok(seen.leads, 'and its import leads the element it landed in');
+		assert.match(seen.animation, /^turn-[a-z0-9]+$/, 'the keyframes are named and in use');
+		// An import is a fetch, so what it brings arrives when it arrives.
+		await view.waitForFunction(() => getComputedStyle(document.querySelector('#box')!).marginTop === '7px');
 	} finally {
 		await browser.close();
 		await site.close();
