@@ -43,6 +43,12 @@ interface RecipeElement {
 	scrollTop: number;
 }
 
+/** The browser's own form serializer, which is what proves a form posts what a page thinks it does. */
+declare class FormData {
+	constructor(form: unknown);
+	[Symbol.iterator](): IterableIterator<[string, string]>;
+}
+
 declare const document: {
 	title: string;
 	readonly head: RecipeElement & { querySelector(selector: string): RecipeElement | null };

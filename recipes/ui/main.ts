@@ -382,6 +382,7 @@ try {
 		Head: 'a head tag', Link: 'a head tag', Meta: 'a head tag', Script: 'a head tag',
 		Style: 'a head tag', Title: 'a head tag',
 		Theme: 'a provider', ThemeContext: 'a provider', Icons: 'a provider',
+		Countries: 'a provider, shown in the Country example',
 		InputContext: 'a provider', LoaderContext: 'a provider', PopupContext: 'a provider',
 		StageContext: 'a provider, and what this page routes on',
 		TextModifiers: 'a provider, shown in the Typography example',
@@ -1210,6 +1211,136 @@ try {
 	assert.equal(await page.evaluate(() => document.querySelector('#validate-phone-light')!.value),
 		'(519) 555-1234', 'a formatting validator wrote the value back punctuated');
 
+	// The country and subdivision fields: a dialog with a search over a grid, and a form that posts
+	// the two codes (designs 250 and 251).
+	await show('Country');
+	const closed = await page.evaluate(() => {
+		const button = document.querySelector('#country-light')!;
+		return {
+			expanded: button.getAttribute('aria-expanded'),
+			popup: button.getAttribute('aria-haspopup'),
+			open: document.querySelector('#country-light-dialog')!.hasAttribute('open'),
+			// The subdivision field has nothing to offer until a country is chosen.
+			region: document.querySelector('#region-light')!.hasAttribute('disabled'),
+		};
+	});
+	assert.equal(closed.popup, 'dialog', 'the control says what it opens');
+	assert.equal(closed.expanded, 'false');
+	assert.equal(closed.open, false, 'and the dialog is in the markup, closed');
+	assert.equal(closed.region, true, 'the province field waits for a country');
+
+	await page.click('#country-light');
+	await page.waitForFunction(() => document.querySelector('#country-light-dialog')!.hasAttribute('open'));
+	const dialog = await page.evaluate(() => {
+		const box = document.querySelector('#country-light-dialog')!;
+		const rows = Array.from(box.querySelectorAll('[role="option"]'));
+		const top = rows.filter((row) => row.getBoundingClientRect().top === rows[0]!.getBoundingClientRect().top);
+		return {
+			rows: rows.length,
+			columns: top.length,
+			names: rows.slice(0, 3).map((row) => row.textContent ?? ''),
+			// The suggested row wears a ring rather than a fill, because the fill already means the
+			// choice and the keyboard (design 250).
+			ring: getComputedStyle(rows[0]!).boxShadow,
+			next: getComputedStyle(rows[1]!).boxShadow,
+			focused: document.activeElement?.id ?? '',
+		};
+	});
+	assert.equal(dialog.rows, 249, 'every country the data has, in the grid');
+	assert.ok(dialog.columns > 1, `laid out in ${String(dialog.columns)} columns at this width`);
+	// The order design 251 settled: the country the browser's language points at, then the priority
+	// list in the order it was given, then everything else by name. This browser says `en-US`.
+	assert.match(dialog.names[0] ?? '', /United States/, 'the suggestion leads');
+	assert.match(dialog.names[1] ?? '', /Canada/, 'then the priority list, in the order it was given');
+	assert.match(dialog.names[2] ?? '', /United Kingdom/);
+	assert.notEqual(dialog.ring, 'none', 'and the suggested row is marked');
+	assert.equal(dialog.next, 'none', 'while the row under it is not');
+	assert.equal(dialog.focused, 'country-light-search', 'and the keyboard is in the search box');
+
+	// A modal holds the keyboard: Tab cycles inside the dialog and never reaches the page behind it.
+	// That is the platform's, and it is the reason this is a `<dialog>` rather than a popup
+	// (design 250). The cycle passes through the body between the last control and the first, which
+	// is the host's own way of wrapping and is not the focus leaving.
+	const walk: string[] = [];
+	for (let step = 0; step < 4; step += 1) {
+		await page.keyboard.press('Tab');
+		walk.push(await page.evaluate(() => {
+			const held = document.activeElement;
+			if (held === null || held.tagName === 'BODY') return 'the body';
+			return document.querySelector('#country-light-dialog')!.contains(held)
+				? `inside: ${held.tagName.toLowerCase()}` : `OUTSIDE: ${held.tagName.toLowerCase()}#${held.id}`;
+		}));
+	}
+	assert.equal(await page.evaluate(() =>
+		document.querySelector('#country-light-dialog')!.matches(':modal')), true,
+	'the dialog is modal, so the host itself holds the keyboard in it');
+	assert.deepEqual(walk.filter((where) => where.startsWith('OUTSIDE')), [],
+		`four tabs stayed in the dialog: ${walk.join(', ')}`);
+	assert.ok(walk.some((where) => where.startsWith('inside')), `and landed in it: ${walk.join(', ')}`);
+
+	// The search: an alias for a country whose code is not the letters typed.
+	await page.keyboard.type('uk');
+	await page.waitForFunction(() =>
+		document.querySelectorAll('#country-light-dialog [role="option"]').length < 10);
+	const searched = await page.evaluate(() =>
+		Array.from(document.querySelectorAll('#country-light-dialog [role="option"]'))
+			.map((row) => row.textContent ?? ''));
+	assert.ok(searched.some((text) => text.includes('United Kingdom')), `uk found ${searched.join(', ')}`);
+
+	await page.click('#country-light-dialog [role="option"]');
+	await page.waitForFunction(() => !document.querySelector('#country-light-dialog')!.hasAttribute('open'));
+	const picked = await page.evaluate(() => ({
+		label: document.querySelector('#country-light')!.textContent,
+		region: document.querySelector('#region-light')!.hasAttribute('disabled'),
+		focus: document.activeElement?.id ?? '',
+	}));
+	assert.match(String(picked.label), /United Kingdom/, 'the button reads as the country now');
+	assert.equal(picked.region, false, 'and the province field has something to offer');
+	assert.equal(picked.focus, 'country-light', 'the keyboard came back to the control that opened it');
+
+	// The longest subdivision list there is, searched down to one row.
+	await page.click('#region-light');
+	await page.waitForFunction(() =>
+		document.querySelectorAll('#region-light-dialog [role="option"]').length === 217);
+	await page.keyboard.type('aberdeen');
+	await page.waitForFunction(() =>
+		document.querySelectorAll('#region-light-dialog [role="option"]').length < 5);
+	await page.click('#region-light-dialog [role="option"]');
+	await page.waitForFunction(() => !document.querySelector('#region-light-dialog')!.hasAttribute('open'));
+
+	// The form posts the codes, not the names a person read.
+	await page.click('#country-send-light');
+	await page.waitForFunction(() => document.querySelector('#country-posted-light')!.textContent !== '');
+	const posted = await page.textContent('#country-posted-light');
+	assert.match(String(posted), /country=GB/, `the form posted ${String(posted)}`);
+	assert.match(String(posted), /region=ABE/, 'and the subdivision by its short code');
+	console.log(`recipes/ui: the address form posted ${String(posted)}`);
+
+	// The subdivision field on its own page: a country with nothing to offer, and the longest list
+	// the data has (design 251).
+	await show('Region');
+	const region = await page.evaluate(() => ({
+		off: document.querySelector('#region-none-light')!.hasAttribute('disabled'),
+		on: document.querySelector('#region-ca-light')!.hasAttribute('disabled'),
+		chosen: document.querySelector('#region-us-light')!.textContent,
+	}));
+	assert.equal(region.off, true, 'with no country there is nothing to open');
+	assert.equal(region.on, false, 'and with one there is');
+	assert.match(String(region.chosen), /New York/, 'a chosen subdivision reads as its name');
+
+	await page.click('#region-gb-light');
+	await page.waitForFunction(() =>
+		document.querySelectorAll('#region-gb-light-dialog [role="option"]').length === 217);
+	await page.keyboard.type('aberdeen');
+	await page.waitForFunction(() =>
+		document.querySelectorAll('#region-gb-light-dialog [role="option"]').length < 5);
+	const cut = await page.evaluate(() =>
+		document.querySelectorAll('#region-gb-light-dialog [role="option"]').length);
+	console.log(`recipes/ui: 217 council areas searched down to ${String(cut)}`);
+	await page.keyboard.press('Escape');
+	await page.waitForFunction(() =>
+		!document.querySelector('#region-gb-light-dialog')!.hasAttribute('open'));
+
 	// --- axe over every page, with both modes showing ------------------------------------------------
 
 	await page.addScriptTag({ path: fileURLToPath(import.meta.resolve('axe-core/axe.min.js')) });
@@ -1256,6 +1387,7 @@ try {
 	const opened = await audits('with a menu open');
 	console.log(`recipes/ui: axe passed ${String(opened)} rules with a drawn list open`);
 
+
 	// And once more opened from the keyboard, which is the shape that carries the active row: the
 	// menu takes the focus and names the row from there, because ARIA refuses the attribute on the
 	// `role="button"` that opened it (designs 223, 225). A click alone never reaches that markup.
@@ -1278,6 +1410,20 @@ try {
 		'the focus is on the menu, which is where the pattern puts it');
 	const keyed = await audits('with a menu opened from the keyboard');
 	console.log(`recipes/ui: axe passed ${String(keyed)} rules with a menu open under the keyboard`);
+
+	// And with a dialog open over a grid of options, which is the markup designs 250 and 251 add: a
+	// modal holding a combobox that names its active row, over a listbox nobody has focused. Last,
+	// because a modal takes the rest of the page out of reach and nothing after it could be driven.
+	await show('Country');
+	await page.click('#country-light');
+	await page.waitForFunction(() =>
+		document.querySelector('#country-light-dialog')!.hasAttribute('open')
+		&& document.activeElement?.id === 'country-light-search');
+	await page.keyboard.press('ArrowDown');
+	await page.waitForFunction(() =>
+		document.querySelector('#country-light-search')!.getAttribute('aria-activedescendant') !== null);
+	const grid = await audits('with a country dialog open');
+	console.log(`recipes/ui: axe passed ${String(grid)} rules with a searched grid open`);
 
 	assert.deepEqual(problems, [], 'the page threw nothing');
 	console.log('recipes/ui: ok');
