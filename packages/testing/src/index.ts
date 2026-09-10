@@ -19,6 +19,9 @@ export type { DriverCheck, MakeDriver, StoreDriver } from './drivers.ts';
 export { checkManifests } from './manifests.ts';
 export type { Manifest } from './manifests.ts';
 
+export { checkPublishing } from './publishing.ts';
+export type { PublishManifest } from './publishing.ts';
+
 export { checkEdge, checkGraph } from './boundaries.ts';
 export type { Plane, PackageInfo, Violation } from './boundaries.ts';
 
