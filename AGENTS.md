@@ -251,8 +251,8 @@ allowlist lives.
 What must exist:
 
 - **Branch coverage thresholds**, per package: core, schema, sync, store, modules,
-  sandbox, dom at 90; ui, icons, client, server, auth, jobs, ssg, build, testing at 80. Each
-  package declares its number as `aweft.branchCoverage` in its `package.json`, and
+  sandbox, dom at 90; ui, icons, client, server, auth, jobs, ssg, static, build, testing at
+  80. Each package declares its number as `aweft.branchCoverage` in its `package.json`, and
   `packages/testing/scripts/run-tests.ts` runs every package's tests in a coverage pass
   scoped to that package's own sources, failing below the declared number. Line coverage
   is not gated. Thresholds only ratchet upward; lowering one needs a design note.

@@ -1,0 +1,33 @@
+{
+	"name": "@aweftjs/static",
+	"version": "0.0.0",
+	"type": "module",
+	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
+	"description": "The static battery: one server module that serves a directory of files for every request no route matched.",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "node --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/codec": "*",
+		"@aweftjs/modules": "*"
+	},
+	"devDependencies": {
+		"@aweftjs/auth": "*",
+		"@aweftjs/build": "*",
+		"@aweftjs/server": "*",
+		"@aweftjs/store": "*"
+	},
+	"aweft": {
+		"tier": "integrator",
+		"branchCoverage": 80
+	}
+}

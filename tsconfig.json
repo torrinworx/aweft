@@ -17,6 +17,7 @@
 		{ "path": "packages/icons" },
 		{ "path": "packages/build" },
 		{ "path": "packages/ssg" },
+		{ "path": "packages/static" },
 		{ "path": "packages/testing" },
 		{ "path": "packages/debug" }
 	]

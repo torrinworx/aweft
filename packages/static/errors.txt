@@ -1,0 +1,4 @@
+invalid-config: Give headers a Cache-Control string per path prefix, such as { "assets/": "public, max-age=31536000" }.
+invalid-config: Set dir to the directory to serve, such as "dist".
+invalid-config: Set public to true for a site anyone may read, or false for a private one.
+invalid-config: Set unknown to "404" or to "shell".
