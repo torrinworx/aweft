@@ -12,19 +12,30 @@
 	"description": "Components and theming: a wrapping h, the theme engine, contexts, popups, suspend and marks.",
 	"exports": {
 		".": "./src/index.ts",
+		"./countries": "./src/countries.ts",
 		"./icon-names": "./src/icon-names.ts"
 	},
 	"scripts": {
 		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
 	},
 	"dependencies": {
+		"@aweftjs/codec": "*",
 		"@aweftjs/core": "*",
 		"@aweftjs/dom": "*",
 		"@aweftjs/modules": "*"
 	},
+	"peerDependencies": {
+		"country-region-data": "^3.1.0 || ^4.0.0"
+	},
+	"peerDependenciesMeta": {
+		"country-region-data": {
+			"optional": true
+		}
+	},
 	"devDependencies": {
 		"@aweftjs/build": "*",
-		"@aweftjs/testing": "*"
+		"@aweftjs/testing": "*",
+		"country-region-data": "^4.1.0"
 	},
 	"aweft": {
 		"tier": 7,

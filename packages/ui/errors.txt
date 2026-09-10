@@ -1,0 +1,2 @@
+countries-not-installed: Install the package the message names, or hand your own CountryData to Countries.
+countries-unreadable: Install a 3 or 4 release of the package, whose allCountries is a list of countries.

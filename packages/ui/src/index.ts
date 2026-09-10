@@ -52,6 +52,11 @@ export { Radio } from './radio.tsx';
 export type { RadioProps } from './radio.tsx';
 export { Select } from './select.tsx';
 export type { SelectProps } from './select.tsx';
+export { Countries, Country, Region, flagOf, localeRegion } from './country.tsx';
+export type { CountryProps, RegionProps } from './country.tsx';
+// The data the provider holds. `@aweftjs/ui/countries` is where a value of it comes from, and the
+// types are here so a page annotating its own list needs nothing but the root entry.
+export type { CountryData, Subdivision } from './countries.ts';
 export { Menu } from './menu.tsx';
 export type { MenuGroup, MenuItem, MenuProps } from './menu.tsx';
 export { Slider } from './slider.tsx';

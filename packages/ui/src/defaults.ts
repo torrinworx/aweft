@@ -733,6 +733,131 @@ defineTheme({
 	},
 	dialog_body: { display: 'flex', flexDirection: 'column', gap: '$space2' },
 
+	// The chooser: a control that opens a dialog with a search box over a grid (design 250). The
+	// closed control is an input with the chosen row inside it and no arrow on it, because what
+	// opens is not a list under the field, and an arrow there says it is.
+	chooser: {
+		extends: 'input',
+		appearance: 'none',
+		display: 'inline-flex',
+		alignItems: 'center',
+		gap: '$space2',
+		width: '100%',
+		textAlign: 'left',
+		cursor: 'pointer',
+	},
+	chooser_sm: { extends: 'input_sm' },
+	chooser_lg: { extends: 'input_lg' },
+	// The error border, said here because an entry is matched against the class list and a list of
+	// `chooser invalid` reaches no entry of `input`'s, whatever `chooser` extends.
+	chooser_invalid: { extends: 'input_invalid' },
+	// Around the whole control with no label on it: the button, the hidden element and the dialog
+	// are three children of one box that must not become a box of its own inside a form's layout.
+	chooser_wrap: { display: 'contents' },
+	// The flag and the name on the closed control, on one line, the name giving way first.
+	chooser_chosen: {
+		display: 'inline-flex',
+		alignItems: 'center',
+		gap: '$space2',
+		minWidth: 0,
+		overflow: 'hidden',
+		whiteSpace: 'nowrap',
+	},
+
+	// The dialog is the modal one with a column in it, wider than a plain dialog because the grid
+	// inside wants two or three columns on a desktop, and no taller than the screen it is on.
+	chooser_panel: {
+		extends: 'dialog',
+		$chooserWidth: '44rem',
+		$chooserHeight: '80vh',
+		boxSizing: 'border-box',
+		display: 'flex',
+		flexDirection: 'column',
+		gap: '$space2',
+		maxWidth: '$chooserWidth',
+		maxHeight: '$chooserHeight',
+		// The grid is what scrolls, so the dialog itself must not: two scrollbars over one list is
+		// one too many, and the search box has to stay where it is while the list moves.
+		overflow: 'hidden',
+		// The `display` above is a column when it is open and nothing at all when it is not. The
+		// host's own sheet hides a closed `<dialog>` with `dialog:not([open]) { display: none }`,
+		// which one class of ours outranks: without this line the closed dialog of one of these
+		// covers the page and swallows every click meant for something behind it.
+		'_cssProp_:not([open])': { display: 'none' },
+	},
+	chooser_head: {
+		display: 'flex',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		gap: '$space2',
+		flex: '0 0 auto',
+	},
+	chooser_search: { flex: '0 0 auto' },
+
+	// The grid: as many columns as the box has room for, one on a phone. `auto-fill` rather than
+	// `auto-fit`, because `auto-fit` collapses the empty tracks and a search matching one country
+	// would draw that one row across the whole dialog.
+	chooser_grid: {
+		$chooserColumn: '13rem',
+		display: 'grid',
+		gridTemplateColumns: 'repeat(auto-fill, minmax($chooserColumn, 1fr))',
+		gap: '$space',
+		alignContent: 'start',
+		flex: '1 1 auto',
+		overflowY: 'auto',
+		// The focus halo of a row is drawn outside the row, so the scrolling box needs the room.
+		padding: '$space',
+	},
+	// A row is a list row with two lines in it, so it extends the row a `Select` draws. `selected`
+	// and `active` are the list's own, unchanged: one is the choice and the other is where the
+	// keyboard is.
+	chooser_option: {
+		extends: 'listbox_item',
+		alignItems: 'center',
+		textAlign: 'left',
+		minWidth: 0,
+	},
+	chooser_option_selected: { extends: 'listbox_item_selected' },
+	chooser_option_active: { extends: 'listbox_item_active' },
+	// The row the language settings point at. A ring rather than a fill, because the fill already
+	// means the choice and the keyboard, and a suggestion is neither of those.
+	chooser_option_suggested: { boxShadow: 'inset 0 0 0 $borderWidth $accent' },
+	// The flag: a fixed column, so the names down the grid start at the same place whether or not a
+	// host draws the flag as a flag.
+	chooser_flag: {
+		$flagWidth: '1.5em',
+		flex: '0 0 $flagWidth',
+		fontSize: '$textMd',
+		lineHeight: '$textMdLine',
+		textAlign: 'center',
+	},
+	// The name over the code. Both lines are one line each: a long name gives way rather than
+	// making its row taller than the rest of the grid.
+	chooser_lines: {
+		display: 'flex',
+		flexDirection: 'column',
+		minWidth: 0,
+		'_children_span': {
+			overflow: 'hidden',
+			textOverflow: 'ellipsis',
+			whiteSpace: 'nowrap',
+		},
+	},
+	chooser_note: {
+		fontSize: '$textXs',
+		lineHeight: '$textXsLine',
+		color: '$mutedForeground',
+	},
+	// What a search that found nothing says, where the rows would have been.
+	chooser_none: {
+		margin: 0,
+		padding: '$space2',
+		fontFamily: '$font',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+		color: '$mutedForeground',
+	},
+
 	// The same dialog against an edge (design 202). A modal `<dialog>` is centred by the host with
 	// `margin: auto`, so zeroing the margins and leaving one side `auto` is what anchors it, and the
 	// transform stays free for the motion. The border and the corner are the inner edge only.

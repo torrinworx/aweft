@@ -41,8 +41,10 @@ const page = async (name: string, html: string, entry: string): Promise<{ url: s
 		resolve: {
 			alias: {
 				// The four shared behaviours are internal (design 129), so a browser test that drives
-				// one reaches its file by name. Before the package, because an alias matches a
-				// subpath under its own key.
+				// one reaches its file by name; `countries` is a real subpath and is here for the
+				// same reason. Before the package, because an alias matches a subpath under its own
+				// key.
+				'@aweftjs/ui/countries': join(repo, 'packages/ui/src/countries.ts'),
 				'@aweftjs/ui/dialog': join(repo, 'packages/ui/src/dialog.ts'),
 				'@aweftjs/ui/tooltip': join(repo, 'packages/ui/src/tooltip-trigger.ts'),
 				'@aweftjs/ui': join(repo, 'packages/ui/src/index.ts'),
@@ -2814,4 +2816,191 @@ test('the slider\'s hover is on its thumb and not over its own box', async () =>
 		const after = await view.screenshot({ clip: band });
 		assert.ok(!before.equals(after), 'and the thumb really did grow into the room above it');
 	});
+});
+
+test('a country field hydrates: the dialog comes across empty and fills on the first open', async () => {
+	const site = await page('country-hydration', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { mutable } from '@aweftjs/core';
+		import { Countries, Country, Icons, context, h, hydrate, render } from '@aweftjs/ui';
+		import { countryData } from '@aweftjs/ui/countries';
+
+		const data = await countryData();
+		const code = mutable('GB');
+		const pack = { prefix: 'x', icons: { x: { body: '<path d="M0 0h16v16H0z"/>' } }, width: 16, height: 16 };
+		const App = () => (
+			<Icons value={() => pack.icons.x}>
+				<Countries value={data}>
+					<Country id="country" label="Country" value={code} name="country" suggest={false} locale="en" />
+				</Countries>
+			</Icons>
+		);
+
+		const server = context();
+		const markup = await render(<App />, { context: server });
+
+		const host = document.createElement('div');
+		host.id = 'host';
+		host.innerHTML = markup;
+		document.body.appendChild(host);
+		const style = document.createElement('style');
+		style.setAttribute('data-aweft', '');
+		style.textContent = server.theme.markup();
+		document.head.appendChild(style);
+
+		const before = document.querySelector('#country');
+		const dialog = document.querySelector('#country-dialog');
+		hydrate(host, <App />);
+
+		const rows = () => document.querySelectorAll('#country-dialog [role="option"]').length;
+		const closed = rows();
+		document.querySelector('#country').click();
+
+		window.result = {
+			sameButton: before === document.querySelector('#country'),
+			sameDialog: dialog === document.querySelector('#country-dialog'),
+			dialogInMarkup: markup.includes('<dialog'),
+			rowsInMarkup: (markup.match(/role="option"/g) ?? []).length,
+			optionsInMarkup: (markup.match(/<option/g) ?? []).length,
+			label: document.querySelector('#country').textContent,
+			posted: document.querySelector('select[name="country"]').value,
+			closed,
+			opened: rows(),
+		};
+	`);
+
+	const browser = await chromium.launch();
+	const problems: string[] = [];
+	try {
+		const view = await browser.newPage();
+		view.on('pageerror', (error) => problems.push(error.message));
+		await view.goto(site.url);
+		await view.waitForFunction(() => (window as unknown as { result?: unknown }).result !== undefined)
+			.catch(() => { throw new Error(`the page never finished: ${problems.join('; ')}`); });
+		const result = await view.evaluate(() => (window as unknown as { result: Record<string, unknown> }).result);
+
+		assert.deepEqual(problems, [], 'the page threw nothing');
+		assert.equal(result['sameButton'], true, 'the server\'s button was adopted, not replaced');
+		assert.equal(result['sameDialog'], true, 'and so was the dialog, which is in the markup closed');
+		assert.equal(result['dialogInMarkup'], true, 'a static render emits the control and its dialog');
+		assert.equal(result['rowsInMarkup'], 0, 'and none of the grid, which nobody can read closed');
+		assert.equal(result['closed'], 0, 'so the browser adopts a page with no rows in it either');
+		assert.equal(result['opened'], 249, 'and the first open is what draws them');
+		assert.equal(result['optionsInMarkup'], 250,
+			'while the element a form posts is whole in the markup: 249 and the blank one');
+		assert.match(String(result['label']), /United Kingdom/, 'the button reads as the chosen country');
+		assert.equal(result['posted'], 'GB', 'and what a form posts is the code');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
+
+test('a country name the server and the browser disagree about refuses the hydration by name', async () => {
+	// The two ends resolve a code through two ICU builds, and a host whose data is newer has a
+	// different name for it (design 251). Nothing here can give a browser an older ICU, so the
+	// disagreement is made by editing the markup: what is being pinned is what hydration does with
+	// a difference, not how the difference arose.
+	const site = await page('country-skew', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { mutable } from '@aweftjs/core';
+		import { Countries, Country, Icons, context, h, hydrate, render } from '@aweftjs/ui';
+		import { countryData } from '@aweftjs/ui/countries';
+
+		const data = await countryData();
+		const code = mutable('GB');
+		const pack = { prefix: 'x', icons: { x: { body: '<path d="M0 0h16v16H0z"/>' } }, width: 16, height: 16 };
+		const App = () => (
+			<Icons value={() => pack.icons.x}>
+				<Countries value={data}>
+					<Country id="country" label="Country" value={code} name="country" suggest={false} locale="en" />
+				</Countries>
+			</Icons>
+		);
+
+		const server = context();
+		const markup = await render(<App />, { context: server });
+		const host = document.createElement('div');
+		// The server's ICU, one release behind: it wrote a name this browser no longer uses.
+		host.innerHTML = markup.split('United Kingdom').join('Great Britain');
+		document.body.appendChild(host);
+
+		try {
+			hydrate(host, <App />);
+			window.result = { refused: null };
+		} catch (error) {
+			window.result = { refused: String(error.message ?? error) };
+		}
+	`);
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForFunction(() => (window as unknown as { result?: unknown }).result !== undefined);
+		const result = await view.evaluate(() => (window as unknown as { result: Record<string, unknown> }).result);
+
+		const refused = String(result['refused']);
+		assert.match(refused, /hydration text mismatch/,
+			'the mismatch is refused rather than left on the screen');
+		assert.match(refused, /Great Britain/, 'and the message names what the server wrote');
+		assert.match(refused, /United Kingdom/, 'and what the browser would have written');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
+
+test('the longest subdivision list opens and searches inside one frame budget', async () => {
+	const site = await page('country-cost', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { mutable } from '@aweftjs/core';
+		import { Countries, Icons, Region, h, mount } from '@aweftjs/ui';
+		import { countryData } from '@aweftjs/ui/countries';
+
+		const data = await countryData();
+		const pack = { prefix: 'x', icons: { x: { body: '<path d="M0 0h16v16H0z"/>' } }, width: 16, height: 16 };
+		const open = mutable(false);
+		const query = mutable('');
+
+		mount(document.body, (
+			<Icons value={() => pack.icons.x}>
+				<Countries value={data}>
+					<Region id="region" label="Region" country="GB" open={open} />
+				</Countries>
+			</Icons>
+		));
+
+		const rows = () => document.querySelectorAll('#region-dialog [role="option"]').length;
+		window.measure = () => {
+			const started = performance.now();
+			document.querySelector('#region').click();
+			const opened = performance.now() - started;
+
+			const box = document.querySelector('#region-search');
+			const typed = performance.now();
+			box.value = 'aberdeen';
+			box.dispatchEvent(new Event('input', { bubbles: true }));
+			const searched = performance.now() - typed;
+
+			return { opened, searched, rows: rows() };
+		};
+		window.ready = true;
+	`);
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForFunction(() => (window as unknown as { ready?: boolean }).ready === true);
+		const held = await view.evaluate(() =>
+			(window as unknown as { measure(): { opened: number; searched: number; rows: number } }).measure());
+
+		// 217 rows is the longest subdivision list the data has. What matters is that opening and
+		// filtering it are both work a person does not wait for, not the exact number.
+		assert.ok(held.rows < 5, `the search cut 217 rows to ${String(held.rows)}`);
+		assert.ok(held.opened < 250, `opening the grid took ${held.opened.toFixed(1)}ms`);
+		assert.ok(held.searched < 250, `and filtering it took ${held.searched.toFixed(1)}ms`);
+		console.log(`country: 217 rows open in ${held.opened.toFixed(1)}ms, filter in ${held.searched.toFixed(1)}ms`);
+	} finally {
+		await browser.close();
+		await site.close();
+	}
 });

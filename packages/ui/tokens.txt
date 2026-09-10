@@ -24,6 +24,9 @@ box
 brightness
 ceil
 chevron
+chooserColumn
+chooserHeight
+chooserWidth
 contrast_text
 control
 controlLg
@@ -52,6 +55,7 @@ dotSize
 ease
 easeOut
 fast
+flagWidth
 floor
 font
 fontMono

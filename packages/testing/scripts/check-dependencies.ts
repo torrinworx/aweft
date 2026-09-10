@@ -40,6 +40,11 @@ const violations = checkManifests(manifests, [], {
 	// that is not marked optional. `@iconify-json/lucide` is a devDependency as well, because the
 	// suite and the recipe read a real set.
 	'@aweftjs/icons': ['@iconify-json/*'],
+	// The country codes and their subdivisions, which nothing derives: the names come from the
+	// host's own `Intl.DisplayNames` and the flags from the code (design 251). An optional peer, so
+	// nothing here installs it, and a devDependency as well because the suite and the catalogue read
+	// the real list.
+	'@aweftjs/ui': ['country-region-data'],
 	// The Postgres driver's obligations are transactional, and nothing but a real server enforces a
 	// row lock (design 160). Dev only, this package only: the driver takes a pool the application
 	// made and imports none of these.
