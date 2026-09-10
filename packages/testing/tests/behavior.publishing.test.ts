@@ -9,6 +9,7 @@ import { checkPublishing } from '../src/index.ts';
 const sound = (over: Record<string, unknown> = {}) => ({
 	name: '@aweftjs/core',
 	version: '0.1.0',
+	engines: { node: '>=24.12.0' },
 	files: ['dist', 'src'],
 	scripts: { prepack: 'node ../build/scripts/build-package.ts' },
 	publishConfig: { access: 'public' },
@@ -60,6 +61,12 @@ test('dist missing from files would publish a package with no code in it', () =>
 	const violations = checkPublishing([sound({ files: ['src', 'README.md'] })]);
 	assert.equal(violations.length, 1);
 	assert.match(violations[0]!, /does not name dist in files/);
+});
+
+test('a package that names no Node version lets an old one install it in silence', () => {
+	const violations = checkPublishing([sound({ engines: {} })]);
+	assert.equal(violations.length, 1);
+	assert.match(violations[0]!, /no engines.node/);
 });
 
 test('a scoped package without public access publishes as private', () => {

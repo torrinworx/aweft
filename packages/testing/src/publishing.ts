@@ -13,6 +13,7 @@ export interface PublishManifest {
 	readonly name: string;
 	readonly version?: string | undefined;
 	readonly private?: boolean | undefined;
+	readonly engines?: Readonly<{ node?: string | undefined }> | undefined;
 	readonly files?: readonly string[] | undefined;
 	readonly exports?: Readonly<Record<string, string | Readonly<Record<string, string>>>> | undefined;
 	readonly dependencies?: Readonly<Record<string, string>> | undefined;
@@ -57,6 +58,13 @@ export const checkPublishing = (manifests: readonly PublishManifest[]): string[]
 
 		if (!(manifest.files ?? []).includes('dist')) {
 			say('does not name dist in files, so the compiled output would not ship');
+		}
+
+		// The stack runs on a Node new enough to strip types and to have the flags the sandbox
+		// spawns a room with. Without this field an install on an older one is silent, and what the
+		// consumer gets is a syntax error somewhere inside a dependency.
+		if (manifest.engines?.node === undefined) {
+			say('declares no engines.node, so an install on an older Node warns about nothing');
 		}
 
 		if (manifest.scripts?.prepack === undefined) {

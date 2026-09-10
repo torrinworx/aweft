@@ -31,7 +31,12 @@ const violations = checkManifests(manifests, [], {
 	'@aweftjs/sandbox': ['playwright'],
 	// The server side of the WebSocket protocol is hostile-input parsing this stack does not write
 	// itself (design 072). Its declaration file rides along as a dev dependency. This package only.
-	'@aweftjs/server': ['ws', '@types/ws'],
+	//
+	// `@types/node` is a real dependency rather than a dev one, because `node()` takes an
+	// `http.Server` an application already made (design 072) and so the shipped declarations name
+	// `node:http`. A types-only package is the one kind AGENTS.md allows to be declared for its
+	// declarations, and without it an installed `@aweftjs/server` does not typecheck.
+	'@aweftjs/server': ['ws', '@types/ws', '@types/node'],
 	// One transform has to run in a bundler and in a browser, so it needs a parser that reads
 	// TypeScript and JSX and still fits a page: 89 KB gzipped against `typescript`'s 1,595 KB, and
 	// `acorn` cannot read TypeScript at all. `magic-string` edits the source in place so an
