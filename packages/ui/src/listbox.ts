@@ -43,6 +43,17 @@ export interface ListBoxOptions {
 	readonly onClose: (reason: string, event: unknown) => void;
 	/** Called with the option element that was chosen. */
 	readonly onPick: (item: unknown, event: unknown) => void;
+	/**
+	 * Whether a printable character runs the type-ahead. On when omitted. Off for a list a person
+	 * types into: the type-ahead swallows the key it acts on, and a search box never sees a
+	 * character whose keydown was defaulted away (design 250).
+	 */
+	readonly typeahead?: boolean | undefined;
+	/**
+	 * Nodes a mousedown inside does not dismiss, beside the trigger and the list. A list inside a
+	 * dialog hands over the dialog, so a press on its heading is not a press outside the list.
+	 */
+	readonly inside?: (() => readonly unknown[]) | undefined;
 }
 
 interface Listening {
@@ -88,7 +99,12 @@ const printable = (key: string): boolean => key.length === 1 && key !== ' ';
  *
  * The type-ahead searches the options' text for the buffer, from after the active option and
  * wrapping. A pause longer than 700ms starts a new search, and a buffer of one character repeated
- * steps through the options beginning with it.
+ * steps through the options beginning with it. With `typeahead: false` a printable character is
+ * left alone in both states, which is what a list with a search box over it wants: the character
+ * has to reach the box, and a key this swallows never gets there.
+ *
+ * `inside` widens the dismissal, which otherwise reads the trigger and the list. A list inside a
+ * dialog hands the dialog over, so a press on the dialog's own heading is inside.
  *
  * An option carrying `aria-disabled="true"` is stepped over and cannot be picked. The active cell
  * is settled at the start of every event: an id naming no option is replaced by the one carrying
@@ -108,6 +124,7 @@ export const listBox = (element: unknown, options: ListBoxOptions): (() => void)
 		return () => undefined;
 	}
 	const role = options.role ?? 'option';
+	const typeahead = options.typeahead ?? true;
 	// Where the focus lives while the list is open. See the head of this file: ARIA allows
 	// `aria-activedescendant` on the combobox a select opens from and not on the button a menu does.
 	const intoList = role === 'menuitem';
@@ -201,7 +218,7 @@ export const listBox = (element: unknown, options: ListBoxOptions): (() => void)
 				else if (at(all) < 0) go(all, home(all));
 				return;
 			}
-			if (!printable(key)) return;
+			if (!printable(key) || !typeahead) return;
 			swallow();
 			options.onOpen?.(event);
 			const all = items();
@@ -237,7 +254,7 @@ export const listBox = (element: unknown, options: ListBoxOptions): (() => void)
 		else if (key === 'ArrowUp') go(all, step(all, at(all), -1));
 		else if (key === 'Home') go(all, end(all, 1));
 		else if (key === 'End') go(all, end(all, -1));
-		else if (printable(key)) go(all, search(all, key, Date.now()));
+		else if (printable(key) && typeahead) go(all, search(all, key, Date.now()));
 		else return;
 		// The page scrolls under an arrow and jumps under Home, and the person meant the list.
 		swallow();
@@ -311,7 +328,8 @@ export const listBox = (element: unknown, options: ListBoxOptions): (() => void)
 	const stopDismiss = dismiss({
 		inside: () => {
 			const list = options.list();
-			return list === null || list === undefined ? [element] : [element, list];
+			const own = options.inside?.() ?? [];
+			return list === null || list === undefined ? [element, ...own] : [element, list, ...own];
 		},
 		active: isOpen,
 		onDismiss: (event) => { options.onClose('outside', event); },

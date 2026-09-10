@@ -76,6 +76,8 @@ const rig = (options: {
 	chosen?: number;
 	open?: boolean;
 	role?: string;
+	typeahead?: boolean;
+	inside?: () => readonly unknown[];
 } = {}): Rig => {
 	const document = createDocument();
 	const trigger = document.createElement('button');
@@ -114,6 +116,8 @@ const rig = (options: {
 		onOpen: () => { opened.push(1); open.set(true); },
 		onClose: (reason) => { closed.push(reason); open.set(false); },
 		onPick: (item) => { picked.push((item as LightElement).getAttribute('id') ?? ''); },
+		typeahead: options.typeahead,
+		inside: options.inside,
 	});
 
 	return {
@@ -430,4 +434,57 @@ test('with no element to listen on it installs nothing and removes nothing', () 
 		onPick: () => { throw new Error('nothing to pick'); },
 	});
 	assert.doesNotThrow(stop);
+});
+
+test('with the type-ahead off a printable character is left alone, open or closed', () => {
+	const page = fakePage();
+	const uninstall = page.install();
+	try {
+		// What a search box needs: the character has to reach it, and a key this swallows never gets
+		// there (design 250). Everything else about the map is unchanged.
+		const one = rig({ typeahead: false });
+		const first = one.press('b');
+		assert.equal(one.active.get(), null, 'no jump to Banana');
+		assert.equal(first.prevented, false, 'and the character is the box\'s to keep');
+
+		one.press('ArrowDown');
+		assert.equal(one.active.get(), 'row-0', 'the arrows still move');
+		assert.equal(one.press('Enter').prevented, true, 'and Enter still picks');
+		assert.deepEqual(one.picked, ['row-0']);
+
+		const two = rig({ typeahead: false, open: false });
+		const closed = two.press('b');
+		assert.deepEqual(two.opened, [], 'a character does not open it either');
+		assert.equal(closed.prevented, false);
+		two.press('ArrowDown');
+		assert.deepEqual(two.opened, [1], 'while the arrows still do');
+
+		one.stop();
+		two.stop();
+	} finally {
+		uninstall();
+	}
+});
+
+test('inside widens what a mousedown counts as inside, for a list in a dialog', () => {
+	const page = fakePage();
+	const uninstall = page.install();
+	try {
+		const one = rig();
+		page.send('mousedown', { target: one.list.parentNode });
+		assert.deepEqual(one.closed, ['outside'],
+			'the box the trigger and the list sit in is outside both of them');
+		one.stop();
+
+		// What a dialog hands over (design 250): a press on its heading, its padding or its backdrop
+		// is a press inside the thing the list belongs to.
+		const held: unknown[] = [];
+		const two = rig({ inside: () => held });
+		held.push(two.list.parentNode);
+		page.send('mousedown', { target: two.list.parentNode });
+		assert.deepEqual(two.closed, [], 'and the same press is inside once it has been');
+		two.stop();
+	} finally {
+		uninstall();
+	}
 });
