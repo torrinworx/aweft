@@ -11,7 +11,8 @@
 	],
 	"description": "Conformance runners and harnesses the rest of the stack is checked with.",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./postgres": "./src/postgres.ts"
 	},
 	"scripts": {
 		"test": "node --test tests/*.test.ts"
@@ -28,5 +29,22 @@
 	"aweft": {
 		"tier": "integrator",
 		"branchCoverage": 80
+	},
+	"devDependencies": {
+		"embedded-postgres": "^18.4.0-beta.17",
+		"pg": "^8.23.0",
+		"@types/pg": "^8.23.1"
+	},
+	"peerDependencies": {
+		"embedded-postgres": "^18.4.0-beta.17",
+		"pg": "^8.23.0"
+	},
+	"peerDependenciesMeta": {
+		"embedded-postgres": {
+			"optional": true
+		},
+		"pg": {
+			"optional": true
+		}
 	}
 }

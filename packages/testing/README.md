@@ -216,6 +216,30 @@ This is not `sync`'s `inProcess`. That answers two channels, and a channel is on
 carries the link and the call channel together and has the `readyState` and the close event a retry
 reads.
 
+## A database that goes away
+
+`throwaway()` on the `/postgres` subpath starts an empty cluster in a temporary directory on a free
+port, and stops it when you are done.
+
+```ts
+import { throwaway } from '@aweftjs/testing/postgres';
+
+const db = await throwaway();
+const store = createStore({ driver: postgresDriver(await db.pool()) });
+// ...
+await db.stop();
+```
+
+Every `pool()` is in a schema of its own, so two checks in one file never see each other's tables,
+which is also how two applications share one database. **The throwaway owns every pool it handed
+out** and ends them all in `stop`, so do not end one yourself: `pg` throws "Called end on pool more
+than once" for the second call, and that throw is its, not this package's.
+
+`embedded-postgres` and `pg` are optional peers: a project that never opens a store installs
+neither, and one that asks for a throwaway without them gets `peer-not-installed` naming what to
+install. `throwaway` takes how the peers are reached, so that refusal can be reached without
+uninstalling anything.
+
 ## Letting scheduled work run
 
 `settle()` yields to the timer queue ten times, so work that schedules more work gets to run. A

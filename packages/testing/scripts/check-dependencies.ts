@@ -22,8 +22,10 @@ const manifests: Manifest[] = readdirSync(join(root, 'packages'))
 
 const violations = checkManifests(manifests, [], {
 	// The boundary scanner parses source the way the compiler does, and the compiler is
-	// already the one root toolchain.
-	'@aweftjs/testing': ['typescript'],
+	// already the one root toolchain. The database is the throwaway cluster on the `/postgres`
+	// subpath (design 254): optional peers, so nothing here installs one for a consumer, and
+	// devDependencies as well because this package's own suite starts a real cluster.
+	'@aweftjs/testing': ['typescript', 'embedded-postgres', 'pg', '@types/pg'],
 	// The frame runner's escape suite runs in a real browser, because no fake DOM enforces an
 	// iframe's isolation (design 070). Dev only, this package only.
 	'@aweftjs/sandbox': ['playwright'],

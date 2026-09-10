@@ -12,6 +12,7 @@ multiple-attach: Remove the other attach edge in the same commit, or point at it
 no-status-line: Answer every upgrade request with an HTTP status line, refusals included.
 not-in-program: Add the file to the program before reading it.
 not-in-program: Pass this path to surfaceProgram too, or let surfaceOf build its own program.
+peer-not-installed: Install embedded-postgres and pg as devDependencies.
 reason-not-literal: Write the reason as a plain string; a token built at runtime cannot be branched on.
 room-check-failed: Fix the runner so it meets this obligation, then run the checks again.
 rounds-not-positive: Pass a whole number of rounds, one or more, or nothing for the default.
