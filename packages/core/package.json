@@ -1,6 +1,6 @@
 {
 	"name": "@aweftjs/core",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"type": "module",
 	"license": "MIT",
 	"repository": {
@@ -9,6 +9,7 @@
 		"directory": "packages/core"
 	},
 	"files": [
+		"dist",
 		"src",
 		"README.md",
 		"surface.txt",
@@ -16,19 +17,27 @@
 	],
 	"description": "Observables, the deltas they produce, commits, scopes and identity.",
 	"exports": {
-		".": "./src/index.ts"
+		".": {
+			"aweft-source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
 	},
 	"scripts": {
+		"prepack": "node ../build/scripts/build-package.ts",
 		"test": "node --test tests/*.test.ts"
 	},
 	"dependencies": {
-		"@aweftjs/codec": "*"
+		"@aweftjs/codec": "^0.1.0"
 	},
 	"devDependencies": {
-		"@aweftjs/testing": "*"
+		"@aweftjs/testing": "^0.1.0"
 	},
 	"aweft": {
 		"tier": 2,
 		"branchCoverage": 90
+	},
+	"publishConfig": {
+		"access": "public"
 	}
 }

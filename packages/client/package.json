@@ -1,6 +1,6 @@
 {
 	"name": "@aweftjs/client",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"type": "module",
 	"license": "MIT",
 	"repository": {
@@ -9,6 +9,7 @@
 		"directory": "packages/client"
 	},
 	"files": [
+		"dist",
 		"src",
 		"README.md",
 		"surface.txt",
@@ -16,23 +17,31 @@
 	],
 	"description": "One connection to an aweft server for the life of a page: the socket, the link and the requests attached before it opens, and the same documents back after a drop.",
 	"exports": {
-		".": "./src/index.ts"
+		".": {
+			"aweft-source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
 	},
 	"scripts": {
+		"prepack": "node ../build/scripts/build-package.ts",
 		"test": "node --test tests/*.test.ts"
 	},
 	"dependencies": {
-		"@aweftjs/codec": "*",
-		"@aweftjs/core": "*",
-		"@aweftjs/sync": "*"
+		"@aweftjs/codec": "^0.1.0",
+		"@aweftjs/core": "^0.1.0",
+		"@aweftjs/sync": "^0.1.0"
 	},
 	"devDependencies": {
-		"@aweftjs/modules": "*",
-		"@aweftjs/server": "*",
-		"@aweftjs/testing": "*"
+		"@aweftjs/modules": "^0.1.0",
+		"@aweftjs/server": "^0.1.0",
+		"@aweftjs/testing": "^0.1.0"
 	},
 	"aweft": {
 		"tier": 6,
 		"branchCoverage": 80
+	},
+	"publishConfig": {
+		"access": "public"
 	}
 }

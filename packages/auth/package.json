@@ -1,6 +1,6 @@
 {
 	"name": "@aweftjs/auth",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"type": "module",
 	"license": "MIT",
 	"repository": {
@@ -9,6 +9,7 @@
 		"directory": "packages/auth"
 	},
 	"files": [
+		"dist",
 		"src",
 		"README.md",
 		"surface.txt",
@@ -16,28 +17,40 @@
 	],
 	"description": "The first battery: a gate that reads public, sessions as documents, sign-in and sign-up by email and password, and a per-user state document, as server modules, with the page half as client modules.",
 	"exports": {
-		".": "./src/index.ts",
-		"./client": "./src/client.ts"
+		".": {
+			"aweft-source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./client": {
+			"aweft-source": "./src/client.ts",
+			"types": "./dist/client.d.ts",
+			"default": "./dist/client.js"
+		}
 	},
 	"scripts": {
+		"prepack": "node ../build/scripts/build-package.ts",
 		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
 	},
 	"dependencies": {
-		"@aweftjs/client": "*",
-		"@aweftjs/codec": "*",
-		"@aweftjs/core": "*",
-		"@aweftjs/modules": "*",
-		"@aweftjs/server": "*",
-		"@aweftjs/store": "*",
-		"@aweftjs/ui": "*"
+		"@aweftjs/client": "^0.1.0",
+		"@aweftjs/codec": "^0.1.0",
+		"@aweftjs/core": "^0.1.0",
+		"@aweftjs/modules": "^0.1.0",
+		"@aweftjs/server": "^0.1.0",
+		"@aweftjs/store": "^0.1.0",
+		"@aweftjs/ui": "^0.1.0"
 	},
 	"devDependencies": {
-		"@aweftjs/build": "*",
-		"@aweftjs/sync": "*",
-		"@aweftjs/testing": "*"
+		"@aweftjs/build": "^0.1.0",
+		"@aweftjs/sync": "^0.1.0",
+		"@aweftjs/testing": "^0.1.0"
 	},
 	"aweft": {
 		"tier": "integrator",
 		"branchCoverage": 80
+	},
+	"publishConfig": {
+		"access": "public"
 	}
 }

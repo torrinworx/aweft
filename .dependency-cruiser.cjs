@@ -29,7 +29,10 @@ const entryFiles = () => {
 		const manifest = join(here, name, 'package.json');
 		if (!existsSync(manifest)) continue;
 		const map = JSON.parse(readFileSync(manifest, 'utf8')).exports ?? {};
-		for (const file of Object.values(map)) {
+		// An entry is a conditions object since design 256. The source condition is the one that
+		// names a file in this tree; the other two name compiled output that is not committed.
+		for (const entry of Object.values(map)) {
+			const file = typeof entry === 'string' ? entry : entry['aweft-source'];
 			if (typeof file !== 'string') continue;
 			found.push(`^packages/${name}/${file.replace(/^\.\//, '').replace(/\./g, '\\.')}$`);
 		}
@@ -73,9 +76,14 @@ module.exports = {
 		// an orphan, and a deep import into another package's internals would slip past the rule
 		// above by being a type.
 		tsPreCompilationDeps: true,
+		// `dist/` is the compiled copy a publish carries (design 256). Cruising it would check the
+		// same graph twice and read every re-export the compiler split out as an orphan.
+		exclude: { path: '(^|/)dist/' },
 		doNotFollow: { path: 'node_modules' },
 		tsConfig: { fileName: 'tsconfig.base.json' },
-		enhancedResolveOptions: { exportsFields: ['exports'], conditionNames: ['import', 'node'] },
+		// `aweft-source` first, so a package resolves to the source in this tree rather than to the
+		// compiled output a published one carries and a checkout does not (design 256).
+		enhancedResolveOptions: { exportsFields: ['exports'], conditionNames: ['aweft-source', 'import', 'node'] },
 		reporterOptions: { text: { highlightFocused: true } },
 	},
 };

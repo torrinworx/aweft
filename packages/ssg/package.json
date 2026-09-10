@@ -1,6 +1,6 @@
 {
 	"name": "@aweftjs/ssg",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"type": "module",
 	"license": "MIT",
 	"repository": {
@@ -9,6 +9,7 @@
 		"directory": "packages/ssg"
 	},
 	"files": [
+		"dist",
 		"src",
 		"README.md",
 		"surface.txt",
@@ -16,24 +17,36 @@
 	],
 	"description": "Pages from a routed site, at build time and at run time: walk the acts, write the files, take the markup over in the browser.",
 	"exports": {
-		".": "./src/index.ts",
-		"./client": "./src/client.ts"
+		".": {
+			"aweft-source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./client": {
+			"aweft-source": "./src/client.ts",
+			"types": "./dist/client.d.ts",
+			"default": "./dist/client.js"
+		}
 	},
 	"scripts": {
+		"prepack": "node ../build/scripts/build-package.ts",
 		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
 	},
 	"dependencies": {
-		"@aweftjs/codec": "*",
-		"@aweftjs/dom": "*",
-		"@aweftjs/ui": "*"
+		"@aweftjs/codec": "^0.1.0",
+		"@aweftjs/dom": "^0.1.0",
+		"@aweftjs/ui": "^0.1.0"
 	},
 	"devDependencies": {
-		"@aweftjs/build": "*",
-		"@aweftjs/core": "*",
-		"@aweftjs/testing": "*"
+		"@aweftjs/build": "^0.1.0",
+		"@aweftjs/core": "^0.1.0",
+		"@aweftjs/testing": "^0.1.0"
 	},
 	"aweft": {
 		"tier": "integrator",
 		"branchCoverage": 80
+	},
+	"publishConfig": {
+		"access": "public"
 	}
 }

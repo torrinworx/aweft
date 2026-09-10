@@ -1,6 +1,6 @@
 {
 	"name": "@aweftjs/dom",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"type": "module",
 	"license": "MIT",
 	"repository": {
@@ -9,6 +9,7 @@
 		"directory": "packages/dom"
 	},
 	"files": [
+		"dist",
 		"src",
 		"README.md",
 		"surface.txt",
@@ -16,21 +17,33 @@
 	],
 	"description": "The DOM binding: mount, static render and hydration as modes of one path.",
 	"exports": {
-		".": "./src/index.ts",
-		"./router": "./src/router.ts"
+		".": {
+			"aweft-source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./router": {
+			"aweft-source": "./src/router.ts",
+			"types": "./dist/router.d.ts",
+			"default": "./dist/router.js"
+		}
 	},
 	"scripts": {
+		"prepack": "node ../build/scripts/build-package.ts",
 		"test": "node --test tests/*.test.ts"
 	},
 	"dependencies": {
-		"@aweftjs/codec": "*",
-		"@aweftjs/core": "*"
+		"@aweftjs/codec": "^0.1.0",
+		"@aweftjs/core": "^0.1.0"
 	},
 	"devDependencies": {
-		"@aweftjs/testing": "*"
+		"@aweftjs/testing": "^0.1.0"
 	},
 	"aweft": {
 		"tier": 6,
 		"branchCoverage": 90
+	},
+	"publishConfig": {
+		"access": "public"
 	}
 }

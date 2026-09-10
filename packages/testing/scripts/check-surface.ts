@@ -21,14 +21,22 @@ const packages = readdirSync(join(root, 'packages'))
 
 // Every entry the exports map names, the main one first. A subpath is as public as the main
 // entry, so its surface is recorded too, each line prefixed with the subpath it belongs to.
+//
+// The surface is the source's, so an entry is read through its `aweft-source` condition. The
+// other two conditions name compiled output that only a published package carries (design 256),
+// and reading them here would make the check depend on a build having run.
 const entriesOf = (name: string): Array<readonly [string, string]> => {
 	const manifest = JSON.parse(readFileSync(join(root, 'packages', name, 'package.json'), 'utf8')) as {
-		exports?: Record<string, string>;
+		exports?: Record<string, string | Record<string, string>>;
 	};
 	const exports = manifest.exports ?? { '.': './src/index.ts' };
 	return Object.entries(exports)
 		.sort(([a], [b]) => (a === '.' ? -1 : b === '.' ? 1 : a < b ? -1 : 1))
-		.map(([subpath, file]) => [subpath, join(root, 'packages', name, file)] as const);
+		.map(([subpath, entry]) => {
+			const file = typeof entry === 'string' ? entry : entry['aweft-source'];
+			if (file === undefined) throw new Error(`${name}: ${subpath} names no aweft-source condition`);
+			return [subpath, join(root, 'packages', name, file)] as const;
+		});
 };
 
 // One program over every entry file. Six programs would reparse the shared lower packages six

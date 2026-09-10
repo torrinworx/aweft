@@ -15,6 +15,7 @@
 	],
 	"scripts": {
 		"typecheck": "tsc --build",
+		"build": "node packages/build/scripts/build-package.ts --all",
 		"deps": "depcruise packages --config .dependency-cruiser.cjs",
 		"fixtures": "node packages/testing/scripts/generate-fixtures.ts",
 		"frames": "node packages/sync/scripts/generate-frames.ts",

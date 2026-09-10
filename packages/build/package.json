@@ -1,6 +1,6 @@
 {
 	"name": "@aweftjs/build",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"type": "module",
 	"license": "MIT",
 	"repository": {
@@ -9,6 +9,7 @@
 		"directory": "packages/build"
 	},
 	"files": [
+		"dist",
 		"src",
 		"README.md",
 		"surface.txt",
@@ -16,26 +17,38 @@
 	],
 	"description": "One transform, two modes: markup and JSX to h calls, static subtrees to templates, asserts out of a release build.",
 	"exports": {
-		".": "./src/index.ts",
-		"./loader": "./src/loader.ts"
+		".": {
+			"aweft-source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./loader": {
+			"aweft-source": "./src/loader.ts",
+			"types": "./dist/loader.d.ts",
+			"default": "./dist/loader.js"
+		}
 	},
 	"scripts": {
+		"prepack": "node ../build/scripts/build-package.ts",
 		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
 	},
 	"dependencies": {
-		"@aweftjs/codec": "*",
-		"@aweftjs/icons": "*",
+		"@aweftjs/codec": "^0.1.0",
+		"@aweftjs/icons": "^0.1.0",
 		"@babel/parser": "^7.28.4",
 		"magic-string": "^0.30.19"
 	},
 	"devDependencies": {
-		"@aweftjs/dom": "*",
-		"@aweftjs/core": "*",
-		"@aweftjs/ui": "*",
-		"@aweftjs/testing": "*"
+		"@aweftjs/dom": "^0.1.0",
+		"@aweftjs/core": "^0.1.0",
+		"@aweftjs/ui": "^0.1.0",
+		"@aweftjs/testing": "^0.1.0"
 	},
 	"aweft": {
 		"tier": "integrator",
 		"branchCoverage": 80
+	},
+	"publishConfig": {
+		"access": "public"
 	}
 }

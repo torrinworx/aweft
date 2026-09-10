@@ -1,6 +1,6 @@
 {
 	"name": "@aweftjs/codec",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"type": "module",
 	"license": "MIT",
 	"repository": {
@@ -9,6 +9,7 @@
 		"directory": "packages/codec"
 	},
 	"files": [
+		"dist",
 		"src",
 		"README.md",
 		"surface.txt",
@@ -16,9 +17,14 @@
 	],
 	"description": "The normative encoding: values, deltas and commits to bytes, and back.",
 	"exports": {
-		".": "./src/index.ts"
+		".": {
+			"aweft-source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
 	},
 	"scripts": {
+		"prepack": "node ../build/scripts/build-package.ts",
 		"test": "node --test tests/*.test.ts"
 	},
 	"aweft": {
@@ -26,6 +32,9 @@
 		"branchCoverage": 90
 	},
 	"devDependencies": {
-		"@aweftjs/testing": "*"
+		"@aweftjs/testing": "^0.1.0"
+	},
+	"publishConfig": {
+		"access": "public"
 	}
 }
