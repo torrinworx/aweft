@@ -48,3 +48,9 @@ export { checkTheme, themeTokens } from './theme.ts';
 export type { ThemeSource, ThemeViolation } from './theme.ts';
 export { checkWords, wordRules } from './words.ts';
 export type { WordSource, WordViolation } from './words.ts';
+
+export { socketPair } from './sockets.ts';
+export type { PairedSocket } from './sockets.ts';
+export { loadServer } from './server.ts';
+export type { Connected, LoadedServer, OpenOptions } from './server.ts';
+export { settle } from './settle.ts';

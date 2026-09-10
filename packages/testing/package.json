@@ -21,6 +21,7 @@
 		"@aweftjs/modules": "*",
 		"@aweftjs/sandbox": "*",
 		"@aweftjs/server": "*",
+		"@aweftjs/sync": "*",
 		"typescript": "^5.9.2",
 		"@aweftjs/dom": "*"
 	},

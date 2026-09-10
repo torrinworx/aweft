@@ -155,6 +155,74 @@ name; a missing one is refused by name before anything is instantiated. The modu
 through the real loader, so `imports` reaches the factory keyed by the last segment of each
 name, exactly as it would in an application.
 
+## Testing a whole backend
+
+`loadModule` above is one module with its dependencies stubbed. `loadServer` is the level above:
+a real server, real modules, and the gate the application actually uses, on a listener that opens
+nothing. It takes `createServer`'s options without the listener, which is the one part a test
+cannot supply.
+
+```ts
+import { loadServer } from '@aweftjs/testing';
+
+const server = await loadServer({
+	sources: [fromDirectory(modules), auth],
+	store: createStore({ driver: memoryDriver(), declare: { ...paths } }),
+	gate: 'auth/Gate',
+});
+
+const answer = await server.fetch('/api/session', { method: 'POST', body });
+const page = await server.open({ headers: { cookie } });
+await page.asks.ask('board/Mine');
+await server.stop();
+```
+
+A throwaway or a server the suite never stops keeps its own resources alive: a cluster is a child
+process and a running one holds the test process open. Stop them in an `after`.
+
+`fetch` and `open` are the two seams a listener feeds, so everything a deployment does goes
+through the same code a deployment does it with. `open` answers a socket, a link and the call
+channel; it **throws** when the gate refuses the handshake, carrying the status the gate answered
+with, because a browser handed a refusal gets a failed connection and not a response to read.
+
+**Signing in is yours.** The sequence is a POST to your battery's session route, the `Set-Cookie`
+off the answer, and `open` with that cookie. It is five lines and it is not here, because putting
+it here would tie this package to one battery's routes and one idea of what a session is.
+`recipes/full-stack/tests/board.test.ts` is those five lines.
+
+## Two ends of one socket
+
+`socketPair()` is what `loadServer` opens over, and it is exported because a suite that is about
+the transport itself wants one without a server.
+
+```ts
+const [near, far] = socketPair();       // near is the page's end, far the server's
+const link = connect(fromWebSocket(near));
+```
+
+What one sends the other hears on a microtask, never synchronously. A send before the socket is
+open or after it closed reaches nobody, as a real one refuses and drops. Closing either closes both
+and fires `close` at both; a second close does nothing. A listener that throws is recorded on
+`thrown` and the listeners after it still run, because one socket here carries both the link and
+the call channel and a throwing link would otherwise mean an ask that never settles.
+
+An end also carries `peer` and `fire`. `fire('open', {})` is how a suite driving a client's retry
+hands the page the event a browser would have fired. A listener added while an event is dispatching
+does not hear that event, which is what a real `EventTarget` does. Pass `0` for a near end that
+starts connecting, which is the order a page sees: the server is handed an accepted socket before
+the page is told about its own.
+
+This is not `sync`'s `inProcess`. That answers two channels, and a channel is one plane; a socket
+carries the link and the call channel together and has the `readyState` and the close event a retry
+reads.
+
+## Letting scheduled work run
+
+`settle()` yields to the timer queue ten times, so work that schedules more work gets to run. A
+single `await` drains microtasks and nothing else, which is why a suite that awaits once and
+asserts sees a tree that is half settled. Pass a whole number of one or more for a different count;
+anything else is refused rather than settling for nothing and failing an assertion further on.
+
 ## Seeded randomness
 
 A property test is worth having only if a failure can be run again, so a failing assertion

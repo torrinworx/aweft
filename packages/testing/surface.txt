@@ -1,5 +1,6 @@
 type Applier: type Applier = (initial: DocumentJson, commits: readonly Commit[]) => DocumentJson;
 type CommitJson: interface CommitJson { readonly bytes: string; readonly deltas: readonly DeltaJson[]; readonly tag?: string; }
+type Connected: interface Connected { readonly socket: PairedSocket; readonly link: Link; readonly asks: Requests; readonly request: Request; }
 type DeltaJson: interface DeltaJson { readonly type: DeltaType; readonly id: string; readonly ref: RefJson; readonly value?: ValueJson; }
 type DocumentJson: interface DocumentJson { readonly root: string; readonly observables: Readonly<Record<string, ObservableJson>>; }
 type DriverCheck: interface DriverCheck { readonly name: string; run(make: MakeDriver): Promise<void>; }
@@ -7,6 +8,7 @@ type Fixture: interface Fixture { readonly name: string; readonly description: s
 type InvalidFixture: interface InvalidFixture { readonly name: string; readonly description: string; readonly stage: 'decode' | 'apply'; readonly reason: string; readonly bytes: string; readonly initial?: DocumentJson; }
 type ListenerCheck: interface ListenerCheck { readonly name: string; run(make: MakeListener): Promise<void>; }
 type LoadedModule: interface LoadedModule { readonly instance: unknown; stop(): Promise<void>; }
+type LoadedServer: interface LoadedServer { readonly server: Server; fetch(path: string, init?: RequestInit): Promise<Response>; open(options?: OpenOptions): Promise<Connected>; stop(): Promise<void>; }
 type MadeListener: interface MadeListener { readonly listener: Listener; url(): string; }
 type MakeDriver: type MakeDriver = () => Promise<StoreDriver> | StoreDriver;
 type MakeListener: type MakeListener = () => Promise<MadeListener> | MadeListener;
@@ -14,7 +16,9 @@ type MakeRunner: type MakeRunner = () => Runner;
 type Manifest: interface Manifest { readonly name: string; readonly dependencies?: Readonly<Record<string, string>> | undefined; readonly devDependencies?: Readonly<Record<string, string>> | undefined; readonly peerDependencies?: Readonly<Record<string, string>> | undefined; readonly peerDependenciesMeta?: Readonly<Record<string, { readonly optional?: boolean; }>> | undefined; }
 type ModuleUnderTest: interface ModuleUnderTest { readonly exports: ModuleExports; readonly imports?: Readonly<Record<string, unknown>>; readonly config?: Readonly<Record<string, unknown>>; readonly props?: Readonly<Record<string, unknown>>; }
 type ObservableJson: interface ObservableJson { readonly kind: ObservableKind; readonly slots: Readonly<Record<string, ValueJson>>; }
+type OpenOptions: interface OpenOptions { readonly headers?: Record<string, string> | undefined; readonly url?: string | undefined; readonly peer?: Peer | undefined; }
 type PackageInfo: interface PackageInfo { readonly tier: number | 'integrator'; readonly plane: Plane; readonly imports: readonly string[] | '*'; }
+type PairedSocket: interface PairedSocket extends SocketLike { peer: PairedSocket | undefined; readonly sent: (Uint8Array | string)[]; readonly thrown: unknown[]; fire(type: string, event: { data?: unknown; }): void; }
 type Plane: type Plane = 'client' | 'server' | 'isomorphic';
 type Recording: interface Recording { readonly document: DocumentLike & { readonly body: ElementLike; readonly head: ElementLike; }; readonly ops: string[]; }
 type RefJson: interface RefJson { readonly kind: ObservableKind; readonly key: string; }
@@ -49,6 +53,7 @@ value listenerChecks: () => ListenerCheck[]
 value loadFixtures: (dir: string | URL) => Fixture[]
 value loadInvalidFixtures: (dir: string | URL) => InvalidFixture[]
 value loadModule: (test: ModuleUnderTest) => Promise<LoadedModule>
+value loadServer: (options: Omit<ServerOptions, "listener">) => Promise<LoadedServer>
 value modelApplier: Applier
 value moduleSpecifiers: (source: string, fileName?: string) => string[]
 value randomBelow: (random: () => number, bound: number) => number
@@ -58,8 +63,10 @@ value refFromJson: (r: RefJson) => Ref
 value refToJson: (ref: Ref) => RefJson
 value roomChecks: () => RoomCheck[]
 value seedFrom: (text: string) => number
+value settle: (rounds?: number) => Promise<void>
 value shuffle: <T>(items: readonly T[], seed: number) => T[]
 value slotKeyOf: (ref: Ref) => string (from @aweftjs/codec)
+value socketPair: (readyState?: number) => [PairedSocket, PairedSocket]
 value surfaceOf: (indexPath: string, program?: Program) => string[]
 value surfaceProgram: (indexPaths: readonly string[]) => Program
 value themeTokens: (files: readonly ThemeSource[]) => string[]
