@@ -1,5 +1,8 @@
 # 109: One object per render carries every `ui` system
 
+Amended by design 257: the render's `<style>` is written whole once, and every class compiled after
+that goes into an element of its own. One sheet and one class sequence per page are unchanged.
+
 ## Decision
 
 `ui` holds no mutable state at module scope. Everything that would be a module singleton lives
