@@ -1,18 +1,19 @@
 // What the suites share: a store with the battery's paths, the modules through the harness,
-// and a connection over an in-memory socket pair for the integration cases.
+// and a connection over the harness socket for the integration cases (design 254).
 
 import type { Listener, ListenerHandlers, Peer } from '@aweftjs/server';
 import { createStore, memoryDriver } from '@aweftjs/store';
 import type { Store } from '@aweftjs/store';
 import { connect, fromWebSocket, requests } from '@aweftjs/sync';
 import type { Link, Requests, SocketLike } from '@aweftjs/sync';
-import { loadModule } from '@aweftjs/testing';
+import { loadModule, settle, socketPair } from '@aweftjs/testing';
+import type { PairedSocket } from '@aweftjs/testing';
 
 import type { Fetcher } from '../src/client.ts';
 import { paths } from '../src/index.ts';
 
 export const tick = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
-export const settle = async (rounds = 10): Promise<void> => { for (let i = 0; i < rounds; i++) await tick(); };
+export { settle };
 export const reasonOf = (error: unknown): string => String((error as { reason?: unknown } | null)?.reason);
 
 export const newStore = (): Store => createStore({ driver: memoryDriver(), declare: paths });
@@ -40,29 +41,6 @@ export const module = async <T>(
 
 // --- a connection with no port, for the integration cases -------------------------------------
 
-export interface Fake extends SocketLike {
-	peer: Fake | undefined;
-	fire(type: string, event: { data?: unknown }): void;
-}
-
-const fake = (readyState = 1): Fake => {
-	const listeners: Record<string, ((event: { data?: unknown }) => void)[]> = {};
-	const it: Fake = {
-		binaryType: 'blob', readyState, peer: undefined,
-		send: (data) => { const peer = it.peer; if (peer !== undefined) queueMicrotask(() => peer.fire('message', { data })); },
-		close: () => {
-			if (it.readyState === 3) return;
-			it.readyState = 3;
-			it.fire('close', {});
-			const peer = it.peer;
-			if (peer !== undefined) queueMicrotask(() => peer.close());
-		},
-		addEventListener: (type, fn) => { (listeners[type] ??= []).push(fn); },
-		fire: (type, event) => { for (const fn of listeners[type] ?? []) fn(event); },
-	};
-	return it;
-};
-
 export const fakeListener = (): { listener: Listener; handlers(): ListenerHandlers } => {
 	let held: ListenerHandlers | undefined;
 	return {
@@ -73,15 +51,12 @@ export const fakeListener = (): { listener: Listener; handlers(): ListenerHandle
 
 export const peer: Peer = { address: '127.0.0.1' };
 
-export interface Client { readonly socket: Fake; readonly link: Link; readonly asks: Requests; }
+export interface Client { readonly socket: PairedSocket; readonly link: Link; readonly asks: Requests; }
 
 export const connectTo = async (handlers: ListenerHandlers, cookie?: string): Promise<Client | Response> => {
 	const answer = await handlers.socket(cookie === undefined ? request('/ws') : withCookie('/ws', cookie), peer);
 	if (answer instanceof Response) return answer;
-	const near = fake();
-	const far = fake();
-	near.peer = far;
-	far.peer = near;
+	const [near, far] = socketPair();
 	answer(far);
 	return { socket: near, link: connect(fromWebSocket(near)), asks: requests(near) };
 };
@@ -98,13 +73,13 @@ export interface Page {
 	open(url: string): SocketLike;
 	fetch: Fetcher;
 	/** Every socket the client has made, newest last. */
-	readonly sockets: Fake[];
+	readonly sockets: PairedSocket[];
 	/** What the jar holds, so a test can connect beside the page or check it was cleared. */
 	cookie(): string;
 }
 
 export const page = (handlers: () => ListenerHandlers): Page => {
-	const sockets: Fake[] = [];
+	const sockets: PairedSocket[] = [];
 	let jar = '';
 	return {
 		sockets,
@@ -112,10 +87,7 @@ export const page = (handlers: () => ListenerHandlers): Page => {
 		// The order this package's client half depends on: the far end is handed to the server
 		// and answers before the near end ever fires `open`.
 		open: () => {
-			const near = fake(0);
-			const far = fake();
-			near.peer = far;
-			far.peer = near;
+			const [near, far] = socketPair(0);
 			sockets.push(near);
 			void handlers().socket(jar === '' ? request('/ws') : withCookie('/ws', jar), peer).then((answer) => {
 				if (typeof answer !== 'function' || near.readyState === 3) return;

@@ -1,16 +1,21 @@
-// What the suites share: sockets wired in memory so a whole connection runs with no port, and
-// a real server behind a listener that opens nothing.
+// What the suites share: a real server behind a listener that opens nothing. The socket and
+// the tick loop come from the harness (design 254).
 
 import { fromBundle } from '@aweftjs/modules';
 import type { Factory, ModuleExports } from '@aweftjs/modules';
 import { createServer, open } from '@aweftjs/server';
 import type { Listener, ListenerHandlers, Server } from '@aweftjs/server';
 import type { SocketLike } from '@aweftjs/sync';
+import { settle, socketPair } from '@aweftjs/testing';
+import type { PairedSocket } from '@aweftjs/testing';
+
+// The readyState values a WebSocket reports, named where they are read.
+const CONNECTING = 0;
+const OPEN = 1;
+const CLOSED = 3;
 
 export const tick = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
-export const settle = async (rounds = 10): Promise<void> => {
-	for (let i = 0; i < rounds; i++) await tick();
-};
+export { settle, socketPair };
 
 /** Microtasks only, so a suite under mocked timers can still let the wiring catch up. */
 export const spin = async (rounds = 20): Promise<void> => {
@@ -19,44 +24,8 @@ export const spin = async (rounds = 20): Promise<void> => {
 
 export const reasonOf = (error: unknown): string => String((error as { reason?: unknown } | null)?.reason);
 
-/** A socket shaped like a WebSocket, wired to a peer: what one sends, the other hears on a microtask. */
-export interface Fake extends SocketLike {
-	peer: Fake | undefined;
-	readonly sent: (Uint8Array | string)[];
-	fire(type: string, event: { data?: unknown }): void;
-}
-
-const CONNECTING = 0;
-const OPEN = 1;
-const CLOSED = 3;
-
-export const fake = (readyState = CONNECTING): Fake => {
-	const listeners: Record<string, Array<(event: { data?: unknown }) => void>> = {};
-	const it: Fake = {
-		binaryType: 'blob',
-		readyState,
-		peer: undefined,
-		sent: [],
-		send: (data) => {
-			it.sent.push(data);
-			const peer = it.peer;
-			if (peer !== undefined) queueMicrotask(() => peer.fire('message', { data }));
-		},
-		close: () => {
-			if (it.readyState === CLOSED) return;
-			it.readyState = CLOSED;
-			it.fire('close', {});
-			const peer = it.peer;
-			if (peer !== undefined) queueMicrotask(() => peer.close());
-		},
-		addEventListener: (type, fn) => { (listeners[type] ??= []).push(fn); },
-		fire: (type, event) => { for (const fn of [...(listeners[type] ?? [])]) fn(event); },
-	};
-	return it;
-};
-
 /** The moment the browser would fire `open`, after the far end has already spoken. */
-export const opens = (socket: Fake): void => {
+export const opens = (socket: PairedSocket): void => {
 	socket.readyState = OPEN;
 	socket.fire('open', {});
 };
@@ -91,15 +60,12 @@ export const serverOf = async (modules: Record<string, ModuleExports>): Promise<
  * the far end to the server, and only then fires the client's `open` event. That order is the
  * one this package exists to get right, so the harness reproduces it rather than smoothing it.
  */
-export const dialer = (handlers: () => ListenerHandlers): { open(): SocketLike; sockets: Fake[] } => {
-	const sockets: Fake[] = [];
+export const dialer = (handlers: () => ListenerHandlers): { open(): SocketLike; sockets: PairedSocket[] } => {
+	const sockets: PairedSocket[] = [];
 	return {
 		sockets,
 		open: () => {
-			const near = fake();
-			const far = fake(OPEN);
-			near.peer = far;
-			far.peer = near;
+			const [near, far] = socketPair(CONNECTING);
 			sockets.push(near);
 			void handlers().socket(new Request('http://app.test/ws'), { address: '127.0.0.1' })
 				.then((answer) => {

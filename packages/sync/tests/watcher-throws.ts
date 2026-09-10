@@ -4,14 +4,15 @@
 
 import { createObject, idOf, observer } from '@aweftjs/core';
 import { connect, inProcess } from '@aweftjs/sync';
+import { settle as settleRounds } from '@aweftjs/testing';
+
+/** Twenty rounds, which is what this program waited for before the harness shipped a default. */
+const settle = (): Promise<void> => settleRounds(20);
 
 type Doc = Record<string, unknown>;
 const raised: string[] = [];
 process.on('uncaughtException', (error: Error) => { raised.push(error.message); });
 
-const settle = async (): Promise<void> => {
-	for (let i = 0; i < 20; i++) await new Promise((done) => setTimeout(done, 0));
-};
 
 const [a, b] = inProcess();
 const source = createObject<Doc>({ n: 0 });

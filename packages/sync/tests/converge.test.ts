@@ -12,7 +12,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { apply, atomic, createArray, createObject, idOf, snapshot } from '@aweftjs/core';
-import { canonicalJson, randomBelow, randomFrom } from '@aweftjs/testing';
+import { canonicalJson, randomBelow, randomFrom, settle } from '@aweftjs/testing';
 import { asCommit, connect, inProcess } from '@aweftjs/sync';
 import type { Commit, Link, Refused, Shared, WireReason } from '@aweftjs/sync';
 
@@ -25,9 +25,6 @@ const REASON: WireReason = {
 	code: 'not-here', message: 'sealed is not written from anywhere else', path: ['sealed'],
 };
 
-const settle = async (rounds: number): Promise<void> => {
-	for (let i = 0; i < rounds; i++) await new Promise((done) => setTimeout(done, 0));
-};
 
 /** The first end's rule, and nobody else's: `sealed` keeps the value it has here. */
 const guard = (commit: Commit): readonly WireReason[] =>

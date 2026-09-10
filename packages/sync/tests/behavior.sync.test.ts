@@ -10,7 +10,11 @@ import { MessageChannel } from 'node:worker_threads';
 import { spawnSync } from 'node:child_process';
 
 import { apply, atomic, createObject, idOf, observer, snapshot } from '@aweftjs/core';
-import { canonicalJson } from '@aweftjs/testing';
+import { canonicalJson, settle as settleRounds, socketPair } from '@aweftjs/testing';
+
+// This suite settled for twenty rounds before the harness shipped one, and its convergence checks
+// were tuned against that number rather than the harness's default of ten.
+const settle = (rounds = 20): Promise<void> => settleRounds(rounds);
 import {
 	asCommit, connect, decodeFrame, encodeFrame, fromMessagePort, fromWebSocket, inProcess, track,
 } from '@aweftjs/sync';
@@ -20,9 +24,6 @@ import type {
 
 type Doc = Record<string, unknown>;
 
-const settle = async (rounds = 20): Promise<void> => {
-	for (let i = 0; i < rounds; i++) await new Promise((done) => setTimeout(done, 0));
-};
 
 const same = (a: unknown, b: unknown, what: string): void => {
 	assert.equal(canonicalJson(snapshot(a)), canonicalJson(snapshot(b)), what);
@@ -663,33 +664,6 @@ test('one link carries three documents at once, each with its own numbering', as
 });
 
 // --- the same protocol on every transport ---------------------------------------------------
-
-/** A pair of fakes shaped like a `WebSocket`, wired to each other. */
-const socketPair = (): [SocketLike, SocketLike] => {
-	const build = () => {
-		const listeners: Record<string, ((event: { data?: unknown }) => void)[]> = {};
-		return {
-			binaryType: 'blob',
-			readyState: 1,
-			other: undefined as unknown as { fire(type: string, event: { data?: unknown }): void },
-			send(data: Uint8Array) {
-				queueMicrotask(() => this.other.fire('message', { data }));
-			},
-			close() { this.readyState = 3; },
-			addEventListener(type: string, fn: (event: { data?: unknown }) => void) {
-				(listeners[type] ??= []).push(fn);
-			},
-			fire(type: string, event: { data?: unknown }) {
-				for (const fn of listeners[type] ?? []) fn(event);
-			},
-		};
-	};
-	const left = build();
-	const right = build();
-	left.other = right;
-	right.other = left;
-	return [left as unknown as SocketLike, right as unknown as SocketLike];
-};
 
 const transports: Record<string, () => [Channel, Channel]> = {
 	'in process': () => inProcess(),

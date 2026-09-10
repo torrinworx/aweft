@@ -6,9 +6,13 @@ import assert from 'node:assert/strict';
 import { connect, encodeFrame, fromWebSocket, requests } from '@aweftjs/sync';
 import type { RequestError, SocketLike } from '@aweftjs/sync';
 import { createObject } from '@aweftjs/core';
+import { settle as settleRounds } from '@aweftjs/testing';
+
+/** Eight rounds, which is what this suite waited for before the harness shipped a default. */
+const settle = (rounds = 8): Promise<void> => settleRounds(rounds);
 
 const tick = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
-const settle = async (rounds = 8): Promise<void> => { for (let i = 0; i < rounds; i++) await tick(); };
+
 const reasonOf = (error: unknown): string => String((error as RequestError).reason);
 
 /** A socket shaped like a WebSocket, wired to a peer: what one sends, the other hears on a microtask. */

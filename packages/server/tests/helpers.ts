@@ -1,56 +1,18 @@
-// What the suites share: a listener that hands its handlers to the test, sockets wired in
-// memory so a whole connection runs with no port, and a source over a bundle.
+// What the suites share: a listener that hands its handlers to the test, and a source over a
+// bundle. The socket and the tick loop come from the harness (design 254).
 
 import { fromBundle } from '@aweftjs/modules';
 import type { Factory, ModuleExports, ModuleProps, Source } from '@aweftjs/modules';
 import { connect, fromWebSocket, requests } from '@aweftjs/sync';
-import type { Link, Requests, SocketLike } from '@aweftjs/sync';
+import type { Link, Requests } from '@aweftjs/sync';
+import { settle, socketPair } from '@aweftjs/testing';
+import type { PairedSocket } from '@aweftjs/testing';
 
 import type { Accept, Listener, ListenerHandlers, Peer } from '../src/index.ts';
 
 export const tick = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
-export const settle = async (rounds = 10): Promise<void> => { for (let i = 0; i < rounds; i++) await tick(); };
+export { settle };
 export const reasonOf = (error: unknown): string => String((error as { reason?: unknown } | null)?.reason);
-
-/** A socket shaped like a WebSocket, wired to a peer: what one sends, the other hears on a microtask. */
-export interface Fake extends SocketLike {
-	peer: Fake | undefined;
-	readonly sent: (Uint8Array | string)[];
-	fire(type: string, event: { data?: unknown }): void;
-}
-
-export const fake = (readyState = 1): Fake => {
-	const listeners: Record<string, ((event: { data?: unknown }) => void)[]> = {};
-	const it: Fake = {
-		binaryType: 'blob',
-		readyState,
-		peer: undefined,
-		sent: [],
-		send: (data) => {
-			it.sent.push(data);
-			const peer = it.peer;
-			if (peer !== undefined) queueMicrotask(() => peer.fire('message', { data }));
-		},
-		close: () => {
-			if (it.readyState === 3) return;
-			it.readyState = 3;
-			it.fire('close', {});
-			const peer = it.peer;
-			if (peer !== undefined) queueMicrotask(() => peer.close());
-		},
-		addEventListener: (type, fn) => { (listeners[type] ??= []).push(fn); },
-		fire: (type, event) => { for (const fn of listeners[type] ?? []) fn(event); },
-	};
-	return it;
-};
-
-export const socketPair = (): [Fake, Fake] => {
-	const a = fake();
-	const b = fake();
-	a.peer = b;
-	b.peer = a;
-	return [a, b];
-};
 
 /**
  * A listener that opens nothing and hands the server's handlers to the test instead. Pass a
@@ -105,7 +67,7 @@ export const peer: Peer = { address: '127.0.0.1' };
 
 /** A client end: the link and the requests over one socket, both through the public surface. */
 export interface Client {
-	readonly socket: Fake;
+	readonly socket: PairedSocket;
 	readonly link: Link;
 	readonly asks: Requests;
 }

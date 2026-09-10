@@ -8,15 +8,16 @@ import assert from 'node:assert/strict';
 
 import { createClient } from '../src/index.ts';
 
-import { type Fake, fake, opens, spin } from './helpers.ts';
+import { opens, socketPair, spin } from './helpers.ts';
+import type { PairedSocket } from '@aweftjs/testing';
 
 /** Sockets that drop the moment they are made, and the list of them. */
-const failing = (openable: () => boolean = () => false): { open(): Fake; sockets: Fake[] } => {
-	const sockets: Fake[] = [];
+const failing = (openable: () => boolean = () => false): { open(): PairedSocket; sockets: PairedSocket[] } => {
+	const sockets: PairedSocket[] = [];
 	return {
 		sockets,
 		open: () => {
-			const socket = fake();
+			const [socket] = socketPair(0);
 			sockets.push(socket);
 			queueMicrotask(() => {
 				if (openable()) opens(socket);
@@ -216,7 +217,7 @@ test('reconnect false listens for neither global', async (t) => {
 
 test('a socket seam that throws from the retry timer is a drop, not an error the page loses', async (t) => {
 	t.mock.timers.enable({ apis: ['setTimeout'] });
-	const sockets: Fake[] = [];
+	const sockets: PairedSocket[] = [];
 	let attempts = 0;
 	const client = createClient({
 		url: 'ws://app.test/',
@@ -225,7 +226,7 @@ test('a socket seam that throws from the retry timer is a drop, not an error the
 		open: () => {
 			attempts += 1;
 			if (attempts === 2) throw new Error('the browser refused to make the socket');
-			const socket = fake();
+			const [socket] = socketPair(0);
 			sockets.push(socket);
 			return socket;
 		},
