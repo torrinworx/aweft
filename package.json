@@ -3,6 +3,10 @@
 	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/torrinworx/aweft.git"
+	},
 	"engines": {
 		"node": ">=24.12.0"
 	},
