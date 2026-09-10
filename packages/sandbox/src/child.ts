@@ -7,6 +7,8 @@
 // front of the command.
 
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { Runner } from './contract.ts';
@@ -23,13 +25,30 @@ export interface ChildOptions {
 	readonly env?: Readonly<Record<string, string>> | undefined;
 }
 
-const bootstrap = fileURLToPath(new URL('./child-bootstrap.ts', import.meta.url));
-// What the bootstrap has to read to import the stack: the packages it and its imports live
-// in, and the node_modules those resolve through. Granting the workspace root instead would
-// hand a room `.git`, `docs` and every sibling's source, which the room has no need of; the
-// operator's wall is what truly contains a room, but the seat belt need not be loose.
-const root = fileURLToPath(new URL('../../../', import.meta.url));
-const stack = [`${root}packages/`, `${root}node_modules/`];
+// A published package carries JavaScript and a checkout carries TypeScript (design 256), so the
+// room runs whichever mode its host is running. The extension of this file is what says which,
+// because the compiler rewrites an import specifier and not a path inside `new URL()`.
+const SOURCE_MODE = import.meta.url.endsWith('.ts');
+const bootstrap = fileURLToPath(new URL(SOURCE_MODE ? './child-bootstrap.ts' : './child-bootstrap.js', import.meta.url));
+
+// What the bootstrap has to read to import the stack: the directory holding this package's
+// siblings, and every `node_modules` its imports resolve through. In a checkout those are
+// `packages/` and the workspace's `node_modules/`; installed they are `node_modules/@aweftjs/`
+// and the `node_modules/` above it. Granting a whole workspace root instead would hand a room
+// `.git`, `docs` and every sibling's source, which the room has no need of; the operator's wall
+// is what truly contains a room, but the seat belt need not be loose.
+const stackPaths = (): string[] => {
+	const here = dirname(fileURLToPath(import.meta.url));
+	const paths = [join(here, '..', '..')];
+	for (let at = here; ; at = dirname(at)) {
+		const candidate = join(at, 'node_modules');
+		if (existsSync(candidate)) paths.push(candidate);
+		if (dirname(at) === at) break;
+	}
+	return paths.map((path) => path.replace(/\/*$/, '/'));
+};
+
+const stack = stackPaths();
 
 /**
  * A runner whose room is a child Node process.
@@ -57,6 +76,9 @@ export const child = (options: ChildOptions = {}): Runner => {
 		'--permission',
 		...stack.map((path) => `--allow-fs-read=${path}*`),
 		...(options.read ?? []).map((path) => `--allow-fs-read=${path}`),
+		// The room is spawned with an empty environment, so the condition an `.npmrc` sets for
+		// everything npm starts does not reach it and is passed here instead.
+		...(SOURCE_MODE ? ['--conditions=aweft-source'] : []),
 		'--disallow-code-generation-from-strings',
 		'--disable-warning=ExperimentalWarning',
 		...(options.limits?.memoryMB === undefined ? [] : [`--max-old-space-size=${options.limits.memoryMB}`]),
