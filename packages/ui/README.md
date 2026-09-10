@@ -604,10 +604,10 @@ writes that attribute for you; write it from the same cell you pass to `error` i
 
 ## Composites
 
-Eight more components, each built out of the controls above and the behaviours underneath them.
+Ten more components, each built out of the controls above and the behaviours underneath them.
 
 ```tsx
-import { ColorPicker, Default, DropDown, FileDrop, Menu, Modal, Tooltip, Validate, ValidateContext } from '@aweftjs/ui';
+import { ColorPicker, Country, Default, DropDown, FileDrop, Menu, Modal, Region, Tooltip, Validate, ValidateContext } from '@aweftjs/ui';
 ```
 
 | component | what it is | its own props | example |
@@ -620,6 +620,8 @@ import { ColorPicker, Default, DropDown, FileDrop, Menu, Modal, Tooltip, Validat
 | `Validate` | a check around a control, and the message it shows | `value`, `validate`, `signal`, `valid`, `error`, `showError`, `icon`, `type` | `validate` |
 | `ValidateContext` | the form's answer: every `Validate` below it | `value` | `validate` |
 | `ColorPicker` | a saturation and brightness square, the hue and the alpha as `Slider`s, and a swatch | `value`, `hasAlpha`, `disabled`, `type` | `color-picker` |
+| `Country` | a button that opens a searched grid of every country | `value`, `locale`, `priority`, `flags`, `suggest` | `country` |
+| `Region` | the same, over one country's subdivisions | `value`, `country` | `country` |
 | `Menu` | a button and the list of actions it opens | `items`, `open`, `label`, `icon`, `type`, `size`, `disabled`, `locations` | `menu` |
 
 These ask for `chevron-up`, `chevron-down`, `x`, `triangle-alert` and `upload` by name, so a page
@@ -718,6 +720,71 @@ flow. The `open` cell goes both ways: writing it opens and closes the element, a
 it writes the cell. Space, Enter, the `button` role and the expanded state are the platform's,
 because the element is a `<details>`. A floating menu under a button is `Detached` with a `Button`
 anchor, which is one call and no new component.
+
+**The country fields are a button and a dialog, and they ship no country data.**
+
+```tsx
+import { Countries, Country, Region } from '@aweftjs/ui';
+import { countryData } from '@aweftjs/ui/countries';
+
+const data = await countryData();
+
+<Countries value={data}>
+  <Country label="Country" value={country} name="country" autocomplete="country"
+           priority={['CA', 'US']} placeholder="Pick a country" />
+  <Region label="Province" value={region} country={country} name="region" />
+</Countries>
+```
+
+Each is a button that opens a modal dialog with a search box over a grid of rows. `Country`'s cell
+holds a two-letter code, `Region`'s holds a subdivision's short code, and under each is a hidden
+`<select>` carrying the same options, so a form posts the code and autofill has a control to find.
+Nothing is chosen to begin with and nothing ever chooses for the person.
+
+**The names come from the host, the codes and the subdivisions from you.** `Intl.DisplayNames` has a
+country's name in the page's own language, so no list of names ships here and `locale` is the only
+thing that decides which language they are in; the flags are the two letters of the code as regional
+indicator symbols, so no flags ship either, and `flags={false}` turns them off where a host draws
+none. What is left is the codes and the subdivisions, which nothing derives: `countryData()` reads
+the optional `country-region-data` peer, and `CountryData` is a shape you can build yourself instead
+if the form allows five countries rather than 249. A field with no `Countries` above it is a loud
+assert naming both.
+
+**A search matches the name, the code and this package's aliases, without accents**: `uk` finds the
+United Kingdom, `usa` and `america` find the United States, `cote` finds Côte d'Ivoire. It matches
+anywhere in the word rather than only the start of it, so `uk` finds Ukraine as well. The aliases are
+`countryAliases` on the same subpath, and `CountryData.aliases` is the whole map rather than an
+addition to it: to add your own words, spread the shipped map into yours.
+
+```ts
+const data = await countryData();
+<Countries value={{ ...data, aliases: { ...countryAliases, nz: ['aotearoa'] } }}>
+```
+
+**A row is chosen with a click on it, or with Enter or Space while the keyboard is on it**, which is
+the listbox map every list in this package shares: the arrows and Home and End move, Escape closes,
+and the search box keeps every printable character. Writing the cell chooses too, and that is the
+whole of the control's state: a page that knows the country already writes `country.set('CA')` and
+never opens the dialog.
+
+**The rows are ordered, and the first one is a suggestion.** `Intl.Locale(navigator.language).region`
+says which country the browser's language settings point at, so a browser set to `en-CA` has Canada
+first, marked; a language with no region in it is maximized by the host, so `pt` is Brazil. It is the
+language setting and not the location: nothing is asked for, nothing is fetched, and a person filling
+a form for somewhere else is ordinary, which is why it suggests and never selects. `suggest={false}`
+turns it off. After it comes `priority`, in the order you wrote it, and then every other country by
+its name in the page's language.
+
+**`Region` is the same control and not a dropdown**, because one country has 217 subdivisions and the
+middle one has 11 (design 251). Handed no country it is disabled; the country changing does not clear
+it, because a form clearing a field a person filled is the page's decision. Its names are English,
+which is what the data has.
+
+**Known limits.** The grid is drawn the first time the dialog opens, so a static render emits the
+control, its dialog and the element a form posts, and none of the rows. A country that is already
+chosen when a page is rendered statically has its name in the markup, and if the server's ICU data
+and the browser's disagree about that name, the hydration refuses with both names in the message
+rather than showing the wrong one.
 
 **A file drop holds entries, and no upload.**
 
@@ -853,7 +920,9 @@ kept a cell of its own would look as though it had honoured what you asked for.
 
 **The theme entries these add**, on top of the ones above: `dialog` with its `::backdrop`, `tooltip`,
 `disclosure` and `disclosure_summary`, `filedrop` with `dragging`, `prompt`, `list` and `entry`,
-`validate`, and `colorpicker` with `swatch`, `plane`, `plane_thumb`, `track` and `hue`. `offscreen` is one more, and it is
+`validate`, and `colorpicker` with `swatch`, `plane`, `plane_thumb`, `track` and `hue`. The country
+fields add `chooser` and its parts: `wrap`, `chosen`, `panel`, `head`, `search`, `grid`, `option`
+with `selected`, `active` and `suggested`, `flag`, `lines`, `note` and `none`. `offscreen` is one more, and it is
 yours to use: it takes an element off the screen and leaves it in the reading order.
 
 Each of them has a page on `recipes/ui/catalogue.html`, in both modes, driven in Chromium by
