@@ -186,3 +186,53 @@ test('with no showModal the element carries the open attribute instead', () => {
 		page.uninstall();
 	}
 });
+
+test('two dialogs holding the same branch: it comes back when the last one lets go', () => {
+	// A chooser's dialog inside an open modal act, or two country fields in one form: both dialogs
+	// sit in the same branch, so both take the same other branch out of the reading order. The inner
+	// one closing must not put back what the outer one is still holding (design 250).
+	const page = stage(true);
+	const second = (globalThis as unknown as { document: { createElement(tag: string): LightElement } })
+		.document.createElement('dialog');
+	page.holder.appendChild(second);
+	try {
+		const outer = dialogControl(page.dialog);
+		const inner = dialogControl(second);
+
+		outer.open();
+		assert.equal(page.beside.getAttribute('inert'), '', 'the outer one took the rest of the page out');
+		inner.open();
+		assert.equal(page.beside.getAttribute('inert'), '', 'and so did the inner one, for its own reasons');
+
+		inner.close();
+		assert.equal(page.beside.getAttribute('inert'), '',
+			'closing the inner one leaves what the outer one is still holding');
+
+		outer.close();
+		assert.equal(page.beside.getAttribute('inert'), null,
+			'and the last one to let go is what puts it back');
+	} finally {
+		page.uninstall();
+	}
+});
+
+test('a teardown while another dialog holds the same branch puts back only its own share', () => {
+	const page = stage(true);
+	const second = (globalThis as unknown as { document: { createElement(tag: string): LightElement } })
+		.document.createElement('dialog');
+	page.holder.appendChild(second);
+	try {
+		const outer = dialogControl(page.dialog);
+		const inner = dialogControl(second);
+		outer.open();
+		inner.open();
+
+		inner.stop();
+		assert.equal(page.beside.getAttribute('inert'), '',
+			'a dialog torn down while open leaves the other one\'s hold in place');
+		outer.stop();
+		assert.equal(page.beside.getAttribute('inert'), null);
+	} finally {
+		page.uninstall();
+	}
+});

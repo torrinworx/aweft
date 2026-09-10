@@ -60,7 +60,8 @@ const pageOf = (): PageLike | undefined => (globalThis as { document?: PageLike 
  * The three things this adds to the element:
  *
  * - every other top-level child of the page gets `inert` while it is open, so a screen reader and
- *   the Tab key both stop at the dialog rather than walking the page behind it;
+ *   the Tab key both stop at the dialog rather than walking the page behind it. Two dialogs open at
+ *   once each hold what they took, and a branch comes back when the last of them lets go;
  * - the element that had the keyboard when it opened gets it back when it closes;
  * - Escape arrives as the element's own `cancel` event, which the platform fires and this lets
  *   through, so there is no second key listener to disagree with the platform.
@@ -76,6 +77,13 @@ const pageOf = (): PageLike | undefined => (globalThis as { document?: PageLike 
  *   const modal = dialogControl(element, { onClose: () => shown.set(false) });
  *   modal.open();
  */
+// How many open dialogs are holding each branch out of the reading order. Two dialogs open at once
+// each take the page out for their own reasons, and the second one closing must not put back what
+// the first one is still holding: a chooser inside an open modal act, or two country fields on one
+// page, both did exactly that. Kept beside the controls rather than in one of them, because neither
+// control knows the other exists (design 250).
+const held = new WeakMap<object, number>();
+
 export const dialogControl = (element: unknown, options: DialogOptions = {}): DialogControl => {
 	const target = element as DialogLike;
 	let open = false;
@@ -91,12 +99,20 @@ export const dialogControl = (element: unknown, options: DialogOptions = {}): Di
 			// nested in a wrapper must not go inert along with the wrapper.
 			if (within(target, [child])) continue;
 			child.setAttribute('inert', '');
+			held.set(child as object, (held.get(child as object) ?? 0) + 1);
 			inerted.push(child);
 		}
 	};
 
 	const putItBack = (): void => {
-		for (const child of inerted) child.removeAttribute('inert');
+		for (const child of inerted) {
+			const count = (held.get(child as object) ?? 1) - 1;
+			if (count > 0) held.set(child as object, count);
+			else {
+				held.delete(child as object);
+				child.removeAttribute('inert');
+			}
+		}
 		inerted = [];
 	};
 
