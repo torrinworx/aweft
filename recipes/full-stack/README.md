@@ -57,14 +57,25 @@ takes whatever path hot reload is moved to.
 
 ## The application's own files
 
-`package.json`. The stack is a git submodule, and each `@aweftjs/*` name resolves to a directory
-inside it, because nothing is published to a registry. Every package is listed, not only the ones
-the application imports, because each linked package's own `@aweftjs/*` dependencies resolve
-through the application's `node_modules` and nowhere else.
+`package.json`. This application carries the stack as a git submodule, so each `@aweftjs/*` name
+resolves to a directory inside it and a fix to the stack is live on the next run. An application
+that only uses the stack installs the packages it imports from npm instead, and skips the
+submodule, the `.npmrc` and the `customConditions` line below.
+
+Every package is listed, not only the ones the application imports, because each linked package's
+own `@aweftjs/*` dependencies resolve through the application's `node_modules` and nowhere else.
 
 ```
 git submodule add <this repo's url> aweft
 npm install
+```
+
+`.npmrc`. A published package carries compiled JavaScript and the submodule carries TypeScript,
+and one `exports` map serves both: whoever wants the source asks for it by name (design 256).
+This is that ask, for every script npm runs.
+
+```
+node-options=--conditions=aweft-source
 ```
 
 ```json
@@ -121,11 +132,16 @@ what let Node run the `.ts` files with no build step, and `jsx: "preserve"` leav
 		"isolatedModules": true,
 		"jsx": "preserve",
 		"allowImportingTsExtensions": true,
+		"customConditions": ["aweft-source"],
 		"noEmit": true,
 		"skipLibCheck": true
 	}
 }
 ```
+
+`customConditions` is the compiler's half of the `.npmrc` line: without it the compiler reads the
+declarations a published package ships while Node runs the submodule's source, and the two
+disagree the moment the submodule is ahead of the last release.
 
 Two tsconfigs over it, because the two halves see different globals. The Node half has `process` and
 no `document`, and the config file vite runs belongs to it. The page half is the other way around.

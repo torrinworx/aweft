@@ -579,9 +579,17 @@ failure lands somewhere recoverable.
 ## Publishing
 
 - **`aweft`**: the unscoped meta-package, batteries included. What someone installs to get
-  the whole stack.
-- **`@aweftjs/*`**: the individual packages.
+  the whole stack. Not built: it bundles batteries that do not exist yet.
+- **`@aweftjs/*`**: the individual packages. Published.
 - Site: `aweft.dev`.
 
 All packages version in lockstep.
+
+A published package carries compiled JavaScript in `dist/` and the declarations beside it,
+because Node refuses to strip types from a file under `node_modules`. This repo, and an
+application carrying it as a submodule, read the TypeScript in `src/` instead and build nothing.
+One `exports` map serves both, through the `aweft-source` condition (design 256).
+
+`npm run build` writes every package's `dist/`, each package's `prepack` writes its own, and
+`npm run publishing` reads the manifests for every way a publish would carry the wrong thing.
 

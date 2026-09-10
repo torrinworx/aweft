@@ -506,9 +506,10 @@ A resolution is written down as a design note, an architecture doc edit, or a wr
 
 ### KEEPING ONE SOURCE OF TRUTH
 
-The stack is developed in this repo, and applications consume it as a git submodule pinned
-to this repo's default branch. That workflow upstreams by construction: a fix made inside
-the submodule and pushed is upstream the moment it lands.
+The stack is developed in this repo, and an application that also changes it consumes it as a
+git submodule pinned to this repo's default branch. That workflow upstreams by construction: a
+fix made inside the submodule and pushed is upstream the moment it lands. An application that
+only uses the stack installs the packages from npm, and a fix reaches it in the next release.
 
 - **Every change to stack code is made in this repo**, whether you reached it directly or
   through an app's submodule checkout. Never patch a copy.
@@ -521,7 +522,11 @@ the submodule and pushed is upstream the moment it lands.
   change.
 - **A stack bug found while working in an app** gets its regression test here, in the
   package that has the bug, not in the app.
-- All packages version in lockstep.
+- All packages version in lockstep, and one version number is the whole set's. `npm run
+  publishing` refuses a manifest that carries a version of its own.
+- **A release is `npm run build`, then the root gate, then `npm publish --workspaces`.** The
+  build writes each package's `dist/`, which is compiled output nothing commits (design 256).
+  A publish is the one action here that cannot be taken back, so nothing goes out on a red gate.
 
 **Before drawing any conclusion from a working copy, `git fetch` first.** A stale checkout
 reads as a systemic problem when it is a local one. A directory is not a source of truth; a

@@ -81,11 +81,17 @@ from its own tier or below, never across that line.
 | `@aweftjs/testing` | the harnesses the stack tests itself with, for a driver or a listener of your own |
 | `@aweftjs/debug` | a document or a commit read back as text |
 
-**Getting them.** Nothing is published to a registry yet. An application carries this repo
-as a git submodule (`git submodule add <this repo's url> aweft`) and resolves each `@aweftjs/*`
-name through a `file:` dependency on the package's directory; `recipes/full-stack/README.md`
-shows the manifest and the two skills under `.claude/skills/` an application links. Node 24.12
-or later.
+**Getting them.** `npm i @aweftjs/core @aweftjs/ui`, and so on for whichever the application
+needs. Node 24.12 or later. A published package carries compiled JavaScript, because Node will
+not strip types from a file under `node_modules` (design 256).
+
+An application that also changes the stack carries this repo as a git submodule
+(`git submodule add <this repo's url> aweft`) and resolves each `@aweftjs/*` name through a
+`file:` dependency on the package's directory instead. That application reads the TypeScript
+source, so a fix is live on the next run with nothing to build: it asks for the source by name,
+with `node-options=--conditions=aweft-source` in its `.npmrc` and `aweft-source` in its
+`tsconfig`'s `customConditions`. `recipes/full-stack/README.md` shows the manifest, the two
+configs and the two skills under `.claude/skills/` an application links.
 
 ## Where to read
 
