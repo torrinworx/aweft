@@ -10,7 +10,7 @@
 // but `hovered_button` does not. The matches, ordered, are the define chain, and later in the
 // chain wins.
 
-import { type Derived, mutable } from '@aweftjs/core';
+import { type Derived, type MutableArray, mutableArray } from '@aweftjs/core';
 
 import { assert } from './assert.ts';
 import { warnOnContrast } from './contrast.ts';
@@ -475,6 +475,30 @@ export const compileChain = (
 
 // --- the per-render sheet ------------------------------------------------------------------
 
+// One thing the sheet emitted: an `@import`, an at-rule that belongs to a definition (a face or a
+// keyframes block), or a style rule. The sheet is the list of these in emission order, and any run
+// of them writes out as one stylesheet (design 257).
+interface Piece {
+	readonly kind: 'import' | 'at' | 'rule';
+	readonly css: string;
+}
+
+// A run of pieces as the text of one stylesheet: the imports, which a parser accepts only at the
+// top of a sheet, then the layer with the at-rules and the style rules inside it.
+const sheetText = (pieces: Iterable<Piece>): string => {
+	const imports: string[] = [];
+	const atRules: string[] = [];
+	const rules: string[] = [];
+	for (const piece of pieces) {
+		if (piece.kind === 'import') imports.push(piece.css);
+		else if (piece.kind === 'at') atRules.push(piece.css);
+		else rules.push(piece.css);
+	}
+	const body = [...atRules, ...rules];
+	if (body.length === 0 && imports.length === 0) return '';
+	return [...imports, `@layer ${LAYER} {`, ...body.map((line) => `  ${line}`), '}'].join('\n');
+};
+
 /** The theme systems for one render: its class cache and its stylesheet. */
 export interface Sheet {
 	/**
@@ -495,7 +519,24 @@ export interface Sheet {
 	base(): Definitions;
 	/** The whole stylesheet as it stands. */
 	markup(): string;
-	/** The cell a `<style>` element's text follows. */
+	/**
+	 * Hear what each compile adds to the sheet, as a stylesheet of its own.
+	 *
+	 * Params:
+	 *   fn: called with the CSS added, written so it stands alone: any `@import` it carries leads
+	 *       it, and the rest sits in the layer. A compile that adds nothing, because every rule it
+	 *       reached was already in the sheet, delivers nothing. Compiles inside one `atomic` block
+	 *       arrive together, as core delivers every list
+	 *
+	 * Returns: the unsubscribe. What was added before the subscription is not delivered; that is
+	 * `markup()`. Delivery is core's, so it lands in the same task as the compile that caused it,
+	 * which can be inside a mount: do only what is safe there.
+	 *
+	 * Example:
+	 *   const stop = sheet.watch((css) => { style().textContent = css; });
+	 */
+	watch(fn: (css: string) => void): () => void;
+	/** The sheet's text as a cell, derived from the pieces. Reading it costs a join. */
 	readonly text: Derived<string>;
 }
 
@@ -513,20 +554,16 @@ export const createSheet = (): Sheet => {
 	// Keyed on what a theme says, not on which object said it, so a `<Theme value={{...}}>`
 	// written inline gets one class for every mount rather than one class per mount.
 	const cache = new Map<string, Map<string, { className: string; lookup: Lookup; variables: Map<string, string> }>>();
-	const imports: string[] = [];
+	// Everything emitted, in emission order, as a list something else can follow (design 257). It
+	// only ever grows: a compile appends what it reached, and a piece already in it is not appended
+	// again, so what a watcher hears is exactly what is new.
+	const pieces: MutableArray<Piece> = mutableArray<Piece>();
 	const seenImports = new Set<string>();
-	const atRules: string[] = [];
 	const seenAtRules = new Set<string>();
-	const rules: string[] = [];
 	let counter = 0;
 	let snapshot: Definitions | null = null;
 
-	const text = mutable('');
-	const markup = (): string => {
-		const body = [...atRules, ...rules];
-		if (body.length === 0 && imports.length === 0) return '';
-		return [...imports, `@layer ${LAYER} {`, ...body.map((line) => `  ${line}`), '}'].join('\n');
-	};
+	const markup = (): string => sheetText(pieces);
 
 	const compiled = (definitions: Definitions, classes: readonly string[]) => {
 		const theme = contentKey(definitions);
@@ -546,18 +583,21 @@ export const createSheet = (): Sheet => {
 		const made = { className, lookup: out.lookup, variables: out.variables };
 		byChain.set(key, made);
 
+		const added: Piece[] = [];
 		for (const line of out.imports) {
 			if (seenImports.has(line)) continue;
 			seenImports.add(line);
-			imports.push(line);
+			added.push({ kind: 'import', css: line });
 		}
 		for (const rule of out.atRules) {
 			if (seenAtRules.has(rule.key)) continue;
 			seenAtRules.add(rule.key);
-			atRules.push(rule.css);
+			added.push({ kind: 'at', css: rule.css });
 		}
-		rules.push(...out.rules);
-		text.set(markup());
+		for (const rule of out.rules) added.push({ kind: 'rule', css: rule });
+		// One push, so a watcher hears one stylesheet per compile, and one for a whole `atomic`
+		// block, which is how core delivers every other list.
+		if (added.length > 0) pieces.push(...added);
 		return made;
 	};
 
@@ -569,6 +609,13 @@ export const createSheet = (): Sheet => {
 		call: (definitions, classes, name) => compiled(definitions, classes).lookup.call(name),
 		value: (definitions, classes, text) => resolve(parseValue(text), compiled(definitions, classes).lookup),
 		markup,
-		text,
+		watch: (fn) => pieces.watch((changes) => {
+			// The list only grows, so every change is an add; the narrowing is what reaches the value.
+			const added: Piece[] = [];
+			for (const change of changes) if (change.type === 'add') added.push(change.value);
+			const css = sheetText(added);
+			if (css !== '') fn(css);
+		}),
+		text: pieces.derive(sheetText),
 	};
 };

@@ -244,3 +244,48 @@ test('two Theme cells, one inside the other, each move the page on their own', (
 	assert.ok(own.theme.markup().includes('rgb(7, 7, 7)'));
 	stop();
 });
+
+test('a sheet delivers what a compile added, as a stylesheet of its own', () => {
+	const sheet = context().theme;
+	Theme.define({ heardFirst: { color: 'rgb(1, 1, 1)' }, heardSecond: { color: 'rgb(2, 2, 2)' } });
+	const first = sheet.classes(sheet.base(), ['heardFirst']);
+
+	const heard: string[] = [];
+	const stop = sheet.watch((css) => { heard.push(css); });
+	const second = sheet.classes(sheet.base(), ['heardSecond']);
+
+	assert.equal(heard.length, 1, 'one delivery for one compile, in the same task');
+	assert.match(heard[0]!, /^@layer aweft \{\n/, 'and it stands alone, layer and all');
+	assert.ok(heard[0]!.includes(`.${second} { color: rgb(2, 2, 2); }`), 'the compile\'s own rule is in it');
+	assert.ok(!heard[0]!.includes(`.${first} `), 'and nothing compiled before the subscription');
+	assert.ok(sheet.markup().includes(`.${first} `), 'which is in the whole sheet, where it always was');
+
+	sheet.classes(sheet.base(), ['heardSecond']);
+	assert.equal(heard.length, 1, 'a chain already compiled adds nothing, so nothing is delivered');
+
+	stop();
+	sheet.classes(sheet.base(), ['heardFirst', 'heardSecond']);
+	assert.equal(heard.length, 1, 'and nothing at all after the unsubscribe');
+});
+
+test('the sheet text is the pieces joined: imports first, then the at-rules, then the rules', () => {
+	const sheet = context().theme;
+	Theme.define({
+		joined: {
+			_import_theme: { url: 'https://example.invalid/joined.css' },
+			_fontFace_joined: { fontFamily: '"Joined"', src: 'url("/joined.woff2")' },
+			_keyframes_turn: 'to { transform: rotate(1turn); }',
+			animationName: '$turn',
+		},
+	});
+	const name = sheet.classes(sheet.base(), ['joined']);
+	const text = sheet.markup();
+	const lines = text.split('\n');
+	assert.equal(lines[0], '@import url("https://example.invalid/joined.css") layer(aweft);');
+	assert.equal(lines[1], '@layer aweft {');
+	assert.match(lines[2]!, /^  @font-face \{ font-family: "Joined"; src: url\("\/joined\.woff2"\); \}$/);
+	assert.match(lines[3]!, /^  @keyframes turn-[a-z0-9]+ \{ to \{ transform: rotate\(1turn\); \} \}$/);
+	assert.ok(lines.slice(4, -1).every((line) => line.includes(`.${name}`)), 'the rules follow, all for this class');
+	assert.equal(lines[lines.length - 1], '}');
+	assert.equal(sheet.text.get(), text, 'and the cell holds the same text');
+});
