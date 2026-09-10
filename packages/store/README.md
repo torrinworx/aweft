@@ -238,7 +238,8 @@ letting a bare database error out of a half written commit. And string ordering 
 the basic plane.
 
 Tested against Postgres 18, started per run by `embedded-postgres`; both it and `pg` are
-development dependencies of this package and neither ships. Measured by `bench/store-postgres.ts`
+development dependencies of this package and neither ships. Measured by
+[`bench/store-postgres.ts`](https://github.com/torrinworx/aweft/blob/main/bench/store-postgres.ts)
 on one machine, editing one field of one record over and over, two runs back to back:
 
 | Document | Per write | Write-ahead log per write |
@@ -306,9 +307,9 @@ whole rather than slot by slot fails all three, which is what they are there to 
 Thirty-three checks in all, a count the proof program pins, and the example driver below passes
 every one there.
 
-`recipes/store/driver-file.ts` is a complete driver written outside the package, and the proof
-program runs the real thing: it writes a document, sends the writing
-process a `SIGKILL`, and reopens what survived.
+[`recipes/store/driver-file.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/store/driver-file.ts)
+is a complete driver written outside the package, and the proof program runs the real thing: it
+writes a document, sends the writing process a `SIGKILL`, and reopens what survived.
 
 ## One thing to know about aliases
 
@@ -331,3 +332,9 @@ Every row is kept whether or not something attaches it, so the projection follow
 into a detached row and indexes the value there, while opening the document drops that slot
 instead (design 050). A query can therefore answer with a document that has no such field once
 it is open; settling it means the projection and `open` agreeing about an aliased row.
+
+## The design notes
+
+A `design NNN` above is the note of that number in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design), which says what was
+decided, why, what it costs, and what would reverse it.

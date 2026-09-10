@@ -46,9 +46,9 @@ stop();
 
 Registering a watcher returns the function that stops it, always.
 
-A watcher cannot tell a commit landed with `apply` from a local mutation. An undo stack
-that stays subscribed while it undoes will record its own undo; hold a flag for the
-duration of the call, the way `recipes/core` does.
+A watcher cannot tell a commit landed with `apply` from a local mutation. An undo stack that stays
+subscribed while it undoes will record its own undo; hold a flag for the duration of the call, the
+way [`recipes/core`](https://github.com/torrinworx/aweft/tree/main/recipes/core) does.
 
 That flag works while `apply` is called from ordinary code. It does not work when `apply`
 is called from **inside** a watcher, which is the shape a replication seam reaches for
@@ -146,11 +146,12 @@ observer(doc).path('tasks', 3, 'done').watch(fn);  // checked on every write any
 observer(task).path('done').watch(fn);             // checked only on writes under task
 ```
 
-Both see the same changes. The first is checked on every write in the document, the second
-only on writes under `task`. Measured with `bench/write.ts`, on one write nobody matches:
-1,000 listeners on the root cost 4.56 us and 10,000 cost 51.59 us, while the same listeners
-registered on the observable they are about stay flat at 0.42 to 0.45 us. Start the scope at
-the thing you are reading and the question does not arise.
+Both see the same changes. The first is checked on every write in the document, the second only on
+writes under `task`. Measured with
+[`bench/write.ts`](https://github.com/torrinworx/aweft/blob/main/bench/write.ts), on one write
+nobody matches: 1,000 listeners on the root cost 4.56 us and 10,000 cost 51.59 us, while the same
+listeners registered on the observable they are about stay flat at 0.42 to 0.45 us. Start the
+scope at the thing you are reading and the question does not arise.
 
 A number in a path names a position, not an element. `path('tasks', 0)` follows whatever sits
 at index 0 now, so removing the first task makes it the second task's scope. To follow one
@@ -324,8 +325,10 @@ Deliberately not here: any transport, any persistence, any DOM. `sort`, `reverse
 and `copyWithin` on an array throw, because they cannot be expressed as changes to the
 slots they appear to touch.
 
-The wire format lives in `spec/`, the reasoning in `docs/design/`, and a complete
-program using all of the above in `recipes/core/`.
+The wire format lives in [`spec/`](https://github.com/torrinworx/aweft/tree/main/spec), the
+reasoning in [`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design), and a
+complete program using all of the above in
+[`recipes/core/`](https://github.com/torrinworx/aweft/tree/main/recipes/core).
 
 ## Known limits
 
@@ -343,3 +346,9 @@ because nothing attaches it, and still writes the alias, so rebuilding that snap
 observable, detach it, and then save the document and build it again. `@aweftjs/store` drops
 the dangling slot as it opens a document (design 050); which answer holds in general, dropping
 the alias, carrying what is named as well as what is held, or refusing the detach, is open.
+
+## The design notes
+
+A `design NNN` above is the note of that number in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design), which says what was
+decided, why, what it costs, and what would reverse it.

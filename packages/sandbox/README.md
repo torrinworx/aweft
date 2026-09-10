@@ -4,13 +4,14 @@ A room for modules the host does not trust: an `@aweftjs/modules` loader on the 
 `@aweftjs/sync` link, fed a module document, props, and a list of granted names. Everything a
 module inside can reach came through that link, by name.
 
-**This package enforces the window; it does not build or promise the wall.** The window is
-what crosses the link: the module document, the props, the granted names, and plain data, and
-nothing else. The wall around the room is a runner's, and the operator's. `child` runs under
-Node's permission model, which Node itself calls a seat belt rather than a boundary; put a jail
-around it (the `recipes/` show bubblewrap and docker) when a room must be safe beside your
-database. `iframe` runs in an opaque-origin frame, which is the browser's own boundary.
-`inProcess` isolates nothing, and is for tests and for code you trust.
+**This package enforces the window; it does not build or promise the wall.** The window is what
+crosses the link: the module document, the props, the granted names, and plain data, and nothing
+else. The wall around the room is a runner's, and the operator's. `child` runs under Node's
+permission model, which Node itself calls a seat belt rather than a boundary; put a jail around it
+(the [`recipes/`](https://github.com/torrinworx/aweft/tree/main/recipes) show bubblewrap and
+docker) when a room must be safe beside your database. `iframe` runs in an opaque-origin frame,
+which is the browser's own boundary. `inProcess` isolates nothing, and is for tests and for code
+you trust.
 
 ## Quickstart
 
@@ -102,13 +103,13 @@ source changes in the document is reloaded inside the room, with `handlers.appli
 | `iframe({ inside, into })` | an opaque-origin frame | the browser | the page, its storage, cookies, the network, navigation |
 | `child(options)`, on `@aweftjs/sandbox/node` | a Node process | Node's permission model, plus your `wrap` | files, network, spawning, workers, native addons, eval, the environment |
 
-`child` takes `limits.memoryMB`, `read` (paths besides this package's own it may read), `env` (empty
-unless given), and `wrap` (a command in front of the Node command: a bubblewrap invocation, a
-`sudo -u`). `createSandbox` takes `limits.callMs` (a call the room does not answer in time
+`child` takes `limits.memoryMB`, `read` (paths besides this package's own it may read), `env`
+(empty unless given), and `wrap` (a command in front of the Node command: a bubblewrap invocation,
+a `sudo -u`). `createSandbox` takes `limits.callMs` (a call the room does not answer in time
 errors with `timeout`), because a room of any runner can hang. None of the limits ship with a
-value. A runner is `start()` returning a channel and
-`stop()`; a room on another machine is the same runner over a socket, and `recipes/` shows a
-docker one whose channel is the container's stdin and stdout.
+value. A runner is `start()` returning a channel and `stop()`; a room on another machine is the
+same runner over a socket, and [`recipes/`](https://github.com/torrinworx/aweft/tree/main/recipes)
+shows a docker one whose channel is the container's stdin and stdout.
 
 A runner proves what it stops by passing `roomChecks()` from `@aweftjs/testing`, an append-only
 escape suite run in every shipped runner (and, for the frame, under a real browser).
@@ -119,4 +120,5 @@ Which runner. How many rooms, for how long, or how they are grouped. What the wa
 load, grant, or call. Limits. What a granted module lets a caller do. It enforces the window,
 each runner says what it stops, and the wall is yours.
 
-The design notes are in `docs/design/` 066 to 070.
+The design notes are in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 066 to 070.

@@ -141,7 +141,8 @@ are, the page's own by default and read when a route is first called, so making 
 page is fine and only calling one refuses `no-origin`. `fetch` makes the two HTTP calls, the
 global by default; a Node program hands in one that carries the cookie, because Node's `fetch`
 keeps no cookie jar. The client's own `open` seam is the third, and it is `@aweftjs/client`'s: a
-Node program hands in a socket carrying the same cookie header. `recipes/client` runs all three.
+Node program hands in a socket carrying the same cookie header.
+[`recipes/client`](https://github.com/torrinworx/aweft/tree/main/recipes/client) runs all three.
 
 ## The two page modules
 
@@ -216,7 +217,8 @@ export default ({ imports }) => ({
 ```
 
 The act calls `require()` in its own factory, the load rejects, and the stage shows whatever
-`refused` names. `recipes/client` is the whole pattern in one small application.
+`refused` names. [`recipes/client`](https://github.com/torrinworx/aweft/tree/main/recipes/client)
+is the whole pattern in one small application.
 
 **A static render has no connection.** Handed no `client`, `auth/Session` is anonymous at once:
 `user` reads `null` from the first read, `state()` rejects `anonymous`, and `enter`, `leave` and
@@ -256,4 +258,6 @@ that is what one module for both means, and `auth/Check` exists so a form can as
 Email verification and password reset wait for the email battery. The client half ships no sign-in
 or sign-up view, so a page writes its own form and calls `enter`.
 
-The design notes are in `docs/design/` 071 and 074, and 185 for the client half.
+The design notes are in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 071 and 074, and 185
+for the client half.

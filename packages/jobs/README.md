@@ -148,6 +148,7 @@ the only one that ships.
 What a job is or does. Who may add, edit or remove a row. Whether the array is stored, or
 shared. Catch-up, retries, queues, progress, notifications, and which process runs a row.
 
-Every error this package raises carries a `reason`: `missing` (`createScheduler` without
-`jobs` or `run`), `not-a-list` (`jobs` is not an observable array), `invalid` (a row that
-cannot be scheduled). The design notes are in `docs/design/` 075 and 076.
+Every error this package raises carries a `reason`: `missing` (`createScheduler` without `jobs` or
+`run`), `not-a-list` (`jobs` is not an observable array), `invalid` (a row that cannot be
+scheduled). The design notes are in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 075 and 076.

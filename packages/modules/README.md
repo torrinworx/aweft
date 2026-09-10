@@ -106,10 +106,11 @@ try { await compile(draft); } catch (error) { /* refuse the draft */ }
 
 Nothing here does that for you.
 
-The default keeps every distinct source in the runtime's module cache for the life of the
-process. `bench/compile.ts` measured it on Node 25: about 5.6 KB of heap per distinct source,
-53 MB for 10,000, and the same text imported twice is one module. An application that compiles
-many versions of many modules supplies a compile that does not keep them.
+The default keeps every distinct source in the runtime's module cache for the life of the process.
+[`bench/compile.ts`](https://github.com/torrinworx/aweft/blob/main/bench/compile.ts) measured it
+on Node 25: about 5.6 KB of heap per distinct source, 53 MB for 10,000, and the same text imported
+twice is one module. An application that compiles many versions of many modules supplies a compile
+that does not keep them.
 
 ## The tools
 
@@ -183,5 +184,6 @@ what its history is. Whether the code is safe to run.
 
 ## Reading on
 
-The design notes are in `docs/design/` 061 to 065. The contract this package is built to is the
-one an application's own modules are written to.
+The design notes are in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 061 to 065. The
+contract this package is built to is the one an application's own modules are written to.

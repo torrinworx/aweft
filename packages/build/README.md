@@ -71,7 +71,7 @@ with no name in front of it, means the same thing. Both compile to `{ ...props }
 
 What compiling changes is when a mistake is reported: every fault the parser would have thrown at
 render time is thrown here instead, as a `TransformError` carrying `at`, the offset in the file,
-and the `reason` and `fix` every refusal in the stack carries. `packages/build/errors.txt` lists
+and the `reason` and `fix` every refusal in the stack carries. `errors.txt` lists
 every reason.
 One check does not survive compilation, and it is named rather than hidden. The parser asserts
 that a spread is an object; a compiled template writes `{ ...expr }`, which spreads whatever it
@@ -118,14 +118,15 @@ const Row = (label, click) => h('tr', { class: 'row' },
 ```
 
 becomes one `template(...)` at the top of the file and one call to it per row. Measured by
-`bench/hoist.ts` in Chromium, 10,000 rows of that shape, best of five invocations of best of
-seven: inside a mount, which is where a list builds its rows, 28.5 ms through the eight `h`
-calls against 13.4 ms as one template instance. Outside any mount, which is where a page builds
-the item it then hands to `mount` or `hydrate`, the same two are 43.1 ms and 29.8 ms, because
-every node made there is marked as the binding's own so `hydrate` can adopt the server's markup.
-For a clone that marking is a walk, and it is about 16 ms per 10,000 instances. A row built
-during a mount that is not hydrating pays none of it. The loop for re-running the script is
-`bench/README.md`.
+[`bench/hoist.ts`](https://github.com/torrinworx/aweft/blob/main/bench/hoist.ts) in Chromium,
+10,000 rows of that shape, best of five invocations of best of seven: inside a mount, which is
+where a list builds its rows, 28.5 ms through the eight `h` calls against 13.4 ms as one template
+instance. Outside any mount, which is where a page builds the item it then hands to `mount` or
+`hydrate`, the same two are 43.1 ms and 29.8 ms, because every node made there is marked as the
+binding's own so `hydrate` can adopt the server's markup. For a clone that marking is a walk, and
+it is about 16 ms per 10,000 instances. A row built during a mount that is not hydrating pays none
+of it. The loop for re-running the script is
+[`bench/README.md`](https://github.com/torrinworx/aweft/blob/main/bench/README.md).
 
 **Hoisting only happens where `h` is provably `@aweftjs/dom`'s in that file.** JSX still
 compiles to any `h`; only this substitution is restricted, because it assumes `dom`'s `h`'s
@@ -163,7 +164,8 @@ called `assert` next to the file.
 
 A string literal shaped `set:name`, on the `name` prop of the `Icon` a file bound from
 `@aweftjs/ui`, becomes an import of that one icon and the plugin and loader answer that import.
-`packages/icons/README.md` says exactly which names move and which are left for run time.
+[`@aweftjs/icons`](https://github.com/torrinworx/aweft/blob/main/packages/icons/README.md)'s
+README says exactly which names move and which are left for run time.
 
 ## The release mangle
 
@@ -189,8 +191,14 @@ When source that arrives at run time is compiled, or by whom.
 
 ## Proven by
 
-`recipes/build/main.ts` builds a real page through the transforms, runs it in all three modes,
-and checks that a release build of the binding's own source has no asserts left in it. The
-package's own suite is the equivalence suite: every fixture runs twice, once as written and
-once transformed, mounted, rendered and hydrated, over a document whose nodes clone and one
-whose nodes do not.
+[`recipes/build/main.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/build/main.ts)
+builds a real page through the transforms, runs it in all three modes, and checks that a release
+build of the binding's own source has no asserts left in it. The package's own suite is the
+equivalence suite: every fixture runs twice, once as written and once transformed, mounted,
+rendered and hydrated, over a document whose nodes clone and one whose nodes do not.
+
+## The design notes
+
+A `design NNN` above is the note of that number in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design), which says what was
+decided, why, what it costs, and what would reverse it.

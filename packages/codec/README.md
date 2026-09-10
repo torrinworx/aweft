@@ -10,8 +10,9 @@ serves it.
 That is a rule about spelling, not about trust. See "What this does not do" before you rely
 on it for anything else.
 
-The format is written down in `spec/format.md`, and this package is its normative
-implementation. Nothing here knows about observables, transports or storage.
+The format is written down in
+[`spec/format.md`](https://github.com/torrinworx/aweft/blob/main/spec/format.md), and this package
+is its normative implementation. Nothing here knows about observables, transports or storage.
 
 ## Quickstart
 
@@ -127,10 +128,11 @@ try {
 }
 ```
 
-The reasons are pinned by `spec/fixtures/invalid/`: one file per case, naming the bytes, the
-stage the refusal is due at, and the reason to refuse for. The filenames say which is which,
-so that directory is the list to read and to branch on. A reason not exercised there is not
-part of the contract.
+The reasons are pinned by
+[`spec/fixtures/invalid/`](https://github.com/torrinworx/aweft/tree/main/spec/fixtures/invalid):
+one file per case, naming the bytes, the stage the refusal is due at, and the reason to refuse
+for. The filenames say which is which, so that directory is the list to read and to branch on. A
+reason not exercised there is not part of the contract.
 
 ## The value layer
 
@@ -177,13 +179,22 @@ const frame = (bytes: Uint8Array): Uint8Array => {
 // Reading back: take the length, slice the frame, hand exactly that slice to decodeCommit.
 ```
 
-`decodeCommit` takes one commit with nothing before or after it, so the framing decides
-where a commit ends, and anything that must survive a hostile channel adds its own checksum
-or signature at this layer. `recipes/codec/main.ts` is a complete log doing this.
+`decodeCommit` takes one commit with nothing before or after it, so the framing decides where a
+commit ends, and anything that must survive a hostile channel adds its own checksum or signature
+at this layer.
+[`recipes/codec/main.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/codec/main.ts) is
+a complete log doing this.
 
 ## Boundaries
 
 Deliberately not here: any document model, any transport, any persistence.
 
-The reasoning behind the choices lives in `docs/design/`, and the format they implement in
-`spec/format.md`.
+The reasoning behind the choices lives in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design), and the format they
+implement in [`spec/format.md`](https://github.com/torrinworx/aweft/blob/main/spec/format.md).
+
+## The design notes
+
+A `design NNN` above is the note of that number in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design), which says what was
+decided, why, what it costs, and what would reverse it.

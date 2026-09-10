@@ -115,9 +115,10 @@ import { fromUrl } from '@aweftjs/icons';
 <Icons value={[standard, fromUrl('https://api.iconify.design')]}><App /></Icons>
 ```
 
-`fromUrl(base)` fetches `<base>/<set>.json?icons=<name>` and reads the answer the public icon
-APIs give. Point it at a route of your own to serve the icons yourself; `recipes/icons/main.ts`
-has that route in about fifteen lines, built out of an installed set.
+`fromUrl(base)` fetches `<base>/<set>.json?icons=<name>` and reads the answer the public icon APIs
+give. Point it at a route of your own to serve the icons yourself;
+[`recipes/icons/main.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/icons/main.ts) has
+that route in about fifteen lines, built out of an installed set.
 
 Nothing installs it. A page that never adds it makes no requests, because a fetch to somebody
 else's service is a decision you make and not one a library makes for you.

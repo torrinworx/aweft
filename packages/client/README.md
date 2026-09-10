@@ -124,7 +124,7 @@ Two seams, and a page needs neither.
 - `url` defaults to the page's own origin with the `ws` or `wss` scheme and path `/`. Where
   there is no `location`, `url` is required and its absence is refused with `no-url`. Behind a
   dev server's proxy the socket takes a path of its own, `/ws`, proxied with `ws: true`, because
-  a proxy entry for `/` takes the dev server's own socket with it; `recipes/full-stack/` is that
+  a proxy entry for `/` takes the dev server's own socket with it; [`recipes/full-stack/`](https://github.com/torrinworx/aweft/tree/main/recipes/full-stack) is that
   setup.
 - `open(url)` makes the socket, `new WebSocket(url)` by default. A Node program hands in one
   that carries a cookie header, which is how a script signs in:
@@ -155,5 +155,6 @@ timeout ran out before any socket opened). Everything else a caller sees comes f
 `sync`'s own `closed`, `not-data` and `timeout` on an ask that was sent, and a module's own
 reason for a refusal.
 
-The design notes are in `docs/design/`: 183 (what this package is and what it opens) and 184
-(the reconnect, and the server winning).
+The design notes are in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design): 183 (what this
+package is and what it opens) and 184 (the reconnect, and the server winning).

@@ -258,7 +258,15 @@ load or unload through `server.loader` while it runs.
 When a client sends bytes that are not a frame, the link ends and the connection with it:
 the end functions run and the socket closes, so the client hears.
 
-Every error this package raises carries a `reason`: `missing` (`createServer` without one of
-its three, or a gate named that is not a loaded gate), `not-an-option` (`loader` or `props`
-passed to `createServer`, which builds its own loader), `route-conflict`, `no-accept`,
-`not-a-response`, `started`. The design notes are in `docs/design/` 071 to 073, 240 and 241.
+Every error this package raises carries a `reason`: `missing` (`createServer` without one of its
+three, or a gate named that is not a loaded gate), `not-an-option` (`loader` or `props` passed to
+`createServer`, which builds its own loader), `route-conflict`, `no-accept`, `not-a-response`,
+`started`. The design notes are in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 071 to 073, 240 and
+241.
+
+## The design notes
+
+A `design NNN` above is the note of that number in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design), which says what was
+decided, why, what it costs, and what would reverse it.

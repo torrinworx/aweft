@@ -9,10 +9,11 @@ a claim about the stack becomes a check that fails when the claim stops being tr
 
 ## Conformance
 
-A fixture is one case stated as plain JSON: the bytes, what they mean, the document before
-and the document after. Nothing about this repo's types is needed to read one, which is the
-point. An implementation in another language reads `spec/fixtures/` and is conformant when it
-agrees with every file there.
+A fixture is one case stated as plain JSON: the bytes, what they mean, the document before and the
+document after. Nothing about this repo's types is needed to read one, which is the point. An
+implementation in another language reads
+[`spec/fixtures/`](https://github.com/torrinworx/aweft/tree/main/spec/fixtures) and is conformant
+when it agrees with every file there.
 
 ```ts
 import { checkFixture, type Fixture } from '@aweftjs/testing';
@@ -38,9 +39,10 @@ was generated; what anchors that encoder to the prose of the format is a pair of
 spelled out by hand, head by head, in codec's own tests. A second implementation proves itself
 by agreeing with those fixtures byte for byte.
 
-`checkInvalidFixture` is the other half. Each case in `spec/fixtures/invalid/` names a
-`reason` and a `stage`, and an implementation that refuses the input for a different reason
-has not agreed on the format, it has agreed on rejecting one string.
+`checkInvalidFixture` is the other half. Each case in
+[`spec/fixtures/invalid/`](https://github.com/torrinworx/aweft/tree/main/spec/fixtures/invalid)
+names a `reason` and a `stage`, and an implementation that refuses the input for a different
+reason has not agreed on the format, it has agreed on rejecting one string.
 
 ```ts
 import { checkInvalidFixture, type InvalidFixture } from '@aweftjs/testing';
@@ -57,9 +59,10 @@ type Applier = (initial: DocumentJson, commits: readonly Commit[]) => DocumentJs
 ```
 
 A fixture states its commits as `CommitJson`, which is bytes plus JSON. Your applier is never
-handed those: `checkFixture` decodes each one and calls you with `Commit`, the codec type,
-with real byte-string ids and reference objects. Read the format from `spec/format.md` and the
-codec types, not from the fixture JSON shape.
+handed those: `checkFixture` decodes each one and calls you with `Commit`, the codec type, with
+real byte-string ids and reference objects. Read the format from
+[`spec/format.md`](https://github.com/torrinworx/aweft/blob/main/spec/format.md) and the codec
+types, not from the fixture JSON shape.
 
 `modelApplier` is the default, and it is the harness's own reading: plain data, no
 reactivity, written from the specification rather than from any package. Passing a second
@@ -115,9 +118,10 @@ made elsewhere joins the recording when it is inserted.
 
 ## The tier rule
 
-Packages are numbered, and a package may import downward only. `boundaries.json` is the
-table, this package holds the check, and `packages/testing/scripts/check-boundaries.ts` runs
-it over the imports that actually exist.
+Packages are numbered, and a package may import downward only. `boundaries.json` is the table,
+this package holds the check, and
+[`packages/testing/scripts/check-boundaries.ts`](https://github.com/torrinworx/aweft/blob/main/packages/testing/scripts/check-boundaries.ts)
+runs it over the imports that actually exist.
 
 ```ts
 import { checkGraph } from '@aweftjs/testing';
@@ -188,7 +192,8 @@ with, because a browser handed a refusal gets a failed connection and not a resp
 **Signing in is yours.** The sequence is a POST to your battery's session route, the `Set-Cookie`
 off the answer, and `open` with that cookie. It is five lines and it is not here, because putting
 it here would tie this package to one battery's routes and one idea of what a session is.
-`recipes/full-stack/tests/board.test.ts` is those five lines.
+[`recipes/full-stack/tests/board.test.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/full-stack/tests/board.test.ts)
+is those five lines.
 
 ## Two ends of one socket
 
@@ -267,9 +272,10 @@ nothing under another.
 
 `npm run words` reads every tracked file for the vocabulary of how the stack was built (who
 decided a thing, when, through which review) and prints each line that carries a word from the
-list, with what to write instead. The list is in `packages/testing/src/words.ts`, one entry per
-word with its fix. It reads text, not syntax, so it matches the spellings the process used and
-leaves the words the code needs alone.
+list, with what to write instead. The list is in
+[`packages/testing/src/words.ts`](https://github.com/torrinworx/aweft/blob/main/packages/testing/src/words.ts),
+one entry per word with its fix. It reads text, not syntax, so it matches the spellings the
+process used and leaves the words the code needs alone.
 
 ```ts
 import { checkWords } from '@aweftjs/testing';
@@ -281,7 +287,9 @@ instead of the whole tree.
 
 ## Running the gate
 
-`npm test` at the root is the whole gate: typecheck, the dependency rules, the tier rule over
-real imports, every package's suite with its coverage threshold, and every proof program.
-`packages/testing/scripts/run-tests.ts` is the part that runs the suites, and
-`generate-fixtures.ts` rewrites `spec/fixtures/` from the generator entries.
+`npm test` at the root is the whole gate: typecheck, the dependency rules, the tier rule over real
+imports, every package's suite with its coverage threshold, and every proof program.
+[`packages/testing/scripts/run-tests.ts`](https://github.com/torrinworx/aweft/blob/main/packages/testing/scripts/run-tests.ts)
+is the part that runs the suites, and `generate-fixtures.ts` rewrites
+[`spec/fixtures/`](https://github.com/torrinworx/aweft/tree/main/spec/fixtures) from the generator
+entries.

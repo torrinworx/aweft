@@ -26,7 +26,8 @@ const Counter = () => {
 mount(document.body, <Counter />);
 ```
 
-`recipes/ui/` is the whole of this README as a running page. `npx vite recipes/ui` serves it.
+[`recipes/ui/`](https://github.com/torrinworx/aweft/tree/main/recipes/ui) is the whole of this
+README as a running page. `npx vite recipes/ui` serves it.
 
 ## Five rules
 
@@ -58,14 +59,18 @@ Node cannot load `.tsx` on its own, so a suite that imports one runs with
 `node --import @aweftjs/build/loader`; the root gate does that for you.
 
 An application bundles with `aweft()` from `@aweftjs/build`, which is one line in a vite config
-and is what `recipes/ui/vite.config.ts` shows. Pass `aweft({ defaultH: '@aweftjs/ui' })` if your
-pages are `ui` pages: a file that writes JSX and imports no `h` of its own is given one, and
-without that setting it is `dom`'s, which writes `theme` out as an attribute nothing reads.
+and is what
+[`recipes/ui/vite.config.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/vite.config.ts)
+shows. Pass `aweft({ defaultH: '@aweftjs/ui' })` if your pages are `ui` pages: a file that writes
+JSX and imports no `h` of its own is given one, and without that setting it is `dom`'s, which
+writes `theme` out as an attribute nothing reads.
 
 **Getting the packages.** Nothing is published to a registry yet. An application takes this repo
 as a git submodule and its own package manager resolves `@aweftjs/*` through the workspace, which
 is how the five applications that use the stack do it. A program written outside a checkout has
-nothing to resolve those specifiers to, so `recipes/` and the tests live inside the repo.
+nothing to resolve those specifiers to, so
+[`recipes/`](https://github.com/torrinworx/aweft/tree/main/recipes) and the tests live inside the
+repo.
 
 ## `h`, `svg` and `html`
 
@@ -171,7 +176,9 @@ object, can say one property twice.
 
 **Every rule is inside `@layer aweft`, and this package ships zero `!important`.** Unlayered
 styles beat every layer, so an application's own stylesheet overrides the library with a one-class
-selector and no specificity fight. `packages/ui/tests/browser.test.ts` asserts that in Chromium.
+selector and no specificity fight.
+[`packages/ui/tests/browser.test.ts`](https://github.com/torrinworx/aweft/blob/main/packages/ui/tests/browser.test.ts)
+asserts that in Chromium.
 
 **Two themes on one page.** `<Theme value={partial}>` merges a partial theme onto whatever is
 above it for its subtree, and that subtree generates its own classes. `<ThemeContext value="brand">`
@@ -211,11 +218,12 @@ your own instead, which is what a static render wants; two named renders in one 
 their classes from zero.
 
 **A component hydrates by identity, and the elements it makes on the way are dropped.** `hydrate`
-builds the client's tree and pairs it against the nodes the server wrote, keeping the server's; the
-fresh elements it made to compare against are thrown away. So a hydration is not free of
+builds the client's tree and pairs it against the nodes the server wrote, keeping the server's;
+the fresh elements it made to compare against are thrown away. So a hydration is not free of
 `createElement`, and counting those calls counts the client's tree, not a defect.
-`packages/ui/tests/controls.test.ts` pins both halves: every server element is kept by identity, and
-nothing the client made ends up in the page.
+[`packages/ui/tests/controls.test.ts`](https://github.com/torrinworx/aweft/blob/main/packages/ui/tests/controls.test.ts)
+pins both halves: every server element is kept by identity, and nothing the client made ends up in
+the page.
 
 **A hydrated page is live.** Nothing this package computes is written onto an element: a handler is
 a `$on<type>` property and the class and the style are cells handed to `dom` as attributes, and
@@ -418,9 +426,11 @@ const problem = mutable(null);
 | `LoadingDots` | three dots | `type`, `size`, `label` | a CSS length | `loading-dots` |
 | `Icon` | `<svg>` | `name`, `size`, `label`, `rot` | a CSS length | `icon` |
 
-The last column is the file under `recipes/ui/examples/`, without its `.example.tsx` ending. Each
-one renders every state, type and size of its component, in both modes, on a page of its own at
-`catalogue.html#/<Component>`, and the recipe's driver reads it there (designs 197 and 226).
+The last column is the file under
+[`recipes/ui/examples/`](https://github.com/torrinworx/aweft/tree/main/recipes/ui/examples),
+without its `.example.tsx` ending. Each one renders every state, type and size of its component,
+in both modes, on a page of its own at `catalogue.html#/<Component>`, and the recipe's driver
+reads it there (designs 197 and 226).
 
 **`size` is one theme segment, right after `type`** (design 194): `sm` is 32px tall, nothing is
 36px and `lg` is 40px, and the entries are `button_sm`, `input_lg`, `checkbox_sm` and so on, the
@@ -429,11 +439,12 @@ also takes `icon`, `icon-sm` and `icon-lg`, which are a square of that height wi
 a button whose label is an icon. It is a value or a cell, like every other display prop.
 `LoadingDots` and `Icon` have a `size` of their own, which is a CSS length and not this axis.
 
-**A label is what gives a control a name.** Give one and the component renders a `<label for>` next
-to the element, both inside one `<div>`, mints the ids off the render (so a server and its hydration
-agree), and wires `aria-describedby` and `aria-invalid` for you. Give none and you get the bare
-element, and naming it is yours. `packages/ui/tests/controls.test.ts` finds every control by its
-role and its name.
+**A label is what gives a control a name.** Give one and the component renders a `<label for>`
+next to the element, both inside one `<div>`, mints the ids off the render (so a server and its
+hydration agree), and wires `aria-describedby` and `aria-invalid` for you. Give none and you get
+the bare element, and naming it is yours.
+[`packages/ui/tests/controls.test.ts`](https://github.com/torrinworx/aweft/blob/main/packages/ui/tests/controls.test.ts)
+finds every control by its role and its name.
 
 **One document is one render.** The ids come off the render's counter, which starts at zero every
 time (design 109), so two named renders mounted into the same document mint the same ids and their
@@ -548,9 +559,11 @@ and `end` mean across the page on both.
 <div theme={['row', 'fill', 'spread']}><span>left</span><span>right</span></div>
 ```
 
-`recipes/ui/catalogue.html` is every one of them in every state, in both modes, one page per
-component at `#/<Component>`, driven in Chromium by `recipes/ui/main.ts` with axe-core over every
-page.
+[`recipes/ui/catalogue.html`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/catalogue.html)
+is every one of them in every state, in both modes, one page per component at `#/<Component>`,
+driven in Chromium by
+[`recipes/ui/main.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/main.ts) with
+axe-core over every page.
 
 ## Laying a form out
 
@@ -925,8 +938,11 @@ fields add `chooser` and its parts: `wrap`, `chosen`, `panel`, `head`, `search`,
 with `selected`, `active` and `suggested`, `flag`, `lines`, `note` and `none`. `offscreen` is one more, and it is
 yours to use: it takes an element off the screen and leaves it in the reading order.
 
-Each of them has a page on `recipes/ui/catalogue.html`, in both modes, driven in Chromium by
-`recipes/ui/main.ts` with axe-core over it.
+Each of them has a page on
+[`recipes/ui/catalogue.html`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/catalogue.html),
+in both modes, driven in Chromium by
+[`recipes/ui/main.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/main.ts) with
+axe-core over it.
 
 ## Text
 
@@ -982,8 +998,11 @@ with a span, because editing is `TextField`'s job and a page composes the two. N
 measure is yours, as `maxWidth` on `text_p1`. No fonts: the theme engine already emits `@font-face`
 and `@import` from your own theme's directives.
 
-`recipes/ui/preview.html` shows the whole family in both modes, and the gallery's modifier demo is
-`recipes/ui/page.tsx`, both driven by `recipes/ui/main.ts`.
+[`recipes/ui/preview.html`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/preview.html)
+shows the whole family in both modes, and the gallery's modifier demo is
+[`recipes/ui/page.tsx`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/page.tsx), both
+driven by
+[`recipes/ui/main.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/main.ts).
 
 ## Display
 
@@ -1106,7 +1125,8 @@ returns is mounted per row, so nothing about the one-shape rule under `each` rea
 ```
 
 What `each` asks one shape of is a row component you write yourself, which is a different thing;
-`packages/dom/README.md` says what that costs.
+[`@aweftjs/dom`](https://github.com/torrinworx/aweft/blob/main/packages/dom/README.md)'s README
+says what that costs.
 
 **A wide table scrolls in its own box**, which carries `tabindex="0"` so a keyboard can reach the
 scroll. Give the table a `caption` or a `label`: without one it has no name for a screen reader.
@@ -1204,7 +1224,8 @@ fills by state, 6 to 8 lines, 9 and 10 solids, 11 and 12 text.
 | `$link` | | text that goes somewhere |
 
 Every pair meets WCAG 2 AA in both modes, 4.5:1 for text and 3:1 for a line, asserted in
-`packages/ui/tests/contrast.test.ts` with a ratio the test computes itself.
+[`packages/ui/tests/contrast.test.ts`](https://github.com/torrinworx/aweft/blob/main/packages/ui/tests/contrast.test.ts)
+with a ratio the test computes itself.
 
 **The default is monochrome.** `$accent` is the neutral scale's text step and `$accentForeground`
 is its page step, so a filled button is near-black on near-white in light and the same line read
@@ -1414,8 +1435,11 @@ plain object subscribes to nothing and costs nothing extra.
 
 **No unnamed value.** A component of this package writes `$name`, never a colour, a size or a
 duration. `node packages/testing/scripts/check-theme.ts` refuses one that does, over
-`packages/ui/src` and `recipes/`, and `packages/ui/tokens.txt` is the committed list of every name
-there is. A value with no name yet gets one in the entry that needs it:
+[`packages/ui/src`](https://github.com/torrinworx/aweft/tree/main/packages/ui/src) and
+[`recipes/`](https://github.com/torrinworx/aweft/tree/main/recipes), and
+[`packages/ui/tokens.txt`](https://github.com/torrinworx/aweft/blob/main/packages/ui/tokens.txt)
+is the committed list of every name there is. A value with no name yet gets one in the entry that
+needs it:
 
 ```ts
 Theme.define({ splash: { $splashHeight: '320px', minHeight: '$splashHeight' } });
@@ -1694,3 +1718,9 @@ interaction and is not in a page's markup at all. `Tooltip` and `Popup` avoid th
 their element back out of the mount that put it in the document (design 153), which `Modal`
 cannot do until `dom` says which node a mount put in the document and lets a component write an
 attribute a hydration reconciles rather than compares.
+
+## The design notes
+
+A `design NNN` above is the note of that number in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design), which says what was
+decided, why, what it costs, and what would reverse it.

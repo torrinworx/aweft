@@ -153,9 +153,11 @@ A shell with no `<head>` or no `<body>` is refused too.
 **Where page data comes from.** `entries()` and your components read whatever they read. This
 package never opens a store.
 
-**How the data reaches the client.** A component that waited on the server waits again on the client
-unless you hand it the value. Write it out beside the pages and read it in your entry before you
-call `attach`; `recipes/posts-to-pages` shows the whole pattern, and `dom`'s README has the reason.
+**How the data reaches the client.** A component that waited on the server waits again on the
+client unless you hand it the value. Write it out beside the pages and read it in your entry
+before you call `attach`;
+[`recipes/posts-to-pages`](https://github.com/torrinworx/aweft/tree/main/recipes/posts-to-pages)
+shows the whole pattern, and `dom`'s README has the reason.
 
 **Which host serves the files, or what it does with a URL it has no file for.** The layout is chosen
 so that "the exact file, then `<path>/index.html`" is enough for any static host. Answering an
@@ -169,11 +171,13 @@ package's.
 
 ## Proven by
 
-`recipes/ssg` builds the routed site, writes it out, serves it and drives it in Chromium: a deep
-link hydrates with no element the server wrote removed or replaced, a click on the hydrated page is
-answered, a link changes the act and the title, and a URL nothing enumerated is served the live
-shell. `recipes/posts-to-pages` publishes a post over a socket, writes that one page, hydrates it in
-a browser, and refreshes the sitemap from a scheduled full write.
+[`recipes/ssg`](https://github.com/torrinworx/aweft/tree/main/recipes/ssg) builds the routed site,
+writes it out, serves it and drives it in Chromium: a deep link hydrates with no element the
+server wrote removed or replaced, a click on the hydrated page is answered, a link changes the act
+and the title, and a URL nothing enumerated is served the live shell.
+[`recipes/posts-to-pages`](https://github.com/torrinworx/aweft/tree/main/recipes/posts-to-pages)
+publishes a post over a socket, writes that one page, hydrates it in a browser, and refreshes the
+sitemap from a scheduled full write.
 
 The suite in `tests/` is the same guarantees stated one at a time, over the light tree
 `@aweftjs/dom` ships, plus a Chromium run for `attach`.

@@ -159,26 +159,35 @@ that stored `"5-1a2b"` gets its 304 from a file whose tag is `W/"5-1a2b"`.
 
 ## Proven by
 
-`packages/static/tests/files.test.ts` boots a real server on a real port and fetches from it: the
-exact file, the index fallback, a trailing slash, the unknown answer in both settings and with the
-page missing, a climbing segment and a dot segment getting that answer and never the file beside
-the directory, a `dir` that is not there answering a bare 404 for a refused path and an ordinary
-miss alike, HEAD with the headers and no body, 405 with `Allow`, the ETag and the 304 for `*`, for
-the strong spelling of the tag and for the tag among others, `Content-Type` for a named and an
-unnamed extension, `Cache-Control` for the longest matching prefix, for the empty prefix and
-absent otherwise, a file larger than one stream chunk arriving byte-identical, and an invalid
-configuration refused at load. Over a listener the test holds, so the answer is read as this
-module built it: HEAD carries no body at all and a GET body is a stream that arrives in chunks.
-`packages/static/tests/surface.test.ts` pins the one export.
+[`packages/static/tests/files.test.ts`](https://github.com/torrinworx/aweft/blob/main/packages/static/tests/files.test.ts)
+boots a real server on a real port and fetches from it: the exact file, the index fallback, a
+trailing slash, the unknown answer in both settings and with the page missing, a climbing segment
+and a dot segment getting that answer and never the file beside the directory, a `dir` that is not
+there answering a bare 404 for a refused path and an ordinary miss alike, HEAD with the headers
+and no body, 405 with `Allow`, the ETag and the 304 for `*`, for the strong spelling of the tag
+and for the tag among others, `Content-Type` for a named and an unnamed extension, `Cache-Control`
+for the longest matching prefix, for the empty prefix and absent otherwise, a file larger than one
+stream chunk arriving byte-identical, and an invalid configuration refused at load. Over a
+listener the test holds, so the answer is read as this module built it: HEAD carries no body at
+all and a GET body is a stream that arrives in chunks.
+[`packages/static/tests/surface.test.ts`](https://github.com/torrinworx/aweft/blob/main/packages/static/tests/surface.test.ts)
+pins the one export.
 
-`recipes/static` builds the site `recipes/ssg` writes, serves it from this battery, and drives it
-in Chromium: a deep link hydrates with no element the server wrote removed or replaced, an unknown
-URL is 404 with the fallback page, the same URL under `unknown: 'shell'` is 200 and mounts live,
-HEAD and the 304 answer as they should, a climbing path and a dot path are 404, and the sitemap is
-served as XML.
+[`recipes/static`](https://github.com/torrinworx/aweft/tree/main/recipes/static) builds the site
+[`recipes/ssg`](https://github.com/torrinworx/aweft/tree/main/recipes/ssg) writes, serves it from
+this battery, and drives it in Chromium: a deep link hydrates with no element the server wrote
+removed or replaced, an unknown URL is 404 with the fallback page, the same URL under `unknown:
+'shell'` is 200 and mounts live, HEAD and the 304 answer as they should, a climbing path and a dot
+path are 404, and the sitemap is served as XML.
 
 ## Boundaries
 
 An integrator: it may import anything, and nothing imports it. It reads `node:fs`, `node:path` and
 `node:stream`, and has no third-party dependency of any kind. The rule it implements is
 `design 249`; the hook it answers through is `design 248`.
+
+## The design notes
+
+A `design NNN` above is the note of that number in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design), which says what was
+decided, why, what it costs, and what would reverse it.

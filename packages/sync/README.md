@@ -24,10 +24,11 @@ interface Channel {
 }
 ```
 
-`inProcess()`, `fromWebSocket(socket)` and `fromMessagePort(port)` ship. Anything else is
-yours, and it is the same size: put `encodeFrame(frame)` on the wire, hand `decodeFrame(bytes)`
-back. `recipes/sync/main.ts` writes one over a TCP socket in about forty lines and runs the
-whole scenario over it, beside the shipped ones, to make the point that they are not special.
+`inProcess()`, `fromWebSocket(socket)` and `fromMessagePort(port)` ship. Anything else is yours,
+and it is the same size: put `encodeFrame(frame)` on the wire, hand `decodeFrame(bytes)` back.
+[`recipes/sync/main.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/sync/main.ts)
+writes one over a TCP socket in about forty lines and runs the whole scenario over it, beside the
+shipped ones, to make the point that they are not special.
 
 Delivery is always asynchronous, on every channel including the in-process one. Applying a
 commit from inside a watcher hands it to the receiving document's watchers after the outer

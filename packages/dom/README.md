@@ -241,9 +241,10 @@ flight closes the walk and checks nothing, because the page it was pairing has g
 A component that waits with `pending` and shows a loading state runs again on the client, and
 showing that state over the server's finished markup is a mismatch, whatever the wait does after.
 Either render what you know (give the resolved value as a prop from data the page embeds,
-`h(Status, { known })`, which is what `recipes/dom/` shows) or show nothing while a hydration is
-open: `hydrating()` answers whether the mount running right now is claiming server nodes, and
-`@aweftjs/ui`'s `suspend` uses it to keep its fallback off the page during one.
+`h(Status, { known })`, which is what
+[`recipes/dom/`](https://github.com/torrinworx/aweft/tree/main/recipes/dom) shows) or show nothing
+while a hydration is open: `hydrating()` answers whether the mount running right now is claiming
+server nodes, and `@aweftjs/ui`'s `suspend` uses it to keep its fallback off the page during one.
 
 An empty text node is inserted rather than paired. `''` renders to no characters, so the
 markup holds no node to pair it with, and a form's error line that is empty until something
@@ -353,9 +354,10 @@ document array a store persists or a link shares.
 
 ## Boundaries
 
-`@aweftjs/dom` imports `@aweftjs/core` and nothing else. The complete program using all of
-the above, with its DOM operations asserted one by one against the recording host in
-`@aweftjs/testing`, is `recipes/dom/`.
+`@aweftjs/dom` imports `@aweftjs/core` and nothing else. The complete program using all of the
+above, with its DOM operations asserted one by one against the recording host in
+`@aweftjs/testing`, is
+[`recipes/dom/`](https://github.com/torrinworx/aweft/tree/main/recipes/dom).
 
 ## Known limits
 
@@ -366,3 +368,9 @@ every node those calls returned is garbage by the end of the mount. On a page of
 elements that is a fraction of a frame; a page of hundreds has not been measured. Making it
 zero means claiming the server's node before building a fresh one, which changes the mounting
 model and the node factory every path here shares.
+
+## The design notes
+
+A `design NNN` above is the note of that number in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design), which says what was
+decided, why, what it costs, and what would reverse it.

@@ -193,5 +193,13 @@ Deliberately not here:
 - **Repairing anything.** A commit is refused whole or taken whole. Nothing here rewrites a
   commit to make it fit.
 
-The reasoning lives in `docs/design/057` and `058`, and a complete program using all of the
-above in `recipes/schema/`.
+The reasoning lives in
+[`docs/design/057`](https://github.com/torrinworx/aweft/blob/main/docs/design/057-schema-is-the-shape-a-document-keeps.md)
+and `058`, and a complete program using all of the above in
+[`recipes/schema/`](https://github.com/torrinworx/aweft/tree/main/recipes/schema).
+
+## The design notes
+
+A `design NNN` above is the note of that number in
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design), which says what was
+decided, why, what it costs, and what would reverse it.
