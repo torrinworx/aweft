@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/auth",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "The first battery: a gate that reads public, sessions as documents, sign-in and sign-up by email and password, and a per-user state document, as server modules, with the page half as client modules.",
 	"exports": {
 		".": "./src/index.ts",

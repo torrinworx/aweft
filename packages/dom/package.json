@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/dom",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "The DOM binding: mount, static render and hydration as modes of one path.",
 	"exports": {
 		".": "./src/index.ts",

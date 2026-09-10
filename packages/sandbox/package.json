@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/sandbox",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "A room for modules the host does not trust: a loader on the far end of a link, fed a module document, props and granted names, and the runners that make the room.",
 	"exports": {
 		".": "./src/index.ts",

@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/debug",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "Reads a running document or commit back as text.",
 	"exports": {
 		".": "./src/index.ts"

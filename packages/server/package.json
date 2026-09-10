@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/server",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "Connections and requests behind a gate: a listener the application supplies, one socket carrying a sync link and a call channel, and the modules' hooks run for whoever the gate allows.",
 	"exports": {
 		".": "./src/index.ts",

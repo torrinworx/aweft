@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/sync",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "Replication: a link with two equal ends, moving commits between documents over any channel.",
 	"exports": {
 		".": "./src/index.ts"

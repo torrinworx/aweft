@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/icons",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "Icon sets as modules: one icon at build time, a whole set, the standard names, and a resolver for a name known only at run time.",
 	"exports": {
 		".": "./src/index.ts",

@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/ssg",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "Pages from a routed site, at build time and at run time: walk the acts, write the files, take the markup over in the browser.",
 	"exports": {
 		".": "./src/index.ts",

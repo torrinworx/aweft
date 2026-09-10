@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/jobs",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "A scheduler over an array of rows the application hands in: each row says when, the application says what runs.",
 	"exports": {
 		".": "./src/index.ts"

@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/modules",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "Modules from a directory, a bundle or a document, loaded in dependency order with their dependencies injected.",
 	"exports": {
 		".": "./src/index.ts",

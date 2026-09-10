@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/client",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "One connection to an aweft server for the life of a page: the socket, the link and the requests attached before it opens, and the same documents back after a drop.",
 	"exports": {
 		".": "./src/index.ts"

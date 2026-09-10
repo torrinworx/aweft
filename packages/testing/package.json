@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/testing",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "Conformance runners and harnesses the rest of the stack is checked with.",
 	"exports": {
 		".": "./src/index.ts"

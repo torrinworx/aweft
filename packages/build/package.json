@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/build",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "One transform, two modes: markup and JSX to h calls, static subtrees to templates, asserts out of a release build.",
 	"exports": {
 		".": "./src/index.ts",

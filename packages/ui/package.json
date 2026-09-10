@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/ui",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "Components and theming: a wrapping h, the theme engine, contexts, popups, suspend and marks.",
 	"exports": {
 		".": "./src/index.ts",

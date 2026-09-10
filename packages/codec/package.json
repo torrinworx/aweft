@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/codec",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "The normative encoding: values, deltas and commits to bytes, and back.",
 	"exports": {
 		".": "./src/index.ts"

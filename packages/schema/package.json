@@ -1,9 +1,14 @@
 {
 	"name": "@aweftjs/schema",
 	"version": "0.0.0",
-	"private": true,
 	"type": "module",
 	"license": "MIT",
+	"files": [
+		"src",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
 	"description": "The shape a document keeps: describe it, and answer whether a commit keeps it that way.",
 	"exports": {
 		".": "./src/index.ts"
