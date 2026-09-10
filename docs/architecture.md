@@ -86,6 +86,7 @@ aweft/
                            the sources, a listener, the link and the call channel on one
                            socket, the modules' hooks
     auth/                  the first battery: the gate, sessions, sign-in, per-user state
+    static/                the static battery: a directory of files served for what no route matched
     jobs/                  a scheduler over an array the application hands in
     ssg/                   static generation
     build/                 transforms, in two modes
@@ -324,6 +325,7 @@ indexed by the job rather than the package, are not in this table.
 | auth | inside the server recipe: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous; and, in the client recipe, a page whose every part is a module signs up through `auth/SignIn`, reads `user`, opens `state` and signs out |
 | jobs | a scheduled job runs, persists an effect, and survives a restart |
 | ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM |
+| static | a generated site is served by the stack's own server in one process: a deep link hydrates in place, an unknown URL is 404 with the fallback page, the same URL under the shell setting is 200 and mounts live, and HEAD, the ETag and a climbing path answer as the rule says |
 | build | the transforms build a real page; assert stripping is verified in the output |
 | testing | consumed by every other package's suite; its recipe is everyone else's |
 | debug | a bug found in a document the reader did not write, using only what the package prints |
@@ -432,6 +434,13 @@ and files working. `auth`'s server half is built (design 074), its client half o
 `@aweftjs/client` (design 183, 185), and its views ship as page modules a stage loads by name
 (design 245): a battery's view is a module like any other, and the application puts it on a URL
 by naming it in its acts map. No battery picks a URL.
+
+The static battery is built (design 249). `@aweftjs/static` is a source of one server module,
+`static/Files`, which answers every HTTP request no route matched with a file from a directory:
+the exact path, then `<path>/index.html`, then `404.html` or, when its configuration says so,
+`shell.html`. A segment that begins with a dot is never a file and never reaches the disk. It
+carries `public` from its configuration, so one word makes a site private, and it makes the
+process that runs an application the host that serves its generated pages.
 
 They split per area rather than shipping as one package because an application that wants
 auth and not posts should not carry posts, and an agent reading `@aweftjs/auth` should find

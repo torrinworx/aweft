@@ -27,6 +27,7 @@ Start here if you know what you are trying to build.
 | `icons/` | Icons named three ways, and what each way puts in the bundle | ui, icons, build |
 | `routed-site/` | A site with real URLs: nested pages, a page with a parameter, a page that arrives later, a dialog the back button dismisses, and a title per page | core, dom, ui, build |
 | `ssg/` | A routed site written out as files, served by anything, and taken over in place when the browser gets to it | dom, ui, build, ssg |
+| `static/` | A generated site served by the stack's own server: one process is the whole deployment, and the page still comes alive where it stands | modules, server, ui, build, ssg, static |
 | `documents-on-postgres/` | Documents kept in Postgres: a writer killed mid-edit, eight processes opening one name at once, and a path declared after the data was there | store |
 | `posts-to-pages/` | Pages written while the application runs: a post published over a socket becomes a page, and a scheduled full write refreshes the sitemap | store, modules, server, jobs, ui, ssg |
 | `backend/` | The boot pattern to copy: a twelve-line boot file and a folder of modules, one holding a document, one the rules, one a scheduler, one the gate, and one configuring a battery module | store, modules, server, auth, jobs, client |
@@ -37,7 +38,7 @@ Start here if you know which package you need and want to see it do its hardest 
 each of these has to demonstrate is the table in `docs/architecture.md`.
 
 `codec/`, `core/`, `schema/`, `sync/`, `store/`, `modules/`, `sandbox/`, `server/`, `jobs/`,
-`dom/`, `ui/`, `icons/`, `build/`, `ssg/`, `debug/`.
+`dom/`, `ui/`, `icons/`, `build/`, `ssg/`, `static/`, `debug/`.
 
 ## What a recipe is
 
