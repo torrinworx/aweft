@@ -1,4 +1,4 @@
-# 251: Skills ship in the repo, and an application links them
+# 253: Skills ship in the repo, and an application links them
 
 ## Decision
 
