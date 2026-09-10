@@ -10,6 +10,7 @@ import {
 	type Accept, type Gate, type Identified, type ListenerHandlers, type Peer, type Server,
 	type ServerHandlers, type ServerOptions, serverError,
 } from './contract.ts';
+import { fallthrough } from './request.ts';
 import { routeKey, routeTable } from './routes.ts';
 
 const json = (status: number, body: unknown): Response =>
@@ -124,7 +125,13 @@ export const createServer = (options: ServerOptions): Server => {
 				report('routes', error);
 				return empty(500);
 			}
-			if (owned === undefined) return empty(404);
+			if (owned === undefined) {
+				const fell = await fallthrough({ request, context: who.context, loader, gate: perUse, report });
+				if (fell.answer !== undefined) return fell.answer;
+				if (fell.failed === true) return empty(500);
+				// The 403 at the end keeps a private site from reading as an empty one (design 248).
+				return fell.refused === undefined ? empty(404) : json(403, { reasons: fell.refused });
+			}
 
 			let settled: Gate;
 			try {

@@ -4,6 +4,7 @@ missing: Name a module the sources list whose instance is a gate, or pass a Gate
 missing: Pass all three: createServer({ sources, gate, listener }).
 missing: Pass an object with identify and access, open, or the name of a module that is one.
 no-accept: Pass accept in the share handlers, or open for the trusted case.
+not-a-response: Return a Response from the request hook, or undefined to decline.
 not-a-response: Return a Response from the route.
 not-an-option: Pass sources, and make anything you would have passed as a prop a module that others deps on.
 over-bound: Send a smaller body, or raise maxPayload on the listener.

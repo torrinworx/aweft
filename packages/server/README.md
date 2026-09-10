@@ -118,7 +118,7 @@ other. The gate stands between the outside and a module.
 
 ## What a module can carry
 
-The server reads three things off a loaded module's instance, all optional:
+The server reads four things off a loaded module's instance, all optional:
 
 ```ts
 export default ({ store }) => ({
@@ -132,6 +132,8 @@ export default ({ store }) => ({
 	call: async (args, context, { progress }) => { progress('reading'); return report(args); },
 	// HTTP, keyed by exact method and path.
 	routes: { 'GET /api/export': async (request, context) => new Response(await csv(context.user)) },
+	// An HTTP request no route matched. A `Response` answers it; `undefined` declines it.
+	request: async (request) => serve(new URL(request.url).pathname),
 });
 ```
 
@@ -161,6 +163,18 @@ reasons.
 one key are refused at `start()` by both names, and a conflict a later load introduces
 answers 500 to the request that meets it. No match is 404. A route answers with a `Response`;
 anything else is 500 and reported as `not-a-response`.
+
+`request` is the rule for what no route matched, for the answers a table of exact paths cannot
+hold: a directory of files, or anything under one prefix. Every loaded module that declares it
+is asked, in load order, behind the gate, and the first `Response` is the request's answer;
+`undefined` declines and the next module is asked. A module the gate refuses is skipped rather
+than answered on the spot, so a public module still answers under a private one loaded before
+it. When every module declines the request is 404, as it was; when the gate refused one along
+the way and nothing answered it is 403 carrying that refusal's reasons, the same shape a
+refused route gets, so a private site does not read as an empty one. That body is JSON,
+`{ reasons: [{ code, message }] }`. A hook that throws is 500, reported under its module's name,
+and it ends the walk: no module after it is asked, because a defect is not a decline. One that
+answers something that is not a `Response` is 500 and reported as `not-a-response` (design 248).
 
 ## The client
 

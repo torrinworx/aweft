@@ -15,7 +15,7 @@ type Route: type Route<C = unknown> = (request: Request, context: C) => Response
 type Server: interface Server { start(): Promise<void>; stop(): Promise<void>; readonly loader: Loader; }
 type ServerError: interface ServerError extends Error { readonly reason: string; }
 type ServerHandlers: interface ServerHandlers { readonly failed?: ((name: string, error: unknown) => void) | undefined; }
-type ServerModule: interface ServerModule<C = unknown> { connection?(connection: Connection<C>): Ending | Promise<Ending>; call?(args: unknown, context: C, tools: Progress): unknown; readonly routes?: Readonly<Record<string, Route<C>>>; }
+type ServerModule: interface ServerModule<C = unknown> { connection?(connection: Connection<C>): Ending | Promise<Ending>; call?(args: unknown, context: C, tools: Progress): unknown; readonly routes?: Readonly<Record<string, Route<C>>>; request?(request: Request, context: C): Response | undefined | Promise<Response | undefined>; }
 type ServerOptions: interface ServerOptions { readonly sources: readonly Source[]; readonly store?: unknown; readonly gate: Gate | string; readonly listener: Listener; readonly handlers?: ServerHandlers | undefined; }
 value createServer: (options: ServerOptions) => Server
 value open: Gate<Record<string, never>> & Accepting

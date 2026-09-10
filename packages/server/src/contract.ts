@@ -122,6 +122,23 @@ export interface ServerModule<C = unknown> {
 	call?(args: unknown, context: C, tools: Progress): unknown;
 	/** HTTP routes keyed by exact `METHOD /path`, such as `POST /api/session`. */
 	readonly routes?: Readonly<Record<string, Route<C>>>;
+	/**
+	 * Answer an HTTP request that no route matched, after the gate allowed this module.
+	 *
+	 * Params:
+	 *   request: the web-standard request, whatever its method
+	 *   context: what `identify` answered
+	 *
+	 * Returns: the `Response` that answers the request, or `undefined` to decline it, which
+	 * hands it on to the next module. The modules that declare this are asked in load order and
+	 * the first `Response` wins; when every one declines the request is 404, or 403 when the
+	 * gate refused a module along the way. Answering with anything else is 500, reported as
+	 * `not-a-response`, as a route is (design 248).
+	 *
+	 * Examples:
+	 *   request: (req) => file(new URL(req.url).pathname)
+	 */
+	request?(request: Request, context: C): Response | undefined | Promise<Response | undefined>;
 }
 
 /** What `socket` answers to accept an upgrade: the function the listener hands the opened socket to. */
@@ -201,7 +218,8 @@ export interface Server {
  * loaded gate, or an ask naming a module that is not loaded or has no `call`),
  * `not-an-option` (`loader` or `props` passed to `createServer`, which builds its own),
  * `route-conflict`, `no-accept` (a share on a connection without `accept`), `not-a-response`
- * (a route answered with something else; reported, never thrown to a caller), `started`,
+ * (a route or a `request` hook answered with something else; reported, never thrown to a
+ * caller), `started`,
  * `over-bound` (a request body past the listener's `maxPayload`), `refused` (the gate refused
  * an ask) and `closed` (an ask on a connection that has ended).
  */
