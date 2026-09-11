@@ -87,6 +87,7 @@ aweft/
                            socket, the modules' hooks
     auth/                  the first battery: the gate, sessions, sign-in, per-user state
     static/                the static battery: a directory of files served for what no route matched
+    health/                the health battery: one route that says the process is up and right
     jobs/                  a scheduler over an array the application hands in
     ssg/                   static generation
     build/                 transforms, in two modes
@@ -326,6 +327,7 @@ indexed by the job rather than the package, are not in this table.
 | jobs | a scheduled job runs, persists an effect, and survives a restart |
 | ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM |
 | static | a generated site is served by the stack's own server in one process: a deep link hydrates in place, an unknown URL is 404 with the fallback page, the same URL under the shell setting is 200 and mounts live, and HEAD, the ETag and a climbing path answer as the rule says |
+| health | a deploy's verification: the endpoint polled until the shipped build is the one answering, then the two states a poll must not mistake for health, a store that stopped answering and a check that threw |
 | build | the transforms build a real page; assert stripping is verified in the output |
 | testing | consumed by every other package's suite; its recipe is everyone else's |
 | debug | a bug found in a document the reader did not write, using only what the package prints |
@@ -409,8 +411,8 @@ the sandbox package's; the wall around the room is the operator's.
 ## Default modules, the batteries
 
 A full stack application should not start from nothing. The stack ships default module areas:
-`auth`, `email`, `files`, `geo`, `moderation`, `notifications`, `posts`, `state`, `static`,
-`uploads`, `users`.
+`auth`, `email`, `files`, `geo`, `health`, `moderation`, `notifications`, `posts`, `state`,
+`static`, `uploads`, `users`.
 
 The loader gives an application's own directory precedence over the library's, so an
 application overrides a default module by writing one with the same name, configures one
@@ -441,6 +443,12 @@ the exact path, then `<path>/index.html`, then `404.html` or, when its configura
 `shell.html`. A segment that begins with a dot is never a file and never reaches the disk. It
 carries `public` from its configuration, so one word makes a site private, and it makes the
 process that runs an application the host that serves its generated pages.
+
+The health battery is built (design 258). `@aweftjs/health` is a source of one server module,
+`health/Check`, which answers `GET /api/health` (and HEAD) with `ok`, `time`, `started`, the
+application's `info` and its named `checks`: 200 when the process and, when there is one, the
+store answer, 503 when the store does not, and never the error. A check adds detail and never
+decides `ok`.
 
 They split per area rather than shipping as one package because an application that wants
 auth and not posts should not carry posts, and an agent reading `@aweftjs/auth` should find

@@ -251,11 +251,11 @@ allowlist lives.
 What must exist:
 
 - **Branch coverage thresholds**, per package: core, schema, sync, store, modules,
-  sandbox, dom at 90; ui, icons, client, server, auth, jobs, ssg, static, build, testing at
-  80. Each package declares its number as `aweft.branchCoverage` in its `package.json`, and
-  `packages/testing/scripts/run-tests.ts` runs every package's tests in a coverage pass
-  scoped to that package's own sources, failing below the declared number. Line coverage
-  is not gated. Thresholds only ratchet upward; lowering one needs a design note.
+  sandbox, dom at 90; ui, icons, client, server, auth, jobs, ssg, static, health, build,
+  testing at 80. Each package declares its number as `aweft.branchCoverage` in its
+  `package.json`, and `packages/testing/scripts/run-tests.ts` runs every package's tests in a
+  coverage pass scoped to that package's own sources, failing below the declared number. Line
+  coverage is not gated. Thresholds only ratchet upward; lowering one needs a design note.
 - **Conformance fixtures**: `spec/fixtures` is the normative suite for the wire format.
   The gate's conformance suite fails on any byte a regeneration would change. Changing a
   fixture requires a `spec/CHANGELOG.md` entry.
