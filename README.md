@@ -76,6 +76,7 @@ from its own tier or below, never across that line.
 | `@aweftjs/server` | connections and requests behind a gate, over a listener you supply |
 | `@aweftjs/auth` | the first battery: the gate, sessions, sign-in and sign-up, per-user state |
 | `@aweftjs/health` | the health battery: `GET /api/health`, 200 when the process and its store answer, with the application's own info beside |
+| `@aweftjs/logs` | the logs battery: what a page and the server did, per visit, in the store, with readers any process imports |
 | `@aweftjs/jobs` | a scheduler over an array of jobs the application holds |
 | `@aweftjs/ssg` | a routed site written out as files, taken over in place when the browser arrives |
 | `@aweftjs/build` | the vite plugin and the Node loader: JSX and markup to `h`, static hoisting, asserts out of a release |
