@@ -1,0 +1,7 @@
+capped: Send fewer, or raise the cap in logs/Visits's config.
+invalid-config: Give build a string, such as a commit hash, or null.
+invalid-config: Give that setting a number above zero.
+invalid-config: Set public to true for a route any page may post to, or false for one that needs a signed-in user.
+malformed: Send { visit, entries: [{ at, kind, ... }] } as JSON.
+no-store: Pass store to createServer, or props: { store } to a loader you build yourself.
+undeclared: Spread paths from @aweftjs/logs into the store's declare.
