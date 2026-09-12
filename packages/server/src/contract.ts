@@ -103,6 +103,28 @@ export type Route<C = unknown> = (request: Request, context: C) => Response | Pr
 /** What a `connection` hook returns: nothing, or the function run when the connection ends. */
 export type Ending = (() => unknown) | undefined | void;
 
+/** What an `ask` came to: the module's answer, or what was thrown, the server's own refusals included. */
+export type Outcome = { readonly result: unknown } | { readonly error: unknown };
+
+/**
+ * What the server did, as it tells the modules that declare `observe` (design 260). Every
+ * event carries `at`, the time it was made. `args` and `result` are the caller's own objects,
+ * handed whole; a request's body is never here.
+ */
+export type ServerEvent =
+	/** A socket the gate let in, before any `connection` hook has run. */
+	| { readonly kind: 'connection'; readonly at: number; readonly request: Request }
+	/** That connection ended, `ms` after it opened. */
+	| { readonly kind: 'closed'; readonly at: number; readonly ms: number }
+	/** An `ask` answered: the module asked for and its instance when one is loaded, the args as sent, and how it came out. */
+	| { readonly kind: 'call'; readonly at: number; readonly name: string; readonly instance?: unknown; readonly args: unknown; readonly outcome: Outcome; readonly ms: number }
+	/** An HTTP request answered; `name` is the module whose route or `request` hook answered, absent when the server did. */
+	| { readonly kind: 'request'; readonly at: number; readonly method: string; readonly path: string; readonly status: number; readonly ms: number; readonly name?: string }
+	/** A commit a share's `accept` refused. */
+	| { readonly kind: 'refused'; readonly at: number; readonly topic: string; readonly reasons: readonly WireReason[] }
+	/** What reaches `handlers.failed`, except an observer's own throw. */
+	| { readonly kind: 'failed'; readonly at: number; readonly name: string; readonly error: unknown };
+
 /**
  * What the server reads off a loaded module's instance. Every field is optional; a module
  * with none of them is never asked about.
@@ -139,6 +161,23 @@ export interface ServerModule<C = unknown> {
 	 *   request: (req) => file(new URL(req.url).pathname)
 	 */
 	request?(request: Request, context: C): Response | undefined | Promise<Response | undefined>;
+	/**
+	 * Hear every event the server produces, in load order with the other modules that declare
+	 * this (design 260).
+	 *
+	 * Params:
+	 *   event: what happened, by `kind`
+	 *   context: what `identify` answered for the connection or request it belongs to; the
+	 *   same reference reaches every hook and every event of one connection
+	 *
+	 * Returns: nothing the server reads. It does not wait: a throw or a rejected promise is
+	 * reported under this module's name and emitted to no observer, and the event observed
+	 * is unaffected.
+	 *
+	 * Examples:
+	 *   observe: (event, context) => { if (event.kind === 'call') count(event.name); }
+	 */
+	observe?(event: ServerEvent, context: C): unknown;
 }
 
 /** What `socket` answers to accept an upgrade: the function the listener hands the opened socket to. */

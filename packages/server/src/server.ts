@@ -11,6 +11,7 @@ import {
 	type ServerHandlers, type ServerOptions, serverError,
 } from './contract.ts';
 import { fallthrough } from './request.ts';
+import { type Emit, emitter } from './observe.ts';
 import { routeKey, routeTable } from './routes.ts';
 
 const json = (status: number, body: unknown): Response =>
@@ -82,7 +83,14 @@ export const createServer = (options: ServerOptions): Server => {
 	const live = new Set<Live>();
 	let started = false;
 
-	const report = reporter(handlers);
+	// An observer's own throw is reported and never emitted, so the two reporters differ by
+	// that one line (design 260).
+	const observed = reporter(handlers);
+	const emit: Emit = emitter(loader, observed);
+	const report = (name: string, error: unknown, context?: unknown): void => {
+		observed(name, error);
+		emit({ kind: 'failed', at: Date.now(), name, error }, context);
+	};
 
 	// A named gate is one of the modules the sources list, so it exists only once `start` has
 	// run the factories (design 241), and it is read off the loader at every use, the way the
@@ -113,24 +121,32 @@ export const createServer = (options: ServerOptions): Server => {
 			}
 		};
 
-		const onRequest = async (request: Request, peer: Peer): Promise<Response> => {
+		/** The answer, with who asked and which module answered, for the event that follows it. */
+		interface Answered {
+			readonly response: Response;
+			readonly context?: unknown;
+			readonly name?: string;
+		}
+
+		const answerRequest = async (request: Request, peer: Peer): Promise<Answered> => {
 			const who = await identify(request, peer);
-			if (who instanceof Response) return who;
-			if ('refused' in who) return json(401, { reasons: who.refused });
+			if (who instanceof Response) return { response: who };
+			if ('refused' in who) return { response: json(401, { reasons: who.refused }) };
+			const context = who.context;
 
 			let owned;
 			try {
 				owned = routeTable(loader).get(routeKey(request));
 			} catch (error) {
-				report('routes', error);
-				return empty(500);
+				report('routes', error, context);
+				return { response: empty(500), context };
 			}
 			if (owned === undefined) {
-				const fell = await fallthrough({ request, context: who.context, loader, gate: perUse, report });
-				if (fell.answer !== undefined) return fell.answer;
-				if (fell.failed === true) return empty(500);
+				const fell = await fallthrough({ request, context, loader, gate: perUse, report });
+				if (fell.answer !== undefined) return { response: fell.answer, context, ...(fell.name === undefined ? {} : { name: fell.name }) };
+				if (fell.failed === true) return { response: empty(500), context };
 				// The 403 at the end keeps a private site from reading as an empty one (design 248).
-				return fell.refused === undefined ? empty(404) : json(403, { reasons: fell.refused });
+				return { response: fell.refused === undefined ? empty(404) : json(403, { reasons: fell.refused }), context };
 			}
 
 			let settled: Gate;
@@ -138,15 +154,15 @@ export const createServer = (options: ServerOptions): Server => {
 				settled = asked();
 			} catch (error) {
 				// The window where a named gate is being reloaded and nothing is loaded under it.
-				report('gate', error);
-				return empty(500);
+				report('gate', error, context);
+				return { response: empty(500), context };
 			}
 
 			try {
-				const reasons = await settled.access({ name: owned.name, instance: owned.instance }, who.context);
-				if (reasons.length > 0) return json(403, { reasons });
-				const answer: unknown = await owned.route(request, who.context);
-				if (answer instanceof Response) return answer;
+				const reasons = await settled.access({ name: owned.name, instance: owned.instance }, context);
+				if (reasons.length > 0) return { response: json(403, { reasons }), context };
+				const answer: unknown = await owned.route(request, context);
+				if (answer instanceof Response) return { response: answer, context, name: owned.name };
 				// A route that answered with something else is the module's defect, and it is reported
 				// like a throw rather than turned into a bare 500 nobody hears about.
 				throw serverError(
@@ -154,9 +170,18 @@ export const createServer = (options: ServerOptions): Server => {
 					'Return a Response from the route.',
 				);
 			} catch (error) {
-				report(owned.name, error);
-				return empty(500);
+				report(owned.name, error, context);
+				return { response: empty(500), context };
 			}
+		};
+
+		const onRequest = async (request: Request, peer: Peer): Promise<Response> => {
+			const at = Date.now();
+			const { response, context, name } = await answerRequest(request, peer);
+			const { method } = request;
+			const path = new URL(request.url).pathname;
+			emit({ kind: 'request', at, method, path, status: response.status, ms: Date.now() - at, ...(name === undefined ? {} : { name }) }, context);
+			return response;
 		};
 
 		const onSocket = async (request: Request, peer: Peer): Promise<Response | Accept> => {
@@ -164,7 +189,7 @@ export const createServer = (options: ServerOptions): Server => {
 			if (who instanceof Response) return who;
 			if ('refused' in who) return json(401, { reasons: who.refused });
 			return (socket: SocketLike): void => {
-				const connection = openConnection({ socket, request, context: who.context, loader, gate: perUse, report });
+				const connection = openConnection({ socket, request, context: who.context, loader, gate: perUse, report, emit });
 				live.add(connection);
 				void connection.ended.then(() => { live.delete(connection); });
 			};

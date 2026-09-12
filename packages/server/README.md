@@ -118,7 +118,7 @@ other. The gate stands between the outside and a module.
 
 ## What a module can carry
 
-The server reads four things off a loaded module's instance, all optional:
+The server reads five things off a loaded module's instance, all optional:
 
 ```ts
 export default ({ store }) => ({
@@ -134,6 +134,8 @@ export default ({ store }) => ({
 	routes: { 'GET /api/export': async (request, context) => new Response(await csv(context.user)) },
 	// An HTTP request no route matched. A `Response` answers it; `undefined` declines it.
 	request: async (request) => serve(new URL(request.url).pathname),
+	// What the server did, every event, after the fact.
+	observe: (event, context) => { if (event.kind === 'call') count(event.name, event.ms); },
 });
 ```
 
@@ -175,6 +177,22 @@ refused route gets, so a private site does not read as an empty one. That body i
 `{ reasons: [{ code, message }] }`. A hook that throws is 500, reported under its module's name,
 and it ends the walk: no module after it is asked, because a defect is not a decline. One that
 answers something that is not a `Response` is 500 and reported as `not-a-response` (design 248).
+
+`observe` hears what the server did (design 260). Every loaded module that declares it is
+handed every event, in load order: `connection` (a socket the gate let in, with the handshake
+request) and `closed` (with `ms` since it opened); `call` (the module asked for and its `instance` when one is loaded, the `args` as sent, the
+`outcome` as `{ result }` or `{ error }`, and `ms`), for asks the server refused itself too,
+where the error is its `missing`, `refused` or `closed`; `request` (method, path,
+status, `ms`, and `name`, the module whose route or `request` hook answered, absent when the
+server answered itself; never the body); `refused` (a commit a share's `accept` turned away,
+with the topic and the reasons); `failed` (what reaches `handlers.failed`). `context` is what
+`identify` answered for that connection or request, and the same reference reaches every hook
+and every event of one connection, so an observer that tells connections apart keys on it. The
+hook is not gated, because the server is telling its own modules what it did. Nothing waits
+for an observer and nothing reads what it answers: a throw or a rejection is reported under the
+observer's name and emitted to no one, so an observer that throws on every event does not chase
+its own tail, and the event it threw on is unaffected. `args` and `result` are the caller's own
+objects, not copies.
 
 ## The client
 

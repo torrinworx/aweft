@@ -6,7 +6,8 @@ import type { Loader } from '@aweftjs/modules';
 import { connect, fromWebSocket, requests } from '@aweftjs/sync';
 import type { SocketLike } from '@aweftjs/sync';
 
-import { type Connection, type Ending, type Gate, type GatedLink, type ServerModule, serverError } from './contract.ts';
+import { type Connection, type Ending, type Gate, type GatedLink, type Outcome, type ServerModule, serverError } from './contract.ts';
+import type { Emit } from './observe.ts';
 
 export interface Live {
 	/** End the connection. */
@@ -21,7 +22,8 @@ interface Wiring {
 	readonly context: unknown;
 	readonly loader: Loader;
 	readonly gate: Gate;
-	readonly report: (name: string, error: unknown) => void;
+	readonly report: (name: string, error: unknown, context?: unknown) => void;
+	readonly emit: Emit;
 }
 
 type Hook = NonNullable<ServerModule['connection']>;
@@ -43,11 +45,12 @@ const callOf = (instance: unknown): Call | undefined => {
 const asking = (reason: string, detail: string, fix: string, reasons?: readonly unknown[]): Error =>
 	reasons === undefined ? codecError(reason, detail, fix) : Object.assign(codecError(reason, detail, fix), { reasons });
 
-export const openConnection = ({ socket, request, context, loader, gate, report }: Wiring): Live => {
+export const openConnection = ({ socket, request, context, loader, gate, report, emit }: Wiring): Live => {
 	const channel = fromWebSocket(socket);
 	const link = connect(channel);
 	const asks = requests(socket);
 	const ends: Array<{ readonly name: string; readonly end: () => unknown }> = [];
+	const opened = Date.now();
 	let over = false;
 
 	const close = (): void => { socket.close(); };
@@ -60,7 +63,16 @@ export const openConnection = ({ socket, request, context, loader, gate, report 
 					'Pass accept in the share handlers, or open for the trusted case.',
 				);
 			}
-			return link.share(name, document, handlers);
+			// The module's rule, with the server told each time it refused (design 260).
+			const accept = handlers.accept;
+			return link.share(name, document, {
+				...handlers,
+				accept: (commit) => {
+					const reasons = accept(commit);
+					if (reasons.length > 0) emit({ kind: 'refused', at: Date.now(), topic: name, reasons }, context);
+					return reasons;
+				},
+			});
 		},
 	};
 
@@ -69,9 +81,9 @@ export const openConnection = ({ socket, request, context, loader, gate, report 
 	const runEnd = (name: string, end: () => unknown): void => {
 		try {
 			const outcome = end();
-			if (outcome instanceof Promise) outcome.catch((error: unknown) => report(name, error));
+			if (outcome instanceof Promise) outcome.catch((error: unknown) => report(name, error, context));
 		} catch (error) {
-			report(name, error);
+			report(name, error, context);
 		}
 	};
 
@@ -81,8 +93,7 @@ export const openConnection = ({ socket, request, context, loader, gate, report 
 	let hooked: () => void = () => {};
 	const ready = new Promise<void>((done) => { hooked = done; });
 
-	asks.answer(async (name, args, progress) => {
-		await ready;
+	const answer = async (name: string, args: unknown, progress: (value: unknown) => void): Promise<unknown> => {
 		if (over) throw asking('closed', 'the connection has ended', 'Open a new connection and ask again.');
 		const instance = loader.get(name);
 		const call = callOf(instance);
@@ -90,6 +101,21 @@ export const openConnection = ({ socket, request, context, loader, gate, report 
 		const reasons = await gate.access({ name, instance }, context);
 		if (reasons.length > 0) throw asking('refused', `${name} refused the call`, 'Sign in, or ask for something the gate allows.', reasons);
 		return await call.call(instance, args, context, { progress });
+	};
+
+	asks.answer(async (name, args, progress) => {
+		await ready;
+		const at = Date.now();
+		let outcome: Outcome;
+		try {
+			outcome = { result: await answer(name, args, progress) };
+		} catch (error) {
+			outcome = { error };
+		}
+		const instance = loader.get(name);
+		emit({ kind: 'call', at, name, ...(instance === undefined ? {} : { instance }), args, outcome, ms: Date.now() - at }, context);
+		if ('error' in outcome) throw outcome.error;
+		return outcome.result;
 	});
 
 	// The connection is over when its link is over. The socket closing ends the link, and a
@@ -100,6 +126,7 @@ export const openConnection = ({ socket, request, context, loader, gate, report 
 			over = true;
 			asks.stop();
 			for (const { name, end } of ends.splice(0).reverse()) runEnd(name, end);
+			emit({ kind: 'closed', at: Date.now(), ms: Date.now() - opened }, context);
 			done();
 		});
 	});
@@ -107,6 +134,7 @@ export const openConnection = ({ socket, request, context, loader, gate, report 
 	// Hooks in load order, for the modules the gate allows. A hook that throws ends the
 	// connection: a connection half set up is the state nothing else can reason about.
 	void (async () => {
+		emit({ kind: 'connection', at: opened, request }, context);
 		try {
 			for (const name of loader.loaded()) {
 				if (over) return;
@@ -121,7 +149,7 @@ export const openConnection = ({ socket, request, context, loader, gate, report 
 					const connection: Connection = { link: gated, request, context, close };
 					ending = await hook.call(instance, connection);
 				} catch (error) {
-					report(name, error);
+					report(name, error, context);
 					close();
 					return;
 				}
