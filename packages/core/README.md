@@ -273,6 +273,21 @@ sits at is silent: it never matches, and a derived value on it sits at its initi
 forever, which reads as a counter that works and is always zero. Count the steps from the
 observable the scope starts at, or use `tree`, which does not care how deep the thing is.
 
+`skip(Infinity)` is any run of steps. Ending the scope, it reaches every slot at every depth,
+so `observer(doc).skip(Infinity).watch(fn)` hears every delta in the document, each on its
+own. Every step of the run has to be open: a wildcard never consumes an object slot whose key
+starts with an underscore, so a `_draft` slot and everything an object under it holds are
+private from this scope at any depth, and never a slot named in `ignore`, which drops that
+slot and everything under it. That is the scope for a recorder or a mirror: what the document
+holds that its author did not mark private, and nothing the recorder has to know about.
+Followed by a key, `skip(Infinity).path('done')` reaches `done` at any depth, which is what
+`tree('done')` spells.
+
+```ts
+observer(doc).skip(Infinity).watch((change) => record(change.deltas));   // every public delta
+observer(doc).skip(Infinity).ignore('scratch').watch(fn);               // except under scratch
+```
+
 ## A snapshot rebuilds
 
 `fromSnapshot(snapshot(doc))` is a live copy: same ids, kinds, slots, positions and

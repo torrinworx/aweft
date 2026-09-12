@@ -63,7 +63,7 @@ export interface Node {
 }
 
 /** A wildcard scope step: any one key, or any depth ending at a key (design 025). */
-export type WildStep = { readonly any: true } | { readonly deep: string | number };
+export type WildStep = { readonly any: true } | { readonly deep: string | number } | { readonly run: true };
 
 /** One step of a scope: a literal key, or a wildcard. */
 export type Step = string | number | WildStep;

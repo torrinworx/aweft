@@ -407,10 +407,16 @@ const wildScope = (
 	const step = (j: number): string => (j < base ? slots[base - 1 - j]! : last);
 	const holder = (j: number): Node => chain[base - j]!;
 
+	// A run that ends the pattern reaches the delta's own slot, so there is no step past the
+	// match: shallow has nothing to narrow and ignore is read on the run's way down instead.
+	const ending = keys[keys.length - 1];
+	const trailing = typeof ending === 'object' && 'run' in ending;
+
 	// Where a full match ends decides the rest: shallow measures from it, and ignore reads
 	// the step just past it.
 	const accept = (consumed: number): boolean => {
-		if (listener.shallow && reach !== consumed + 1) return false;
+		if (trailing && consumed !== reach) return false;
+		if (listener.shallow && !trailing && reach !== consumed + 1) return false;
 
 		if (listener.ignore.length > 0 && reach > consumed) {
 			const next = step(consumed);
@@ -427,15 +433,30 @@ const wildScope = (
 	const open = (j: number): boolean =>
 		!(holder(j).kind === 'object' && step(j).startsWith('_'));
 
+	// A run never consumes a slot the scope ignores either (design 259).
+	const kept = (j: number): boolean => {
+		for (const key of listener.ignore) {
+			if (step(j) === resolveKey(holder(j), key)) return false;
+		}
+		return true;
+	};
+
 	const fits = (j: number, k: number): boolean => {
 		if (j === keys.length) return accept(k);
-		if (k >= reach) return false;
+		if (k > reach || (k === reach && !trailing)) return false;
 
 		const key = keys[j]!;
 		if (typeof key !== 'object') {
-			return step(k) === resolveKey(holder(k), key) && fits(j + 1, k + 1);
+			return k < reach && step(k) === resolveKey(holder(k), key) && fits(j + 1, k + 1);
 		}
-		if ('any' in key) return open(k) && fits(j + 1, k + 1);
+		if ('any' in key) return k < reach && open(k) && fits(j + 1, k + 1);
+		if ('run' in key) {
+			// Zero steps first, then one more each time the rest of the pattern did not fit.
+			for (let m = k; ; m++) {
+				if (fits(j + 1, m)) return true;
+				if (m >= reach || !open(m) || !kept(m)) return false;
+			}
+		}
 
 		for (let m = k; m < reach; m++) {
 			// The named key itself is explicit and may be private; the run of steps a deep
