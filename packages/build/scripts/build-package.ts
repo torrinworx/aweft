@@ -10,13 +10,16 @@
 // `@aweftjs/core` stays bare.
 //
 // Run with `--all` for every package, or with no argument from inside one, which is what each
-// package's `prepack` does.
+// package's `prepack` does. Several packages, `--all` among them, compile in dependency order,
+// because a package resolves the ones it imports through their `dist/`.
 
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
 
 import { transform } from '../src/index.ts';
+
+import { type Manifest, buildOrder } from './order.ts';
 
 const root = join(import.meta.dirname, '..', '..', '..');
 const packagesDir = join(root, 'packages');
@@ -99,16 +102,18 @@ const build = (name: string): void => {
 	console.log(`build: ${name}`);
 };
 
-const all = readdirSync(packagesDir)
+const manifests = new Map<string, Manifest>(readdirSync(packagesDir)
 	.filter((name) => statSync(join(packagesDir, name)).isDirectory())
 	.filter((name) => existsSync(join(packagesDir, name, 'package.json')))
-	.sort();
+	.map((name) => [name, JSON.parse(readFileSync(join(packagesDir, name, 'package.json'), 'utf8')) as Manifest]));
+const all = buildOrder(manifests);
 
 // Named packages build; `--all` builds every one; with neither, the package is whichever
 // directory npm started the script in, which is how one `prepack` line works in every manifest.
+// Whatever was named builds in dependency order, not the order it was named in.
 const named = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
-const targets = process.argv.includes('--all') ? all : named.length > 0 ? named : [basename(process.cwd())];
-for (const name of targets) {
+const wanted = process.argv.includes('--all') ? all : named.length > 0 ? named : [basename(process.cwd())];
+for (const name of wanted) {
 	if (!all.includes(name)) throw new Error(`no package named ${name} in packages/`);
-	build(name);
 }
+for (const name of all.filter((name) => wanted.includes(name))) build(name);

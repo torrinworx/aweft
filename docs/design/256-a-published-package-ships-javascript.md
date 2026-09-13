@@ -25,7 +25,10 @@ script npm runs in it. This repo has one. An application with the submodule writ
 and its `tsconfig` names the condition in `customConditions`.
 
 `dist/` is built, never committed. `npm run build` writes every package's, and each package's
-`prepack` writes its own, so no publish can carry a stale one.
+`prepack` writes its own, so no publish can carry a stale one. The packages compile in
+dependency order, read from their manifests, because `tsc` resolves a bare `@aweftjs/x` through
+that package's `dist/`: from a clean tree, or over a stale one, every package a package imports
+is built before it.
 
 The compile is two passes, because the stack compiles its own JSX:
 
