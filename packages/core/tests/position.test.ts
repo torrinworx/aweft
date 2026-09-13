@@ -350,3 +350,58 @@ test('a splice in the middle still places one key at a time, between its neighbo
 		assert.ok(compareBytes(keys[i - 1]!, keys[i]!) < 0, `key ${i} sorts after the one before it`);
 	}
 });
+
+/** Every digit byte of a key, integer and fractional, strictly inside the byte range. */
+const digitsInRange = (positions: readonly Uint8Array[]): boolean => positions.every((p) => {
+	const count = p[0]!;
+	for (let j = 1; j <= count; j++) if (p[j]! < 1 || p[j]! > 254) return false;
+	// After the integer part and its three random bytes, each level is a digit and three bytes.
+	for (let at = 1 + count + 3; at < p.length; at += 4) if (p[at]! < 1 || p[at]! > 254) return false;
+	return true;
+});
+
+const ordered = (positions: readonly Uint8Array[]): boolean =>
+	positions.every((p, i) => i === 0 || compareBytes(positions[i - 1]!, p) === -1);
+
+test('a fractional digit stops strictly inside the byte range at either end, and goes down a level instead', () => {
+	// Stepping toward the ceiling: always inserting just before the last element. A digit past
+	// the ceiling would be a byte the format has no place for, and a zero digit would end a key
+	// in a way the next insert could not get under.
+	const climbing = createArray<number>([0, 1]);
+	for (let i = 0; i < 300; i++) climbing.splice(climbing.length - 1, 0, i);
+	assert.ok(ordered(positionsOf(climbing)));
+	assert.ok(digitsInRange(positionsOf(climbing)), 'no digit past the ceiling');
+
+	const descending = createArray<number>([0, 1]);
+	for (let i = 0; i < 300; i++) descending.splice(1, 0, i);
+	assert.ok(ordered(positionsOf(descending)));
+	assert.ok(digitsInRange(positionsOf(descending)), 'no digit under the floor');
+
+	// Counting an integer down past zero.
+	const prepended = createArray<number>([0]);
+	for (let i = 0; i < 140; i++) prepended.unshift(i);
+	assert.ok(ordered(positionsOf(prepended)));
+	assert.ok(digitsInRange(positionsOf(prepended)), 'no negative integer digit');
+});
+
+test('a gap of exactly two digits takes the digit between, at the same width, at either level', () => {
+	// The chooser steps by one at an open end and halves a gap in the middle. A gap of two has
+	// exactly one digit between, and taking it costs nothing; going down a level instead would
+	// grow every key placed there by four bytes for no reason.
+	const fractional = createArray<number>([0, 1]);
+	fractional.splice(1, 0, 10);
+	fractional.splice(2, 0, 11);
+	fractional.splice(3, 0, 12);
+	fractional.splice(2, 1);
+	const before = positionsOf(fractional).map((p) => p.length);
+	fractional.splice(2, 0, 99);
+	const after = positionsOf(fractional).map((p) => p.length);
+	assert.deepEqual(after, [before[0], before[1], before[1], before[2], before[3]], 'the new key is as wide as its neighbours');
+	assert.ok(ordered(positionsOf(fractional)));
+
+	const integers = createArray<number>([0, 1, 2]);
+	integers.splice(1, 1);
+	integers.splice(1, 0, 9);
+	assert.deepEqual(positionsOf(integers).map((p) => p.length), [5, 5, 5], 'one integer digit each, the middle one taken');
+	assert.ok(ordered(positionsOf(integers)));
+});
