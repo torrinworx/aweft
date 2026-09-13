@@ -106,6 +106,28 @@ test('a visit fills to its cap, then holds one capped entry and drops the rest',
 	await stop();
 });
 
+test('two first writes to one visit in the same tick open it once, so the one close lets the store let it go', async () => {
+	const opens: string[] = [];
+	const closes: string[] = [];
+	const inner = newStore();
+	const store = new Proxy(inner, {
+		get: (target, key) => {
+			if (key === 'open') return async (doc: string, kind?: 'object' | 'array') => { opens.push(doc); return target.open(doc, kind); };
+			if (key === 'close') return async (handle: { doc: string }) => { closes.push(handle.doc); return target.close(handle as never); };
+			return Reflect.get(target, key) as unknown;
+		},
+	});
+	const { instance, stop } = await visits(store);
+	await Promise.all([
+		instance.record({ visit: 'v10', entries: [entry('a')] }, null),
+		instance.record({ visit: 'v10', entries: [entry('b')] }, null),
+	]);
+	await stop();
+	assert.deepEqual(opens.filter((doc) => doc === 'visit:v10'), ['visit:v10'], 'opened once');
+	assert.deepEqual(closes.filter((doc) => doc === 'visit:v10'), ['visit:v10'], 'closed once, which is all the store needs');
+	assert.deepEqual((await readVisit(inner, 'v10'))!.entries.map((e) => e.kind), ['a', 'b']);
+});
+
 test('a batch larger than the batch cap is refused, and the visit is untouched', async () => {
 	const store = newStore();
 	const { instance, stop } = await visits(store, { batch: 2 });

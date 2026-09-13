@@ -34,6 +34,12 @@ interface Root {
 	entries: Record<string, Primitive>[];
 }
 
+/** A document this module holds open, and the timer that lets a visit go. */
+interface Holding {
+	readonly handle: Handle;
+	idle: ReturnType<typeof setTimeout> | undefined;
+}
+
 /** The instance: what the gate reads, the page's call, and what a module calls. */
 export interface Visits {
 	readonly public: true;
@@ -112,7 +118,10 @@ export default async (props: ModuleProps): Promise<Visits> => {
 	const build = config.build as string | null;
 
 	const process = `process:${idText()}`;
-	const held = new Map<string, { handle: Handle; idle: ReturnType<typeof setTimeout> | undefined }>();
+	const held = new Map<string, Holding>();
+	// Two first writes to one document in the same tick would each open it, and the store would
+	// count two opens against the one close; the second joins the first's open instead.
+	const opening = new Map<string, Promise<Holding>>();
 	const bound = new WeakMap<object, string>();
 	// The latest visit each session sent a batch from, so a request with that cookie lands there.
 	// Bounded, oldest out, because sessions are as many as the application has.
@@ -126,28 +135,36 @@ export default async (props: ModuleProps): Promise<Visits> => {
 	const visits = perMinute();
 
 	/** The document, opened once and held; a visit is let go of `idleMs` after its last use. */
-	const opened = async (name: string): Promise<Root> => {
+	const opened = (name: string): Promise<Holding> => {
 		const holding = held.get(name);
 		if (holding !== undefined) {
 			if (holding.idle !== undefined) { clearTimeout(holding.idle); holding.idle = undefined; }
-			return holding.handle.root as Root;
+			return Promise.resolve(holding);
 		}
-		const handle = await store.open(name);
-		const root = handle.root as Root;
-		if (root.kind === undefined) {
-			atomic(() => {
-				root.kind = name.startsWith('process:') ? 'process' : 'visit';
-				root.user = null;
-				root.build = root.kind === 'process' ? build : null;
-				root.browser = null;
-				root.startedAt = Date.now();
-				root.endedAt = null;
-				root.errors = 0;
-				root.entries = createArray();
-			});
-		}
-		held.set(name, { handle, idle: undefined });
-		return root;
+		const inFlight = opening.get(name);
+		if (inFlight !== undefined) return inFlight;
+		const building = (async (): Promise<Holding> => {
+			const handle = await store.open(name);
+			const root = handle.root as Root;
+			if (root.kind === undefined) {
+				atomic(() => {
+					root.kind = name.startsWith('process:') ? 'process' : 'visit';
+					root.user = null;
+					root.build = root.kind === 'process' ? build : null;
+					root.browser = null;
+					root.startedAt = Date.now();
+					root.endedAt = null;
+					root.errors = 0;
+					root.entries = createArray();
+				});
+			}
+			const made: Holding = { handle, idle: undefined };
+			held.set(name, made);
+			return made;
+		})();
+		opening.set(name, building);
+		void building.then(() => opening.delete(name), () => opening.delete(name));
+		return building;
 	};
 
 	const release = (name: string): void => {
@@ -163,7 +180,8 @@ export default async (props: ModuleProps): Promise<Visits> => {
 
 	/** Append what fits under the caps, count the errors, and keep the tail to one commit. */
 	const append = async (name: string, entries: readonly Entry[], onRoot?: (root: Root) => void): Promise<number> => {
-		const root = await opened(name);
+		const { handle } = await opened(name);
+		const root = handle.root as Root;
 		let kept = 0;
 		atomic(() => {
 			onRoot?.(root);
@@ -179,7 +197,7 @@ export default async (props: ModuleProps): Promise<Visits> => {
 				kept += 1;
 			}
 		});
-		await store.settled(held.get(name)!.handle);
+		await store.settled(handle);
 		await store.truncate(name, 1);
 		release(name);
 		return kept;

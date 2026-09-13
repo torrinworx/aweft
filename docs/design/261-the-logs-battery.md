@@ -125,15 +125,16 @@ that wants a line in the record calls `write`.
 ## Evidence
 
 `packages/logs/tests/`: `visits.test.ts` (the documents, the caps, `write` with and without a
-context, binding, the sweep, `invalid-config`), `record.test.ts` (the route: a batch kept, `user`
-from the cookie and kept across a sign-out, `browser` and `build` written once, `ended`, a body
-that is not a batch, 429 over each cap), `observe.test.ts` (every event kind written to the
-bound visit or the process document, `logs: true` read off the instance, a body never written),
-`client.test.ts` (each source recorded through a fake window, console put back, a `_secret`
-commit recorded as shape with the path absent, a printable key absent, a password field's key
-absent, the socket never touched, `sendBeacon` on `pagehide`, a throwing sink swallowed),
-`readers.test.ts` (each reader over a memory store), `views.test.ts` (the SQL views over a
-throwaway database, skipped without one), `surface.test.ts`. `recipes/logs` drives a page in
+context, binding, the sweep, two first writes opening a document once, `invalid-config`),
+`record.test.ts` (the route: a batch kept, `user` from the cookie and kept across a sign-out,
+`browser` and `build` written once, `ended`, a body that is not a batch, 429 over each cap, two
+anonymous sockets under the auth gate as two visits), `observe.test.ts` (every event kind
+written to the bound visit or the process document, `logs: true` read off the instance, a body
+never written), `client.test.ts` (each source recorded through a fake window, console put back,
+a `_secret` commit recorded as shape with the path absent, a printable key absent, a password
+field's key absent, the socket never touched, `sendBeacon` on `pagehide`, a throwing sink
+swallowed), `readers.test.ts` (each reader over a memory store), `views.test.ts` (the SQL views
+over a throwaway database, skipped without one), `surface.test.ts`. `recipes/logs` drives a page in
 Chromium through the full-stack shape and reads the visit back with the readers.
 
 ## What would reverse this
