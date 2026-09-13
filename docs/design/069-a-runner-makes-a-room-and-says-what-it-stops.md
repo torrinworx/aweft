@@ -64,3 +64,8 @@ interface and would change nothing above it.
 instead, because the timeout guards a call into the room and a room of every runner can hang,
 not only a child's. `memoryMB` stays on `child`, being a Node heap flag. Reversing this would
 move `callMs` onto each runner.
+
+`iframe()` takes `allow` (design 281): inline styles, and images, fonts and media from the
+inside origin, `data:`, `blob:` and the origins the application names. `script-src` and
+`connect-src` never widen and the sandbox attribute stays `allow-scripts` alone, so the frame's
+claim is what it was.
