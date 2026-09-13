@@ -1,8 +1,9 @@
-// The browser half: one function, and nothing that reads a disk (design 151).
+// The browser half: two functions, and nothing that reads a disk (design 151).
 //
 // Its own subpath, and the only values it imports are `ui`'s `mount` and `hydrate` and the two
 // `dom` needs to read an item, so a page bundle that reaches for it carries the walk, the
-// document builder and `node:fs` nowhere.
+// document builder and `node:fs` nowhere. `languageOf` reads the language the site wrote on the
+// page back, by the one prefix rule the site wrote it with (design 279).
 
 import { type ParentLike, type Remove, h, isComponentCall } from '@aweftjs/dom';
 import { type Render, hydrate, mount } from '@aweftjs/ui';
@@ -43,4 +44,43 @@ export const attach = (target: ParentLike, item: unknown, render?: Render): Remo
 	// mounter and render nothing. `mount`'s own contract is untouched.
 	const mounted = typeof item === 'function' && !isComponentCall(item) ? h(item) : item;
 	return generated ? hydrate(target, mounted, render) : mount(target, mounted, undefined, render);
+};
+
+/** Where a page stands: its language, and the router base its URLs carry. */
+export interface PageLanguage {
+	/** The tag on `<html lang>`, or `''` for a page with none. */
+	readonly locale: string;
+	/** `/<tag>` when the address is under the language's prefix, and `''` otherwise, which is the
+	 * source language and a site with one language alike. What `createRouter({ base })` takes. */
+	readonly base: string;
+}
+
+/**
+ * The language a generated page is in, and the base its router needs.
+ *
+ * Params:
+ *   document: the page's document, or anything with a `documentElement` carrying `lang` and a
+ *             `location` with a `pathname`; the browser's `document` and `window` are read when
+ *             the argument has no location of its own
+ *
+ * Returns: the tag on `<html lang>` and the prefix the address carries when its first segment is
+ * that tag. A site with one language answers `''` for both, so an entry written this way works
+ * before the site has a second language.
+ *
+ * Example:
+ *   const { locale, base } = languageOf(document);
+ *   const catalog = locale === 'en' ? undefined : (await import(`./text/${locale}.json`)).default;
+ *   attach(document.body, h(Site, { router: createRouter({ base }) }), context({ locale, catalog }));
+ */
+export const languageOf = (document: {
+	readonly documentElement?: { getAttribute?(name: string): string | null } | null;
+	readonly location?: { readonly pathname?: string } | null;
+}): PageLanguage => {
+	const root = document.documentElement;
+	const locale = (root !== null && root !== undefined && typeof root.getAttribute === 'function' ? root.getAttribute('lang') : null) ?? '';
+	if (locale === '') return { locale: '', base: '' };
+	const location = document.location ?? (globalThis as { location?: { pathname?: string } }).location;
+	const path = location?.pathname ?? '/';
+	const prefix = `/${locale}`;
+	return { locale, base: path === prefix || path.startsWith(`${prefix}/`) ? prefix : '' };
 };

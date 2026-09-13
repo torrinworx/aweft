@@ -1,8 +1,11 @@
 type PageResult: interface PageResult { readonly html: string; readonly title: string | null; readonly noindex: boolean; }
 type Site: interface Site { walk(): Promise<WalkResult>; page(url: string): Promise<PageResult>; write(urls?: readonly string[]): Promise<WriteResult>; }
-type SiteOptions: interface SiteOptions { page(router: Router): unknown; readonly shell: string; readonly out: string; readonly base?: string; }
+type SiteOptions: interface SiteOptions { page(router: Router): unknown; readonly shell: string; readonly out: string; readonly base?: string; readonly locale?: string; readonly locales?: Readonly<Record<string, Catalog>>; }
+type TextReport: interface TextReport { readonly missing: readonly string[]; readonly unused: readonly string[]; }
 type Unenumerated: interface Unenumerated { readonly prefix: string; readonly name: string; }
 type WalkResult: interface WalkResult { readonly urls: readonly string[]; readonly unenumerated: readonly Unenumerated[]; }
-type WriteResult: interface WriteResult { readonly files: readonly string[]; readonly urls: readonly string[]; readonly unenumerated: readonly Unenumerated[]; readonly sitemap: string | null; }
+type WriteResult: interface WriteResult { readonly files: readonly string[]; readonly urls: readonly string[]; readonly unenumerated: readonly Unenumerated[]; readonly sitemap: string | null; readonly text: Readonly<Record<string, TextReport>>; }
 value createSite: (options: SiteOptions) => Site
+./client type PageLanguage: interface PageLanguage { readonly locale: string; readonly base: string; }
 ./client value attach: (target: ParentLike, item: unknown, render?: Render | undefined) => Remove
+./client value languageOf: (document: { readonly documentElement?: { getAttribute?(name: string): string | null; } | null | undefined; readonly location?: { readonly pathname?: string | undefined; } | null | undefined; }) => PageLanguage

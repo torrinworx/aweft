@@ -1,5 +1,8 @@
 bad-entries: Answer an array of objects from entries(), one per page, an empty array for none, or null to say you cannot list them.
 bad-entry-value: Answer a value with no empty, . or .. segment in it; those name a place rather than a page.
+locale-invalid: Write a BCP 47 tag such as fr or fr-CA.
+locale-needed: Name the language the pages are written in as locale; its pages stand unprefixed and every other language under its tag.
+locale-twice: Leave the source language out of locales: its pages stand unprefixed and need no catalog.
 missing-parameter: Answer every :name and *name in the act key from entries(), as a string.
 not-a-page: Ask for a URL the site has; walk() answers the list, and the fallback is written once as 404.html.
 not-a-path: Write each page at the path its URL names; a . or a .. in it names a place rather than a page.
