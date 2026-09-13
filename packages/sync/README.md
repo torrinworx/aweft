@@ -119,6 +119,11 @@ The document you hold is moved, never swapped: every watcher, derived value and 
 keeps working, and the change reads like any other commit. Write the rule that decides who
 yields once, in your `refused` handler or wherever your application knows best.
 
+A state moves this end only when this end asked for one, by sharing with no document or by
+`resync()`. One that arrives unasked is refused with the fault `unwanted-state` at both ends,
+applies nothing, and ends the topic, so an end that refuses writes through `accept` cannot be
+moved past it by the other end sending its state instead (design 269).
+
 ## Several networks on one document
 
 A document can be on any number of links, in a store, and under any number of watchers at the

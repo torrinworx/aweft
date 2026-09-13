@@ -90,6 +90,7 @@ aweft/
     health/                the health battery: one route that says the process is up and right
     logs/                  the logs battery: what a page and the server did, per visit, in the store
     uploads/               the uploads battery: a file kept in a directory or a bucket, and served at /files/<id>
+    notify/                the notify battery: one send to a person over inbox, email and push, the inbox shared live
     jobs/                  a scheduler over an array the application hands in
     ssg/                   static generation
     build/                 transforms, in two modes
@@ -130,6 +131,7 @@ version in lockstep.
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
 | `logs` | What a page and the server did, per visit, in the application's store: a client half that records the page, three server modules, and readers any process imports | Who may read a visit; whether to record; retention beyond its defaults; any URL but its one route; a typed value, a private-slot value, an IP |
 | `uploads` | A file from a page or a module: the bytes in a directory or an S3-compatible bucket through an adapter, the record in the store, served at `/files/<id>` with the type from the record; a client half that posts with progress; readers any process imports | Who may upload beyond the gate and `accept`; who may read beyond `public` and `allow`; deletion over the wire; expiry; what a file means (no index, resize, transcode); a storage setting from the environment; an IP |
+| `notify` | One send to a user or an address over the channels its level picks: an inbox document per user shared live on their connections, email over Resend, push over FCM, each channel's outcome recorded; a client half that hands a page the inbox and registers a device | Who may send to whom; any cap but the one per recipient; templates; whether a `url` is safe to render; any URL; a page writing the inbox; a device endpoint reaching a page |
 | `debug` | Reading a running document or commit back as text | Nothing. It may know everything; no runtime package may know it |
 
 ---
@@ -345,6 +347,7 @@ indexed by the job rather than the package, are not in this table.
 | health | a deploy's verification: the endpoint polled until the shipped build is the one answering, then the two states a poll must not mistake for health, a store that stopped answering and a check that threw |
 | logs | a page recorded end to end in a browser and the visit read back: a page error, a rejection, a console error, a failed call on both sides, a commit's shape with a private slot absent, a typed character never stored, a non-character key kept, a refused write, sign-in mid-visit, and the browser facts |
 | uploads | a page under the gate uploads a picture from a drop zone with progress and it paints from `/files/<id>` with the type, the tag, `immutable`, `nosniff` and `sandbox`; an anonymous post is 403 before its body is read; a wrong type, wrong bytes, an oversized file and the application's own `accept` each refuse with their status and reason on the page; a module makes a file of its own; the readers list them; `remove` takes bytes and record; the static battery behind it answers unknown URLs and never a file |
+| notify | two pages of one signed-in user hear a module's send live and mark it read for each other, a device registered from the page, email and push against two fake services with the record on the item, a dead device forgotten, a failed mail kept, a forged write refused, the per-recipient cap, a restart over the same driver, and a server with no store doing a contact form's job |
 | build | the transforms build a real page; assert stripping is verified in the output |
 | testing | consumed by every other package's suite; its recipe is everyone else's |
 | debug | a bug found in a document the reader did not write, using only what the package prints |
@@ -428,8 +431,9 @@ the sandbox package's; the wall around the room is the operator's.
 ## Default modules, the batteries
 
 A full stack application should not start from nothing. The stack ships default module areas:
-`auth`, `email`, `geo`, `health`, `logs`, `moderation`, `notifications`, `posts`, `state`,
-`static`, `uploads`, `users`. (`files` and `uploads` were one area, and are `uploads`.)
+`auth`, `geo`, `health`, `logs`, `moderation`, `notify`, `posts`, `state`, `static`, `uploads`,
+`users`. (`files` and `uploads` were one area, and are `uploads`. Email is a channel of `notify`,
+not an area of its own.)
 
 The loader gives an application's own directory precedence over the library's, so an
 application overrides a default module by writing one with the same name, configures one
@@ -441,15 +445,15 @@ crosses the plane boundary, so these are integrators, not members of either plan
 ```
 @aweftjs/auth        server modules + client views + schema
 @aweftjs/uploads     upload and serve + a client half + storage adapters (built)
-@aweftjs/email       providers and templates
+@aweftjs/notify      one send over inbox, email and push + the inbox on the page (built)
 @aweftjs/users       profiles and validation
 @aweftjs/posts       the generic content module
 @aweftjs/geo         geocoding and map components
 @aweftjs/moderation  image and text moderation
 ```
 
-`aweft`, the meta-package, bundles the common set, so `npm i aweft` gets auth, users, email
-and files working. `auth`'s server half is built (design 074), its client half on
+`aweft`, the meta-package, bundles the common set, so `npm i aweft` gets auth, users, notify
+and uploads working. `auth`'s server half is built (design 074), its client half on
 `@aweftjs/client` (design 183, 185), and its views ship as page modules a stage loads by name
 (design 245): a battery's view is a module like any other, and the application puts it on a URL
 by naming it in its acts map. No battery picks a URL.
@@ -487,6 +491,17 @@ the application's `accept` before the record is written; `uploads/Serve` answers
 `open` and `remove`. It is listed before `static` in `sources`, because the load order follows
 the listing (design 263) and `static/Files` answers everything it is asked. No delete route, no
 expiry, no IP: those stay with the application.
+The notify battery is built (design 268). `@aweftjs/notify` is a source of three server modules
+and a client half. `notify/Send` is the broker any module names in `deps`: one `send` to
+`{ user }` or `{ email }`, over the channels its level picks (the inbox; push; email) unless the
+send names them, with what each channel did written into the answer and onto the item, and a
+channel that fails never losing the message or throwing out of the send. `notify/Inbox` keeps
+`inbox:<user>`, the last two hundred items, shared live on every connection of theirs and
+written only by the server; the page marks items read through the one call. `notify/Devices`
+keeps `devices:<user>`, never shared, for push. Email is Resend and push is FCM v1, both over
+`fetch` with no dependency, chosen by configuration, and the application's own sender or pusher
+is a function in the same configuration. One cap ships, per recipient per hour. Who may send to
+whom, every per-sender cap and every template stay in the module that calls `send`.
 
 They split per area rather than shipping as one package because an application that wants
 auth and not posts should not carry posts, and an agent reading `@aweftjs/auth` should find

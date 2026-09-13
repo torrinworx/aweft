@@ -21,6 +21,7 @@
 		{ "path": "packages/health" },
 		{ "path": "packages/logs" },
 		{ "path": "packages/uploads" },
+		{ "path": "packages/notify" },
 		{ "path": "packages/testing" },
 		{ "path": "packages/debug" }
 	]

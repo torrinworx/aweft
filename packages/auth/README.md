@@ -303,8 +303,9 @@ it, so a route of yours can count by it the way `auth/Enter` does.
 
 ## What waits
 
-Email verification, password change and password reset wait for the notify battery. The client
-half ships no sign-in or sign-up view, so a page writes its own form and calls `enter`.
+Email verification, password change and password reset wait on a sender, which `@aweftjs/notify`
+now is: a send with `channels: ['email']` and the mail's `html`. None of the three is built yet.
+The client half ships no sign-in or sign-up view, so a page writes its own form and calls `enter`.
 `securityChecks()` from `@aweftjs/testing` runs against this battery from its own suite and from
 `recipes/full-stack/tests/security.test.ts`; that file is how an application runs it against
 itself.

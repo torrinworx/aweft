@@ -31,6 +31,7 @@ Start here if you know what you are trying to build.
 | `health/` | A deploy's verification: the health endpoint polled until the shipped build is the one answering, and the two states a poll must not mistake for health | store, modules, server, auth, health |
 | `logs/` | A page recorded end to end in a browser and the visit read back: an error, a rejection, a console line, a failed call on both sides, a commit's shape with a private slot absent, a typed character never stored, sign-in mid-visit | store, modules, server, auth, logs, ui, client |
 | `uploads/` | A page uploads pictures under the gate and they paint from `/files/<id>`; each refusal reaches the page with its reason, a module makes a file of its own, and the static battery behind it never sees a file | store, modules, server, auth, static, uploads, ui, client |
+| `notify/` | Two pages of one user hear a send live and mark it read for each other, a device registered from the page, email and push against two fakes, a failed mail kept, a forged write refused, a restart, and a server with no store sending a contact form's mail | store, modules, server, auth, notify, ui, client |
 | `documents-on-postgres/` | Documents kept in Postgres: a writer killed mid-edit, eight processes opening one name at once, and a path declared after the data was there | store |
 | `posts-to-pages/` | Pages written while the application runs: a post published over a socket becomes a page, and a scheduled full write refreshes the sitemap | store, modules, server, jobs, ui, ssg |
 | `accessible-page/` | A page everyone can use, driven by keyboard and audited in both modes, and each guardrail catching one page written wrong: the build refusing an element no one can read, the mount throwing on a nameless button and a page with no language, `audit` and `walk` reading what only the rendered page shows | build, ui, testing |
@@ -42,7 +43,7 @@ Start here if you know which package you need and want to see it do its hardest 
 each of these has to demonstrate is the table in `docs/architecture.md`.
 
 `codec/`, `core/`, `schema/`, `sync/`, `store/`, `modules/`, `sandbox/`, `server/`, `jobs/`,
-`dom/`, `ui/`, `icons/`, `build/`, `ssg/`, `static/`, `health/`, `logs/`, `uploads/`, `debug/`.
+`dom/`, `ui/`, `icons/`, `build/`, `ssg/`, `static/`, `health/`, `logs/`, `uploads/`, `notify/`, `debug/`.
 
 ## What a recipe is
 
