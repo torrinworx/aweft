@@ -144,6 +144,38 @@ hoists nothing anywhere in it, including the elements the shadow never reaches. 
 deliberate, because following a shadow properly needs real scope analysis, and the blunt rule can
 only be wrong in the direction of hoisting less.
 
+### The access rules
+
+Every element the transform reads, in whichever notation wrote it, goes through eight rules
+before anything is hoisted, and a fault is a `TransformError` at the element like any other
+(design 265). Each is a case a screen reader or a keyboard cannot recover from, and each is
+decidable from the source alone.
+
+| reason | refused | write instead |
+| --- | --- | --- |
+| `image-needs-alt` | `<img src="a.png" />` | `alt="what it shows"`, or `alt=""` for decoration |
+| `control-needs-label` | `<input />` on its own | an `id` with a `<label for>`, a `<label>` around it, or an `aria-label` |
+| `click-needs-role` | `<div $onclick={go}>` | a `<button>`, or a `role` and a `tabindex` |
+| `tabindex-positive` | `tabindex="1"` | `0` to join the tab order where it sits, `-1` to reach it from code |
+| `link-needs-href` | `<a>docs</a>` | an `href`, or a `<button>` when it acts on the page |
+| `button-needs-name` | `<button />` | text inside it, or an `aria-label` |
+| `heading-needs-text` | `<h2 />` | the heading's text, or no heading |
+| `frame-needs-title` | `<iframe src="/map" />` | a `title` saying what it holds |
+
+An `input` whose literal `type` is `hidden`, `submit`, `button`, `reset` or `image` needs no
+label. Natively interactive elements (`a`, `button`, `input`, `select`, `textarea`, `summary`,
+`details`, `option`, `label`, `audio`, `video`) may take a click as they are.
+
+The rules read what the source says and stop there. An attribute given as an expression is
+present: `alt={caption}` passes whatever `caption` holds. A spread makes the element unknowable
+and it passes. A component is not read itself, and the elements written inside it are. The Node
+loader compiles `.tsx` only, so an `h` call in a `.ts` file meets the rules in a bundle and not
+under `node --import @aweftjs/build/loader`. A `label` counts only when it is around the control in the same JSX, template or
+`h` call; a label in another expression pairs through an `id`. What the source cannot settle, a
+rendered page can: `audit` from
+[`@aweftjs/testing/browser`](https://github.com/torrinworx/aweft/blob/main/packages/testing/README.md)
+runs axe over the page a test drives.
+
 ### Assert stripping
 
 With `release: true`, a statement that is nothing but a call to a name imported by name from a

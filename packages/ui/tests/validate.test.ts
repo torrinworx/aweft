@@ -75,7 +75,7 @@ test('a name that is not one of the eight asserts, listing them', () => {
 	assert.throws(
 		() => {
 			mount(document.body, h(Validate as never, { value: mutable(''), validate: 'zipcode' },
-				h('input', {})));
+				h('input', { 'aria-label': 'zip' })));
 		},
 		/no built-in validator named zipcode[^]*phone, email, pan, expDate, postalCode, date, number, float/,
 	);

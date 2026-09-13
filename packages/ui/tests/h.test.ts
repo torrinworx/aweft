@@ -148,7 +148,7 @@ test('a state prop that is not a writable cell asserts, and names what to pass',
 	// The claim is split where `h` runs, so this is where it fires.
 	const document = createDocument();
 	assert.throws(
-		() => mount(document.body, h('button', { isHovered: true })),
+		() => mount(document.body, h('button', { isHovered: true }, 'press')),
 		/must be a cell this component can write/,
 	);
 });
