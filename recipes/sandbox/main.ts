@@ -8,7 +8,7 @@
 // report is benign and is summarized; one is hostile and is contained; a plan change revokes
 // a name mid-run; an edit to a report reloads it in place.
 //
-// Run: node examples/sandbox/main.ts
+// Run: node recipes/sandbox/main.ts
 
 import { createArray, createObject } from '@aweftjs/core';
 import { createSandbox, inProcess } from '@aweftjs/sandbox';

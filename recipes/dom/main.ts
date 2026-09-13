@@ -6,7 +6,7 @@
 // markup is hydrated in place with the server nodes kept. If the binding ever did more work
 // than an edit calls for, or rebuilt what it should adopt, this program would exit nonzero.
 //
-// Run: node examples/dom/main.ts
+// Run: node recipes/dom/main.ts
 
 import assert from 'node:assert/strict';
 

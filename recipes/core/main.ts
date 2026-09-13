@@ -7,7 +7,7 @@
 // ever reached a watcher half applied, the count would disagree with the tasks and this
 // program would exit nonzero.
 //
-// Run: node examples/core/main.ts
+// Run: node recipes/core/main.ts
 
 import { decodeCommit, encodeCommit } from '@aweftjs/codec';
 import { randomFrom } from '@aweftjs/testing';

@@ -10,7 +10,7 @@
 // Every boot here is the rail: sources, a store, a gate, a listener. Nothing builds a loader,
 // nobody lists what to load, and the gate is named (designs 240, 241).
 //
-// Run: node examples/server/main.ts
+// Run: node recipes/server/main.ts
 
 import { auth, paths } from '@aweftjs/auth';
 import type { AuthContext } from '@aweftjs/auth';

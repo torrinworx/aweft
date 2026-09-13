@@ -6,7 +6,7 @@
 // carries no guard and asks `check` at its own door instead, because a node that did not make
 // a commit still has to decide whether to take it. The same description answers both.
 //
-// Run: node examples/schema/main.ts
+// Run: node recipes/schema/main.ts
 
 import {
 	RefusedError, apply, atomic, createArray, createMap, createObject, fromSnapshot, observer,

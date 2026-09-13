@@ -7,7 +7,7 @@
 // both shared over a link and kept in a store, where a change made by the other person is
 // what the store writes down.
 //
-// Run: node examples/sync/main.ts
+// Run: node recipes/sync/main.ts
 
 import { strict as assert } from 'node:assert';
 import { MessageChannel, Worker } from 'node:worker_threads';
