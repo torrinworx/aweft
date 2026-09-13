@@ -1,0 +1,18 @@
+anonymous: Sign in first; an anonymous connection has no inbox and no devices.
+capped: Forget one, or raise perUser in the module's config.
+capped: Send fewer to one person, or raise perHour in the module's config.
+invalid-call: Ask with { read: [id, ...] } or { read: 'all' }.
+invalid-config: Give address a function from a user id to their email, or null to read user documents.
+invalid-config: Give each level a list drawn from inbox, email and push.
+invalid-config: Give email { resend: { key, from } }, a function taking the mail, or null.
+invalid-config: Give email.resend a key and a from address.
+invalid-config: Give idleMs at most 2147483647 milliseconds, about 24.8 days.
+invalid-config: Give levels an object of level to channel list, such as { info: ['inbox'] }.
+invalid-config: Give push { fcm: { account } }, a function taking the data and the endpoints, or null.
+invalid-config: Give push.fcm the service account key file as JSON or base64 on one line.
+invalid-config: Give that setting a number above zero.
+invalid-config: Give that setting true or false.
+invalid-device: Register with { device, platform, transport, endpoint }: an id of letters, digits, dashes and underscores, a known platform and transport, and an endpoint under the byte cap.
+invalid-notification: Send { to: { user } | { email }, title, body?, level?: info | warn | error, channels?: [inbox | email | push] }.
+no-store: Pass store to createServer, or send with channels that need none.
+stopped: Make a new view with createInbox; a stopped one follows no connection.
