@@ -56,9 +56,10 @@ application starts from.
 
 ## The packages
 
-Everything from `codec` to `sandbox` runs anywhere. `dom`, `ui`, `icons` and `client` are the
-page; `server` and `jobs` are the Node side; `auth` has a half on each. A package imports only
-from its own tier or below, never across that line.
+Everything from `codec` to `modules` runs anywhere, and so does a `sandbox` compute room. `dom`,
+`ui`, `icons` and `client` are the page, and the two page halves of `sandbox` sit over them;
+`server` and `jobs` are the Node side; `auth` has a half on each. A package imports only from
+its own tier or below, never across that line.
 
 | Package | What it is |
 |---|---|
@@ -68,7 +69,7 @@ from its own tier or below, never across that line.
 | `@aweftjs/sync` | commits between two documents over any channel, both ends equal |
 | `@aweftjs/store` | persistence over a driver; a memory driver and a Postgres driver ship |
 | `@aweftjs/modules` | modules from directories, bundles or documents, loaded in dependency order |
-| `@aweftjs/sandbox` | isolated rooms for module code that came from a document |
+| `@aweftjs/sandbox` | isolated rooms for module code that came from a document; `@aweftjs/sandbox/page` and `@aweftjs/sandbox/room` for a room with a page in it, an act in a frame |
 | `@aweftjs/dom` | direct DOM binding, hydration and static render; `@aweftjs/dom/router` for URLs |
 | `@aweftjs/ui` | components, theming, a stage for routed pages, head tags |
 | `@aweftjs/icons` | icon sets as modules, one icon per import |

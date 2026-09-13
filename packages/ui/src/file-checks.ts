@@ -5,6 +5,15 @@
 // count is written.
 //
 // This is not exported.
+//
+// Every sentence a person reads is a text token resolved by `say`, which the component hands in
+// with its mount context, so the zone's prompt and an entry's `error` come out in the page's
+// language and `error` stays the string a page reads (design 278).
+
+import { type TextToken, text } from './text.ts';
+
+/** How a sentence reaches a person: a token resolved in the component's own render. */
+export type Say = (token: TextToken) => string;
 
 /** One file the zone was given, as the application reads it. */
 export interface FileDropEntry {
@@ -84,14 +93,14 @@ export const typeNames = (wanted: readonly string[]): string[] =>
 	wanted.map(typeName).filter((name) => name !== '');
 
 /** The line the zone shows: what to do, then what is accepted and how big it may be. */
-export const promptFor = (limits: Limits): string => {
-	const asked = limits.many
-		? 'Drop files here, or choose them'
-		: 'Drop a file here, or choose one';
+export const promptFor = (limits: Limits, say: Say): string => {
+	const asked = say(limits.many
+		? text('Drop files here, or choose them')
+		: text('Drop a file here, or choose one'));
 	const said: string[] = [];
 	const names = typeNames(limits.wanted);
 	if (names.length > 0) said.push(names.join(', '));
-	if (limits.cap !== null) said.push(`up to ${sizeText(limits.cap)}`);
+	if (limits.cap !== null) said.push(say(text('up to {size}', { size: sizeText(limits.cap) })));
 	return said.length === 0 ? asked : `${asked}. ${said.join(', ')}`;
 };
 
@@ -100,17 +109,18 @@ export const refusalOf = (
 	limits: Limits,
 	file: unknown,
 	taken: number,
+	say: Say,
 ): { reason: 'type' | 'size' | 'count'; error: string } | null => {
 	if (!covers(limits.wanted, file)) {
-		return { reason: 'type', error: `${nameOf(file)} is not one of the accepted types` };
+		return { reason: 'type', error: say(text('{name} is not one of the accepted types', { name: nameOf(file) })) };
 	}
 	if (limits.cap !== null && sizeOf(file) > limits.cap) {
-		return { reason: 'size', error: `${nameOf(file)} is over the ${sizeText(limits.cap)} limit` };
+		return { reason: 'size', error: say(text('{name} is over the {size} limit', { name: nameOf(file), size: sizeText(limits.cap) })) };
 	}
 	// A refused file stays in the list with its reason, so a person who dragged eight of them can
 	// see which ones did not land (design 137).
 	if (!limits.many && taken > 0) {
-		return { reason: 'count', error: 'only one file is accepted' };
+		return { reason: 'count', error: say(text('only one file is accepted')) };
 	}
 	return null;
 };
@@ -119,11 +129,12 @@ export const refusalOf = (
 export const sortFiles = (
 	limits: Limits,
 	given: readonly unknown[],
+	say: Say,
 ): { rows: FileDropEntry[]; taken: unknown[] } => {
 	const rows: FileDropEntry[] = [];
 	const taken: unknown[] = [];
 	for (const file of given) {
-		const why = refusalOf(limits, file, taken.length);
+		const why = refusalOf(limits, file, taken.length, say);
 		if (why !== null) {
 			rows.push({ name: nameOf(file), file, status: 'error', error: why.error, reason: why.reason });
 			continue;

@@ -1,4 +1,4 @@
 {
 	"extends": "../../tsconfig.base.json",
-	"include": ["src", "tests", "../../recipes/ssg", "../../recipes/posts-to-pages"]
+	"include": ["src", "tests", "../../recipes/ssg", "../../recipes/posts-to-pages", "../../recipes/translated-site"]
 }

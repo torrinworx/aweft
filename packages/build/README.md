@@ -1,7 +1,8 @@
 # @aweftjs/build
 
 The transforms. It compiles markup and JSX to `h` calls, replaces a static subtree with a
-template made once and cloned per use, and removes assert calls from a release build. It
+template made once and cloned per use, removes assert calls from a release build, and, when
+asked, finds every string a page shows so it can be looked up in the reader's language. It
 decides nothing else: not which bundler you use, not whether you write JSX, markup or `h` by
 hand, not what a custom `h` does, and not when source that arrives at run time is compiled.
 
@@ -27,12 +28,12 @@ library's.
 // Anywhere, a browser included, for source that did not exist at build time.
 import { transform } from '@aweftjs/build';
 
-const { code, map } = transform(source, { filename: 'page.tsx', release: true });
+const { code, map } = transform(source, { filename: 'page.tsx', release: true, defaultH: '@aweftjs/ui' });
 ```
 
 ```
 # A Node process, which has no bundler config to put an option in.
-AWEFT_DEFAULT_H=@aweftjs/ui node --import @aweftjs/build/loader build-site.ts
+AWEFT_DEFAULT_H=@aweftjs/ui AWEFT_TEXT=1 node --import @aweftjs/build/loader build-site.ts
 ```
 
 Both produce the same bytes for the same input, and there is a fixture suite that says so
@@ -200,6 +201,62 @@ A string literal shaped `set:name`, on the `name` prop of the `Icon` a file boun
 [`@aweftjs/icons`](https://github.com/torrinworx/aweft/blob/main/packages/icons/README.md)'s
 README says exactly which names move and which are left for run time.
 
+### The text a page shows
+
+`aweft({ text: true })`, `transform(source, { text: true })`, or `AWEFT_TEXT=1` for the loader.
+Off by default. On, in a file whose `h` is `@aweftjs/ui`'s, every literal a person reads becomes
+a `text()` call from `@aweftjs/ui`, which looks the string up in the render's catalog where the
+page mounts (`packages/ui/README.md`, The text a page shows):
+
+```tsx
+<input placeholder="Search" name="q" />
+<p>Save changes</p>
+```
+
+compiles to
+
+```tsx
+import { text as _text } from '@aweftjs/ui';
+<input placeholder={_text("Search")} name="q" />
+<p>{_text("Save changes")}</p>
+```
+
+What moves: every literal text child of an element, in JSX, markup and a hand-written `h` call
+alike, and every string literal on a text prop. The text props are `TEXT_PROPS` on this package:
+`label`, `title`, `description`, `placeholder`, `alt`, `error`, `caption`, `aria-label`,
+`aria-description`, `aria-placeholder`, `aria-valuetext` and `aria-roledescription`. A `class`,
+an `href`, a `name`, a `type` or an `id` is a word for the machine and never moves.
+
+What is left alone: text with no letter in it (punctuation, a number, a separator); an element
+with a literal `translate="no"` and everything under it; a prop given as an expression; the props
+of an element carrying a spread, whose children still move; a file compiled against `dom`'s `h`,
+which comes out byte for byte as it went in; and a file under `node_modules`, because a package
+ships compiled files a server render reads as they are. A string built at run time is never a
+literal: write it as a message, `text('{n, plural, one {# item} other {# items}}', { n })`,
+which is also the only way it translates. A sentence with an element inside it is one message
+with a tag, `text('Read <link>the docs</link>', { link })`, not two literals.
+
+**What the transform answers.** `transform` gains `text` on its result: every key the file's
+tokens look up, each once, the wrapped literals and the `text()` calls the page wrote itself, a
+literal `context` folded in as `source|context`. A page that compiles a stored module at run time
+keeps that list beside the source, since the build below never saw it.
+
+**What the plugin writes.** When the bundle closes, `text/source.json` under the bundler's root:
+every key, sorted, with the files it came from relative to the root, and the keys every installed
+`@aweftjs` package ships in its `text.json` folded in under that name. It then reads each
+`text/<tag>.json` beside it and warns about the keys that catalog lacks and the entries it holds
+that no file uses. It never fails a build for either: what to do about a missing translation is
+yours. The loader writes nothing, because a process that renders pages is not a build.
+
+**Both sides must agree.** A page rendered on a server with the option off and bundled with it
+on has different trees on the two sides, one text node against one component per string, and
+does not hydrate. `AWEFT_TEXT` is the loader's word for the plugin's `text`, as `AWEFT_DEFAULT_H`
+is for `defaultH`, and the scaffold in `recipes/full-stack` sets both. Set to anything but a yes
+or a no it is refused when the loader starts.
+
+**What it costs.** A literal that hoisted into the template is a hole filled by a component call,
+about 0.7 µs per text in Chromium and a bracket pair in the static markup, measured in design 277.
+
 ## The release mangle
 
 `mangle` is the configuration for renaming this stack's internal properties, in the pattern and
@@ -220,13 +277,17 @@ nothing; it is here so that the rename, when it happens, is a rename and nothing
 ## What it never decides
 
 Which bundler you use. Whether you write JSX, markup or `h` by hand. What a custom `h` does.
-When source that arrives at run time is compiled, or by whom.
+When source that arrives at run time is compiled, or by whom. Which language a page shows, and
+whether a missing translation fails a build.
 
 ## Proven by
 
 [`recipes/build/main.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/build/main.ts)
 builds a real page through the transforms, runs it in all three modes, and checks that a release
-build of the binding's own source has no asserts left in it. The package's own suite is the
+build of the binding's own source has no asserts left in it.
+[`recipes/translated-site`](https://github.com/torrinworx/aweft/tree/main/recipes/translated-site)
+builds a site with the text option on, reads the source catalog back, and hydrates the pages
+in three languages. The package's own suite is the
 equivalence suite: every fixture runs twice, once as written and once transformed, mounted,
 rendered and hydrated, over a document whose nodes clone and one whose nodes do not.
 

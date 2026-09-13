@@ -50,12 +50,30 @@ test('what a match hands back: decoded parameters, what it took and what it did 
 
 	const rest = matchAct(['files/*path'], 'files/a/b/c');
 	assert.deepEqual(rest?.params, { path: 'a/b/c' });
-	assert.equal(rest?.tail, '', 'a rest segment takes everything left');
+	assert.equal(rest?.taken, 'files/a/b/c', 'a rest segment takes everything left');
+	assert.equal(rest?.tail, '', 'so nothing is left for a stage below; only a bare * parks the path');
 
 	// A rest that takes nothing still matches.
 	assert.deepEqual(matchAct(['files/*path'], 'files')?.params, { path: '' });
 	// A parameter needs a segment to be there.
 	assert.equal(matchAct(['posts/:id'], 'posts'), null);
+});
+
+test('a bare * takes no segment and no parameter, and parks the whole path as the tail', () => {
+	assert.deepEqual(matchAct(['*'], '/a/b/c'), { name: '*', params: {}, taken: '', tail: 'a/b/c' });
+	assert.deepEqual(matchAct(['*'], '/'), { name: '*', params: {}, taken: '', tail: '' }, 'the empty path too');
+	assert.deepEqual(matchAct(['docs/*'], '/docs/guide/install'), { name: 'docs/*', params: {}, taken: 'docs', tail: 'guide/install' },
+		'what stands before it is what the key took');
+
+	// The same class as `*name`, so a literal or a `:name` beats it wherever they differ.
+	assert.equal(matchAct(['*', 'posts/:id'], '/posts/3')?.name, 'posts/:id');
+	assert.equal(matchAct(['*', 'about'], '/about/x')?.name, 'about');
+	assert.equal(matchAct(['*', 'about'], '/nowhere')?.name, '*');
+
+	// `''` matches `/` only, and at `/` it is the exact key, so it wins over `*`.
+	assert.equal(matchAct(['', '*'], '/')?.name, '');
+	assert.equal(matchAct(['', '*'], '/x')?.name, '*');
+	checkActKeys(['', '*']);
 });
 
 test('the index key takes the empty path and nothing else', () => {
@@ -85,7 +103,10 @@ test('the act keys are checked once, and each mistake names its fix', () => {
 	assert.throws(() => checkActKeys(['/about']), /act keys are relative/);
 	assert.throws(() => checkActKeys(['a/*one/*two']), /at most one is allowed/);
 	assert.throws(() => checkActKeys(['*rest/edit']), /move it to the end/);
-	checkActKeys(['', 'about', 'posts/:id', 'files/*path']);
+	// A bare `*` is refused anywhere but last, like a `*name`.
+	assert.throws(() => checkActKeys(['*/edit']), /move it to the end/);
+	assert.throws(() => checkActKeys(['a/*/b']), /move it to the end/);
+	checkActKeys(['', 'about', 'posts/:id', 'files/*path', 'docs/*']);
 });
 
 test('a query round trips through a plain object, spelled the same both ways', () => {
@@ -106,7 +127,8 @@ test('a key that passes the shape rules and can never match is refused at declar
 	assert.throws(() => checkActKeys(['trail/']), /ends with a slash/);
 	assert.throws(() => checkActKeys(['a//b']), /has an empty segment/);
 	assert.throws(() => checkActKeys([':']), /with no name after it/);
-	assert.throws(() => checkActKeys(['a/*']), /with no name after it/);
+	// A `*` needs no name: last in a key it parks the path rather than taking it.
+	checkActKeys(['a/*']);
 	// The index key is the one empty key there is, and it is not a trailing slash.
 	checkActKeys(['']);
 });
@@ -115,6 +137,9 @@ test('two keys that match the same paths are refused, naming both', () => {
 	// `a/:y` can never win: `a/:x` matches every path it does and one of them has to lose.
 	assert.throws(() => checkActKeys(['a/:x', 'a/:y']), /"a\/:x" and "a\/:y" match the same paths/);
 	assert.throws(() => checkActKeys(['*one', '*two']), /match the same paths/);
+	// A bare `*` and a `*name` match the same paths too: one parks what the other takes.
+	assert.throws(() => checkActKeys(['*', '*rest']), /"\*" and "\*rest" match the same paths/);
+	assert.throws(() => checkActKeys(['a/*rest', 'a/*']), /match the same paths/);
 	// A literal somewhere tells them apart, and so does the kind of segment.
 	checkActKeys(['a/:x', 'b/:y']);
 	checkActKeys(['a/:x', 'a/*rest']);

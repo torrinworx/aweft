@@ -28,6 +28,8 @@ export interface Bindings {
 	readonly assert: string | null;
 	/** The local name bound to `ui`'s `Icon`, or null when the file has no `Icon` from `ui`. */
 	readonly uiIcon: string | null;
+	/** The local name bound to `ui`'s `text`, or null when the file has no `text` from `ui`. */
+	readonly uiText: string | null;
 	/** Every name the file binds, however it binds it. */
 	readonly binds: ReadonlySet<string>;
 	/** Every name that appears in the file, bound or merely used, so a generated name can dodge
@@ -65,6 +67,7 @@ export const readBindings = (program: Node): Bindings => {
 	let importedUiHtml: string | null = null;
 	let importedAssert: string | null = null;
 	let importedIcon: string | null = null;
+	let importedText: string | null = null;
 
 	for (const statement of program['body'] as Node[]) {
 		if (statement.type !== 'ImportDeclaration') continue;
@@ -80,6 +83,7 @@ export const readBindings = (program: Node): Bindings => {
 			if (from === UI && name === 'h') importedUiH = local;
 			if (from === UI && name === 'html') importedUiHtml = local;
 			if (from === UI && name === 'Icon') importedIcon = local;
+			if (from === UI && name === 'text') importedText = local;
 			if (NEIGHBOURING_ASSERT.test(from) && name === 'assert') importedAssert = local;
 		}
 	}
@@ -119,6 +123,7 @@ export const readBindings = (program: Node): Bindings => {
 		uiHtml: importedUiHtml !== null && boundOnlyByImport(importedUiHtml, counts) ? importedUiHtml : null,
 		assert: importedAssert,
 		uiIcon: importedIcon !== null && boundOnlyByImport(importedIcon, counts) ? importedIcon : null,
+		uiText: importedText !== null && boundOnlyByImport(importedText, counts) ? importedText : null,
 		binds: new Set(counts.keys()),
 		names,
 	};

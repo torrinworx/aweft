@@ -19,6 +19,7 @@ import { type ContextNode, createContext } from './contexts.ts';
 import { h } from './h.ts';
 import { type ActEntries, type StageAct, type StageEntry } from './stage-entry.ts';
 import { use } from './render.ts';
+import { textOf } from './text.ts';
 import { type Match, checkActKeys, hashOf, matchAct, parseQuery, pathOf, queryOf, writeQuery } from './route.ts';
 import { suspend } from './suspend.tsx';
 
@@ -29,8 +30,8 @@ export type ActComponent = Component<Record<string, unknown>> & { entries?: ActE
 export interface ActInstance {
 	/** The component the stage renders. */
 	readonly component: Component<Record<string, unknown>>;
-	/** What the live region says when this act arrives. The head's title is not touched. */
-	readonly title?: string;
+	/** What the live region says when this act arrives, a string or a text token. The head's title is not touched. */
+	readonly title?: unknown;
 }
 
 /** What an act key maps to: the component itself, or the name of a module that makes one. */
@@ -67,7 +68,7 @@ export interface StageValue {
 
 /** What `StageContext` takes. */
 export interface StageProps {
-	/** The acts, by path. `''` is the index; `:name` takes one segment and `*name` the rest. */
+	/** The acts, by path. `''` is the index; `:name` takes one segment, `*name` the rest, and a bare `*` parks the rest as the tail. */
 	readonly acts: Readonly<Record<string, Act>>;
 	/** What wraps the act. A plain pass-through when it is left off. */
 	readonly template?: Component;
@@ -75,13 +76,22 @@ export interface StageProps {
 	readonly fallback?: string;
 	/** The act shown when no URL decides. A name in `acts`. */
 	readonly initial?: string;
-	/** The router this stage takes its URL from. Without one it is a content swapper. */
+	/**
+	 * The router this stage takes its URL from. A nested stage under a routed act takes none and
+	 * follows its parent's; a stage with no router above it either is a content swapper.
+	 */
 	readonly router?: Router;
 	/**
 	 * Where a named act comes from, in precedence order. The stage builds one loader over these
 	 * for the whole routing tree; a stage inside an act inherits it and takes none of its own.
 	 */
 	readonly sources?: readonly Source[];
+	/**
+	 * The loader the modules are already in, from a platform that built it, instead of
+	 * `sources` (design 282). The stage loads acts from it and never closes it; a stage inside
+	 * an act inherits it as it would a loader built from `sources`.
+	 */
+	readonly loader?: Loader;
 	/**
 	 * The page's connection, handed to every module as its `client` prop. Typed `unknown`
 	 * because this package may not import `@aweftjs/client`; pass what `createClient` answered.
@@ -204,27 +214,30 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 		`the stage names ${JSON.stringify(props.refused)} as its refused act and that key takes parameters; a refused act renders under the URL that was refused, so name an act key with no :name or *name segment`);
 
 	const above = Inner.read(context);
-	assert(props.sources === undefined || above === null,
-		'a stage inside another stage cannot take sources of its own; one loader is built for a routing tree and every stage under it shares it, so declare sources on the outermost StageContext');
+	assert(props.sources === undefined || props.loader === undefined,
+		'the stage was given sources and a loader; a loader is already built over its sources, so pass one or the other');
+	assert((props.sources === undefined && props.loader === undefined) || above === null,
+		'a stage inside another stage cannot take sources or a loader of its own; one loader is built for a routing tree and every stage under it shares it, so declare sources on the outermost StageContext');
 	assert(props.client === undefined || props.sources !== undefined,
-		'the stage was given a client and no sources, so nothing would ever read it; pass sources too, or take the client off');
+		'the stage was given a client and no sources, so nothing would ever read it; a loader handed in was built with the props its builder chose, so pass sources too, or take the client off');
 	const router = props.router ?? above?.router ?? null;
 	const owns = props.router !== undefined;
 
 	// One loader per mount, over the sources this stage was given, mirroring what the server does
 	// with its own (designs 240, 242). `client` is the one prop the platform hands a page module,
-	// and the key is absent when the caller named none, so a factory can tell the two apart.
+	// and the key is absent when the caller named none, so a factory can tell the two apart. A
+	// loader handed in belongs to whoever built it, so this stage never closes it (design 282).
 	const ownsLoader = props.sources !== undefined;
 	const loader: Loader | null = ownsLoader
 		? createLoader({
 			sources: props.sources!,
 			...(props.client === undefined ? {} : { props: { client: props.client } }),
 		})
-		: above?.loader ?? null;
+		: props.loader ?? above?.loader ?? null;
 	const sources = props.sources ?? above?.sources ?? null;
 	for (const name of keys) {
 		assert(typeof props.acts[name] !== 'string' || loader !== null,
-			`the act ${JSON.stringify(name)} names the module ${JSON.stringify(props.acts[name])} and no stage above it was given sources; pass sources to the StageContext at the top of the routing tree`);
+			`the act ${JSON.stringify(name)} names the module ${JSON.stringify(props.acts[name])} and no stage above it was given sources or a loader; pass sources to the StageContext at the top of the routing tree`);
 	}
 
 	// A stage with a router of its own reads the URL. One without takes what its parent did not
@@ -379,8 +392,9 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 			return null;
 		}
 		loaded = name;
-		const title = instance?.title;
-		announced = typeof title === 'string' && title !== '' ? title : null;
+		// Resolved here, where the render is, so a token is announced in the page's language.
+		const title = textOf(context, instance?.title);
+		announced = title !== '' ? title : null;
 		return h(component as Component, given);
 	};
 
@@ -611,8 +625,9 @@ export interface StageContextComponent {
  *
  * Params:
  *   acts: the acts, by path. `''` is the index, `:name` takes one segment, one trailing `*name`
- *         takes the rest. A value is the component, or the name of a module whose factory answers
- *         `{ component, title? }` (design 242)
+ *         takes the rest, and a trailing bare `*` takes nothing and parks the rest as the tail
+ *         for a stage inside the act. A value is the component, or the name of a module whose
+ *         factory answers `{ component, title? }` (design 242)
  *   template: what wraps the act. A pass-through when it is left off
  *   fallback: the act shown when nothing matched. This is the 404, and it is matched last
  *   initial: the act shown when no URL decides: no router, or a parent that took the whole path
@@ -620,6 +635,8 @@ export interface StageContextComponent {
  *           `open` and `close`, and a stage inside an act takes what its parent did not match
  *   sources: where a named act comes from. The stage builds one loader over these for the whole
  *            routing tree, so a stage inside an act inherits it and takes no `sources`
+ *   loader: the loader the modules are already in, instead of `sources`, from a platform that
+ *           built it; the stage loads acts from it and never closes it (design 282)
  *   client: the page's connection, handed to every module as its `client` prop
  *   refused: the act shown when loading a named act rejects with a refusal (design 244)
  *   children: the page, with a `Stage` somewhere in it
@@ -633,12 +650,13 @@ export interface StageContextComponent {
  * the stage is removed.
  *
  * Throws: an assert, loud in development and stripped in a release build, for an act key that is
- * not relative, has an empty segment, has a `:` or `*` with no name, has a `*rest` anywhere but
+ * not relative, has an empty segment, has a `:` with no name, has a `*` segment anywhere but
  * last, or cannot be told apart from another key; for a `fallback`, `initial` or `refused` naming
  * an act that is not declared; for a `refused` naming a key with a `:name` or `*name` segment,
- * which would render under another act's parameters; for a nested stage given `sources`; for a
- * `client` with no `sources`; for a named act with no `sources` anywhere above it; and for an act
- * module whose instance carries no `component`.
+ * which would render under another act's parameters; for a nested stage given `sources` or a
+ * `loader`; for `sources` beside a `loader`; for a `client` with no `sources`; for a named act
+ * with no `sources` or `loader` anywhere above it; and for an act module whose instance carries
+ * no `component`.
  *
  * Example:
  *   <StageContext router={router} sources={[app]} client={client}
@@ -650,6 +668,57 @@ export const StageContext: StageContextComponent = Object.assign(
 	provider as unknown as (props: StageProps) => unknown,
 	{ read: Value.read, node: Value.node, use: Value.use },
 );
+
+/** What `claimTail` hands a routed child that is not a stage. */
+export interface TailClaim {
+	/** The part of the path the parent stage did not take, recomputed on every navigation. */
+	readonly tail: Derived<string>;
+	/**
+	 * The path the parent's acts sit under plus what the parent matched, as `StageEntry.prefix`
+	 * spells it: no leading slash, `''` at the root. Read on each ask, because the parent's match
+	 * can change under a mounted child.
+	 */
+	readonly base: string;
+	/** The router of the routing tree, or null when no stage above has one. */
+	readonly router: Router | null;
+	/** Give the tail back, so the next claimant takes it. Call it on unmount. */
+	release(): void;
+}
+
+/**
+ * Claim the parent stage's tail for a component that is a routed child without being a stage
+ * (design 282): a frame that routes inside itself, say. It claims exactly what a nested
+ * `StageContext` claims, once, and the tail is released with `release` when the component
+ * unmounts (design 123).
+ *
+ * Params:
+ *   context: the mount context the component was handed
+ *
+ * Returns: the claim, or null when there is no stage above or the tail is already claimed, which
+ * is what a second child under one act gets.
+ *
+ * Example:
+ *   const Room = (props): Mounter => (elem, _item, before, context) => {
+ *     const claim = claimTail(context);
+ *     const stop = claim?.tail.effect((tail) => { route.url = `/${tail}`; });
+ *     ...
+ *     return (arg) => { if (arg !== undefined) return remove(arg); stop?.(); claim?.release(); return remove(); };
+ *   };
+ */
+export const claimTail = (context: unknown): TailClaim | null => {
+	const inner = Inner.read(context);
+	if (inner === null) return null;
+	const claim = inner.claimTail();
+	if (claim === null) return null;
+	return {
+		tail: claim.tail,
+		get base() {
+			return inner.basePath();
+		},
+		router: inner.router,
+		release: claim.release,
+	};
+};
 
 /**
  * Where the current act is rendered.

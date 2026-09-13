@@ -16,7 +16,7 @@ import type { LightElement, NodeLike } from '@aweftjs/dom';
 import { createLoader, fromBundle } from '@aweftjs/modules';
 import type { Source } from '@aweftjs/modules';
 import { createServer } from '@aweftjs/server';
-import { Stage, StageContext, context, h, mount, render } from '@aweftjs/ui';
+import { Stage, StageContext, context, h, isText, mount, render, textOf } from '@aweftjs/ui';
 
 import { auth } from '../src/index.ts';
 import { authClient } from '../src/client.ts';
@@ -162,10 +162,11 @@ test('auth/SignIn calls enter, and shows the refusal it answers with', async () 
 	});
 
 	const act = (await loader.load(['auth/SignIn']))['auth/SignIn'] as {
-		title: string;
+		title: unknown;
 		component: () => unknown;
 	};
-	assert.equal(act.title, 'Sign in', 'the act names itself for the live region');
+	assert.ok(isText(act.title), 'the act names itself for the live region, as a text token');
+	assert.equal(textOf(context(), act.title), 'Sign in');
 
 	const document = createDocument();
 	const stop = mount(document.body as never, h(act.component, {}));

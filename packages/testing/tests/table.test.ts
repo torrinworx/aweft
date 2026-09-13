@@ -68,6 +68,11 @@ test('the intended dependency graph is legal under the table', () => {
 		['auth', 'store'],
 		['testing', 'server'],
 		['jobs', 'core'],
+		['sandbox', 'modules'],
+		['sandbox', 'sync'],
+		['sandbox', 'dom'],
+		['sandbox', 'client'],
+		['sandbox', 'ui'],
 		['aweft', 'ui'],
 		['aweft', 'server'],
 	];

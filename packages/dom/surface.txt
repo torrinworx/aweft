@@ -40,8 +40,9 @@ value setAttribute: (element: ElementLike, name: string, value: unknown) => void
 value template: (spec: TemplateElement, edits: readonly TemplateEdit[]) => Template
 value toHtml: (node: NodeLike | readonly NodeLike[]) => string
 value watch: (value: unknown, callback: (value: unknown) => void) => () => void
+./router type Entries: interface Entries { current(): string; state(): unknown; push(state: unknown, href: string): void; replace(state: unknown, href: string): void; back(): void; listen(fn: () => void): () => void; }
 ./router type LinkRoot: interface LinkRoot { addEventListener(type: string, listener: (event: never) => void): void; removeEventListener(type: string, listener: (event: never) => void): void; }
 ./router type Router: interface Router { readonly url: Derived<string>; readonly key: Derived<string>; readonly base: string; push(url: string): void; replace(url: string): void; back(): void; links(root: LinkRoot): () => void; saved(): ScrollPosition | null; restore(): boolean; stop(): void; }
-./router type RouterOptions: interface RouterOptions { readonly url?: string; readonly base?: string; }
+./router type RouterOptions: interface RouterOptions { readonly url?: string; readonly base?: string; readonly entries?: Entries; }
 ./router type ScrollPosition: interface ScrollPosition { readonly x: number; readonly y: number; }
 ./router value createRouter: (options?: RouterOptions) => Router

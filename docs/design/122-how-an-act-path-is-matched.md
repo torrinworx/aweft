@@ -72,3 +72,20 @@ learn, and every rule in it is a rule the static walk has to reproduce.
 
 A real application whose URL shape cannot be written in these three segment kinds without
 declaring more keys than a person can hold in their head.
+
+## Amended
+
+An act key may end in a bare `*` (design 282). It matches any path, takes no segment and no
+parameter, and parks everything from it as the tail for the stage below: `*` alone at
+`/a/b` hands back no parameters, `''` taken and `a/b` as the tail; `docs/*` at
+`/docs/guide` takes `docs` and parks `guide`. Its class is the `*name` class, so a literal or
+a `:name` beats it, and `*` beside `*name` (or `a/*` beside `a/*rest`) is refused as two keys
+that match the same paths. A `*` that is not last is refused like a `*name` that is not last.
+`''` still matches `/` only, and at `/` it is the exact key, so it wins over `*` when both are
+declared.
+
+An earlier amendment had a `*name` park its rest as the tail while still taking it as its
+parameter. It was withdrawn: the room's stage keyed its act on `*rest`, the rest was a
+parameter, and a parameter change rebuilds the act (design 123), so every navigation inside
+the room built the act again and its component state went with it. A `*name` takes every
+segment left and leaves an empty tail, exactly as written above. Only a bare `*` parks.

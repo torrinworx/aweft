@@ -1,8 +1,8 @@
 # @aweftjs/ssg
 
 Pages from a routed site, at build time and at run time. It renders every page a site declares,
-writes each one as a file a static host can serve with no configuration, and hands the browser one
-function that takes the page over in place.
+writes each one as a file a static host can serve with no configuration, once per language when
+the site has more than one, and hands the browser one function that takes the page over in place.
 
 It decides nothing else: not where page data comes from, not which host serves the files, not what
 that host does with a URL it has no file for, and not whether a page it could not enumerate should
@@ -32,7 +32,8 @@ console.log(written.unenumerated);   // the acts nothing could list
 Four things go in. **`page`** builds the whole page from a router, and it is the same function your
 browser entry mounts, which is what makes the markup here the markup the client renders. **`shell`**
 is the `index.html` your bundler built, as text. **`out`** is the directory. **`base`** is the
-site's absolute URL, and it is needed only for the sitemap.
+site's absolute URL, needed for the sitemap and the language alternates. Two more for a site in
+more than one language, below.
 
 The browser half is one import:
 
@@ -47,7 +48,62 @@ router.links(document.body);
 
 `attach` hydrates a page this package wrote and mounts anything else, so the development server and
 the generated site share one entry file. It imports `mount` and `hydrate` from `@aweftjs/ui` and
-nothing else, so a page bundle carries none of the rest of this package.
+nothing else, so a page bundle carries none of the rest of this package. `languageOf(document)`,
+beside it, reads the language back off a page for the entry of a site in several languages.
+
+## A site in several languages
+
+```ts
+const site = createSite({
+	page: (router) => h(Site, { router }),
+	shell, out, base: 'https://example.com',
+	locale: 'en',
+	locales: { fr: JSON.parse(readFileSync('text/fr.json', 'utf8')), uk: JSON.parse(readFileSync('text/uk.json', 'utf8')) },
+});
+```
+
+**`locale`** is the language the pages are written in, a BCP 47 tag. **`locales`** is every other
+language, each tag to its catalog, the plain object `@aweftjs/ui`'s text tokens look up (its README,
+The text a page shows). With `locales` and no `locale` the site is refused (`locale-needed`),
+because the layout below needs to know which language stands unprefixed.
+
+**The layout.** The source language is written where the site was written before,
+`<url>/index.html`; every other language under its tag, `/fr/<url>/index.html`, with `/fr/404.html`
+and `/fr/shell.html` beside it. A site that adds a language keeps every URL it had, and a host
+serves every language with the same two rules it served one with. `write()` renders each URL the
+walk found once per language, with the language's catalog on the render and a router whose `base`
+is the language's prefix, so a link the page writes with `router.base` in front stays in its
+language. `page('/fr/about')` is `about` in French: the URL carries the language. `write(urls)`
+with a list writes a prefixed URL in that language and an unprefixed one in every language.
+
+**The document.** `<html>` gains `lang` with the page's tag, replacing one the shell wrote, and
+`dir="rtl"` for a script that runs right to left, which `Intl.Locale` says and nothing here lists.
+With a `base`, every page's head gains a `<link rel="alternate" hreflang>` per language and an
+`x-default` naming the source language's URL, and the sitemap lists every language's URL with the
+same alternates as `xhtml:link`. A site with `locale` alone writes `lang` and nothing else changes.
+
+**The report.** The write result gains `text`: per language, `missing`, the keys the pages looked
+up that its catalog has no entry for (those show the source), and `unused`, the entries no page
+looked up. It reads what the renders resolved, so it says what the site would show; the build's own
+report (`packages/build/README.md`) reads the files, and the two differ on a page compiled at run
+time. It fails nothing. An application that wants a build to stop on a missing translation reads it
+and stops.
+
+**The entry.** `languageOf(document)` answers `{ locale, base }`: the tag on `<html lang>`, and
+`/<tag>` when the address is under that prefix, `''` for the source language and for a site with
+one language alike. A page with no `lang` answers `''` for both, which finds no catalog and which
+`context()` reads as no language, so the entry below is the entry of a site with one language too.
+
+```tsx
+const catalogs = { fr: () => import('./text/fr.json'), uk: () => import('./text/uk.json') };
+const { locale, base } = languageOf(document);
+const catalog = (await catalogs[locale]?.())?.default;
+attach(document.body, <Site router={createRouter({ base })} />, context({ locale, catalog }));
+```
+
+The catalog is the application's own import, one request before `attach`, and a hydration waits
+for it. How the visitor's language is chosen is not here: the pages are files, one per language,
+and a host or a first page sends the reader to the right tree.
 
 ## The three things a site does
 
@@ -169,6 +225,21 @@ package's.
 **Rendering at request time.** This is a Node API. Your build script, your job or your module calls
 `write()`. There is no bundler plugin hook.
 
+**Which language a visitor gets.** A header, a cookie, a setting: the application's, and the
+pages are one file per language for it to send a reader to. **Whether a translation is right, or
+whether a missing one fails a build.** It is in the report.
+
+## Known limits
+
+**A language tag that is also a top-level segment of the site is the language's.** `placeOf`
+reads the prefix first, so a site with an act at `/de` and German under `de` writes the German
+home page over the act's page. Name the act something else; a two-letter segment is a language on
+any site in more than one of them.
+
+**The source language is refused in `locales`** (`locale-twice`), and a tag `Intl` cannot read is
+refused (`locale-invalid`); a tag it can read but has no plural rules for falls back to the host's
+own rules, which is what `Intl` does.
+
 ## Proven by
 
 [`recipes/ssg`](https://github.com/torrinworx/aweft/tree/main/recipes/ssg) builds the routed site,
@@ -178,6 +249,9 @@ and the title, and a URL nothing enumerated is served the live shell.
 [`recipes/posts-to-pages`](https://github.com/torrinworx/aweft/tree/main/recipes/posts-to-pages)
 publishes a post over a socket, writes that one page, hydrates it in a browser, and refreshes the
 sitemap from a scheduled full write.
+[`recipes/translated-site`](https://github.com/torrinworx/aweft/tree/main/recipes/translated-site)
+writes a site in three languages, reads the report, and hydrates the Ukrainian page in Chromium
+with nothing the server wrote removed.
 
 The suite in `tests/` is the same guarantees stated one at a time, over the light tree
 `@aweftjs/dom` ships, plus a Chromium run for `attach`.

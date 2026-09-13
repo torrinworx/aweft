@@ -1,7 +1,7 @@
 type Act: type Act = ActComponent | string;
 type ActComponent: type ActComponent = Component<Record<string, unknown>> & { entries?: ActEntries; };
 type ActEntries: type ActEntries = () => Promise<readonly Readonly<Record<string, string>>[] | null>;
-type ActInstance: interface ActInstance { readonly component: Component<Record<string, unknown>>; readonly title?: string; }
+type ActInstance: interface ActInstance { readonly component: Component<Record<string, unknown>>; readonly title?: unknown; }
 value Alert: (props: AlertProps) => unknown
 type AlertProps: interface AlertProps { readonly title?: unknown; readonly icon?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Avatar: (props: AvatarProps) => unknown
@@ -15,6 +15,7 @@ value Button: (props: ButtonProps, _cleanup: Cleanup, mounted: Mounted) => Mount
 type ButtonProps: interface ButtonProps { readonly label?: unknown; readonly type?: unknown; readonly size?: unknown; readonly icon?: unknown; readonly iconPosition?: string; readonly disabled?: unknown; readonly loading?: unknown; readonly round?: unknown; readonly inline?: unknown; readonly href?: unknown; readonly hrefNewTab?: unknown; readonly onClick?: (event: unknown) => unknown; readonly track?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Card: (props: CardProps) => unknown
 type CardProps: interface CardProps { readonly title?: unknown; readonly description?: unknown; readonly foot?: unknown; readonly type?: unknown; readonly tight?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
+type Catalog: type Catalog = Readonly<Record<string, string>>;
 type Category: interface Category { readonly items: unknown[]; readonly props: Record<string, unknown>; }
 value Checkbox: (props: CheckboxProps) => Mounter
 type CheckboxProps: interface CheckboxProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly invert?: unknown; readonly indeterminate?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly onChange?: (next: boolean, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
@@ -23,6 +24,7 @@ type ColorPickerProps: interface ColorPickerProps { readonly value?: unknown; re
 type Component: type Component<P = Record<string, unknown>> = (props: P & { children?: unknown[]; each?: unknown; }, cleanup: Cleanup, mounted: Mounted, pending: Pending) => unknown;
 type Context: interface Context<T> { (props: ProviderProps): unknown; readonly def: T; read(context: unknown): T; node(context: unknown): ContextNode<T> | null; use<P extends Record<string, unknown>>(build: (value: T) => Component<P>): Component<P>; }
 type ContextNode: interface ContextNode<T> { readonly id: string; readonly parent: ContextNode<T> | null; readonly children: MutableArray<ContextNode<T>>; value(): T; }
+type ContextOptions: interface ContextOptions { readonly locale?: string | undefined; readonly catalog?: Catalog | undefined; }
 value Countries: Context<CountryData | null>
 value Country: (props: CountryProps, _cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
 type CountryData: interface CountryData { readonly codes: readonly string[]; regions(code: string): readonly Subdivision[]; readonly aliases?: Readonly<Record<string, readonly string[]>>; }
@@ -89,7 +91,7 @@ type Rect: interface Rect { readonly left: number; readonly top: number; readonl
 value Region: (props: RegionProps) => Mounter
 type RegionProps: interface RegionProps { readonly value?: unknown; readonly country?: unknown; readonly [prop: string]: unknown; }
 type Registry: interface Registry<T = unknown> { readonly items: MutableArray<T>; add(item: T): () => void; claim(): boolean; }
-type Render: interface Render { readonly theme: Sheet; readonly head: HeadList; readonly stage: Registry<StageEntry>; readonly ids: Ids; readonly popups: Registry; }
+type Render: interface Render { readonly theme: Sheet; readonly head: HeadList; readonly stage: Registry<StageEntry>; readonly ids: Ids; readonly popups: Registry; readonly locale?: string; readonly catalog?: Catalog; }
 value Script: (props: TagProps) => unknown
 value Select: (props: SelectProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
 type SelectProps: interface SelectProps { readonly value?: unknown; readonly options?: unknown; readonly display?: unknown; readonly placeholder?: unknown; readonly open?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly name?: unknown; readonly autocomplete?: unknown; readonly onChange?: (next: unknown, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
@@ -105,7 +107,7 @@ type StageAct: interface StageAct { readonly name: string; readonly loader: bool
 value StageContext: StageContextComponent
 type StageContextComponent: interface StageContextComponent { (props: StageProps): unknown; read(context: unknown): StageValue | null; node(context: unknown): ContextNode<StageValue | null> | null; use<P extends Record<string, unknown>>(build: (stage: StageValue | null) => Component<P>): Component<P>; }
 type StageEntry: interface StageEntry { readonly acts: readonly StageAct[]; readonly prefix: string; readonly parent: StageEntry | null; readonly fallback: string | null; readonly current: string | null; }
-type StageProps: interface StageProps { readonly acts: Readonly<Record<string, Act>>; readonly template?: Component; readonly fallback?: string; readonly initial?: string; readonly router?: Router; readonly sources?: readonly Source[]; readonly client?: unknown; readonly refused?: string; readonly children?: unknown[]; }
+type StageProps: interface StageProps { readonly acts: Readonly<Record<string, Act>>; readonly template?: Component; readonly fallback?: string; readonly initial?: string; readonly router?: Router; readonly sources?: readonly Source[]; readonly loader?: Loader; readonly client?: unknown; readonly refused?: string; readonly children?: unknown[]; }
 type StageValue: interface StageValue { readonly current: Derived<string | null>; readonly params: Derived<Readonly<Record<string, string>>>; readonly query: Derived<Record<string, string>>; open(options: OpenOptions): void; close(): void; }
 value Style: (props: TagProps) => unknown
 type Subdivision: interface Subdivision { readonly code: string; readonly name: string; }
@@ -121,12 +123,16 @@ type TableProps: interface TableProps { readonly columns?: readonly (TableColumn
 value Tabs: (props: TabsProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
 type TabsProps: interface TabsProps { readonly value?: unknown; readonly tabs?: unknown; readonly orientation?: unknown; readonly type?: unknown; readonly size?: unknown; readonly label?: unknown; readonly onChange?: (next: unknown, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type TagProps: interface TagProps { readonly key?: string; readonly children?: unknown[]; readonly [attribute: string]: unknown; }
+type TailClaim: interface TailClaim { readonly tail: Derived<string>; readonly base: string; readonly router: Router | null; release(): void; }
 value TextArea: (props: TextAreaProps) => Mounter
 type TextAreaProps: interface TextAreaProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly maxHeight?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value TextField: (props: TextFieldProps) => Mounter
 type TextFieldProps: interface TextFieldProps { readonly leading?: unknown; readonly trailing?: unknown; readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly password?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type TextModifier: interface TextModifier { readonly check: string | RegExp; readonly return: (match: string) => unknown; readonly [key: string]: unknown; }
 value TextModifiers: Context<TextModifier[]>
+type TextSource: interface TextSource { readonly source: string; readonly key: string; readonly values: TextValues | undefined; }
+type TextToken: interface TextToken { (...args: never[]): unknown; readonly [TEXT]: TextSource; }
+type TextValues: interface TextValues { readonly context?: string; readonly [name: string]: unknown; }
 value Theme: ThemeApi
 type ThemeApi: interface ThemeApi extends Context<Definitions> { define(entries: Definitions): void; }
 type ThemeCascade: interface ThemeCascade { (props: ProviderProps): unknown; readonly def: string[]; read(context: unknown): string[]; node(context: unknown): ContextNode<string[]> | null; use<P extends Record<string, unknown>>(build: (h: Themed) => Component<P>): Component<P>; }
@@ -146,14 +152,17 @@ value ValidateContext: (props: ValidateContextProps) => Mounter
 type ValidateContextProps: interface ValidateContextProps { readonly value?: unknown; readonly children?: unknown[]; }
 type ValidateProps: interface ValidateProps { readonly value?: unknown; readonly validate?: unknown; readonly signal?: unknown; readonly valid?: unknown; readonly error?: unknown; readonly showError?: unknown; readonly icon?: unknown; readonly type?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value categories: (children: readonly unknown[], names: readonly string[], fallback?: string | undefined) => Category[]
-value context: () => Render
+value claimTail: (context: unknown) => TailClaim | null
+value context: (options?: ContextOptions) => Render
 value createContext: <T>(def: T, transform?: Transform<T>) => Context<T>
 value dark: Readonly<Record<string, Readonly<Record<string, unknown>>>>
 value flagOf: (code: string) => string
 value h: (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown
 value html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown
 value hydrate: (target: ParentLike, item: unknown, render?: Render | undefined) => Hydrated
+value isText: (value: unknown) => value is TextToken
 value light: Readonly<Record<string, Readonly<Record<string, unknown>>>>
+value localeOf: (context: unknown) => string | undefined
 value localeRegion: () => string | null
 value mark: Mark
 value mount: (target: ParentLike, item: unknown, before?: Remove | undefined, render?: Render | undefined) => Remove
@@ -163,11 +172,15 @@ value standardIcons: readonly string[]
 value suspend: <P extends Record<string, unknown>>(fallback: Component | null, loader: Loader<P>, failed?: Component<{ error?: unknown; }> | null | undefined) => (props: P & { children?: unknown[] | undefined; }, cleanup: (...fns: (() => void)[]) => void, _mounted: unknown, pending: (promise: Promise<unknown>) => void) => Mounter
 value svg: (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown
 value template: (spec: TemplateElement, edits: readonly TemplateEdit[]) => Template
+value text: (source: string, values?: TextValues | undefined) => TextToken
+value textOf: (context: unknown, value: unknown) => string
 value trackedMount: () => [MutableArray<NodeLike>, (props: { children?: unknown[] | undefined; }) => unknown]
 value use: (value: unknown) => Render
 value useAbort: <A extends unknown[]>(fn: (signal: AbortSignal, ...args: A) => void) => (...args: A) => () => void
+value usedText: (render: Render) => readonly string[]
 ./countries type CountryData: interface CountryData { readonly codes: readonly string[]; regions(code: string): readonly Subdivision[]; readonly aliases?: Readonly<Record<string, readonly string[]>>; }
 ./countries type Subdivision: interface Subdivision { readonly code: string; readonly name: string; }
 ./countries value countryAliases: Readonly<Record<string, readonly string[]>>
 ./countries value countryData: (load?: (() => Promise<unknown>) | undefined) => Promise<CountryData>
 ./icon-names value standardIcons: readonly string[]
+./text.json data ./text.json

@@ -22,8 +22,11 @@ boundary in the system.
    dom (+ dom/router), client                                           |
         +-------------------------------+-------------------------------+
                                         |
+                                    THE ROOM
+                            sandbox (+ sandbox/page, /room)      (isomorphic, over ui)
+                                        |
                                   ORGANIZATION
-                                 modules, sandbox                (isomorphic)
+                                     modules                     (isomorphic)
                                         |
                                    DATA PLANE
                                   sync      store                (isomorphic)
@@ -78,6 +81,8 @@ aweft/
     store/                 persistence and its driver interface
     modules/               the isomorphic module system, static and dynamic
     sandbox/               isolated execution for stored module code
+                           + sandbox/page and sandbox/room subpaths: the two halves of a
+                             room on the page, a host act and the stage inside the frame
     dom/                   direct DOM binding, hydration, static render
                            + dom/router subpath: history and URL to state
     ui/                    components and theming
@@ -119,15 +124,15 @@ version in lockstep.
 | `sync` | Moving commits between documents over a channel, both ends equal | Who may write, what a commit means, DOM, storage internals |
 | `store` | Persisting a document as observable rows, its commit tail, the driver interface | DOM, transport |
 | `modules` | Reading module definitions from a directory, a bundle map or a document; dependency order; injection; load and unload | Whether it runs on a client or a server; storage, transport, history; who may load or run anything; which modules load or when |
-| `sandbox` | The window: a loader on the far end of a link, the grants, calls as rows, and the runners that make a room | What the code it runs is for; what wall is around the room; who may load, grant or call; how many rooms and for how long |
+| `sandbox` | The window: a loader on the far end of a link, the grants, calls as rows, and the runners that make a room; and the page halves, a host act that puts the frame on the page and shares the documents the application names, and the stage inside the frame over the tail of the page's URL | What the code it runs is for; what wall is around the room; who may load, grant or call; how many rooms and for how long; what a granted name lets a module do; whether a write from the room is acceptable |
 | `dom` | Mounting, hydration, static render, URL and history, and the prototype a hoisted template is instanced from | Storage, transport, components |
 | `client` | One connection to a server for the life of a page: the socket, the link and the requests attached before it opens, asks, share handles that keep one document object across reconnects, the retry | Who is on the connection, what a document means, which documents a page shares; users, sessions, cookies; components |
-| `ui` | Components, theming, and the stage: the acts a URL reaches, and the loader it builds over the sources it was given so an act can be a module name | Storage, transport, server; what a connection is, and who is on it |
+| `ui` | Components, theming, the stage: the acts a URL reaches, and the loader it builds over the sources it was given so an act can be a module name; and the text a page shows, looked up in the render's language where it mounts | Storage, transport, server; what a connection is, and who is on it; which language a visitor gets, and where a catalog comes from |
 | `icons` | Turning an installed icon set into modules a page imports: one icon, a whole set, the standard names, and a resolver for a name known only at run time | Which sets an application installs, whether a page fetches, what an icon looks like; any icon data of its own |
 | `server` | Building the loader from the sources the application names and loading every module they list; accepting connections and requests through a listener; one socket as a link and a call channel; running the modules' `connection`, `call` and `routes` hooks behind the gate the application supplies | Who is on a connection, who may reach a module, who may write a commit, what a module is for; users, sessions, storage; component internals |
 | `auth` | The gate that reads `public`, sessions as documents, sign-in and sign-up, the per-user state document, as server modules; the client half over a `client` connection: `user` as a cell, `enter`, `leave`, `state` and `check`; and a source of two page modules, `auth/Session` and the `auth/SignIn` form | Which application loads it; which URL any of it is on; who may see a page |
 | `jobs` | When a row runs, over an observable array the application hands in: the timers, the cron arithmetic, `last` written onto the row | What a job does; who may add, edit or remove a row; storage; queues, retries, catch-up; modules; component internals |
-| `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom |
+| `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, the text a page shows found and answered, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom; whether a missing translation fails a build |
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
 | `logs` | What a page and the server did, per visit, in the application's store: a client half that records the page, three server modules, and readers any process imports | Who may read a visit; whether to record; retention beyond its defaults; any URL but its one route; a typed value, a private-slot value, an IP |
 | `uploads` | A file from a page or a module: the bytes in a directory or an S3-compatible bucket through an adapter, the record in the store, served at `/files/<id>` with the type from the record; a client half that posts with progress; readers any process imports | Who may upload beyond the gate and `accept`; who may read beyond `public` and `allow`; deletion over the wire; expiry; what a file means (no index, resize, transcode); a storage setting from the environment; an IP |
@@ -204,11 +209,16 @@ superseded it.
 | What `modules` does and decides | `load`, `unload`, `dependents`, `dependencies`, and `follow` as an opt-in helper; a loader is an instance; nothing decides which modules load, when, how many, or for how long | 063 |
 | What `modules` refuses to know | No history, no authority, no storage, no transport: a module document is an ordinary document and everything that works for one works for it | 064 |
 | Isolation | Later, behind G4, after `modules` is proven; `modules` claims none and says that loading a module runs its code | 065 |
-| A room | A loader on the far end of a link; three documents cross it (`modules` read-only to the room, `room` read-only to the room, `calls` written by both) and nothing else; nothing inside is ambient | 066 |
+| A room | A loader on the far end of a link; three documents cross it (`modules` read-only to the room, `room` read-only to the room, `calls` written by both), beside them the documents the application names, and nothing else; nothing inside is ambient | 066, 281 |
 | A capability | A granted name on an observable list the application changes; `expose` puts an instance behind a name; inside, the name is an import carrying the instance's functions; a removed name refuses from the next call; modules in one room trust each other | 067 |
 | A call | A row in the calls document, in both directions, with JSON text either side and anything that is not data refused by name; the writer deletes an answered row | 068 |
 | A runner | `start` makes the room and hands back the channel, `stop` ends it; `inProcess`, `iframe` and `child` ship, bubblewrap and docker are examples; limits are parameters with no defaults; each runner says what it stops and the wall is the operator's | 069 |
 | Proof of a runner | The escape suite in `testing`, two halves, append-only, run in every shipped runner and under a real browser for the frame | 070 |
+| A room on the page | `Room` on `sandbox/page` runs an act in a frame and `room()` on `sandbox/room` boots a stage inside it over one loader; a factory in the room gets a `client` shaped like the page's and nothing else | 280 |
+| Named documents cross | `createSandbox({ documents })` shares each under its key, writable both ways; `modules`, `room`, `calls` and `route` are reserved; the far end refuses an unlisted `share` at once; refusing a write is the application's guard on its own copy | 281 |
+| The route across the wall | A `route` document the host shares; the room's stage owns the tail under the host act and nothing above it; `createRouter({ entries })` is where the URL and its entries live; `claimTail` claims a parent stage's tail for a child that is not a stage; a bare `*` act key parks the whole path as its tail and takes no parameter, so a stage under it routes and the act is not rebuilt per move | 282 |
+| What leaves the room as data | Errors, rejections and the console levels the host names cross as `Report` data to `handlers.error` and `handlers.console`; a frame forwards all three, a child forwards console, an in-process room forwards nothing | 283 |
+| The frame's `allow` | `iframe({ allow })` opens inline styles and images, fonts and media from named origins; `script-src` and `connect-src` never widen | 284 |
 | The gate | Required and outside every module: `identify` once per connection or request answers a context or refuses, `access` runs before a module sees a connection, a call or a request; `open` is the trusted case; a module declares `public` or nothing and the auth gate reads it, `server` does not; the application names a `Gate` object or a module that is one, and a composed gate is a module | 071, 241 |
 | A connection | One socket behind a listener the application supplies: the link as binary messages, requests as text; hooks run in load order for the modules the gate allows; a share on it requires `accept` | 072, 073 |
 | The boot | `createServer({ sources, store, gate, listener })` builds its own loader and `start` loads every module every source lists; `loader` and `props` are refused; the platform hands in `store` and nothing else, so anything the application makes is a module others `deps` on; `stop` unloads in reverse load order | 240 |
@@ -334,7 +344,7 @@ indexed by the job rather than the package, are not in this table.
 | sync | two live documents over a real channel converge under concurrent edits; the same protocol runs over a second channel unchanged; a conflict is left swapped and then resolved by a handler that yields; a chain of three converges; a document shared over a link and persisted by a store at once |
 | store | write, kill the process, reopen, verify; find-or-create under concurrent open |
 | modules | an app assembled from all three sources (a directory, a bundle map, a document), with dependency order and injection asserted; a module document shared over a link loads on the far end; `follow` reloads a changed module and its dependents; `unload` calls `stop`; nothing inside the package touches store or sync |
-| sandbox | a hostile module runs the escape suite and stays contained, while a benign module does real work through granted capabilities |
+| sandbox | a hostile module runs the escape suite and stays contained, while a benign module does real work through granted capabilities; and, as the task recipe `recipes/room`, an act module stored on the server runs in a frame on the page: the board it shares reaches the server, its ask carries the page's identity, its navigation is the page's URL under the host act, and what goes wrong inside reaches the page as data |
 | dom | mount and hydrate a page with a dynamic list; edits assert exact DOM operations against the mock |
 | ui | an interactive page composed from components, driven and asserted against the mock (plus a manual browser page, outside CI) |
 | icons | a page naming icons three ways (written out, a standard name, a name fetched when the page runs), with the bundle weighed: the icons it named and not the one it looked up |
@@ -342,7 +352,7 @@ indexed by the job rather than the package, are not in this table.
 | client | a page against a real listener: a share and an ask made before the socket opens both arrive, the server is restarted underneath it, and the page comes back on its own with the same state document object holding what the server wrote while it was down, with an ask made while it was down answered on the new socket |
 | auth | inside the server recipe: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous; and, in the client recipe, a page whose every part is a module signs up through `auth/SignIn`, reads `user`, opens `state` and signs out |
 | jobs | a scheduled job runs, persists an effect, and survives a restart |
-| ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM |
+| ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM; and a site written in one language is written in three, with a stored act compiled where it runs, and hydrates in each |
 | static | a generated site is served by the stack's own server in one process: a deep link hydrates in place, an unknown URL is 404 with the fallback page, the same URL under the shell setting is 200 and mounts live, and HEAD, the ETag and a climbing path answer as the rule says |
 | health | a deploy's verification: the endpoint polled until the shipped build is the one answering, then the two states a poll must not mistake for health, a store that stopped answering and a check that threw |
 | logs | a page recorded end to end in a browser and the visit read back: a page error, a rejection, a console error, a failed call on both sides, a commit's shape with a private slot absent, a typed character never stored, a non-character key kept, a refused write, sign-in mid-visit, and the browser facts |
@@ -365,9 +375,11 @@ defined in `AGENTS.md`.
 3. `schema`. The shape a document must keep, checked before a commit lands.
 4. `store` + `sync`.
 5. `modules`.
-5b. `sandbox` (design 070).
+5b. `sandbox` (design 070), the compute room.
 6. `dom` + `build`, with hydration and route data designed in rather than bolted on.
 7. `ui`, `icons`, `ssg`.
+7b. The page halves of `sandbox` (design 280), which sit over `ui`, `dom` and `client`, so the
+    package is tier 7 and its compute room still imports nothing above `modules`.
 8. `server`, `jobs`, `client`, the batteries. `server`, `auth` and `jobs` were built ahead of 6
    and 7, after a re-read of the eight packages then built; `client` and the `auth` client half
    followed. The other batteries wait their turn here.
@@ -595,6 +607,9 @@ Four passes, in the order a node reaches them: markup in a template literal beco
 JSX becomes `h` calls resolved by ordinary scope, a static subtree becomes a template `dom`
 instances per document (design 089, 093, 094), and a release build loses its assert calls
 (design 097). Hoisting happens only where `h` is provably `dom`'s in that file (design 092).
+A fifth, off unless asked for: every literal a page shows becomes a `text()` call from `ui`,
+looked up in the render's language where it mounts, and the keys are answered so a build can
+write the catalog (design 277, 278).
 
 The transform's own risk is changing what a program means, so the package's suite is an
 equivalence suite: each fixture runs as written and transformed, mounted, rendered and

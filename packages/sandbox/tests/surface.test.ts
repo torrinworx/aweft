@@ -12,8 +12,8 @@ test('the main entry hands out exactly what the calls decided', () => {
 	assert.deepEqual(Object.keys(sandbox).sort(), ['createSandbox', 'iframe', 'inProcess']);
 });
 
-test('the inside subpath is the far end, over a channel or a port', () => {
-	assert.deepEqual(Object.keys(inside).sort(), ['inside', 'insidePort']);
+test('the inside subpath is the far end, over a channel or a port, and the two halves a page builds it from', () => {
+	assert.deepEqual(Object.keys(inside).sort(), ['enter', 'inside', 'insidePort']);
 });
 
 test('the node subpath hands out the child runner and nothing else', () => {

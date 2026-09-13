@@ -10,6 +10,7 @@ import { mutable } from '@aweftjs/core';
 import { assert } from './assert.ts';
 import { use } from './render.ts';
 import { isSource, isWritable } from './source.ts';
+import { type TextToken, isText, textIn } from './text.ts';
 import { themeAt, themeRaws } from './theme.ts';
 import type { Definitions } from './sheet.ts';
 import { type Lookup, NO_THEME, cssName, declarationValue, parseValue, resolve } from './values.ts';
@@ -60,6 +61,8 @@ export interface Claimed {
 	classInto?: Attribute;
 	/** Required beside a `style`: the `style` attribute cell. */
 	styleInto?: Attribute;
+	/** Each prop that held a text token, and the cell its resolved string goes into (design 278). */
+	text?: { readonly token: TextToken; readonly into: Attribute }[];
 }
 
 /**
@@ -92,7 +95,7 @@ export const splitProps = (
 	for (const key in props) {
 		const value = props[key];
 		if (value === undefined || value === null) continue;
-		if (key === 'style' ? typeof value !== 'string' : claims(key, themes)) {
+		if (key === 'style' ? typeof value !== 'string' : claims(key, themes) || isText(value)) {
 			anything = true;
 			break;
 		}
@@ -122,6 +125,14 @@ export const splitProps = (
 		const value = props[key];
 		if (key === 'theme') {
 			if (themes && value !== undefined && value !== null) claimed.theme = value;
+			continue;
+		}
+		// A token in any prop: the string it resolves to is written into a cell `dom` binds under
+		// the same name, so the attribute or property carries the translation.
+		if (isText(value)) {
+			const cell = mutable<unknown>('');
+			(claimed.text ??= []).push({ token: value, into: cell });
+			rest[key] = cell;
 			continue;
 		}
 		if (key === 'class' && themed) {
@@ -337,6 +348,12 @@ export const applyClaimed = (claimed: Claimed, context: unknown): (() => void) =
 			(deep) => cssTextOf(claimed.style, deep, NO_THEME),
 			(css) => { claimed.styleInto?.set(css === '' ? null : css); },
 		));
+	}
+
+	for (const { token, into } of claimed.text ?? []) {
+		// Resolved here, where the render's catalog is, and followed through the cells among the
+		// token's values so a plural over a count moves with it.
+		stops.push(track((deep) => textIn(context, token, deep), (value) => { into.set(value); }));
 	}
 
 	return () => {

@@ -9,8 +9,10 @@ export { template } from './template.ts';
 export { mark, categories } from './mark.ts';
 export type { Category, Mark, Marked, MarkMaker } from './mark.ts';
 
-export { context, hydrate, mount, render, use } from './render.ts';
-export type { Render } from './render.ts';
+export { context, hydrate, mount, render, use, usedText } from './render.ts';
+export type { Catalog, ContextOptions, Render } from './render.ts';
+export { isText, localeOf, text, textOf } from './text.ts';
+export type { TextSource, TextToken, TextValues } from './text.ts';
 export type { Hydrated } from '@aweftjs/dom';
 export type { Ids, Registry } from './registry.ts';
 
@@ -19,8 +21,8 @@ export { Head, Link, Meta, Script, Style, Title } from './head.tsx';
 export type { TagProps } from './head.tsx';
 export type { HeadKind, HeadList, HeadTag } from './head-list.ts';
 
-export { Default, Stage, StageContext } from './stage.tsx';
-export type { Act, ActComponent, ActInstance, OpenOptions, StageContextComponent, StageProps, StageValue } from './stage.tsx';
+export { Default, Stage, StageContext, claimTail } from './stage.tsx';
+export type { Act, ActComponent, ActInstance, OpenOptions, StageContextComponent, StageProps, StageValue, TailClaim } from './stage.tsx';
 export type { ActEntries, StageAct, StageEntry } from './stage-entry.ts';
 // `StageProps.sources` names it, so an application annotates its own sources without reaching
 // past this package for the type, the way `Hydrated` is re-exported from dom.

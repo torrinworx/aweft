@@ -52,3 +52,10 @@ from its parent.
 An application needing two routed regions side by side under one act, which would mean splitting
 the tail by a rule rather than handing it to one claimant, and that rule would be new syntax in
 the act key.
+
+## Amended
+
+`ui` exports `claimTail(context)` (design 282): a component that is a routed child without
+being a stage claims the parent's tail exactly as a nested `StageContext` does, once, released
+on unmount, and a second claimant still gets null. The one-claimant rule is unchanged; what
+changed is that the claimant need not be a stage.

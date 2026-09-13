@@ -606,7 +606,13 @@ export const componentHandle = (ctx: Ctx, component: Component, props: Record<st
 				rec.mountedCbs.length = 0;
 				complete(rec);
 				if (error instanceof Error && !error.message.startsWith(`in ${nameOf(component)}: `)) {
-					error.message = `in ${nameOf(component)}: ${error.message}`;
+					// A message that is a getter only (a DOMException) keeps its own text; naming the
+					// component is not worth replacing the error with a TypeError about the assignment.
+					try {
+						error.message = `in ${nameOf(component)}: ${error.message}`;
+					} catch {
+						// nothing to do
+					}
 				}
 				throw error;
 			}

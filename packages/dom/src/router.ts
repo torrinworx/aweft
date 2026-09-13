@@ -1,9 +1,11 @@
-// The URL, the history entry, and the clicks that move between them (design 121).
+// The URL, the history entry, and the clicks that move between them (designs 121 and 282).
 //
 // One history path: `popstate`, `pushState`, `replaceState`. Everything the router does to a
-// browser goes through the `Host` interface below, and the implementation with no `window` keeps
-// its stack in memory rather than switching the effects off. So a static render, a Node test and
-// a real page all drive the same router.
+// browser goes through two interfaces below: `Entries`, where the URL and its history entries
+// live, and `Page`, the scroll, storage and clicks. The implementation with no `window` keeps
+// its stack in memory rather than switching the effects off, so a static render, a Node test
+// and a real page all drive the same router. `Entries` may be handed in, which is how a router
+// runs inside a frame whose own history is out of reach.
 
 import { type Derived, mutable } from '@aweftjs/core';
 
@@ -21,6 +23,25 @@ export interface LinkRoot {
 	removeEventListener(type: string, listener: (event: never) => void): void;
 }
 
+/**
+ * Where the URL and its history entries live (design 282). The browser's history is the usual
+ * one; a router inside a sandbox frame runs over an object that reads and writes a document
+ * shared across the wall. The router stamps its own entry key into the state it pushes and
+ * reads it back through `state`, so an implementation keeps whatever state it is handed, per
+ * entry, and answers it for the entry showing now.
+ */
+export interface Entries {
+	/** The whole path, query and hash showing now, `base` included. */
+	current(): string;
+	/** The history state of the entry showing now, whoever wrote it. */
+	state(): unknown;
+	push(state: unknown, href: string): void;
+	replace(state: unknown, href: string): void;
+	back(): void;
+	/** Called after every entry change the implementation reports. Returns its unsubscribe. */
+	listen(fn: () => void): () => void;
+}
+
 /** What `createRouter` takes. */
 export interface RouterOptions {
 	/**
@@ -30,6 +51,11 @@ export interface RouterOptions {
 	readonly url?: string;
 	/** A path every URL is under, `/docs` say. No trailing slash; `''` when it is left off. */
 	readonly base?: string;
+	/**
+	 * Where the URL and its entries live, instead of the window's history or the stack in
+	 * memory. Scroll, storage and clicks still come from the window when there is one.
+	 */
+	readonly entries?: Entries;
 }
 
 /** The URL, the history entry, and the ways to move. */
@@ -77,19 +103,10 @@ export interface Router {
 // --- the seam ---------------------------------------------------------------------------------
 
 /**
- * Everything the router does outside itself. Two implementations: a browser, and a stack in
- * memory for a static render and for Node.
+ * The rest of what the router does outside itself: the page around the entries. Two
+ * implementations: a browser, and nothing for a static render and for Node.
  */
-interface Host {
-	/** The whole path, query and hash showing now, `base` included. */
-	current(): string;
-	/** The history state of the entry showing now, whoever wrote it. */
-	state(): unknown;
-	push(state: unknown, href: string): void;
-	replace(state: unknown, href: string): void;
-	back(): void;
-	/** Called after every entry change the host reports. Returns its unsubscribe. */
-	listen(fn: () => void): () => void;
+interface Page {
 	/** Where the page is now, or null where there is no page. */
 	position(): ScrollPosition | null;
 	scroll(to: ScrollPosition): void;
@@ -101,6 +118,11 @@ interface Host {
 	 * answers whether it took it; a click it did not take is left to the browser.
 	 */
 	intercept(root: LinkRoot, go: (path: string) => boolean): () => void;
+}
+
+/** Where a link's href is resolved: the window's location, or the entries' own URL. */
+interface Locator {
+	(): { readonly href: string; readonly origin: string };
 }
 
 interface HistoryLike {
@@ -148,6 +170,9 @@ interface AnchorLike {
 /** The attribute that leaves one link to the browser. */
 const OPT_OUT = 'data-no-route';
 
+/** An origin for resolving hrefs against handed-in entries; never fetched, never shown. */
+const STAND_IN = 'http://aweft.route';
+
 const windowOf = (): WindowLike | null => {
 	const found = (globalThis as { window?: WindowLike }).window;
 	if (found === undefined || found === null) return null;
@@ -164,19 +189,8 @@ const anchorOf = (from: unknown): AnchorLike | null => {
 	return null;
 };
 
-const browserHost = (win: WindowLike): Host => {
-	const session = (() => {
-		// Reading `sessionStorage` throws outright where the user has turned storage off, so the
-		// read that finds out is the one in a try rather than every read after it.
-		try {
-			return win.sessionStorage ?? null;
-		} catch {
-			return null;
-		}
-	})();
-
+const browserEntries = (win: WindowLike): Entries => {
 	if (win.history.scrollRestoration !== undefined) win.history.scrollRestoration = 'manual';
-
 	return {
 		current: () => win.location.pathname + win.location.search + win.location.hash,
 		state: () => win.history.state,
@@ -188,6 +202,21 @@ const browserHost = (win: WindowLike): Host => {
 			win.addEventListener('popstate', on as (event: never) => void);
 			return () => { win.removeEventListener('popstate', on as (event: never) => void); };
 		},
+	};
+};
+
+const browserPage = (win: WindowLike, locate: Locator): Page => {
+	const session = (() => {
+		// Reading `sessionStorage` throws outright where the user has turned storage off, so the
+		// read that finds out is the one in a try rather than every read after it.
+		try {
+			return win.sessionStorage ?? null;
+		} catch {
+			return null;
+		}
+	})();
+
+	return {
 		position: () => ({ x: win.scrollX ?? 0, y: win.scrollY ?? 0 }),
 		scroll: (to) => { win.scrollTo(to.x, to.y); },
 		read: (name) => {
@@ -222,8 +251,9 @@ const browserHost = (win: WindowLike): Host => {
 				const href = anchor.getAttribute?.('href') ?? null;
 				if (href === null || href === '') return;
 
-				const resolved = new URL(href, win.location.href);
-				if (resolved.origin !== win.location.origin) return;
+				const at = locate();
+				const resolved = new URL(href, at.href);
+				if (resolved.origin !== at.origin) return;
 
 				if (go(resolved.pathname + resolved.search + resolved.hash)) event.preventDefault();
 			};
@@ -234,12 +264,12 @@ const browserHost = (win: WindowLike): Host => {
 };
 
 /**
- * The host with no page: a stack of entries, and nothing to scroll or click.
+ * The entries with no page: a stack in memory.
  *
  * `push`, `replace` and `back` all work, which is what lets a headless test drive a whole
  * navigation and a static render open the act a URL names.
  */
-const memoryHost = (start: string): Host => {
+const memoryEntries = (start: string): Entries => {
 	const stack: { href: string; state: unknown }[] = [{ href: start, state: null }];
 	let at = 0;
 	const listeners: (() => void)[] = [];
@@ -266,13 +296,17 @@ const memoryHost = (start: string): Host => {
 				if (found >= 0) listeners.splice(found, 1);
 			};
 		},
-		position: () => null,
-		scroll: () => undefined,
-		read: () => null,
-		write: () => undefined,
-		intercept: () => () => undefined,
 	};
 };
+
+/** The page that is not there: nothing to scroll, nothing to remember, nothing to click. */
+const memoryPage = (): Page => ({
+	position: () => null,
+	scroll: () => undefined,
+	read: () => null,
+	write: () => undefined,
+	intercept: () => () => undefined,
+});
 
 // --- the entry stamp ----------------------------------------------------------------------------
 
@@ -307,7 +341,10 @@ const trimEnd = (path: string): string => path.replace(/\/+$/, '');
  *
  * Params:
  *   options: `url`, where to start with no `window` (`/` when left off, ignored in a browser),
- *            and `base`, a path every URL is under (`''` when left off, no trailing slash)
+ *            `base`, a path every URL is under (`''` when left off, no trailing slash), and
+ *            `entries`, where the URL and its history entries live when they are not the
+ *            window's (design 282); scroll, storage and clicks still come from the window when
+ *            there is one, and an anchor click is then resolved against the entries' own URL
  *
  * Returns: the router. `url` and `key` are read-only cells; write to them and they throw,
  * because `push` and `replace` are how a router moves.
@@ -328,7 +365,16 @@ export const createRouter = (options: RouterOptions = {}): Router => {
 
 	const win = windowOf();
 	const start = options.url ?? '/';
-	const host = win === null ? memoryHost(base + (start.startsWith('/') ? start : `/${start}`)) : browserHost(win);
+	const given = options.entries;
+	const entries: Entries = given ?? (win === null ? memoryEntries(base + (start.startsWith('/') ? start : `/${start}`)) : browserEntries(win));
+	// An opaque frame's location is `about:srcdoc`, which no path resolves against, and a link
+	// inside a room means a path in the room: with entries handed in, an href is resolved
+	// against the entries' own URL on a stand-in origin, so a path stays a path and anything
+	// with an origin of its own is left to the browser.
+	const locate: Locator = given === undefined && win !== null
+		? () => win.location
+		: () => ({ href: `${STAND_IN}${entries.current()}`, origin: STAND_IN });
+	const page: Page = win === null ? memoryPage() : browserPage(win, locate);
 
 	/** A URL relative to `base`, or null when it is outside it. */
 	const within = (path: string): string | null => {
@@ -339,41 +385,41 @@ export const createRouter = (options: RouterOptions = {}): Router => {
 
 	const href = (url: string): string => base + (url.startsWith('/') ? url : `/${url}`);
 
-	const url = mutable(within(host.current()) ?? '/');
+	const url = mutable(within(entries.current()) ?? '/');
 	const key = mutable('');
 	let at = '';
 
 	// Seeded from session storage rather than from zero, so a reload does not mint a key an entry
 	// already in the back stack is using and inherit its scroll position.
-	const seeded = Number(host.read(SEQUENCE) ?? '0');
+	const seeded = Number(page.read(SEQUENCE) ?? '0');
 	let sequence = Number.isFinite(seeded) ? seeded : 0;
 
 	const nextKey = (): string => {
 		sequence += 1;
-		host.write(SEQUENCE, String(sequence));
+		page.write(SEQUENCE, String(sequence));
 		return `e${sequence}`;
 	};
 
 	/** Remember where the page is, against the entry it is about to leave. */
 	const save = (): void => {
 		if (at === '') return;
-		const where = host.position();
-		if (where !== null) host.write(SCROLL + at, `${where.x},${where.y}`);
+		const where = page.position();
+		if (where !== null) page.write(SCROLL + at, `${where.x},${where.y}`);
 	};
 
 	/** Read the entry showing now, stamping it with a key when the router did not write it. */
 	const sync = (): void => {
-		let entry = entryOf(host.state());
+		let entry = entryOf(entries.state());
 		if (entry === null) {
 			entry = { key: nextKey() };
-			host.replace(stamped(host.state(), entry), host.current());
+			entries.replace(stamped(entries.state(), entry), entries.current());
 		}
 		at = entry.key;
 		key.set(entry.key);
-		url.set(within(host.current()) ?? '/');
+		url.set(within(entries.current()) ?? '/');
 	};
 
-	const stopListening = host.listen(() => {
+	const stopListening = entries.listen(() => {
 		// The browser has already moved, and scroll restoration is manual, so the page is still
 		// where the entry being left had it.
 		save();
@@ -388,15 +434,15 @@ export const createRouter = (options: RouterOptions = {}): Router => {
 		// Replacing keeps whatever else is on the entry showing now, because it is still that
 		// entry and its other fields belong to whoever wrote them. A push starts an entry of its
 		// own, so it starts from nothing.
-		if (replacing) host.replace(stamped(host.state(), entry), target);
-		else host.push(stamped(null, entry), target);
+		if (replacing) entries.replace(stamped(entries.state(), entry), target);
+		else entries.push(stamped(null, entry), target);
 		at = entry.key;
 		key.set(entry.key);
 		url.set(within(target) ?? '/');
 	};
 
 	const saved = (): ScrollPosition | null => {
-		const held = host.read(SCROLL + key.get());
+		const held = page.read(SCROLL + key.get());
 		if (held === null) return null;
 		const [x, y] = held.split(',').map(Number);
 		return x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y) ? null : { x, y };
@@ -419,13 +465,13 @@ export const createRouter = (options: RouterOptions = {}): Router => {
 		base,
 		push: (to) => { checkPath(to); go(to, false); },
 		replace: (to) => { checkPath(to); go(to, true); },
-		back: () => { host.back(); },
-		links: (root) => host.intercept(root, (path) => {
+		back: () => { entries.back(); },
+		links: (root) => page.intercept(root, (path) => {
 			// A link into the page showing now, differing only in its hash, is the browser's. It
 			// scrolls to the target and writes the entry itself, which no push here would do,
 			// because the act does not change and nothing would move.
 			const at = path.indexOf('#');
-			if (at >= 0 && path.slice(0, at) === host.current().replace(/#.*$/, '')) return false;
+			if (at >= 0 && path.slice(0, at) === entries.current().replace(/#.*$/, '')) return false;
 			// Outside the base is somebody else's page, even on this origin, so the browser keeps it.
 			const relative = within(path);
 			if (relative === null) return false;
@@ -436,7 +482,7 @@ export const createRouter = (options: RouterOptions = {}): Router => {
 		restore: () => {
 			const where = saved();
 			if (where === null) return false;
-			host.scroll(where);
+			page.scroll(where);
 			return true;
 		},
 		stop: stopListening,
