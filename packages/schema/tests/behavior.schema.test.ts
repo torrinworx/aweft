@@ -10,13 +10,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-	RefusedError, apply, atomic, createArray, createMap, createObject, fromSnapshot, mutable,
+	RefusedError, alias, apply, atomic, createArray, createMap, createObject, fromSnapshot, mutable,
 	observer, snapshot, textIdOf,
 } from '@aweftjs/core';
 import type { Change } from '@aweftjs/core';
 
 import { check, guard, list, shape, table } from '../src/index.ts';
-import type { Commit, Shape } from '../src/index.ts';
+import type { Commit, Refusal, Shape } from '../src/index.ts';
 import { flag, later, optional, text } from './validators.ts';
 
 interface Person extends Record<string, unknown> {
@@ -220,4 +220,107 @@ test('a validator that answers later cannot decide a commit', () => {
 	);
 	assert.equal(doc.title, undefined);
 	stop();
+});
+
+/** The answer on the document before and after the commit has landed, which must agree. */
+const judged = (form: Shape, doc: object, run: () => void): readonly Refusal[] => {
+	const before = fromSnapshot(snapshot(doc));
+	const commit = commitFrom(doc, run);
+	const after = check(form, doc, commit);
+	assert.deepEqual(check(form, before, commit), after, 'the answer must not depend on whether the commit has landed');
+	return after;
+};
+
+test('an observable filed by alias is judged whole under the filing path, what it attaches included', () => {
+	// The whole of it means its attached children too. Judging those where they live would
+	// refuse a valid filing whenever the observable lives under a slot the shape does not
+	// name, and would report a path the commit never touched.
+	const Person = shape({ name: text({ min: 1 }), friend: shape({ name: text({ min: 1 }) }) });
+	const Everything = shape({ people: table(Person) });
+	const file = (friendName: string): readonly Refusal[] => {
+		const friend = createObject<Record<string, unknown>>({ name: friendName });
+		const person = createObject<Record<string, unknown>>({ name: 'ada', friend });
+		const doc = createObject<Record<string, unknown>>({ people: createMap(), aside: person });
+		return judged(Everything, doc, () => {
+			(doc['people'] as ReturnType<typeof createMap<object>>).set(textIdOf(person), alias(person));
+		});
+	};
+
+	assert.deepEqual(file('ok'), [], 'a valid person is filed though it lives under a slot the shape does not name');
+
+	const refused = file('');
+	assert.equal(refused.length, 1);
+	assert.equal(refused[0]?.code, 'invalid');
+	assert.deepEqual(refused[0]?.path?.slice(0, 1), ['people'], 'reported at the filing path');
+	assert.deepEqual(refused[0]?.path?.slice(2), ['friend', 'name']);
+});
+
+test('an object landing with an alias inside it has the aliased thing judged under the landing path', () => {
+	const Person = shape({ name: text({ min: 1 }), friend: shape({ name: text({ min: 1 }) }) });
+	const Everything = shape({ people: table(Person) });
+	const other = createObject<Record<string, unknown>>({ name: '' });
+	const doc = createObject<Record<string, unknown>>({ people: createMap(), other });
+	const person = createObject<Record<string, unknown>>({ name: 'bob', friend: alias(other) });
+
+	const refused = judged(Everything, doc, () => {
+		(doc['people'] as ReturnType<typeof createMap<object>>).set(textIdOf(person), person);
+	});
+	assert.equal(refused.length, 1);
+	assert.equal(refused[0]?.code, 'invalid');
+	assert.deepEqual(refused[0]?.path?.slice(2), ['friend', 'name'], 'under people, not at other');
+	assert.equal(refused[0]?.path?.[0], 'people');
+});
+
+test('a list or a table landing whole has each element judged, so an invalid element refuses the landing', () => {
+	const doc = board();
+	const bad = createArray<Task>([{ title: 'fine', done: false }, { title: '', done: true }].map((t) => createObject<Task>(t)));
+
+	const refused = judged(Board, doc, () => { doc.tasks = bad; });
+	assert.equal(refused.length, 1, JSON.stringify(refused));
+	assert.equal(refused[0]?.code, 'invalid');
+	assert.equal(refused[0]?.path?.at(-1), 'title');
+
+	const people = createMap<object>();
+	people.set(textIdOf(createObject()), createObject({ email: 'no' }));
+	const fresh = board();
+	const wrong = judged(Board, fresh, () => { fresh.people = people; });
+	assert.equal(wrong.length, 1, JSON.stringify(wrong));
+	assert.equal(wrong[0]?.path?.at(-1), 'email');
+});
+
+test('a kind mismatch on what lands is answered the same whether or not the commit has landed', () => {
+	// Before the commit lands the new observable is not in the document, so its kind can only
+	// come from the commit; after, it can come from either. One answer, from the same source.
+	const doc = board();
+	const refused = judged(Board, doc, () => {
+		doc.people = createArray([createObject({ email: 'a@b.c' })]);
+	});
+	assert.equal(refused.length, 2, JSON.stringify(refused));
+	assert.ok(refused.every((r) => r.code === 'kind'));
+	assert.deepEqual(refused.map((r) => r.path?.[0]), ['people', 'people']);
+	assert.deepEqual(refused.map((r) => r.path?.length).sort(), [1, 2], 'the slot, and the element inside it');
+});
+
+test('an object moved to a new home takes the alias it holds with it, judged under the new path', () => {
+	// The alias slot is not in the commit: it is a live row of the moved object, and the walk
+	// over what lands has to read it as the alias it is, or the aliased thing is judged at
+	// the path it lives at instead of the one the object is landing at.
+	const Person = shape({ name: text({ min: 1 }), friend: shape({ name: text({ min: 1 }) }) });
+	// The aliased thing lives under a slot of the same name at the root, where any name is fine,
+	// so an alias mistaken for an attach edge by its slot name alone would be judged there.
+	const Everything = shape({ drafts: table(Person), people: table(Person), friend: shape({ name: text() }) });
+	const other = createObject<Record<string, unknown>>({ name: '' });
+	const person = createObject<Record<string, unknown>>({ name: 'cy', friend: alias(other) });
+	const drafts = createMap<object>();
+	drafts.set(textIdOf(person), person);
+	const doc = createObject<Record<string, unknown>>({ drafts, people: createMap(), friend: other });
+
+	const refused = judged(Everything, doc, () => {
+		atomic(() => {
+			drafts.delete(textIdOf(person));
+			(doc['people'] as ReturnType<typeof createMap<object>>).set(textIdOf(person), person);
+		});
+	});
+	assert.equal(refused.length, 1, JSON.stringify(refused));
+	assert.deepEqual(refused[0]?.path, ['people', textIdOf(person), 'friend', 'name']);
 });

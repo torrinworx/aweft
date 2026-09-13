@@ -160,7 +160,9 @@ export const check = (form: Shape, document: unknown, commit: Commit): readonly 
 		// arriving without a field the shape names is as wrong as one arriving with that field
 		// set to something the validator refuses, and only one of the two carries a delta. An
 		// alias is judged the same way where it is filed, once, at filing: afterwards the
-		// observable is judged at the one path it lives at, which is what an alias is.
+		// observable is judged at the one path it lives at, which is what an alias is. What the
+		// aliased observable attaches is part of the whole, so it is judged under the filing
+		// path too, not at the path it lives at.
 		if (held === undefined || !isNamed(held)) return;
 		if (isLeaf(slotField) || held.kind !== slotField.kind) return;
 
@@ -168,7 +170,7 @@ export const check = (form: Shape, document: unknown, commit: Commit): readonly 
 		const steps = slotField.kind === 'object'
 			? new Set([...Object.keys(slotField.fields), ...inside])
 			: inside;
-		const filedAt = held.edge === 'attach' ? undefined : path;
+		const filedAt = held.edge === 'attach' && under === undefined ? undefined : path;
 		for (const step of steps) {
 			pending.push(filedAt === undefined ? { id: held.id, slot: step } : { id: held.id, slot: step, at: filedAt });
 		}
