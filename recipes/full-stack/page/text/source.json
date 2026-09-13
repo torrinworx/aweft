@@ -1,0 +1,71 @@
+{
+	"Breadcrumb": [
+		"@aweftjs/ui/text.json"
+	],
+	"Choose": [
+		"@aweftjs/ui/text.json"
+	],
+	"Close|dialog": [
+		"@aweftjs/ui/text.json"
+	],
+	"Drop a file here, or choose one": [
+		"@aweftjs/ui/text.json"
+	],
+	"Drop files here, or choose them": [
+		"@aweftjs/ui/text.json"
+	],
+	"Email": [
+		"@aweftjs/auth/text.json",
+		"entry.tsx"
+	],
+	"Hue": [
+		"@aweftjs/ui/text.json"
+	],
+	"Next": [
+		"@aweftjs/ui/text.json"
+	],
+	"Nothing matches that.": [
+		"@aweftjs/ui/text.json"
+	],
+	"Opacity": [
+		"@aweftjs/ui/text.json"
+	],
+	"Pagination": [
+		"@aweftjs/ui/text.json"
+	],
+	"Password": [
+		"@aweftjs/auth/text.json",
+		"entry.tsx"
+	],
+	"Previous": [
+		"@aweftjs/ui/text.json"
+	],
+	"Saturation and brightness": [
+		"@aweftjs/ui/text.json"
+	],
+	"Search": [
+		"@aweftjs/ui/text.json"
+	],
+	"Sign in": [
+		"@aweftjs/auth/text.json",
+		"entry.tsx"
+	],
+	"The board": [
+		"entry.tsx"
+	],
+	"only one file is accepted": [
+		"@aweftjs/ui/text.json"
+	],
+	"up to {size}": [
+		"@aweftjs/ui/text.json"
+	],
+	"you@example.com": [
+		"@aweftjs/auth/text.json"
+	],
+	"{name} is not one of the accepted types": [
+		"@aweftjs/ui/text.json"
+	],
+	"{name} is over the {size} limit": [
+		"@aweftjs/ui/text.json"
+	]
+}
