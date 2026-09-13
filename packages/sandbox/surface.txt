@@ -1,19 +1,39 @@
+type ClientLike: interface ClientLike { ask(name: string, args?: unknown): Promise<unknown>; readonly status: Derived<string>; }
 type DocumentLike: interface DocumentLike { createElement(tag: 'iframe'): FrameLike; }
+type FrameAllow: interface FrameAllow { readonly styles?: boolean | undefined; readonly images?: readonly string[] | undefined; readonly fonts?: readonly string[] | undefined; readonly media?: readonly string[] | undefined; }
 type FrameLike: interface FrameLike { setAttribute(name: string, value: string): void; addEventListener(type: 'load', fn: () => void): void; remove(): void; readonly contentWindow: { postMessage(message: unknown, origin: string, transfer: unknown[]): void; } | null; }
-type FrameOptions: interface FrameOptions { readonly inside: string; readonly into: { appendChild(node: FrameLike): unknown; }; readonly importMap?: Readonly<Record<string, string>> | undefined; readonly document?: DocumentLike | undefined; readonly MessageChannel?: (new () => MessageChannelLike) | undefined; }
+type FrameOptions: interface FrameOptions { readonly inside: string; readonly allow?: FrameAllow | undefined; readonly into: { appendChild(node: FrameLike): unknown; }; readonly importMap?: Readonly<Record<string, string>> | undefined; readonly document?: DocumentLike | undefined; readonly MessageChannel?: (new () => MessageChannelLike) | undefined; }
 type MessageChannelLike: interface MessageChannelLike { readonly port1: Parameters<typeof fromMessagePort>[0]; readonly port2: unknown; }
+type PageOptions: interface PageOptions { readonly act: string; readonly route: object; }
+type Report: interface Report { readonly kind: 'error' | 'rejection' | 'console'; readonly level?: string; readonly message: string; readonly stack: string; readonly module?: string; }
 type Runner: interface Runner { start(): Promise<Channel>; stop(): Promise<void>; }
 type Sandbox: interface Sandbox { load(names: readonly string[]): Promise<Readonly<Record<string, Stub>>>; unload(name: string): Promise<boolean>; loaded(): Promise<readonly string[]>; expose(name: string, instance: object): () => void; stop(): Promise<void>; }
 type SandboxError: interface SandboxError extends Error { readonly reason: string; readonly path?: string; }
-type SandboxHandlers: interface SandboxHandlers { readonly applied?: ((name: string, action: 'reloaded' | 'unloaded') => void) | undefined; readonly failed?: ((name: string, error: string) => void) | undefined; }
+type SandboxHandlers: interface SandboxHandlers { readonly applied?: ((name: string, action: 'reloaded' | 'unloaded') => void) | undefined; readonly failed?: ((name: string, error: string) => void) | undefined; readonly error?: ((entry: Report) => void) | undefined; readonly console?: ((level: string, text: string, stack: string) => void) | undefined; }
 type SandboxLimits: interface SandboxLimits { readonly callMs?: number | undefined; }
-type SandboxOptions: interface SandboxOptions { readonly runner: Runner; readonly modules: object; readonly grants: string[]; readonly props?: Readonly<Record<string, unknown>> | undefined; readonly bundle?: string | undefined; readonly follow?: boolean | undefined; readonly handlers?: SandboxHandlers | undefined; readonly limits?: SandboxLimits | undefined; }
+type SandboxOptions: interface SandboxOptions { readonly runner: Runner; readonly modules: object; readonly grants: string[]; readonly props?: Readonly<Record<string, unknown>> | undefined; readonly bundle?: string | undefined; readonly follow?: boolean | undefined; readonly handlers?: SandboxHandlers | undefined; readonly limits?: SandboxLimits | undefined; readonly documents?: Readonly<Record<string, object>> | undefined; readonly console?: readonly string[] | undefined; readonly client?: ClientLike | undefined; readonly page?: PageOptions | undefined; }
 type Stub: type Stub = Readonly<Record<string, (...args: unknown[]) => Promise<unknown>>>;
 value createSandbox: (options: SandboxOptions) => Promise<Sandbox>
 value iframe: (options: FrameOptions) => Runner & { readonly element: FrameLike | undefined; }
 value inProcess: () => Runner
+./inside type Entered: interface Entered { readonly sources: readonly Source[]; readonly props: Readonly<Record<string, unknown>>; readonly page: { readonly act: string; } | null; readonly route: RouteDocument | null; share<T extends object>(name: string): Shared<T>; ask(name: string, args?: unknown): Promise<unknown>; readonly status: Derived<string>; serve(loader: Loader, handlers?: FollowHandlers): Room; }
+./inside type InsideOptions: interface InsideOptions { readonly forward?: { readonly errors?: boolean; readonly console?: boolean; } | undefined; }
+./inside type Report: interface Report { readonly kind: 'error' | 'rejection' | 'console'; readonly level?: string; readonly message: string; readonly stack: string; readonly module?: string; }
 ./inside type Room: interface Room { stop(): Promise<void>; }
-./inside value inside: (channel: Channel) => Promise<Room>
+./inside type RouteDocument: interface RouteDocument extends Record<string, unknown> { url: string; key: string; move: 'push' | 'replace' | 'back'; seq: number; }
+./inside value enter: (channel: Channel, options?: InsideOptions) => Promise<Entered>
+./inside value inside: (channel: Channel, options?: InsideOptions) => Promise<Room>
 ./inside value insidePort: (port: PortLike) => Promise<Room>
 ./node type ChildOptions: interface ChildOptions { readonly limits?: { readonly memoryMB?: number | undefined; } | undefined; readonly wrap?: readonly string[] | undefined; readonly read?: readonly string[] | undefined; readonly env?: Readonly<Record<string, string>> | undefined; }
 ./node value child: (options?: ChildOptions) => Runner
+./page type ClientLike: interface ClientLike { ask(name: string, args?: unknown): Promise<unknown>; readonly status: Derived<string>; }
+./page type FrameAllow: interface FrameAllow { readonly styles?: boolean | undefined; readonly images?: readonly string[] | undefined; readonly fonts?: readonly string[] | undefined; readonly media?: readonly string[] | undefined; }
+./page type Report: interface Report { readonly kind: 'error' | 'rejection' | 'console'; readonly level?: string; readonly message: string; readonly stack: string; readonly module?: string; }
+./page value Room: (props: RoomProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
+./page type RoomProps: interface RoomProps { readonly inside: string; readonly modules: object; readonly grants: string[]; readonly documents?: Readonly<Record<string, object>> | undefined; readonly client?: ClientLike | undefined; readonly act: string; readonly allow?: FrameAllow | undefined; readonly console?: readonly string[] | undefined; readonly handlers?: SandboxHandlers | undefined; readonly focus?: boolean | undefined; readonly props?: Readonly<Record<string, unknown>> | undefined; readonly bundle?: string | undefined; readonly follow?: boolean | undefined; readonly limits?: SandboxLimits | undefined; readonly importMap?: Readonly<Record<string, string>> | undefined; readonly element?: unknown; readonly theme?: unknown; readonly class?: unknown; readonly [prop: string]: unknown; }
+./page type SandboxHandlers: interface SandboxHandlers { readonly applied?: ((name: string, action: 'reloaded' | 'unloaded') => void) | undefined; readonly failed?: ((name: string, error: string) => void) | undefined; readonly error?: ((entry: Report) => void) | undefined; readonly console?: ((level: string, text: string, stack: string) => void) | undefined; }
+./page type SandboxLimits: interface SandboxLimits { readonly callMs?: number | undefined; }
+./room type FrameDocument: interface FrameDocument { readonly body: { insertBefore(node: unknown, before: unknown): unknown; removeChild(node: unknown): unknown; replaceChild(node: unknown, old: unknown): unknown; }; }
+./room type Room: interface Room { stop(): Promise<void>; }
+./room type RoomOptions: interface RoomOptions { readonly template?: Component | undefined; readonly document?: FrameDocument | undefined; }
+./room value room: (port: PortLike, options?: RoomOptions) => Promise<Room>
