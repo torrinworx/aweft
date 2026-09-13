@@ -106,6 +106,27 @@ test('a visit fills to its cap, then holds one capped entry and drops the rest',
 	await stop();
 });
 
+test('the process document rotates when full: a fresh one takes the next entry, the full one keeps what it had', async () => {
+	const store = newStore();
+	const { instance, stop } = await visits(store, { perVisit: 3 });
+	const first = instance.process;
+	for (const kind of ['a', 'b', 'c', 'd']) await instance.write({ kind });
+	const second = instance.process;
+	assert.notEqual(second, first, 'the module moved on to a fresh document');
+	assert.deepEqual((await readVisit(store, first))!.entries.map((e) => e.kind), ['a', 'b'], 'the full one never needed a sentinel');
+	assert.deepEqual((await readVisit(store, second))!.entries.map((e) => e.kind), ['c', 'd']);
+	assert.equal((await readVisit(store, second))!.kind, 'process');
+	// The full one is an ordinary old document from here: the sweep takes it once it is old enough.
+	const handle = await store.open(first);
+	(handle.root as { startedAt: number }).startedAt = 100;
+	await store.settled(handle);
+	await store.close(handle);
+	assert.equal(await instance.sweep(), 1);
+	assert.equal(await readVisit(store, first), undefined);
+	assert.ok(await readVisit(store, second), 'the running document is spared');
+	await stop();
+});
+
 test('two first writes to one visit in the same tick open it once, so the one close lets the store let it go', async () => {
 	const opens: string[] = [];
 	const closes: string[] = [];

@@ -43,7 +43,7 @@ interface Holding {
 /** The instance: what the gate reads, the page's call, and what a module calls. */
 export interface Visits {
 	readonly public: true;
-	/** This process's document, `process:<id>`. */
+	/** This process's document, `process:<id>`; a fresh one once it fills. */
 	readonly process: string;
 	/** Bind the asking connection to a visit: `{ visit }` from the page, once per socket. */
 	call(args: unknown, context: unknown): { bound: true };
@@ -117,7 +117,7 @@ export default async (props: ModuleProps): Promise<Visits> => {
 	}
 	const build = config.build as string | null;
 
-	const process = `process:${idText()}`;
+	let process = `process:${idText()}`;
 	const held = new Map<string, Holding>();
 	// Two first writes to one document in the same tick would each open it, and the store would
 	// count two opens against the one close; the second joins the first's open instead.
@@ -165,6 +165,21 @@ export default async (props: ModuleProps): Promise<Visits> => {
 		opening.set(name, building);
 		void building.then(() => opening.delete(name), () => opening.delete(name));
 		return building;
+	};
+
+	/**
+	 * This process's document, or a fresh one once the next entry would be its sentinel: the
+	 * record goes on, and the full document is closed here and swept in its time.
+	 */
+	const rotated = async (): Promise<string> => {
+		const { handle } = await opened(process);
+		if ((handle.root as Root).entries.length + 1 < perVisit) return process;
+		const was = held.get(process);
+		held.delete(process);
+		process = `process:${idText()}`;
+		await opened(process);
+		if (was !== undefined) await store.close(was.handle);
+		return process;
 	};
 
 	const release = (name: string): void => {
@@ -260,10 +275,16 @@ export default async (props: ModuleProps): Promise<Visits> => {
 		return { kept };
 	};
 
+	let processWrites: Promise<unknown> = Promise.resolve();
 	const write = async (fields: Readonly<Record<string, unknown>>, context?: unknown): Promise<void> => {
 		const entry = entryOf(fields, 'server');
 		if (entry === undefined) return;
-		await append(visitOf(context) ?? process, [entry]);
+		const visit = visitOf(context);
+		if (visit !== undefined) { await append(visit, [entry]); return; }
+		// One at a time into the process document, so a full one rotates exactly once.
+		const next = processWrites.then(async () => append(await rotated(), [entry]));
+		processWrites = next.catch(() => undefined);
+		await next;
 	};
 
 	const sweep = async (): Promise<number> => {
@@ -300,7 +321,7 @@ export default async (props: ModuleProps): Promise<Visits> => {
 
 	return {
 		public: true,
-		process,
+		get process() { return process; },
 		call: (args, context) => {
 			const name = visitName((args as { visit?: unknown } | null)?.visit);
 			if (context !== null && typeof context === 'object') bound.set(context, name);

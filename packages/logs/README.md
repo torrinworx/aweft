@@ -110,9 +110,9 @@ shape, not their content.
 
 ## The store, and reading it back
 
-Each visit is `visit:<id>`, each server run `process:<id>`, an ordinary document with the
-fields above and an `entries` list. Read one back with the readers, which take the store and
-run in any process:
+Each visit is `visit:<id>`, each server run `process:<id>` (a fresh one when the last fills), an
+ordinary document with the fields above and an `entries` list. Read one back with the readers,
+which take the store and run in any process:
 
 ```ts
 import { errors, prune, visit, visits } from '@aweftjs/logs';
@@ -146,6 +146,9 @@ export const config = {
 };
 ```
 
+The process document has the same `perVisit` cap and rotates at it: once the next entry would
+be its sentinel, a fresh `process:<id>` takes over and the full one is swept in its time.
+
 An application that wants its own retention runs `prune` from a `jobs` row instead of, or beside,
 `keep`. `logs/Record`'s one setting is `public`, true by default so an anonymous page may post;
 set it false for a route that needs a signed-in user.
@@ -173,9 +176,9 @@ own.
   A module that wants a line in the record calls `logs/Visits`'s `write` (name it in `deps`).
   Per-module console capture would need an async-context wrapper around every hook and is not
   here.
-- **The process document is held open for the process's life.** `prune` from outside with a
-  cutoff later than the process started removes it under the module; the module's own sweep
-  skips it.
+- **The process document is held open until it fills or the process ends.** `prune` from
+  outside with a cutoff later than the process started removes it under the module; the
+  module's own sweep skips it.
 - **A second library that replaces `console.error` after this one wins.** The page puts the
   console back on `stop`.
 

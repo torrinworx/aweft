@@ -21,7 +21,10 @@ the page calls `createLog`, and nothing is read but through the store.
   last one is a `capped` sentinel and the rest are dropped), `batchesPerMinute` 60 (per visit),
   `visitsPerMinute` 600 (new visits, this process), `idleMs` 60000 (a visit document is held
   open this long after its last batch), `build` null (written into this process's document). A
-  value of the wrong type is refused at load with `invalid-config`.
+  value of the wrong type is refused at load with `invalid-config`. The process document has
+  the same cap and a different answer to it: once the next entry would be its sentinel, the
+  module closes it and opens a fresh `process:<id>`, so the record goes on and the full one
+  waits for the sweep.
 - `logs/Record`, public unless configured otherwise, answers `POST /api/logs` with a batch
   `{ visit, build?, browser?, ended?, entries }`: 200 with `{ kept }`, 400 with reasons for a
   body that is not a batch, 429 with reasons over a cap. HTTP is the only transport for a
@@ -112,9 +115,10 @@ per commit it sees, which is the page's own traffic again as text.
 An observer runs on every server event, and `logs/Observe` looks up the visit for each; a
 server with the battery loaded pays that on every call and request.
 
-The process document is held open for the process's life. `prune` from outside the module
-with a cutoff later than the process's start removes it under the module, and what the process
-writes after that is lost until it restarts; the module's own sweep skips it.
+The process document is held open until it fills or the process ends. `prune` from outside the
+module with a cutoff later than the process's start removes it under the module, and what the
+process writes after that is lost until it fills or restarts; the module's own sweep skips it.
+Entries into it go one at a time, so a full one rotates once.
 
 `console.error` and `console.warn` are replaced on the page while a log runs, and a second
 library that replaces them after this one wins.
@@ -125,7 +129,8 @@ that wants a line in the record calls `write`.
 ## Evidence
 
 `packages/logs/tests/`: `visits.test.ts` (the documents, the caps, `write` with and without a
-context, binding, the sweep, two first writes opening a document once, `invalid-config`),
+context, binding, the sweep, the process document rotating when full, two first writes opening
+a document once, `invalid-config`),
 `record.test.ts` (the route: a batch kept, `user` from the cookie and kept across a sign-out,
 `browser` and `build` written once, `ended`, a body that is not a batch, 429 over each cap, two
 anonymous sockets under the auth gate as two visits), `observe.test.ts` (every event kind
