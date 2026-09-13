@@ -180,7 +180,8 @@ runs axe over the page a test drives.
 
 With `release: true`, a statement that is nothing but a call to a name imported by name from a
 neighbouring `assert` module is removed, and the import goes with it when nothing else in the
-file still names it.
+file still names it. So does any other import the file named only inside those calls: a helper
+an assert fed on has no use left. An import the file never names is left alone.
 
 ```ts
 import { assert } from './assert.ts';   // removed with its last call

@@ -32,6 +32,37 @@ test('the import survives when something else in the file still names it', () =>
 	assert.doesNotMatch(out, /assert\(x/);
 });
 
+test('an import used only inside the asserts goes with them, and one used elsewhere stays', () => {
+	const source = [
+		"import { assert } from './assert.ts';",
+		"import { check, other } from './checks.ts';",
+		"import { keep } from './keep.ts';",
+		'export const f = (x) => {',
+		'	assert(check(x), \'checked\');',
+		'	assert(other(x) !== null, \'present\');',
+		'	return keep(x);',
+		'};',
+	].join('\n');
+	const out = transform(source, { filename: 'f.ts', release: true }).code;
+	assert.doesNotMatch(out, /check|other|assert/);
+	assert.match(out, /import \{ keep \} from '\.\/keep\.ts';/);
+	assert.match(out, /return keep\(x\);/);
+});
+
+test('an import the file never names is left alone by the strip', () => {
+	const source = "import { assert } from './assert.ts';\nimport { unused } from './x.ts';\nexport const f = (x) => {\n\tassert(x, 'x');\n\treturn x;\n};";
+	const out = transform(source, { filename: 'f.ts', release: true }).code;
+	assert.match(out, /import \{ unused \} from '\.\/x\.ts';/);
+	assert.doesNotMatch(out, /assert/);
+});
+
+test('an assert inside another assert\'s argument goes with it, once', () => {
+	const source = "import { assert } from './assert.ts';\nexport const f = (x) => {\n\tassert((() => { assert(x, 'in'); return true; })(), 'out');\n\treturn x;\n};";
+	const out = transform(source, { filename: 'f.ts', release: true }).code;
+	assert.doesNotMatch(out, /assert/);
+	assert.match(out, /return x;/);
+});
+
 test('only the assert specifier goes when the import brought others', () => {
 	const before = "import { assert, isRelease } from './assert.ts';\nexport const f = (x) => { assert(x, 'm'); return isRelease(); };";
 	assert.match(release(before), /import \{ isRelease \} from '\.\/assert\.ts';/);

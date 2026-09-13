@@ -48,7 +48,14 @@ const KEYED = new Set(['ObjectProperty', 'ObjectMethod', 'ClassMethod', 'ClassPr
  */
 export const stripAsserts = (program: Node, local: string, magic: MagicString): number => {
 	const cuts: Cut[] = [];
-	const uses: number[] = [];
+	// Every name an import brought in, and where each is used. The assert's own import goes when
+	// its calls do, and so does any other import whose every use was inside one of those calls:
+	// a helper that only an assert ever named has nothing left to do in the file.
+	const uses = new Map<string, number[]>();
+	for (const statement of program['body'] as Node[]) {
+		if (statement.type !== 'ImportDeclaration') continue;
+		for (const specifier of statement['specifiers'] as Node[]) uses.set((specifier['local'] as Node)['name'] as string, []);
+	}
 	// Both are filled by the parent, which the walk reaches before the child they are about.
 	const solo = new Set<Node>();
 	const named = new Set<Node>();
@@ -63,14 +70,18 @@ export const stripAsserts = (program: Node, local: string, magic: MagicString): 
 		if (MEMBER.has(node.type) && node['computed'] !== true) named.add(node['property'] as Node);
 		if (KEYED.has(node.type) && node['computed'] !== true) named.add(node['key'] as Node);
 
-		if (node.type === 'Identifier' && node['name'] === local && !named.has(node)) uses.push(node.start);
+		if (node.type === 'Identifier' && !named.has(node)) uses.get(node['name'] as string)?.push(node.start);
 		if (node.type !== 'ExpressionStatement') return true;
 		const call = node['expression'] as Node;
 		if (call.type !== 'CallExpression') return true;
 		const callee = call['callee'] as Node;
 		if (callee.type !== 'Identifier' || callee['name'] !== local) return true;
-		cuts.push({ start: node.start, end: node.end, solo: solo.has(node) });
-		return false;
+		// A call inside a call already cut goes with it. The walk still goes in, so a name used
+		// only in there is seen to be used only in there.
+		if (!cuts.some((cut) => node.start >= cut.start && node.end <= cut.end)) {
+			cuts.push({ start: node.start, end: node.end, solo: solo.has(node) });
+		}
+		return true;
 	});
 
 	// An empty statement where the language requires one, and nothing where a list is allowed.
@@ -79,29 +90,33 @@ export const stripAsserts = (program: Node, local: string, magic: MagicString): 
 		else magic.remove(cut.start, cut.end);
 	}
 
-	// A use inside a statement that just went is not a use any more.
+	// A use inside a statement that just went is not a use any more. The assert goes when no use
+	// is left; another import goes when it had uses and every one was in there, because one
+	// nothing ever named is the author's own and stays.
 	const inside = (at: number): boolean => cuts.some((cut) => at >= cut.start && at < cut.end);
-	if (!uses.some((at) => !inside(at))) removeImport(program, local, magic);
+	const gone = new Set<string>();
+	for (const [name, at] of uses) {
+		if ((name === local || at.length > 0) && at.every(inside)) gone.add(name);
+	}
+	if (gone.size > 0) removeImports(program, gone, magic);
 
 	return cuts.length;
 };
 
-/** Take the specifier out of its import, and the whole import when that was its only one. */
-const removeImport = (program: Node, local: string, magic: MagicString): void => {
+/** Take the specifiers out of their imports, and a whole import when nothing of it is left. */
+const removeImports = (program: Node, gone: ReadonlySet<string>, magic: MagicString): void => {
 	for (const statement of program['body'] as Node[]) {
 		if (statement.type !== 'ImportDeclaration') continue;
 		const specifiers = statement['specifiers'] as Node[];
-		const at = specifiers.findIndex((specifier) => (specifier['local'] as Node)['name'] === local);
-		if (at < 0) continue;
-
-		if (specifiers.length === 1) {
+		const kept = specifiers.filter((specifier) => !gone.has((specifier['local'] as Node)['name'] as string));
+		if (kept.length === specifiers.length) continue;
+		if (kept.length === 0) {
 			magic.remove(statement.start, statement.end);
-			return;
+			continue;
 		}
-		const specifier = specifiers[at]!;
-		// Take the comma with it, on whichever side there is one to take.
-		if (at === specifiers.length - 1) magic.remove(specifiers[at - 1]!.end, specifier.end);
-		else magic.remove(specifier.start, specifiers[at + 1]!.start);
-		return;
+		// The list written again with what is left, so the commas come out right whichever went.
+		const first = specifiers[0]!;
+		const last = specifiers[specifiers.length - 1]!;
+		magic.overwrite(first.start, last.end, kept.map((specifier) => magic.original.slice(specifier.start, specifier.end)).join(', '));
 	}
 };
