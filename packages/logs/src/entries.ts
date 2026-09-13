@@ -38,8 +38,11 @@ export const asText = (value: unknown): string => {
 	}
 };
 
-/** The bytes a value takes as JSON, or -1 when JSON cannot write it. */
+/** The bytes a value takes as JSON, or -1 when JSON cannot write it; a binary value, its own. */
 export const bytesOf = (value: unknown): number => {
+	// Written as JSON, a typed array is one numbered key per byte, and that is what a module
+	// answering a file would pay on every call just to be measured.
+	if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return value.byteLength;
 	try {
 		const written = JSON.stringify(value);
 		return written === undefined ? 0 : written.length;

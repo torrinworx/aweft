@@ -18,6 +18,10 @@ test('a call to a module that says logs: true carries args and result; one that 
 	assert.equal(plain.result, undefined);
 	assert.equal(plain.argsBytes, '{"title":"hi"}'.length);
 	assert.equal(plain.resultBytes, '{"ok":1}'.length);
+
+	// A binary answer is measured as its bytes, not written out as JSON to be counted.
+	const file = entryFor({ kind: 'call', at: 1, name: 'app/File', instance: {}, args: null, outcome: { result: new Uint8Array(1000) }, ms: 3 } as ServerEvent)!;
+	assert.equal(file.resultBytes, 1000);
 });
 
 test('a failed call carries the reason and message and no result size', () => {
