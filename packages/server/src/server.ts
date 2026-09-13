@@ -10,12 +10,17 @@ import {
 	type Accept, type Gate, type Identified, type ListenerHandlers, type Peer, type Server,
 	type ServerHandlers, type ServerOptions, serverError,
 } from './contract.ts';
+import { type Sliding, sliding } from './limits.ts';
+import { type Origins, originRefusal } from './origin.ts';
 import { fallthrough } from './request.ts';
 import { type Emit, emitter } from './observe.ts';
 import { routeKey, routeTable } from './routes.ts';
 
-const json = (status: number, body: unknown): Response =>
-	new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const json = (status: number, body: unknown, headers: Record<string, string> = {}): Response =>
+	new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
+
+// The values every server starts with (design 272). Each is one option away from another.
+const REQUESTS = { count: 600, windowMs: 60_000 };
 
 const empty = (status: number): Response => new Response(null, { status });
 
@@ -34,14 +39,19 @@ const isGate = (instance: unknown): instance is Gate =>
  *     the trusted case, and there is no default
  *   options.listener: where connections and requests come from; `node()` ships
  *   options.handlers.failed: where a hook, a route or the gate that threw is reported
+ *   options.limits.requests: how many requests one address may make in a window, before the
+ *     gate; 600 a minute here, `false` for none
+ *   options.origins: where a browser may send a state-changing request or a handshake from;
+ *     the request's own host here, a list of origins to add, or `'any'`
  *
  * Returns: `start`, `stop`, and the `loader` this server built. Nothing is loaded and nothing
  * listens until `start`.
  *
  * Throws: a `ServerError` with reason `missing` when `sources`, `gate` or `listener` is absent,
  * so a JavaScript caller cannot start a server with no gate by leaving the field out, or when
- * `gate` is neither a name nor an object carrying `identify` and `access`; and `not-an-option`
- * when `loader` or `props` is present, because this builds its own.
+ * `gate` is neither a name nor an object carrying `identify` and `access`; `not-an-option`
+ * when `loader` or `props` is present, because this builds its own; and `invalid-limit` when
+ * `limits.requests` is not `{ count, windowMs }` of positive numbers or `false`.
  *
  * Example:
  *   const server = createServer({
@@ -83,12 +93,31 @@ export const createServer = (options: ServerOptions): Server => {
 	const live = new Set<Live>();
 	let started = false;
 
+	// Checked before the gate, so a refused request costs no gate work (design 272). The count is
+	// made here so a bad number is refused at construction rather than at the first request.
+	const requested = options.limits?.requests;
+	const requests: Sliding | undefined = requested === false ? undefined : sliding(requested ?? REQUESTS);
+	const origins: Origins = options.origins ?? [];
+	const before = (request: Request, peer: Peer, handshake: boolean): Response | undefined => {
+		if (requests !== undefined) {
+			// A listener that knows no address counts everything it delivers as one.
+			const taken = requests.take(peer.address ?? 'unknown');
+			if (!taken.ok) {
+				return json(429, { reasons: [{ code: 'limit', message: `${peer.address ?? 'this address'} has made more requests than the window allows` }] }, {
+					'retry-after': String(taken.retryAfter),
+				});
+			}
+		}
+		const refused = originRefusal(request, handshake, origins);
+		return refused === undefined ? undefined : json(403, { reasons: [refused] });
+	};
+
 	// An observer's own throw is reported and never emitted, so the two reporters differ by
 	// that one line (design 260).
 	const observed = reporter(handlers);
 	const emit: Emit = emitter(loader, observed);
-	const report = (name: string, error: unknown, context?: unknown): void => {
-		observed(name, error);
+	const report = (name: string, error: unknown, context?: unknown, soft = false): void => {
+		observed(name, error, soft);
 		emit({ kind: 'failed', at: Date.now(), name, error }, context);
 	};
 
@@ -129,6 +158,8 @@ export const createServer = (options: ServerOptions): Server => {
 		}
 
 		const answerRequest = async (request: Request, peer: Peer): Promise<Answered> => {
+			const early = before(request, peer, false);
+			if (early !== undefined) return { response: early };
 			const who = await identify(request, peer);
 			if (who instanceof Response) return { response: who };
 			if ('refused' in who) return { response: json(401, { reasons: who.refused }) };
@@ -185,6 +216,8 @@ export const createServer = (options: ServerOptions): Server => {
 		};
 
 		const onSocket = async (request: Request, peer: Peer): Promise<Response | Accept> => {
+			const early = before(request, peer, true);
+			if (early !== undefined) return early;
 			const who = await identify(request, peer);
 			if (who instanceof Response) return who;
 			if ('refused' in who) return json(401, { reasons: who.refused });
@@ -244,11 +277,17 @@ export const createServer = (options: ServerOptions): Server => {
 	};
 };
 
-const reporter = (handlers: ServerHandlers) => (name: string, error: unknown): void => {
+const reporter = (handlers: ServerHandlers) => (name: string, error: unknown, soft = false): void => {
 	// Without a handler the error is thrown from a fresh microtask, where nothing catches it
 	// and the process reports it as uncaught. A handler that throws is treated the same way.
+	// A soft report is a call that threw: any client can reach a public call, and a bug in one
+	// is written to the console rather than being a way to end the process (design 272).
 	const raise = (thrown: unknown): void => queueMicrotask(() => { throw thrown; });
-	if (handlers.failed === undefined) { raise(error); return; }
+	if (handlers.failed === undefined) {
+		if (soft) console.error(`${name}: a call threw`, error);
+		else raise(error);
+		return;
+	}
 	try {
 		handlers.failed(name, error);
 	} catch (thrown) {

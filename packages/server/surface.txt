@@ -5,9 +5,11 @@ type Ending: type Ending = (() => unknown) | undefined | void;
 type Gate: interface Gate<C = unknown> { identify(request: Request, peer: Peer): Identified<C> | Promise<Identified<C>>; access(module: Named, context: C): readonly Refusal[] | Promise<readonly Refusal[]>; }
 type GatedLink: interface GatedLink { share<T extends object>(name: string, document: T | undefined, handlers: Accepting): Shared<T>; }
 type Identified: type Identified<C> = { readonly context: C; } | { readonly refused: readonly Refusal[]; };
+type Limits: interface Limits { readonly requests?: { readonly count: number; readonly windowMs: number; } | false | undefined; }
 type Listener: interface Listener { start(handlers: ListenerHandlers): Promise<void>; stop(): Promise<void>; }
 type ListenerHandlers: interface ListenerHandlers { request(request: Request, peer: Peer): Promise<Response>; socket(request: Request, peer: Peer): Promise<Response | Accept>; }
 type Named: interface Named { readonly name: string; readonly instance: unknown; }
+type Origins: type Origins = readonly string[] | 'any';
 type Outcome: type Outcome = { readonly result: unknown; } | { readonly error: unknown; };
 type Peer: interface Peer { readonly address: string | undefined; }
 type Progress: interface Progress { progress(value: unknown): void; }
@@ -18,12 +20,16 @@ type ServerError: interface ServerError extends Error { readonly reason: string;
 type ServerEvent: type ServerEvent = { readonly kind: 'connection'; readonly at: number; readonly request: Request; } | { readonly kind: 'closed'; readonly at: number; readonly ms: number; } | { readonly kind: 'call'; readonly at: number; readonly name: string; readonly instance?: unknown; readonly args: unknown; readonly outcome: Outcome; readonly ms: number; } | { readonly kind: 'request'; readonly at: number; readonly method: string; readonly path: string; readonly status: number; readonly ms: number; readonly name?: string; } | { readonly kind: 'refused'; readonly at: number; readonly topic: string; readonly reasons: readonly WireReason[]; } | { readonly kind: 'failed'; readonly at: number; readonly name: string; readonly error: unknown; };
 type ServerHandlers: interface ServerHandlers { readonly failed?: ((name: string, error: unknown) => void) | undefined; }
 type ServerModule: interface ServerModule<C = unknown> { connection?(connection: Connection<C>): Ending | Promise<Ending>; call?(args: unknown, context: C, tools: Progress): unknown; readonly routes?: Readonly<Record<string, Route<C>>>; request?(request: Request, context: C): Response | undefined | Promise<Response | undefined>; observe?(event: ServerEvent, context: C): unknown; }
-type ServerOptions: interface ServerOptions { readonly sources: readonly Source[]; readonly store?: unknown; readonly gate: Gate | string; readonly listener: Listener; readonly handlers?: ServerHandlers | undefined; }
+type ServerOptions: interface ServerOptions { readonly sources: readonly Source[]; readonly store?: unknown; readonly gate: Gate | string; readonly listener: Listener; readonly handlers?: ServerHandlers | undefined; readonly limits?: Limits | undefined; readonly origins?: readonly string[] | 'any' | undefined; }
+type Sliding: interface Sliding { take(key: string, now?: number): Taken; clear(key: string): void; }
+type Taken: type Taken = { readonly ok: true; } | { readonly ok: false; readonly retryAfter: number; };
+type Window: interface Window { readonly count: number; readonly windowMs: number; }
 value createServer: (options: ServerOptions) => Server
 value open: Gate<Record<string, never>> & Accepting
+value sliding: ({ count, windowMs }: Window) => Sliding
 ./node type GivenServer: interface GivenServer extends NodeSettings { readonly server: HttpServer; readonly port?: undefined; readonly host?: undefined; }
 ./node type NodeListener: interface NodeListener extends Listener { readonly port: number | undefined; }
 ./node type NodeOptions: type NodeOptions = OwnServer | GivenServer;
-./node type NodeSettings: interface NodeSettings { readonly heartbeatMs?: number | undefined; readonly maxPayload?: number | undefined; readonly forwarded?: boolean | undefined; }
+./node type NodeSettings: interface NodeSettings { readonly heartbeatMs?: number | undefined; readonly maxPayload?: number | undefined; readonly forwarded?: boolean | 'x-real-ip' | undefined; }
 ./node type OwnServer: interface OwnServer extends NodeSettings { readonly port: number; readonly host?: string | undefined; readonly server?: undefined; }
 ./node value node: (options: NodeOptions) => NodeListener

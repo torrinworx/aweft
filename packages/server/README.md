@@ -237,13 +237,15 @@ no address and a gate that keys on one has nowhere else to read it.
 `node(options)` on `@aweftjs/server/node` ships: Node's `http` plus `ws`, the one runtime
 dependency in the stack. `node({ port, host })` owns a server and closes it on `stop`;
 `node({ server })` answers on a server you made (TLS, or a shared port) and never closes it.
-`heartbeatMs` pings every open socket and terminates one that does not answer; `maxPayload`
-bounds a WebSocket message and an HTTP body alike (a declared length over it is 413, a body
-that crosses it is cut off); `forwarded` reads the scheme and the peer address from
-`x-forwarded-proto` and `x-forwarded-for`, for a listener behind a proxy you trust. None has
-a value here: without them nothing pings, a message has the transport's own bound, a body has
-none, and the proxy headers are ignored. `port` is readable after `start`, so `port: 0` works
-in a test.
+`heartbeatMs` pings every open socket and terminates one that does not answer, and nothing
+pings without it. `maxPayload` bounds a WebSocket message and an HTTP body alike (a declared
+length over it is 413, a body that crosses it is cut off): 1 MiB with nothing set, and
+`Infinity` is the one way to remove the bound. `forwarded` is for a listener behind a proxy
+you trust: `true` reads the scheme from `x-forwarded-proto` and the peer address from the last
+entry of `x-forwarded-for`, the one that proxy appended, since the first entry is whatever the
+client wrote; `'x-real-ip'` reads the address from that header instead, for a proxy that sets
+it. Off, both headers are ignored. A `TRACE` is answered 405 before any handler sees it. `port`
+is readable after `start`, so `port: 0` works in a test.
 
 A listener for another runtime proves itself with `listenerChecks()` from
 `@aweftjs/testing`, the way a store driver or a sandbox runner does:
@@ -255,20 +257,62 @@ for (const c of listenerChecks()) test(c.name, () => c.run(() => {
 }));
 ```
 
+## Before the gate
+
+Two things are checked before `identify` runs, so a refused request costs no gate work, and
+each has a value here that one option changes.
+
+```ts
+createServer({
+	sources, store, gate, listener,
+	limits: { requests: { count: 600, windowMs: 60_000 } },   // the value with nothing set
+	origins: ['https://app.example'],                         // beside the request's own host
+});
+```
+
+**`limits.requests`** counts requests and handshakes per peer address over a sliding window;
+over the count, the answer is 429 with a `Retry-After` in seconds and the reason `limit`, and
+for a handshake no socket opens. `limits: { requests: false }` removes the count. The address
+is the listener's word: behind a proxy, start the Node listener with `forwarded`, or the proxy
+is the one address every request shares. Clients behind one address share one count. The count
+is coarse on purpose; the sign-in route keeps its own attempt counts (`@aweftjs/auth`).
+
+**`origins`** is the Origin rule. A request carrying an `Origin` header is refused with 403
+and the reason `origin` when that origin's host is not the request's own host, port included,
+and the request is a handshake or has a method other than `GET`, `HEAD` or `OPTIONS`. A
+request with no `Origin` header passes: that is a client that is not a browser, and it holds no
+cookie a browser set. A list adds origins a page may send from; `'any'` removes the rule. The
+browser's own SameSite rule already keeps the cookie off a cross-site request; this rule is
+what stops a sign-in forged from another site, which needs no cookie, and it holds when an
+application widens the cookie.
+
+`sliding({ count, windowMs })` is exported, the counter behind the limit, for a module that
+counts something of its own: `take(key)` answers `{ ok: true }` or `{ ok: false, retryAfter }`,
+and `clear(key)` forgets a key.
+
+Every answer the server gives carries `X-Content-Type-Options: nosniff` unless the module set
+the header itself.
+
 ## When something throws
 
-A `call` that throws answers its caller and is not reported: the caller heard. Everything
-else reaches `handlers.failed(name, error)` on `createServer`: a `connection` hook that
-throws (the connection is closed), an end function that throws (the rest still run), a route
-that throws (500), the gate that throws (500), and a route conflict met by a request (500).
-Without a handler the error is raised where nothing catches it, and the process says so.
+A `call` that throws a refusal, an error carrying a `reason`, answers its caller with it and is
+not reported: the caller heard what the module meant it to. A `call` that throws anything else
+answers its caller `failed` with the words `the call failed` and nothing of the error, and is
+reported: a module's own bug names files and values the caller has no business reading.
+Everything else reaches `handlers.failed(name, error)` on `createServer` too: a `connection`
+hook that throws (the connection is closed), an end function that throws (the rest still run),
+a route that throws (a bare 500), the gate that throws (500), and a route conflict met by a
+request (500). Without a handler, a call's error is written to the console and the process goes
+on, because any client can reach a public call; every other failure is raised where nothing
+catches it, and the process says so and ends. Pass a handler in production.
 
 ## What this package never decides
 
 Who is on a connection, whether it lives, and who may reach a module: the gate's. Who may
 write a commit: `accept`, per share. What a module is for and what it holds: the module's, and
-what it needs is `deps`. Any limit or interval. Users, sessions, cookies: `@aweftjs/auth`, or
-whatever you load instead.
+what it needs is `deps`. Users, sessions, cookies: `@aweftjs/auth`, or whatever you load
+instead. The two bounds above have values so that a server forgotten about is still bounded;
+every other limit or interval is yours.
 
 It does decide one thing about modules, and only one: everything your sources list is loaded
 at `start` and unloaded at `stop`. Which modules exist is still yours, and so is anything you
