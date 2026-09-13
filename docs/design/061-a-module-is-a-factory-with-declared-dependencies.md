@@ -1,5 +1,8 @@
 # 061: A module is a factory with declared dependencies, and an instance may say how it stops
 
+Amended by design 263: a tie in the dependency order breaks by the order the sources listed the
+modules, not by name.
+
 ## Decision
 
 A module is what a file, a bundle entry or a document entry exports:
