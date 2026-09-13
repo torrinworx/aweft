@@ -107,6 +107,15 @@ test('a throwing body names the component, the rest still mounts, and the queue 
 	const anonymous = () => { throw new Error('anon'); };
 	assert.throws(() => mount(doc.body, h(anonymous)), /in anonymous: anon/);
 	assert.throws(() => mount(doc.body, h(() => { throw new Error('inline'); })), /in an anonymous component: inline/);
+
+	// An error whose message is a getter only, as a DOMException's is, cannot take the component's
+	// name; it is thrown as it is rather than replaced by a TypeError about the assignment.
+	class Refusal extends Error {
+		override get message(): string { return 'pushState is not allowed here'; }
+	}
+	const refused = new Refusal();
+	const Frame = () => { throw refused; };
+	assert.throws(() => mount(doc.body, h(Frame)), (e: unknown) => e === refused && (e as Error).message === 'pushState is not allowed here');
 });
 
 test('a component may return a mounter, and the context flows through it', () => {
