@@ -209,16 +209,16 @@ superseded it.
 | What `modules` does and decides | `load`, `unload`, `dependents`, `dependencies`, and `follow` as an opt-in helper; a loader is an instance; nothing decides which modules load, when, how many, or for how long | 063 |
 | What `modules` refuses to know | No history, no authority, no storage, no transport: a module document is an ordinary document and everything that works for one works for it | 064 |
 | Isolation | Later, behind G4, after `modules` is proven; `modules` claims none and says that loading a module runs its code | 065 |
-| A room | A loader on the far end of a link; three documents cross it (`modules` read-only to the room, `room` read-only to the room, `calls` written by both), beside them the documents the application names, and nothing else; nothing inside is ambient | 066, 278 |
+| A room | A loader on the far end of a link; three documents cross it (`modules` read-only to the room, `room` read-only to the room, `calls` written by both), beside them the documents the application names, and nothing else; nothing inside is ambient | 066, 281 |
 | A capability | A granted name on an observable list the application changes; `expose` puts an instance behind a name; inside, the name is an import carrying the instance's functions; a removed name refuses from the next call; modules in one room trust each other | 067 |
 | A call | A row in the calls document, in both directions, with JSON text either side and anything that is not data refused by name; the writer deletes an answered row | 068 |
 | A runner | `start` makes the room and hands back the channel, `stop` ends it; `inProcess`, `iframe` and `child` ship, bubblewrap and docker are examples; limits are parameters with no defaults; each runner says what it stops and the wall is the operator's | 069 |
 | Proof of a runner | The escape suite in `testing`, two halves, append-only, run in every shipped runner and under a real browser for the frame | 070 |
-| A room on the page | `Room` on `sandbox/page` runs an act in a frame and `room()` on `sandbox/room` boots a stage inside it over one loader; a factory in the room gets a `client` shaped like the page's and nothing else | 277 |
-| Named documents cross | `createSandbox({ documents })` shares each under its key, writable both ways; `modules`, `room`, `calls` and `route` are reserved; the far end refuses an unlisted `share` at once; refusing a write is the application's guard on its own copy | 278 |
-| The route across the wall | A `route` document the host shares; the room's stage owns the tail under the host act and nothing above it; `createRouter({ entries })` is where the URL and its entries live; `claimTail` claims a parent stage's tail for a child that is not a stage; a bare `*` act key parks the whole path as its tail and takes no parameter, so a stage under it routes and the act is not rebuilt per move | 279 |
-| What leaves the room as data | Errors, rejections and the console levels the host names cross as `Report` data to `handlers.error` and `handlers.console`; a frame forwards all three, a child forwards console, an in-process room forwards nothing | 280 |
-| The frame's `allow` | `iframe({ allow })` opens inline styles and images, fonts and media from named origins; `script-src` and `connect-src` never widen | 281 |
+| A room on the page | `Room` on `sandbox/page` runs an act in a frame and `room()` on `sandbox/room` boots a stage inside it over one loader; a factory in the room gets a `client` shaped like the page's and nothing else | 280 |
+| Named documents cross | `createSandbox({ documents })` shares each under its key, writable both ways; `modules`, `room`, `calls` and `route` are reserved; the far end refuses an unlisted `share` at once; refusing a write is the application's guard on its own copy | 281 |
+| The route across the wall | A `route` document the host shares; the room's stage owns the tail under the host act and nothing above it; `createRouter({ entries })` is where the URL and its entries live; `claimTail` claims a parent stage's tail for a child that is not a stage; a bare `*` act key parks the whole path as its tail and takes no parameter, so a stage under it routes and the act is not rebuilt per move | 282 |
+| What leaves the room as data | Errors, rejections and the console levels the host names cross as `Report` data to `handlers.error` and `handlers.console`; a frame forwards all three, a child forwards console, an in-process room forwards nothing | 283 |
+| The frame's `allow` | `iframe({ allow })` opens inline styles and images, fonts and media from named origins; `script-src` and `connect-src` never widen | 284 |
 | The gate | Required and outside every module: `identify` once per connection or request answers a context or refuses, `access` runs before a module sees a connection, a call or a request; `open` is the trusted case; a module declares `public` or nothing and the auth gate reads it, `server` does not; the application names a `Gate` object or a module that is one, and a composed gate is a module | 071, 241 |
 | A connection | One socket behind a listener the application supplies: the link as binary messages, requests as text; hooks run in load order for the modules the gate allows; a share on it requires `accept` | 072, 073 |
 | The boot | `createServer({ sources, store, gate, listener })` builds its own loader and `start` loads every module every source lists; `loader` and `props` are refused; the platform hands in `store` and nothing else, so anything the application makes is a module others `deps` on; `stop` unloads in reverse load order | 240 |
@@ -378,7 +378,7 @@ defined in `AGENTS.md`.
 5b. `sandbox` (design 070), the compute room.
 6. `dom` + `build`, with hydration and route data designed in rather than bolted on.
 7. `ui`, `icons`, `ssg`.
-7b. The page halves of `sandbox` (design 277), which sit over `ui`, `dom` and `client`, so the
+7b. The page halves of `sandbox` (design 280), which sit over `ui`, `dom` and `client`, so the
     package is tier 7 and its compute room still imports nothing above `modules`.
 8. `server`, `jobs`, `client`, the batteries. `server`, `auth` and `jobs` were built ahead of 6
    and 7, after a re-read of the eight packages then built; `client` and the `auth` client half

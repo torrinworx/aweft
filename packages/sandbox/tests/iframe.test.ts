@@ -93,7 +93,7 @@ const policyOf = (frame: { attrs: Record<string, string> }): Record<string, stri
 	}));
 };
 
-test('allow opens styles, images, fonts and media and nothing else (design 281)', async () => {
+test('allow opens styles, images, fonts and media and nothing else (design 284)', async () => {
 	const inside = 'https://rooms.example:8443/room/inside.js';
 	const bare = setup(inside);
 	await bare.runner.start();

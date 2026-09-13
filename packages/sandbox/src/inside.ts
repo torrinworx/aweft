@@ -1,4 +1,4 @@
-// The far end: the room's own side of the window (designs 066, 277 to 280).
+// The far end: the room's own side of the window (designs 066, 280 to 283).
 //
 // The same file runs in a frame, a process, a container, or a test. `enter` connects the
 // link, waits for the host's documents and answers with what a loader is built from; `serve`
@@ -24,7 +24,7 @@ export type { RouteDocument } from './route.ts';
 /** What the far end may be told about the realm it runs in. */
 export interface InsideOptions {
 	/**
-	 * What this realm forwards to the host as data (design 280): its uncaught errors and
+	 * What this realm forwards to the host as data (design 283): its uncaught errors and
 	 * unhandled rejections, and the console levels the host named. Nothing when left off.
 	 */
 	readonly forward?: { readonly errors?: boolean; readonly console?: boolean } | undefined;
@@ -44,10 +44,10 @@ export interface Entered {
 	readonly props: Readonly<Record<string, unknown>>;
 	/** The act the room shows, or null in a compute room. */
 	readonly page: { readonly act: string } | null;
-	/** The route document the tail crosses on (design 279), or null in a compute room. */
+	/** The route document the tail crosses on (design 282), or null in a compute room. */
 	readonly route: RouteDocument | null;
 	/**
-	 * The document the host shared under a name (design 278). One handle per name for the
+	 * The document the host shared under a name (design 281). One handle per name for the
 	 * room's life, so two askers hold one object.
 	 *
 	 * Throws: a `SandboxError` with reason `not-shared`, at once, for a name the host did not
@@ -65,7 +65,7 @@ export interface Entered {
 	/**
 	 * Take the loader, answer the host's calls against it, and hand back the room. `handlers`
 	 * hear what `follow` applied, beside the host, so the realm that holds a page can rebuild
-	 * the act on screen (design 277).
+	 * the act on screen (design 280).
 	 */
 	serve(loader: Loader, handlers?: FollowHandlers): Room;
 }

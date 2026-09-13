@@ -1,4 +1,4 @@
-// The URL, the history entry, and the clicks that move between them (designs 121 and 279).
+// The URL, the history entry, and the clicks that move between them (designs 121 and 282).
 //
 // One history path: `popstate`, `pushState`, `replaceState`. Everything the router does to a
 // browser goes through two interfaces below: `Entries`, where the URL and its history entries
@@ -24,7 +24,7 @@ export interface LinkRoot {
 }
 
 /**
- * Where the URL and its history entries live (design 279). The browser's history is the usual
+ * Where the URL and its history entries live (design 282). The browser's history is the usual
  * one; a router inside a sandbox frame runs over an object that reads and writes a document
  * shared across the wall. The router stamps its own entry key into the state it pushes and
  * reads it back through `state`, so an implementation keeps whatever state it is handed, per
@@ -343,7 +343,7 @@ const trimEnd = (path: string): string => path.replace(/\/+$/, '');
  *   options: `url`, where to start with no `window` (`/` when left off, ignored in a browser),
  *            `base`, a path every URL is under (`''` when left off, no trailing slash), and
  *            `entries`, where the URL and its history entries live when they are not the
- *            window's (design 279); scroll, storage and clicks still come from the window when
+ *            window's (design 282); scroll, storage and clicks still come from the window when
  *            there is one, and an anchor click is then resolved against the entries' own URL
  *
  * Returns: the router. `url` and `key` are read-only cells; write to them and they throw,

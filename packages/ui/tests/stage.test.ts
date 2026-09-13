@@ -980,7 +980,7 @@ test('a refused act key that takes parameters is refused, naming the rule', () =
 	);
 });
 
-// --- a routed child that is not a stage, and a loader handed in (design 279) -----------------
+// --- a routed child that is not a stage, and a loader handed in (design 282) -----------------
 
 test('claimTail follows the parent\'s tail, hands back its base and router, and a second claimant gets null', async () => {
 	const router = createRouter({ url: '/app/3/notes/7' });
@@ -1051,7 +1051,7 @@ const shell = (builds: { count: number }) => (): unknown => {
 	} as never, h(Stage, {})));
 };
 
-test('a stage under a * act routes on the path it parked, whose prefix is what stands before it (design 279)', async () => {
+test('a stage under a * act routes on the path it parked, whose prefix is what stands before it (design 282)', async () => {
 	const router = createRouter({ url: '/docs/guide/install' });
 	const document = createDocument();
 	const own: Render = context();
@@ -1073,7 +1073,7 @@ test('a stage under a * act routes on the path it parked, whose prefix is what s
 	stop();
 });
 
-test('a * act is not rebuilt when its tail changes, and a *rest act is, because the rest is its parameter (designs 123 and 279)', async () => {
+test('a * act is not rebuilt when its tail changes, and a *rest act is, because the rest is its parameter (designs 123 and 282)', async () => {
 	// Under `*`: the tail belongs to the child stage, so two moves are two child changes and the
 	// act itself is built once.
 	const router = createRouter({ url: '/docs/guide/install' });

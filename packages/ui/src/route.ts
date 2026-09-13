@@ -110,7 +110,7 @@ const attempt = (key: string, segments: readonly string[]): Candidate | null => 
 
 	for (const piece of pattern) {
 		// A bare `*` takes nothing: it parks every segment from here as the tail, for the stage
-		// below, and the act above is not rebuilt when that tail moves (designs 122 and 279).
+		// below, and the act above is not rebuilt when that tail moves (designs 122 and 282).
 		if (piece === '*') {
 			classes.push(2);
 			continue;

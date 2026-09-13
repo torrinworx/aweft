@@ -183,7 +183,7 @@ application would not have, and a `modules/` directory beside it. The checks are
 
 ## Amended
 
-The props rule holds on a third plane (design 277): the platform hands in `store` on the
+The props rule holds on a third plane (design 280): the platform hands in `store` on the
 server, `client` on the page, and `client` in a room, and nothing else. The room's `client` is
 shaped like the page's and backed by the host, so an act module runs on either side of the
 wall unchanged.

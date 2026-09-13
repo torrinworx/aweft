@@ -312,5 +312,5 @@ out of the room opens. It enforces the window, each runner says what it stops, a
 yours.
 
 The design notes are in
-[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 066 to 070 and 277
-to 281.
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 066 to 070 and 280
+to 284.

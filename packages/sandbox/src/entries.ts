@@ -1,5 +1,5 @@
 // The room's history: where the router's URL and its entries live when the page's history
-// is out of reach (design 279). An `Entries` over the route document the host shared.
+// is out of reach (design 282). An `Entries` over the route document the host shared.
 //
 // `current` reads the document's `url`. `push`, `replace` and `back` write `url`, `move` and
 // `seq`, and the host applies them on the page; `seq` counts up on every write so that a push

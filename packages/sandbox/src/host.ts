@@ -1,4 +1,4 @@
-// The host's side of the window (designs 066 to 068, 278 to 280).
+// The host's side of the window (designs 066 to 068, 281 to 283).
 //
 // The host shares three documents into the room and refuses every commit the room makes to
 // two of them; beside them it shares the documents the application named, and the route
@@ -31,7 +31,7 @@ const DEFAULT_CONSOLE: readonly string[] = ['error', 'warn'];
 
 const KINDS: readonly string[] = ['error', 'rejection', 'console'];
 
-/** A report as the room sent it, or null when it is not one (design 280). */
+/** A report as the room sent it, or null when it is not one (design 283). */
 const reportOf = (value: unknown): Report | null => {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
 	const { kind, level, message, stack, module } = value as Record<string, unknown>;
@@ -163,7 +163,7 @@ export const createSandbox = async (options: SandboxOptions): Promise<Sandbox> =
 				return await client.ask(name, args[1]);
 			}
 			if (method === 'report') {
-				// One call carries the tick's reports (design 280). Each is handed on in order, and
+				// One call carries the tick's reports (design 283). Each is handed on in order, and
 				// one that is not a report is dropped without costing the ones beside it.
 				if (!Array.isArray(args[0])) return null;
 				for (const item of args[0] as unknown[]) {

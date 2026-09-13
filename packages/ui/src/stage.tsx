@@ -88,7 +88,7 @@ export interface StageProps {
 	readonly sources?: readonly Source[];
 	/**
 	 * The loader the modules are already in, from a platform that built it, instead of
-	 * `sources` (design 279). The stage loads acts from it and never closes it; a stage inside
+	 * `sources` (design 282). The stage loads acts from it and never closes it; a stage inside
 	 * an act inherits it as it would a loader built from `sources`.
 	 */
 	readonly loader?: Loader;
@@ -226,7 +226,7 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 	// One loader per mount, over the sources this stage was given, mirroring what the server does
 	// with its own (designs 240, 242). `client` is the one prop the platform hands a page module,
 	// and the key is absent when the caller named none, so a factory can tell the two apart. A
-	// loader handed in belongs to whoever built it, so this stage never closes it (design 279).
+	// loader handed in belongs to whoever built it, so this stage never closes it (design 282).
 	const ownsLoader = props.sources !== undefined;
 	const loader: Loader | null = ownsLoader
 		? createLoader({
@@ -636,7 +636,7 @@ export interface StageContextComponent {
  *   sources: where a named act comes from. The stage builds one loader over these for the whole
  *            routing tree, so a stage inside an act inherits it and takes no `sources`
  *   loader: the loader the modules are already in, instead of `sources`, from a platform that
- *           built it; the stage loads acts from it and never closes it (design 279)
+ *           built it; the stage loads acts from it and never closes it (design 282)
  *   client: the page's connection, handed to every module as its `client` prop
  *   refused: the act shown when loading a named act rejects with a refusal (design 244)
  *   children: the page, with a `Stage` somewhere in it
@@ -687,7 +687,7 @@ export interface TailClaim {
 
 /**
  * Claim the parent stage's tail for a component that is a routed child without being a stage
- * (design 279): a frame that routes inside itself, say. It claims exactly what a nested
+ * (design 282): a frame that routes inside itself, say. It claims exactly what a nested
  * `StageContext` claims, once, and the tail is released with `release` when the component
  * unmounts (design 123).
  *

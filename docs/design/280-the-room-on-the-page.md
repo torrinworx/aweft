@@ -1,4 +1,4 @@
-# 277: The room on the page
+# 280: The room on the page
 
 ## Decision
 
@@ -17,10 +17,10 @@ refuses.
 ```
 
 It makes the `iframe` runner and the sandbox; shares every document in `documents` on the
-room's link under its name (design 278); shares a `route` document and runs the tail it
-holds across the wall (design 279); hands the room's asks to the page's `client.ask` for
+room's link under its name (design 281); shares a `route` document and runs the tail it
+holds across the wall (design 282); hands the room's asks to the page's `client.ask` for
 granted names and refuses the rest; hands errors and console lines to `handlers` (design
-280); passes `styles: true` and `allow` to the frame (design 281); focuses the frame on
+283); passes `styles: true` and `allow` to the frame (design 284); focuses the frame on
 request; and stops the room when the act leaves, which is the runner's `stop` (design 069)
 run from the component's unmount. The frame is the component's own element, sized by the
 theme like any element. One frame per act instance.
@@ -90,7 +90,7 @@ nothing. The recipe's dev server sets it; whatever serves the bundle in producti
 same for the room's files.
 
 **The act under `*` stays across inner navigation.** The room's stage keys the act on the bare
-`*`, which takes no parameter and parks the whole URL as the tail (designs 122 and 279), so a
+`*`, which takes no parameter and parks the whole URL as the tail (designs 122 and 282), so a
 move from `/` to `/second` inside the room is a tail change and not a parameter change: the
 act's nested stage follows the tail and shows the right screen, and the act's component, and
 the state it holds, are left alone (design 123). Keying it on `*rest` instead would make the
@@ -98,7 +98,7 @@ rest a parameter and build the act again on every move.
 
 **What it never decides.** Which modules go in a room, or how many rooms a page has. What a
 granted name lets a module do. Whether a write from the room is acceptable: that is `schema`
-on the host's copy (design 278). What the template looks like. Which console levels cross
+on the host's copy (design 281). What the template looks like. Which console levels cross
 beyond `error` and `warn`. Whether a link out of the room opens: the room intercepts nothing,
 and an application that wants `<a target="_blank">` to work exposes a name and writes the
 in-room module. Exit gestures, theme mode, location, files: application modules on granted

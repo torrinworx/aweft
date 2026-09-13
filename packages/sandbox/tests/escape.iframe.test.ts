@@ -145,7 +145,7 @@ test('the iframe runner: the window suite and the frame\'s own denials, under a 
 	assert.deepEqual(pageErrors, [], `no error escaped to the host page: ${pageErrors.join('; ')}`);
 });
 
-// --- the frame with a page in it (design 281) ------------------------------------------------
+// --- the frame with a page in it (design 284) ------------------------------------------------
 //
 // Under `allow` the frame may paint: inline styles apply and images come from the origins
 // named. Everything the compute room refused is still refused: the network, storage, history.
@@ -243,7 +243,7 @@ test('the iframe runner under allow: styles and named images apply, and the netw
 		assert.equal(p.pushHash, 'SecurityError', `${label}: pushState with a hash throws`);
 	}
 
-	// What left the room as data (design 280): the console line and the uncaught error, from a
+	// What left the room as data (design 283): the console line and the uncaught error, from a
 	// real frame, each attributed to nothing because a compute room has no act on screen.
 	const lines = results.opened.lines as [string, string, boolean][];
 	assert.deepEqual(lines, [['warn', 'a warning from the room {"n":1}', true]], 'the console line crossed with a stack');

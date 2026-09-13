@@ -55,7 +55,7 @@ the act key.
 
 ## Amended
 
-`ui` exports `claimTail(context)` (design 279): a component that is a routed child without
+`ui` exports `claimTail(context)` (design 282): a component that is a routed child without
 being a stage claims the parent's tail exactly as a nested `StageContext` does, once, released
 on unmount, and a second claimant still gets null. The one-claimant rule is unchanged; what
 changed is that the claimant need not be a stage.

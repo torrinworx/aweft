@@ -99,7 +99,7 @@ scroll offset inside a virtual list or the record a modal was opened from, where
 from the URL is not the same value.
 
 The half of the seam that says where the URL and its entries live is an option now:
-`createRouter({ entries })`, with `Entries` exported as a type (design 279). Scroll, storage
+`createRouter({ entries })`, with `Entries` exported as a type (design 282). Scroll, storage
 and clicks are not part of it; they still come from the window when there is one and from
 memory otherwise. The second history implementation this note said would open the seam is a
 document shared across a sandbox wall.

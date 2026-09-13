@@ -1,4 +1,4 @@
-// What leaves the room as data (design 280): errors, rejections and console lines reach the
+// What leaves the room as data (design 283): errors, rejections and console lines reach the
 // host's handlers as plain data, a tick of them is one call row, a handler that throws costs
 // the room nothing, a malformed report is dropped, and each realm forwards what its entry
 // point says it does.

@@ -1,4 +1,4 @@
-// The room on the page (designs 277 to 280), both halves in one process: a host `Room` under a
+// The room on the page (designs 280 to 283), both halves in one process: a host `Room` under a
 // stage in a light document, a fake frame that hands the posted port to `room()` over a second
 // light document, and Node's own `MessageChannel` between them. Then the far end held by the
 // test, so the host's side of the route is driven by writing the document the way a room does.
@@ -284,7 +284,7 @@ test('the iframe runner\'s stop ends a start still waiting on the frame', async 
 	await assert.rejects(started, (e) => reasonOf(e) === 'closed');
 });
 
-// --- the host's side of the route, with the far end held here (design 279) ------------------
+// --- the host's side of the route, with the far end held here (design 282) ------------------
 
 /**
  * A page with a Room under `app/:id`, and the far end entered by the test. The page is unmounted
@@ -396,7 +396,7 @@ const browserLikeEntries = (start: string): Entries & { readonly backs: number }
 	};
 };
 
-test('two room backs in one tick pop one entry: a back in flight holds the rest until the page\'s key has moved (design 279)', async (t) => {
+test('two room backs in one tick pop one entry: a back in flight holds the rest until the page\'s key has moved (design 282)', async (t) => {
 	const entries = browserLikeEntries('/home');
 	const router = createRouter({ entries });
 	router.push('/app/3');

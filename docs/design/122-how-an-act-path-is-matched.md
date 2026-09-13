@@ -75,7 +75,7 @@ declaring more keys than a person can hold in their head.
 
 ## Amended
 
-An act key may end in a bare `*` (design 279). It matches any path, takes no segment and no
+An act key may end in a bare `*` (design 282). It matches any path, takes no segment and no
 parameter, and parks everything from it as the tail for the stage below: `*` alone at
 `/a/b` hands back no parameters, `''` taken and `a/b` as the tail; `docs/*` at
 `/docs/guide` takes `docs` and parks `guide`. Its class is the `*name` class, so a literal or

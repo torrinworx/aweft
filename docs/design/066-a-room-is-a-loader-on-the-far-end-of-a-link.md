@@ -52,8 +52,8 @@ a widening of this one.
 
 ## Amended
 
-Design 278 is the fourth-document note this one asked for. The three fixed documents still
+Design 281 is the fourth-document note this one asked for. The three fixed documents still
 cross, and beside them the documents the application names in `createSandbox`'s `documents`,
 each under its key, writable both ways, and, when the room has a page, the `route` document
-(design 279). Their names are reserved beside the three. The control document gained
+(design 282). Their names are reserved beside the three. The control document gained
 `documents`, `console`, `status` and `page`. Nothing else crosses.

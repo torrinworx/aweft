@@ -36,7 +36,7 @@ export interface SandboxOptions {
 	/** Limits the host keeps. None ship. */
 	readonly limits?: SandboxLimits | undefined;
 	/**
-	 * Documents shared into the room under their keys, writable both ways (design 278). Each is
+	 * Documents shared into the room under their keys, writable both ways (design 281). Each is
 	 * an observable; `modules`, `room`, `calls` and `route` are reserved names.
 	 */
 	readonly documents?: Readonly<Record<string, object>> | undefined;
@@ -44,7 +44,7 @@ export interface SandboxOptions {
 	readonly console?: readonly string[] | undefined;
 	/** What answers the room's asks: the page's client. With none, every ask is refused. */
 	readonly client?: ClientLike | undefined;
-	/** The page in the room: the act it shows and the route document the tail crosses on (design 279). */
+	/** The page in the room: the act it shows and the route document the tail crosses on (design 282). */
 	readonly page?: PageOptions | undefined;
 }
 
@@ -63,7 +63,7 @@ export interface PageOptions {
 }
 
 /**
- * One line that left the room as data (design 280): an uncaught error, an unhandled rejection
+ * One line that left the room as data (design 283): an uncaught error, an unhandled rejection
  * or a console call on a level the host named.
  */
 export interface Report {
@@ -194,9 +194,9 @@ export interface RoomDocument extends Record<string, unknown> {
 	follow: boolean;
 	/** By exposed name, JSON text of the instance's function names. */
 	exposed: Record<string, string>;
-	/** The names the host shared beside the room's own (design 278). */
+	/** The names the host shared beside the room's own (design 281). */
 	documents: string[];
-	/** The console levels that cross (design 280). */
+	/** The console levels that cross (design 283). */
 	console: string[];
 	/** The host client's status, mirrored; `closed` when the host has no client. */
 	status: string;

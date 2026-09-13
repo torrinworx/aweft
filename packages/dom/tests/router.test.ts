@@ -470,7 +470,7 @@ test('push takes a path, and a whole URL or one that already carries the base is
 	assert.equal(docs.url.get(), '/api', 'the path the base is put back onto is the relative one');
 });
 
-// --- with entries handed in (design 279) ------------------------------------------------------
+// --- with entries handed in (design 282) ------------------------------------------------------
 
 /** An entries object in memory that records what the router does to it. */
 const fakeEntries = (start: string) => {

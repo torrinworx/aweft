@@ -1,6 +1,6 @@
-// The documents an application names cross the link both ways (design 278), the room's asks
-// go through the host's client for granted names (design 277), and the route document holds
-// its shape against a room that writes what it should not (design 279). Through the public
+// The documents an application names cross the link both ways (design 281), the room's asks
+// go through the host's client for granted names (design 280), and the route document holds
+// its shape against a room that writes what it should not (design 282). Through the public
 // surface, with the far end held here where the test must play the room.
 
 import test from 'node:test';

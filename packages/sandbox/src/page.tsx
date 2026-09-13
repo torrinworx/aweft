@@ -1,6 +1,6 @@
-// The host half of a room on the page (design 277): a component for an act that puts the
+// The host half of a room on the page (design 280): a component for an act that puts the
 // frame runner in one element, makes the sandbox over it with the documents the application
-// names, and runs the tail of the URL across the wall (design 279).
+// names, and runs the tail of the URL across the wall (design 282).
 //
 // The route is one document written from both ends. The host writes `url` and `key` after the
 // page's router has settled, in a microtask, because the router writes its key and then its
@@ -32,15 +32,15 @@ export interface RoomProps {
 	readonly modules: object;
 	/** The names the room may ask for, as an observable array from `createArray`. */
 	readonly grants: string[];
-	/** Documents shared into the room under their keys, writable both ways (design 278). */
+	/** Documents shared into the room under their keys, writable both ways (design 281). */
 	readonly documents?: Readonly<Record<string, object>> | undefined;
 	/** The page's connection, which answers the room's asks on granted names. */
 	readonly client?: ClientLike | undefined;
 	/** The act module the room shows, by name. */
 	readonly act: string;
-	/** What the frame may load beyond scripts. Inline styles are always allowed (design 281). */
+	/** What the frame may load beyond scripts. Inline styles are always allowed (design 284). */
 	readonly allow?: FrameAllow | undefined;
-	/** The console levels that cross. `['error', 'warn']` unless given (design 280). */
+	/** The console levels that cross. `['error', 'warn']` unless given (design 283). */
 	readonly console?: readonly string[] | undefined;
 	/** Where errors, console lines and reloads report. */
 	readonly handlers?: SandboxHandlers | undefined;
@@ -111,7 +111,7 @@ const reasonOf = (error: unknown): unknown => (error as { reason?: unknown } | n
  * `claimTail`, writes it into the route document as `/` plus the tail with the page's query and
  * hash, and applies a room `push` or `replace` as the same move on the page's router at the
  * act's own prefix. A room `back` is honoured only while the entry showing is one the host
- * pushed on the room's behalf (design 279). With no stage above, or no router in the tree, the
+ * pushed on the room's behalf (design 282). With no stage above, or no router in the tree, the
  * room runs on `act` alone: its URL is `/` and its moves change nothing on the page.
  *
  * A `createSandbox` that rejects is raised where the page already looks, from a microtask,
@@ -199,7 +199,7 @@ export const Room = (
 				router.push(to);
 				pushed.add(key());
 			};
-			// Only the room writes `seq` (design 279), so this scope hears room moves and nothing else.
+			// Only the room writes `seq` (design 282), so this scope hears room moves and nothing else.
 			// The move is applied from a microtask rather than inside the delivery: a cell written
 			// during a delivery reads as it was until the delivery settles, so the key recorded after
 			// a push made here would be the key of the entry the push left.

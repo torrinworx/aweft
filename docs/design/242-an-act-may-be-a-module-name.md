@@ -201,10 +201,10 @@ whole page is modules: a gate, a shared document, three acts and the battery's s
 
 ## Amended
 
-`StageContext` takes `loader` as well as `sources` (design 279): a platform that already holds
+`StageContext` takes `loader` as well as `sources` (design 282): a platform that already holds
 the loader the modules are in hands it over, and naming both is a loud assert. A stage handed
 a loader does not close it when it is removed, because the loader belongs to whoever built
 it, and it reads no `entries` off an act module, because a loader does not say what sources it
-was built over. The room on the page (design 277) is the platform this is for: the loader the
+was built over. The room on the page (design 280) is the platform this is for: the loader the
 host's calls reach is the loader the stage loads acts from, and a factory in the room gets
 `client` and nothing else, which is this note's props rule on a third plane.

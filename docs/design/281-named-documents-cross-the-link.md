@@ -1,4 +1,4 @@
-# 278: Named documents cross the link
+# 281: Named documents cross the link
 
 Amends design 066. The three fixed documents still cross and nothing crosses unasked; what
 changes is that the application may name documents of its own, and each one crosses under
@@ -18,7 +18,7 @@ made. A value that is not an observable (from `createObject`, `createArray` or `
 refused with `malformed`, the way `modules` is checked; any observable kind will do, because
 a list is a document too and the link shares every kind.
 
-**The far end's `share(name)`.** `enter` (design 277) answers with `share`: for a name in the
+**The far end's `share(name)`.** `enter` (design 280) answers with `share`: for a name in the
 control document's `documents` it is `link.share(name)` on the room's link, one handle per
 name for the room's life, so two modules asking for one name hold one document object. For
 any other name it throws `not-shared` at once, synchronously, with the fix naming `documents`
@@ -33,7 +33,7 @@ copy does against a server. Nothing here asks who wrote a commit, because the li
 (design 053).
 
 **The route document is not one of these.** It crosses under the reserved name `route`, only
-when `page` is given, and it is design 279's.
+when `page` is given, and it is design 282's.
 
 ## Why
 

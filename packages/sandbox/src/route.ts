@@ -1,4 +1,4 @@
-// The route document: the tail the room's stage runs over, crossing the wall (design 279).
+// The route document: the tail the room's stage runs over, crossing the wall (design 282).
 //
 // The host writes `url` and `key` when the page's entry changes under the act; the room writes
 // `url`, `move` and `seq` to move. `seq` is what makes a room write a commit even when the

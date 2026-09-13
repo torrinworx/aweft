@@ -1,4 +1,4 @@
-# 281: The frame's `allow`
+# 284: The frame's `allow`
 
 Amends design 069. The frame runner still claims exactly the browser's boundary; what changes
 is that an application may open the frame's content security policy for what a page needs,

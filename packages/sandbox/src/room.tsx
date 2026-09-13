@@ -1,7 +1,7 @@
-// The inside half of a room on the page (design 277): what the application's room entry
+// The inside half of a room on the page (design 280): what the application's room entry
 // calls with the port the frame was posted. It runs the far end over the port, builds the one
 // loader the host's calls and the stage both reach, makes the router over the route document
-// (design 279), and mounts a stage on the act the host named into the frame's body.
+// (design 282), and mounts a stage on the act the host named into the frame's body.
 
 import type { Client, ClientStatus } from '@aweftjs/client';
 import type { Derived } from '@aweftjs/core';
@@ -43,7 +43,7 @@ const NOT_IN_ROOM = 'The connection is the page\'s; a module in a room shares an
  * `stop` unmounts the stage, unloads everything and closes the link.
  *
  * The far end forwards uncaught errors, unhandled rejections and the console levels the host
- * named (design 280), each attributed to the act. One loader is built over the far end's
+ * named (design 283), each attributed to the act. One loader is built over the far end's
  * sources, with the host's `props` and `client` beside them, and handed to the far end and to
  * the stage both. The stage runs `acts={{ '*': act }}` over a router whose entries are the
  * route document, so the tail under the host act is the room's whole URL and `''` is its index;
@@ -67,7 +67,7 @@ export const room = async (port: PortLike, options: RoomOptions = {}): Promise<R
 	}
 	const { act } = entered.page;
 
-	// The connection as a module in the room holds it: the page's own shape (design 277), so an
+	// The connection as a module in the room holds it: the page's own shape (design 280), so an
 	// act module runs on either side of the wall unchanged.
 	const client: Client = {
 		share: entered.share,

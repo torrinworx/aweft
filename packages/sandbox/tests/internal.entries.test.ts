@@ -1,4 +1,4 @@
-// The room's entries over the route document (design 279), driven directly: what the router
+// The room's entries over the route document (design 282), driven directly: what the router
 // reaches through them, and what they refuse before a commit could be.
 
 import test from 'node:test';

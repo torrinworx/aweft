@@ -1,4 +1,4 @@
-// A browser frame as the room (designs 069 and 281).
+// A browser frame as the room (designs 069 and 284).
 //
 // The frame has `sandbox="allow-scripts"` and not `allow-same-origin`, so it has an opaque
 // origin: no cookie, no storage, no reach into the page that made it. Its content security
@@ -33,7 +33,7 @@ export interface MessageChannelLike {
 	readonly port2: unknown;
 }
 
-/** What a page in the room may load beyond scripts (design 281). Each list is origins. */
+/** What a page in the room may load beyond scripts (design 284). Each list is origins. */
 export interface FrameAllow {
 	/** Inline styles: what a themed page writes. */
 	readonly styles?: boolean | undefined;

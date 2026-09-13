@@ -1,4 +1,4 @@
-// What leaves the room as data (design 280): the text of an error, a rejection or a console
+// What leaves the room as data (design 283): the text of an error, a rejection or a console
 // line, made so that nothing a module hands the console can throw back into the room, and the
 // listeners a realm installs to forward them.
 
