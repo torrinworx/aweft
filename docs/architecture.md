@@ -88,6 +88,7 @@ aweft/
     auth/                  the first battery: the gate, sessions, sign-in, per-user state
     static/                the static battery: a directory of files served for what no route matched
     health/                the health battery: one route that says the process is up and right
+    logs/                  the logs battery: what a page and the server did, per visit, in the store
     jobs/                  a scheduler over an array the application hands in
     ssg/                   static generation
     build/                 transforms, in two modes
@@ -126,6 +127,7 @@ version in lockstep.
 | `jobs` | When a row runs, over an observable array the application hands in: the timers, the cron arithmetic, `last` written onto the row | What a job does; who may add, edit or remove a row; storage; queues, retries, catch-up; modules; component internals |
 | `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom |
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
+| `logs` | What a page and the server did, per visit, in the application's store: a client half that records the page, three server modules, and readers any process imports | Who may read a visit; whether to record; retention beyond its defaults; any URL but its one route; a typed value, a private-slot value, an IP |
 | `debug` | Reading a running document or commit back as text | Nothing. It may know everything; no runtime package may know it |
 
 ---
@@ -328,6 +330,7 @@ indexed by the job rather than the package, are not in this table.
 | ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM |
 | static | a generated site is served by the stack's own server in one process: a deep link hydrates in place, an unknown URL is 404 with the fallback page, the same URL under the shell setting is 200 and mounts live, and HEAD, the ETag and a climbing path answer as the rule says |
 | health | a deploy's verification: the endpoint polled until the shipped build is the one answering, then the two states a poll must not mistake for health, a store that stopped answering and a check that threw |
+| logs | a page recorded end to end in a browser and the visit read back: a page error, a rejection, a console error, a failed call on both sides, a commit's shape with a private slot absent, a typed character never stored, a non-character key kept, a refused write, sign-in mid-visit, and the browser facts |
 | build | the transforms build a real page; assert stripping is verified in the output |
 | testing | consumed by every other package's suite; its recipe is everyone else's |
 | debug | a bug found in a document the reader did not write, using only what the package prints |
@@ -449,6 +452,16 @@ The health battery is built (design 258). `@aweftjs/health` is a source of one s
 application's `info` and its named `checks`: 200 when the process and, when there is one, the
 store answer, 503 when the store does not, and never the error. A check adds detail and never
 decides `ok`.
+
+The logs battery is built (design 261). `@aweftjs/logs` is a source of three server modules and
+a client half. The page's `createLog` wraps its client and records the page's errors, console,
+commits (as shape, through the `skip(Infinity)` wildcard of design 259, so a private slot's
+value never leaves the page), asks, status, URL and input; the server's `logs/Observe` records
+its calls, requests, refusals and failures through the `observe` hook of design 260, into the
+same visit. Batches go over HTTP to `logs/Record`, `logs/Visits` keeps the documents and prunes,
+and the readers (`visit`, `visits`, `errors`, `prune`) plus a Metabase view read them back. It
+records no typed value, no IP, and no private-slot value, and it decides nothing about who may
+read a visit.
 
 They split per area rather than shipping as one package because an application that wants
 auth and not posts should not carry posts, and an agent reading `@aweftjs/auth` should find

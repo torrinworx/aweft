@@ -1,0 +1,22 @@
+type Batch: interface Batch { readonly visit: string; readonly build?: string | null; readonly browser?: Readonly<Record<string, Primitive>>; readonly ended?: boolean; readonly entries: readonly Entry[]; }
+type Entry: interface Entry { readonly at: number; readonly side: 'page' | 'server'; readonly kind: string; readonly [field: string]: Primitive | undefined; }
+type ErrorGroup: interface ErrorGroup { readonly message: string; readonly kind: string; readonly build: string | null; readonly count: number; readonly visits: number; readonly firstSeen: number; readonly lastSeen: number; }
+type Primitive: type Primitive = string | number | boolean | null;
+type VisitRecord: interface VisitRecord { readonly id: string; readonly kind: 'visit' | 'process'; readonly user: string | null; readonly build: string | null; readonly browser: Readonly<Record<string, Primitive>> | null; readonly startedAt: number; readonly endedAt: number | null; readonly errors: number; readonly entries: readonly Readonly<Record<string, Primitive>>[]; }
+type VisitSummary: interface VisitSummary { readonly id: string; readonly user: string | null; readonly build: string | null; readonly startedAt: number; readonly errors: number; }
+value errors: (store: Store, filter?: ErrorFilter) => Promise<ErrorGroup[]>
+value logs: Source
+value paths: Readonly<Record<string, readonly string[]>>
+value prune: (store: Store, olderThan: number) => Promise<number>
+value visit: (store: Store, id: string) => Promise<VisitRecord | undefined>
+value visits: (store: Store, filter?: VisitFilter) => Promise<VisitSummary[]>
+./client type Batch: interface Batch { readonly visit: string; readonly build?: string | null; readonly browser?: Readonly<Record<string, Primitive>>; readonly ended?: boolean; readonly entries: readonly Entry[]; }
+./client type Entry: interface Entry { readonly at: number; readonly side: 'page' | 'server'; readonly kind: string; readonly [field: string]: Primitive | undefined; }
+./client type FetchInit: interface FetchInit { method: string; headers: Record<string, string>; body: string; keepalive: true; credentials: 'same-origin'; }
+./client type Fetcher: type Fetcher = (url: string, init: FetchInit) => Promise<unknown>;
+./client type Listening: interface Listening { addEventListener(type: string, listener: (event: never) => void, options?: unknown): void; removeEventListener(type: string, listener: (event: never) => void, options?: unknown): void; }
+./client type Log: interface Log { readonly client: Client; readonly visit: string; write(entry: Readonly<Record<string, unknown>>): void; each(fn: (entry: Entry) => void): () => void; flush(): Promise<void>; stop(): void; }
+./client type LogOptions: interface LogOptions { readonly origin?: string | undefined; readonly build?: string | null | undefined; readonly router?: { readonly url: Derived<string>; } | undefined; readonly fetch?: Fetcher | undefined; readonly flushMs?: number | undefined; readonly batch?: number | undefined; readonly window?: WindowLike | undefined; }
+./client type Primitive: type Primitive = string | number | boolean | null;
+./client type WindowLike: interface WindowLike extends Listening { readonly document?: Listening | undefined; readonly location?: { readonly origin: string; } | undefined; readonly navigator?: { readonly userAgent?: string; readonly userAgentData?: { readonly brands?: readonly { brand: string; version: string; }[]; readonly platform?: string; readonly mobile?: boolean; }; readonly language?: string; readonly maxTouchPoints?: number; sendBeacon?(url: string, data: unknown): boolean; } | undefined; readonly screen?: { readonly width: number; readonly height: number; } | undefined; readonly innerWidth?: number | undefined; readonly innerHeight?: number | undefined; readonly devicePixelRatio?: number | undefined; matchMedia?(query: string): { readonly matches: boolean; }; readonly console?: { error(...args: unknown[]): void; warn(...args: unknown[]): void; } | undefined; readonly Blob?: (new (parts: string[], options: { type: string; }) => unknown) | undefined; }
+./client value createLog: (client: Client, options?: LogOptions) => Log

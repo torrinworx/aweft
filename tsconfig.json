@@ -19,6 +19,7 @@
 		{ "path": "packages/ssg" },
 		{ "path": "packages/static" },
 		{ "path": "packages/health" },
+		{ "path": "packages/logs" },
 		{ "path": "packages/testing" },
 		{ "path": "packages/debug" }
 	]

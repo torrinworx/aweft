@@ -16,7 +16,7 @@ interface Falling {
 	readonly context: unknown;
 	readonly loader: Loader;
 	readonly gate: Gate;
-	readonly report: (name: string, error: unknown) => void;
+	readonly report: (name: string, error: unknown, context?: unknown) => void;
 }
 
 /**
@@ -27,6 +27,8 @@ interface Falling {
  */
 export interface Fallthrough {
 	readonly answer?: Response;
+	/** The module that answered. */
+	readonly name?: string;
 	readonly refused?: readonly Refusal[];
 	readonly failed?: boolean;
 }
@@ -53,7 +55,7 @@ export const fallthrough = async ({ request, context, loader, gate, report }: Fa
 				continue;
 			}
 			const answer: unknown = await hook.call(instance, request, context);
-			if (answer instanceof Response) return { answer };
+			if (answer instanceof Response) return { answer, name };
 			if (answer !== undefined) {
 				throw serverError(
 					'not-a-response', `${name} answered ${routeKey(request)} with something that is not a Response`,
@@ -61,7 +63,7 @@ export const fallthrough = async ({ request, context, loader, gate, report }: Fa
 				);
 			}
 		} catch (error) {
-			report(name, error);
+			report(name, error, context);
 			return { failed: true };
 		}
 	}

@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createArray, createObject, observer } from '../src/index.ts';
+import { atomic, createArray, createMap, createObject, idOf, observer } from '../src/index.ts';
 
 interface Column extends Record<string, unknown> {
 	name?: string;
@@ -163,4 +163,123 @@ test('wildcards see array steps too', () => {
 	const rows = doc.rows as Array<Record<string, unknown>>;
 	rows[1]!.done = true;
 	assert.deepEqual(seen, [true]);
+});
+
+// --- skip(Infinity): any run of open steps (design 259) --------------------------------------
+
+const deltaPaths = (change: { deltas: readonly { ref: { key: unknown } }[] }): string[] =>
+	change.deltas.map((delta) => String(delta.ref.key));
+
+test('a trailing run hears a public delta at any depth, each on its own, and never one under a private slot', () => {
+	const doc = createObject({
+		name: 'a',
+		_secret: 'x',
+		nested: createObject({ title: 'ok', _token: 't', deeper: createObject({ leaf: 1, _hidden: createObject({ inner: 1 }) }) }),
+	});
+	const seen: string[] = [];
+	observer(doc).skip(Infinity).watch((change) => seen.push(...deltaPaths(change)));
+
+	doc.name = 'b';
+	doc._secret = 'y';
+	const nested = doc.nested as Record<string, unknown>;
+	nested.title = 'ko';
+	nested._token = 'u';
+	const deeper = nested.deeper as Record<string, unknown>;
+	deeper.leaf = 2;
+	(deeper._hidden as Record<string, unknown>).inner = 2;
+	// Under a private slot of an object, at any depth: not the slot, and not what it holds.
+	assert.deepEqual(seen, ['name', 'title', 'leaf']);
+});
+
+test('a trailing run delivers only the public deltas of a commit that mixes both', () => {
+	const doc = createObject({ name: 'a', _secret: 'x' });
+	const seen: string[][] = [];
+	observer(doc).skip(Infinity).watch((change) => seen.push(deltaPaths(change)));
+	atomic(() => { doc.name = 'b'; doc._secret = 'y'; });
+	assert.deepEqual(seen, [['name']]);
+});
+
+test('a subtree added in one write reaches a trailing run as its public slots only', () => {
+	const doc = createObject<{ nested?: unknown }>({});
+	const seen: string[] = [];
+	observer(doc).skip(Infinity).watch((change) => seen.push(...deltaPaths(change)));
+	doc.nested = createObject({ title: 'ok', _token: 't' });
+	assert.deepEqual(seen.sort(), ['nested', 'title']);
+});
+
+test('a trailing run walks through arrays and maps, whose steps are always open', () => {
+	const keyed = createObject({ v: 1, _w: 1 });
+	const doc = createObject({
+		rows: createArray([createObject({ done: false, _note: 'n' })]),
+		byKey: createMap([[idOf(keyed), keyed]]),
+	});
+	const seen: string[] = [];
+	observer(doc).skip(Infinity).watch((change) => seen.push(...deltaPaths(change)));
+	const row = (doc.rows as Array<Record<string, unknown>>)[0]!;
+	row.done = true;
+	row._note = 'm';
+	keyed.v = 2;
+	keyed._w = 2;
+	// The array position and the map key are steps too, and neither is an object slot.
+	assert.deepEqual(seen, ['done', 'v']);
+});
+
+test('a run followed by a key reaches the key at any depth and never below a private slot', () => {
+	const doc = createObject({
+		draft: 'top',
+		nested: createObject({ draft: 'mid', _private: createObject({ draft: 'hidden' }) }),
+	});
+	const seen: unknown[] = [];
+	observer(doc).skip(Infinity).path('draft').watch((change) => seen.push(change.deltas[0]!.value));
+	doc.draft = 't2';
+	(doc.nested as Record<string, unknown>).draft = 'm2';
+	((doc.nested as Record<string, unknown>)._private as Record<string, unknown>).draft = 'h2';
+	(doc.nested as Record<string, unknown>).other = 'x';
+	assert.deepEqual(seen, ['t2', 'm2']);
+});
+
+test('ignore drops a step the run would consume, and everything under it', () => {
+	const doc = createObject<Record<string, unknown>>({
+		keep: createObject({ a: 1 }),
+		draft: createObject({ a: 1, deep: createObject({ b: 1 }) }),
+	});
+	const seen: string[] = [];
+	observer(doc).skip(Infinity).ignore('draft').watch((change) => seen.push(...deltaPaths(change)));
+	(doc.keep as Record<string, unknown>).a = 2;
+	const draft = doc.draft as Record<string, unknown>;
+	draft.a = 2;
+	(draft.deep as Record<string, unknown>).b = 2;
+	doc.draft = 'gone';
+	assert.deepEqual(seen, ['a']);
+});
+
+test('shallow after a trailing run changes nothing, and a run has no single value', () => {
+	const doc = createObject({ a: createObject({ b: 1 }) });
+	const seen: string[] = [];
+	const scope = observer(doc).skip(Infinity);
+	scope.shallow().watch((change) => seen.push(...deltaPaths(change)));
+	(doc.a as Record<string, unknown>).b = 2;
+	assert.deepEqual(seen, ['b']);
+	assert.equal(scope.get(), undefined);
+	assert.throws(() => scope.set(1), (error: { reason?: string }) => error.reason === 'multi-target');
+});
+
+test('a run after a path starts under it, and hears the slot the path names too', () => {
+	const doc = createObject<Record<string, unknown>>({ a: createObject({ b: 1, _c: 1 }), other: createObject({ b: 1 }) });
+	const seen: string[] = [];
+	observer(doc).path('a').skip(Infinity).watch((change) => seen.push(...deltaPaths(change)));
+	(doc.a as Record<string, unknown>).b = 2;
+	(doc.a as Record<string, unknown>)._c = 2;
+	(doc.other as Record<string, unknown>).b = 2;
+	doc.a = createObject({ b: 3 });
+	// The replacement and the slot inside it land in one commit, whose deltas have no order.
+	assert.deepEqual(seen.slice(0, 1), ['b']);
+	assert.deepEqual(seen.slice(1).sort(), ['a', 'b']);
+});
+
+test('skip(Infinity) builds one step, in constant memory', () => {
+	const before = process.memoryUsage().heapUsed;
+	const scope = observer(createObject({})).skip(Infinity);
+	assert.ok(scope.isImmutable());
+	assert.ok(process.memoryUsage().heapUsed - before < 8 * 1024 * 1024);
 });

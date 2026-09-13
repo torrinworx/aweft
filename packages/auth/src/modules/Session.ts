@@ -5,7 +5,7 @@ import { atomic } from '@aweftjs/core';
 import type { ModuleProps } from '@aweftjs/modules';
 import type { Identified } from '@aweftjs/server';
 
-import { ANONYMOUS, type AuthContext, userOf } from '../context.ts';
+import { type AuthContext, userOf } from '../context.ts';
 import { cookiesOf, setCookie } from '../cookie.ts';
 import { json, storeOf } from '../props.ts';
 
@@ -102,7 +102,9 @@ export default ({ config, ...props }: ModuleProps): Session => {
 			if (session.expires !== null && session.expires <= Date.now()) continue;
 			return { context: { user: session.user, session: token } };
 		}
-		return { context: ANONYMOUS };
+		// A fresh object each time: the server hands the same reference to every hook and event
+		// of one connection, and a module keys connections apart by it (design 260).
+		return { context: { user: null, session: null } };
 	};
 
 	return {

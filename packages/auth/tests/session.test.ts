@@ -22,6 +22,7 @@ test('issue mints a token, whoIs reads it back from the cookie, and revoke ends 
 	assert.deepEqual(contextOf(await session.whoIs(withCookie('/', `session=${token}`))), { user: 'u_ada', session: token });
 	assert.deepEqual(contextOf(await session.whoIs(withCookie('/', `theme=dark; session=${token}; other=1`))), { user: 'u_ada', session: token });
 	assert.deepEqual(contextOf(await session.whoIs(request('/'))), { user: null, session: null });
+	assert.notEqual(contextOf(await session.whoIs(request('/'))), contextOf(await session.whoIs(request('/'))), 'each anonymous answer is its own object, so a connection can be told from another');
 
 	const held = await store.open(`session:${token}`);
 	const doc = held.root as Record<string, unknown>;

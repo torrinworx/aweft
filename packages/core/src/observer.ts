@@ -51,6 +51,15 @@ export interface Observer extends Omit<Derived<unknown>, 'get' | 'set' | 'watch'
 	 * never matches, and a derived value built on it sits at its initial value forever, which
 	 * reads as a working value that never changes. Count the steps between the observable the
 	 * scope starts at and the slot you mean, or reach for `tree`, which is depth independent.
+	 *
+	 * `Infinity` is any run of steps, none included, each one open: never an object slot whose
+	 * key starts with an underscore, never one `ignore` names (design 259). Ending the scope,
+	 * the run reaches the slot the delta names, so `skip(Infinity).watch(fn)` hears every
+	 * public delta in the document, each on its own, and never one under a private slot at any
+	 * depth. Followed by a key, it reaches that key at any depth, as `tree` does.
+	 *
+	 * Example:
+	 *   observer(doc).skip(Infinity).watch((change) => record(change.deltas));
 	 */
 	skip(count?: number): Observer;
 	/**
@@ -208,7 +217,8 @@ class Scope extends Chain<unknown> implements Observer {
 
 	skip(count = 1): Observer {
 		const steps: WildStep[] = [];
-		for (let i = 0; i < count; i++) steps.push({ any: true });
+		if (count === Infinity) steps.push({ run: true });
+		else for (let i = 0; i < count; i++) steps.push({ any: true });
 		return new Scope(this.#base, [...this.#keys, ...steps], this.#ignored, this.#narrow);
 	}
 

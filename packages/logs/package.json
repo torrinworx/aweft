@@ -1,0 +1,60 @@
+{
+	"name": "@aweftjs/logs",
+	"version": "0.1.0",
+	"type": "module",
+	"license": "MIT",
+	"engines": {
+		"node": ">=24.12.0"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/torrinworx/aweft.git",
+		"directory": "packages/logs"
+	},
+	"files": [
+		"dist",
+		"src",
+		"postgres",
+		"README.md",
+		"surface.txt",
+		"errors.txt"
+	],
+	"description": "The logs battery: what a page and the server did, per visit, in the application's store, with a client half that records the page and readers any process imports.",
+	"exports": {
+		".": {
+			"aweft-source": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./client": {
+			"aweft-source": "./src/client.ts",
+			"types": "./dist/client.d.ts",
+			"default": "./dist/client.js"
+		}
+	},
+	"scripts": {
+		"prepack": "node ../build/scripts/build-package.ts",
+		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
+	},
+	"dependencies": {
+		"@aweftjs/client": "^0.1.0",
+		"@aweftjs/codec": "^0.1.0",
+		"@aweftjs/core": "^0.1.0",
+		"@aweftjs/modules": "^0.1.0",
+		"@aweftjs/server": "^0.1.0",
+		"@aweftjs/store": "^0.1.0"
+	},
+	"devDependencies": {
+		"@aweftjs/auth": "^0.1.0",
+		"@aweftjs/build": "^0.1.0",
+		"@aweftjs/sync": "^0.1.0",
+		"@aweftjs/testing": "^0.1.0"
+	},
+	"aweft": {
+		"tier": "integrator",
+		"branchCoverage": 80
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}
