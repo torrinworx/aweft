@@ -1,0 +1,25 @@
+aborted: Nothing to fix; the page cancelled it.
+incomplete: Send the whole body, or send Content-Length equal to what is sent.
+invalid-config: Add a default to maxBytes, or an entry for that family.
+invalid-config: Give accept a function of (upload, context) answering nothing or { reasons }, or leave it null.
+invalid-config: Give allow a function of (upload, context) answering nothing or { reasons }, or leave it null.
+invalid-config: Give concurrent the number of uploads to hold in flight at once, above zero.
+invalid-config: Give directory the path of the directory to keep files in.
+invalid-config: Give maxBytes a number of bytes, or a map by family such as { image: 5000000, default: 25000000 }.
+invalid-config: Give prefix letters, digits, _ . / and -, such as "site1/", or leave it out.
+invalid-config: Give s3 an endpoint URL, a region, a bucket, an accessKey and a secretKey, each a non-empty string.
+invalid-config: Give storage an adapter: directory(path), s3(options), or one of your own.
+invalid-config: Give types a list of MIME types, such as ["image/png", "audio/mpeg"].
+invalid-config: Set public to true for a route anyone may post to, or false for one that needs a signed-in user.
+invalid-config: Set public to true for files anyone with the URL may read, or false for ones that need a signed-in user.
+invalid-key: Use letters, digits, _ and -, at most 128 characters.
+invalid-put: Give put a MIME type such as "image/png".
+invalid-put: Give put the byte length beside a stream, or hand it the bytes.
+network: Try again; check the origin and the route.
+no-store: Pass store to createServer, or props: { store } to a loader you build yourself.
+refused: Read status and reasons; each reason names what to change.
+refused: Read the reasons; they are the application's own.
+storage-failed: Check the endpoint, the bucket, the region and the keys the s3 adapter was given.
+too-large: Send a smaller file, or raise maxBytes in uploads/Files's config.
+unsupported-type: Send one of the types uploads/Files is configured with, and bytes that are that type.
+wrong-length: Send Content-Length equal to the number of bytes in the body.
