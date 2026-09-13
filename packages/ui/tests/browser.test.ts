@@ -17,6 +17,7 @@ import { type Page, chromium } from 'playwright';
 import { build } from 'vite';
 
 import { aweft } from '@aweftjs/build';
+import { audit } from '@aweftjs/testing/browser';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const space = mkdtempSync(join(tmpdir(), 'aweft-ui-browser-'));
@@ -1561,13 +1562,10 @@ test('a real drag across the colour plane moves the thumb and writes the cell', 
 			'and a key is a write, as rgb() text');
 
 		// The plane is a control a person operates, so it has to pass the same audit every page in
-		// this package does. The audit is scoped to the picker: the page around it is this file's
-		// blank harness, with no title and no language, and neither is anything the component says.
-		await view.addScriptTag({ path: fileURLToPath(import.meta.resolve('axe-core/axe.min.js')) });
-		const audit = await view.evaluate(async () => (globalThis as never as {
-			axe: { run(node: unknown, options: unknown): Promise<{ violations: { id: string; help: string }[] }> };
-		}).axe.run(document.querySelector('#pick')!, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] } }));
-		assert.deepEqual(audit.violations.map((violation) => `${violation.id}: ${violation.help}`), [],
+		// this package does. Scoped to the picker: the page around it is this file's blank harness,
+		// and nothing in it is anything the component says.
+		const { violations } = await audit(view, { root: '#pick' });
+		assert.deepEqual(violations.map((violation) => `${violation.rule}: ${violation.help}`), [],
 			'axe found nothing to fix on the picker');
 	});
 });
