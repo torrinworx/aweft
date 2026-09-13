@@ -104,15 +104,15 @@ const matchesIn = (text: string, modifiers: readonly TextModifier[]): Found[] =>
  */
 const NONE: TextModifier[] = [];
 
-/** The label as children: gaps as text, and each match as whatever its modifier answers. */
-const labelOf = (context: unknown, raw: unknown, modifiers: readonly TextModifier[]): unknown => {
-	const label = resolve(context, raw);
-	if (label === null || label === undefined) return null;
-	if (typeof label !== 'string' && typeof label !== 'number') return label;
-
-	const text = String(label);
+/**
+ * A string as children: gaps as text, and each match as whatever its modifier answers.
+ *
+ * Internal to this package: `Markdown` runs it inside what a modifier returns, which is how a
+ * code span inside a bold run is rendered (design 288).
+ */
+export const splitByModifiers = (text: string, modifiers: readonly TextModifier[]): unknown[] => {
 	const matches = matchesIn(text, modifiers);
-	if (matches.length === 0) return text;
+	if (matches.length === 0) return [text];
 
 	const out: unknown[] = [];
 	let at = 0;
@@ -122,6 +122,18 @@ const labelOf = (context: unknown, raw: unknown, modifiers: readonly TextModifie
 		at = hit.end;
 	}
 	if (at < text.length) out.push(text.slice(at));
+	return out;
+};
+
+/** The label as children: gaps as text, and each match as whatever its modifier answers. */
+const labelOf = (context: unknown, raw: unknown, modifiers: readonly TextModifier[]): unknown => {
+	const label = resolve(context, raw);
+	if (label === null || label === undefined) return null;
+	if (typeof label !== 'string' && typeof label !== 'number') return label;
+
+	const text = String(label);
+	const out = splitByModifiers(text, modifiers);
+	if (out.length === 1 && out[0] === text) return text;
 	// A provider mounts its children in place and adds no node, so this changes nothing a page or
 	// a hydration sees.
 	return h(TextModifiers, { value: NONE }, ...out);

@@ -1104,6 +1104,76 @@ export are different namespaces, and both are the plain word for what they are.
 [`recipes/translated-site`](https://github.com/torrinworx/aweft/tree/main/recipes/translated-site)
 is a site written once and launched in three languages, hydrated in Chromium in each.
 
+## Markdown
+
+```tsx
+import { Markdown } from '@aweftjs/ui';
+
+<Markdown source={readme} />
+```
+
+| component | what it is | its own props | example |
+|---|---|---|---|
+| `Markdown` | a `<div>` on `markdown` holding one element per block of a markdown string | `source`, `modifiers`, `code`, `element`, `theme` | `markdown` |
+
+**What it renders** (design 288). A markdown string, or a cell holding one, as themed blocks
+whose text runs are `Typography`, for the subset a README uses:
+
+| written | rendered as |
+|---|---|
+| `#` to `######` | `Typography` `h1` to `h6` on `markdown_heading`, with an `id` in GitHub's scheme: lowercased, marks and punctuation dropped, spaces to hyphens, a repeat suffixed `-1` |
+| a paragraph | `Typography` `p1` on `markdown_paragraph`; lines joined by a space, two trailing spaces a line break |
+| a fenced block | a `<pre>` on `markdown_code` with the language on `data-language`, holding what `code` answers; focusable, because it scrolls sideways |
+| `-`, `*`, `+` or `1.` items | a `<ul>` or `<ol>` on `markdown_list` (`ordered` for the second, with `start` when the first number is not 1), each item an `<li>` on `markdown_item` |
+| `- [ ]` and `- [x]` | an item on `markdown_item_task` with a `Checkbox` that follows the source |
+| a table with a delimiter row | a `<table>` on `markdown_tabular` in the `table_scroll` box, with the `table_head`, `table_line`, `table_heading` and `table_cell` parts; `:--:` and `--:` align a column |
+| `>` lines | a `<blockquote>` on `markdown_quote`, one paragraph |
+| `---`, `***`, `___` | an `<hr>` on `markdown_rule` |
+
+Inline, a code span (one or two backticks, the double form holding a backtick) is `<code>` on
+`markdown_inline`; `**bold**` and `__bold__` are `<strong>` on `markdown_bold`; `*italic*` and
+`_italic_` are `<em>` on `markdown_italic`; `***both***` is the two nested; `[text](href)` is
+`<a>` on `markdown_link` with the `href` as written, unless its scheme is not `http`, `https`,
+`mailto` or `tel`, in which case the link is text. Each is a modifier in `TextModifiers`' shape,
+listed after `modifiers`, so an application's own patterns run inside markdown with nothing
+wired, inside a bold run included:
+
+```tsx
+<Markdown source={note} modifiers={[{ check: /@\w+/g, return: (who) => <Mention name={who} /> }]} />
+```
+
+With no `modifiers` prop the list is the render's `TextModifiers`; a cell is read when the
+component mounts, as `TextModifiers` reads one. An overlap goes to the match that started first,
+so a code span holding an asterisk is a code span and a bold run holding a code span is both,
+and emphasis of mixed length that opens inside another (`***a** b*`) is read outermost first
+rather than the way CommonMark reads it.
+
+**What is text.** A nested list (an indented item joins the item above it, as written), an
+image, a footnote, an HTML tag, an autolink, a reference link, a setext heading, an indented
+code block and a backslash escape each stay in the paragraph as the characters written. HTML is
+never markup: a paragraph is a text node and nothing here sets `innerHTML`, so an untrusted
+string renders as text.
+
+**The `code` hook** is `(text, language) => anything mountable` and is called once per fenced
+block; absent, the block holds a `<code>` with the text. Highlighting is the application's, and
+this package ships none.
+
+**A cell source re-renders every block when it changes**; there is no diff. A task item's box is
+disabled unless the source is a writable cell, and then a tick rewrites that item's `[ ]` or
+`[x]` in the source and sets the cell, so a document a page shares is what moved.
+
+**The theme** is the `markdown_*` entries above, every value a role or a size name, so both
+modes come from the one set and an application overrides an entry the way it overrides
+`button`. Every heading, paragraph, cell and item text is on the `text` family too, so
+`text_h2` and `text_p1` reach them as they reach any `Typography`.
+
+**What it never decides.** How code is highlighted. Where a link goes, or whether it opens
+elsewhere. What HTML means. The width of a column or a block. Whether the source is trusted:
+HTML in it is text, and a link whose scheme would run something is text, so an untrusted
+string renders without running anything. CommonMark conformance: the subset above is what is read,
+and the [`Markdown`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/catalogue.html)
+example in the catalogue shows every form of it in both modes.
+
 ## Display
 
 Six things a page shows and nobody operates (design 199). Each is one native element with a theme
@@ -1850,7 +1920,7 @@ their cells.
 
 **The parse cache grows with distinct sources.** A message parses once per source string and the
 parts are kept for the life of the process, so a token whose source is built at run time
-(`text(\`${word} items\`)`) parses and keeps one entry per distinct string. Write the message
+(``text(`${word} items`)``) parses and keeps one entry per distinct string. Write the message
 once and put the word in a hole.
 
 **A `Button` whose `label` cell starts empty throws in development.** The name check reads the
