@@ -11,9 +11,9 @@ export interface Match {
 	readonly name: string;
 	/** The `:name` and `*name` values, decoded. */
 	readonly params: Readonly<Record<string, string>>;
-	/** The segments the key took, joined with `/`. */
+	/** The segments the key took, joined with `/`. A `*name` took every segment left; a bare `*` took none. */
 	readonly taken: string;
-	/** The segments it did not take, joined with `/`. Design 123's business. */
+	/** The segments it did not take, joined with `/`: everything from a bare `*` on. Design 123's business. */
 	readonly tail: string;
 }
 
@@ -49,7 +49,8 @@ const split = (path: string): string[] => (path === '' ? [] : path.split('/'));
 /**
  * What a key matches on, with every parameter name taken out: literal segments as they are, and
  * `:` or `*` for the two kinds that take anything. Two keys with one signature match exactly the
- * same paths, so whichever loses is unreachable.
+ * same paths, so whichever loses is unreachable; a bare `*` and a `*name` are one signature,
+ * because one parks the very segments the other takes.
  */
 const signature = (key: string): string =>
 	split(key)
@@ -60,8 +61,9 @@ const signature = (key: string): string =>
  * Check the act keys once, where the mistake is cheap to name.
  *
  * Throws: an assert, loud in development and stripped in a release build, for a key that starts
- * with a slash, ends with one, has an empty segment, has a `:` or `*` with no name after it, has
- * more than one `*rest`, or has one anywhere but last; and for two keys that match the same paths.
+ * with a slash, ends with one, has an empty segment, has a `:` with no name after it, has more
+ * than one `*` segment (named or bare), or has one anywhere but last; and for two keys that match
+ * the same paths.
  */
 export const checkActKeys = (keys: readonly string[]): void => {
 	const seen = new Map<string, string>();
@@ -74,14 +76,14 @@ export const checkActKeys = (keys: readonly string[]): void => {
 		for (const piece of pieces) {
 			assert(piece !== '',
 				`the act key ${JSON.stringify(key)} has an empty segment, which no path can match; take the extra slash out and write it as ${JSON.stringify(pieces.filter((one) => one !== '').join('/'))}`);
-			assert(!((piece === ':') || (piece === '*')),
-				`the act key ${JSON.stringify(key)} has a ${JSON.stringify(piece)} with no name after it; name it, as ${JSON.stringify(`${piece}name`)}, because the name is how the act reads the value`);
+			assert(piece !== ':',
+				`the act key ${JSON.stringify(key)} has a ":" with no name after it; name it, as ":name", because the name is how the act reads the value`);
 		}
 		const rest = pieces.filter((piece) => piece.startsWith('*'));
 		assert(rest.length <= 1,
-			`the act key ${JSON.stringify(key)} has ${rest.length} *rest segments and at most one is allowed; keep the last one and drop the others`);
+			`the act key ${JSON.stringify(key)} has ${rest.length} * segments and at most one is allowed; keep the last one and drop the others`);
 		assert(rest.length === 0 || pieces[pieces.length - 1]!.startsWith('*'),
-			`the act key ${JSON.stringify(key)} has a *rest segment that is not last; move it to the end, because it takes every segment after it`);
+			`the act key ${JSON.stringify(key)} has a * segment that is not last; move it to the end, because everything after it is the rest`);
 
 		const shape = signature(key);
 		const first = seen.get(shape);
@@ -107,6 +109,12 @@ const attempt = (key: string, segments: readonly string[]): Candidate | null => 
 	let at = 0;
 
 	for (const piece of pattern) {
+		// A bare `*` takes nothing: it parks every segment from here as the tail, for the stage
+		// below, and the act above is not rebuilt when that tail moves (designs 122 and 279).
+		if (piece === '*') {
+			classes.push(2);
+			continue;
+		}
 		if (piece.startsWith('*')) {
 			classes.push(2);
 			params[piece.slice(1)] = segments.slice(at).map(decode).join('/');
@@ -151,12 +159,13 @@ const beats = (a: Candidate, b: Candidate): boolean => {
  *   path: the path to match, with or without its slashes, without a query or hash
  *
  * Returns: the match, or null when no key took the path. A key whose whole text is the path wins
- * outright; otherwise a literal segment beats `:name`, `:name` beats `*name`, and the longer
- * pattern breaks a tie.
+ * outright; otherwise a literal segment beats `:name`, `:name` beats `*name` and a bare `*`, and
+ * the longer pattern breaks a tie.
  *
  * Example:
  *   matchAct(['posts/:id', 'posts/new'], 'posts/new');  // name 'posts/new'
  *   matchAct(['posts/:id'], 'posts/3/edit');            // params { id: '3' }, tail 'edit'
+ *   matchAct(['*'], 'a/b');                             // params {}, taken '', tail 'a/b'
  */
 export const matchAct = (keys: readonly string[], path: string): Match | null => {
 	const clean = pathOf(path);
