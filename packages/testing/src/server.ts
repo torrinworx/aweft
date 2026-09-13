@@ -99,7 +99,9 @@ export const loadServer = async (
 
 	return {
 		server,
-		fetch: async (path, init = {}) => started().request(new Request(`${ORIGIN}${path}`, init), LOOPBACK),
+		// A path is on the harness's own origin; a full URL is taken as it is, which is how a suite
+		// says a request arrived over TLS.
+		fetch: async (path, init = {}) => started().request(new Request(/^https?:\/\//.test(path) ? path : `${ORIGIN}${path}`, init), LOOPBACK),
 		open: async ({ headers, url = '/', peer = LOOPBACK } = {}) => {
 			const request = new Request(`${ORIGIN}${url}`, headers === undefined ? {} : { headers });
 			const answer = await started().socket(request, peer);

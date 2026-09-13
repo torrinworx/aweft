@@ -20,6 +20,7 @@ type Manifest: interface Manifest { readonly name: string; readonly dependencies
 type ModuleUnderTest: interface ModuleUnderTest { readonly exports: ModuleExports; readonly imports?: Readonly<Record<string, unknown>>; readonly config?: Readonly<Record<string, unknown>>; readonly props?: Readonly<Record<string, unknown>>; }
 type ObservableJson: interface ObservableJson { readonly kind: ObservableKind; readonly slots: Readonly<Record<string, ValueJson>>; }
 type OpenOptions: interface OpenOptions { readonly headers?: Record<string, string> | undefined; readonly url?: string | undefined; readonly peer?: Peer | undefined; }
+type Opened: interface Opened { readonly socket: { readonly readyState: number; send(data: string | Uint8Array): void; close(): void; }; readonly link: Link; readonly asks: Requests; }
 type PackageInfo: interface PackageInfo { readonly tier: number | 'integrator'; readonly plane: Plane; readonly imports: readonly string[] | '*'; }
 type PairedSocket: interface PairedSocket extends SocketLike { peer: PairedSocket | undefined; readonly sent: (Uint8Array | string)[]; readonly thrown: unknown[]; fire(type: string, event: { data?: unknown; }): void; }
 type Plane: type Plane = 'client' | 'server' | 'isomorphic';
@@ -27,6 +28,10 @@ type PublishManifest: interface PublishManifest { readonly name: string; readonl
 type Recording: interface Recording { readonly document: DocumentLike & { readonly body: ElementLike; readonly head: ElementLike; }; readonly ops: string[]; }
 type RefJson: interface RefJson { readonly kind: ObservableKind; readonly key: string; }
 type RoomCheck: interface RoomCheck { readonly name: string; run(make: MakeRunner): Promise<void>; }
+type SecurityCheck: interface SecurityCheck { readonly name: string; readonly requirements: readonly string[]; run(start: StartTarget): Promise<void>; }
+type SecurityTarget: interface SecurityTarget { fetch(path: string, init?: RequestInit): Promise<Response>; open(options?: { readonly headers?: Record<string, string> | undefined; readonly url?: string | undefined; }): Promise<Opened>; readonly server: Server; stop(): Promise<void>; }
+type StartOptions: interface StartOptions { readonly sources: readonly Source[]; readonly gate: Gate | string; readonly handlers: { failed(name: string, error: unknown): void; }; }
+type StartTarget: type StartTarget = (options: StartOptions) => Promise<SecurityTarget>;
 type StoreDriver: interface StoreDriver { write(write: { doc: string; root: string; rootKind: string; rows: readonly { id: string; kind: string; edge?: { parent: string; slot: string; } | null; set: Record<string, unknown>; unset: readonly string[]; }[]; dropped: readonly string[]; body: Uint8Array; project?: Record<string, unknown>; }): Promise<number>; declare(declaration: Readonly<Record<string, readonly string[]>>): Promise<void>; find(lookup: { where: { field: string; op: string; value: unknown; }; sort?: { field: string; direction: 'asc' | 'desc'; }; limit?: number; after?: string; }): Promise<{ doc: string; fields: Record<string, unknown>; cursor: string; }[]>; scan(limit: number, after?: string): Promise<{ doc: string; fields: Record<string, unknown>; cursor: string; }[]>; create(doc: string, root: string, rootKind: string): Promise<boolean>; read(doc: string): Promise<{ root: string; rootKind: string; rows: unknown[]; } | null>; since(doc: string, seq: number): Promise<{ seq: number; body: Uint8Array; }[]>; head(doc: string): Promise<number>; truncate(doc: string, seq: number): Promise<void>; forget(doc: string, ids: readonly string[]): Promise<void>; remove(doc: string): Promise<void>; close(): Promise<void>; }
 type ThemeSource: interface ThemeSource { readonly path: string; readonly text: string; }
 type ThemeViolation: interface ThemeViolation { readonly path: string; readonly line: number; readonly where: string; readonly property: string; readonly literal: string; readonly fix: string; }
@@ -68,6 +73,7 @@ value recordingDocument: () => Recording
 value refFromJson: (r: RefJson) => Ref
 value refToJson: (ref: Ref) => RefJson
 value roomChecks: () => RoomCheck[]
+value securityChecks: (options: { readonly gate: string | Gate<unknown>; }) => SecurityCheck[]
 value seedFrom: (text: string) => number
 value settle: (rounds?: number) => Promise<void>
 value shuffle: <T>(items: readonly T[], seed: number) => T[]

@@ -60,3 +60,5 @@ export type { PairedSocket } from './sockets.ts';
 export { loadServer } from './server.ts';
 export type { Connected, LoadedServer, OpenOptions } from './server.ts';
 export { settle } from './settle.ts';
+export { securityChecks } from './security.ts';
+export type { Opened, SecurityCheck, SecurityTarget, StartOptions, StartTarget } from './security.ts';
