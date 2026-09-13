@@ -23,6 +23,8 @@ import { postgresDriver } from '../src/postgres.ts';
 import { createArray, createObject } from '@aweftjs/core';
 import { driverChecks, randomBelow, randomFrom } from '@aweftjs/testing';
 
+import { DECLARE, oracle } from './oracle.ts';
+
 type Doc = Record<string, unknown>;
 
 const freePort = (): Promise<number> => new Promise((resolve, reject) => {
@@ -561,3 +563,20 @@ test('a value that reads as SQL is a value, whether it is written, queried for o
 	await store.close(again);
 	await store.stop();
 });
+
+// The store's second reading, over this driver: two stores on one schema, as a process and
+// its restart would be. Fewer steps than the memory run, because each is a round trip.
+for (const seed of [1, 2, 20260913]) {
+	test(`[postgres] the store answers as the model says over seeded random operations, seed ${String(seed)}`, async () => {
+		const schema = `check_${schemas++}`;
+		await admin.query(`CREATE SCHEMA ${schema}`);
+		const stores: ReturnType<typeof createStore>[] = [];
+		const make = (): ReturnType<typeof createStore> => {
+			const store = createStore({ driver: postgresDriver(poolOn(schema)), declare: DECLARE });
+			stores.push(store);
+			return store;
+		};
+		await oracle({ store: make(), again: make }, seed, 60);
+		for (const store of stores) await store.stop();
+	});
+}

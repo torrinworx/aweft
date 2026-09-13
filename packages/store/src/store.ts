@@ -30,12 +30,16 @@ export interface Held {
  *
  * `root` is the live observable. Mutate it and the change is persisted; nothing else is
  * needed. `seq` is the sequence of the last commit written, which is what a resuming session
- * presents.
+ * presents. `droppedSlots` names the slots left out when the document was built from its
+ * rows, as `<id>.<slot>`: an alias to an observable nothing attaches cannot be rebuilt, so the
+ * slot is dropped and reported here rather than making the document unopenable (design 050).
+ * Empty when nothing was dropped, and the same list on every handle of one open document.
  */
 export interface Handle {
 	readonly doc: string;
 	readonly root: object;
 	readonly seq: number;
+	readonly droppedSlots: readonly string[];
 }
 
 interface State {
@@ -473,6 +477,7 @@ export const createStore = (
 		doc: state.doc,
 		root: state.root,
 		get seq(): number { return state.seq; },
+		droppedSlots: [...state.droppedAliases],
 	});
 
 	const stateOf = (handle: Handle): State => {
