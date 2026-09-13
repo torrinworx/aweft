@@ -462,6 +462,44 @@ test('a frame about a topic nothing is open under is answered with a fault, and 
 	a.close();
 });
 
+// A state answers an open that wanted one. Applied when this end did not ask, it would move the
+// document past `accept` from the other end, which is the one rule an end must not get around.
+test('a state this end did not ask for is refused with a fault, applies nothing, and ends the topic', async () => {
+	const here = createObject<Doc>({ n: 0, items: 'kept' });
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const faults: string[] = [];
+	a.share('board', here, {
+		accept: () => [{ code: 'read-only', message: 'this end writes, the other reads' }],
+		fault: (reason, message) => faults.push(`${reason}:${message}`),
+	});
+	const heard: Frame[] = [];
+	y.receive((frame) => heard.push(frame));
+	// The other end pairs holding a copy of its own, and wants nothing.
+	y.send({ kind: 'open', topic: 7, name: 'board', root: { id: idOf(here), kind: 'object' }, want: false });
+	await settle();
+	assert.equal(faults.length, 0, 'paired');
+
+	// Then it sends a state as though this end had asked: an empty one, which would wipe the document.
+	y.send({ kind: 'state', topic: 7 });
+	await settle();
+
+	assert.equal(here.n, 0, 'nothing was applied');
+	assert.equal(here.items, 'kept');
+	const fault = heard.find((frame) => frame.kind === 'fault');
+	assert.equal(fault?.kind === 'fault' && fault.reason, 'unwanted-state', 'the other end is told');
+	assert.equal(fault?.kind === 'fault' && fault.topic, 7, 'by the number it used');
+	assert.equal(faults.length, 1, 'and so is this end');
+	assert.ok(faults[0]!.startsWith('unwanted-state:'), faults[0]);
+
+	// A commit after the fault is about a topic that is no longer open.
+	y.send({ kind: 'commits', topic: 7, first: 1, commits: [{ deltas: [{ type: 'replace', id: idOf(here), ref: { kind: 'object', key: 'n' }, value: 5 }] }] });
+	await settle();
+	assert.equal(here.n, 0);
+	assert.equal(heard.filter((frame) => frame.kind === 'fault' && frame.reason === 'no-topic').length, 1, 'the topic ended');
+	a.close();
+});
+
 test('an end told its topic is not open there hears it as a fault', async () => {
 	const here = createObject<Doc>({ n: 0 });
 	const [x, y] = inProcess();
