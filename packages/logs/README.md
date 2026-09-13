@@ -56,7 +56,7 @@ them in the same visit.
 
 | kind | what it holds |
 |---|---|
-| `error`, `rejection` | an uncaught error or a rejected promise: message, and stack when there is one (the first thing to go under the server's byte cap) |
+| `error`, `rejection` | an uncaught error or a rejected promise: message, and stack when there is one (cut at 8000 characters on the page, and the first thing to go under the server's byte cap) |
 | `console` | a `console.error` or `console.warn` the page made: `level` and `message` |
 | `commit` | a shared document changed: the `topic`, the `paths` touched, the delta count, the bytes; never a value |
 | `refused`, `fault` | a share the server refused a write to, or a topic that faulted |
@@ -93,6 +93,11 @@ POST /api/logs
 `build` and `browser` are read once, from the first batch that carries them; `ended` stamps the
 visit's end. An entry is any flat object with a `kind`; `at` defaults to now. There is no read
 route: reading a visit is the readers below, in a process you trust.
+
+The client sends one batch at a time, each at most `batch` entries (500) and under 48000 bytes,
+because a keepalive request and a beacon may carry 64 KiB at most in flight and the browser
+refuses the send over it. If you lower `logs/Visits`'s `batch`, pass the same `batch` to
+`createLog`, or the route answers 429 to a full batch and the page drops it.
 
 ## What is never recorded
 
@@ -138,7 +143,7 @@ generous by default:
 export const config = {
 	keep: 30,            // days a document is kept; the sweep runs on start and hourly
 	build: process.env.BUILD_SHA ?? null,
-	batch: 500,          // entries a batch may carry
+	batch: 500,          // entries a batch may carry; tell createLog the same when you lower it
 	entry: 4096,         // bytes an entry may take; over it the stack, args, result, paths and reasons go first, then the message is cut
 	perVisit: 10_000,    // entries a visit may hold; the last is capped and the rest are dropped
 	batchesPerMinute: 60,

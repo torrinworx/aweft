@@ -66,6 +66,8 @@ export interface LogOptions {
 	readonly fetch?: Fetcher | undefined;
 	/** How often a batch goes, in milliseconds. 4000 by default. */
 	readonly flushMs?: number | undefined;
+	/** Entries a batch may carry, 500 by default. At or under `logs/Visits`'s `batch`, or it is refused. */
+	readonly batch?: number | undefined;
 	/** The window to listen on. The global one by default. */
 	readonly window?: WindowLike | undefined;
 }
@@ -146,6 +148,7 @@ export const createLog = (client: Client, options: LogOptions = {}): Log => {
 	const origin = options.origin ?? win.location?.origin ?? '';
 	const send: Fetcher | undefined = options.fetch ?? (globalThis as { fetch?: Fetcher }).fetch;
 	const flushMs = options.flushMs ?? 4000;
+	const perBatch = options.batch ?? 500;
 	const visit = idToText(createId());
 	const url = `${origin}/api/logs`;
 
@@ -200,10 +203,22 @@ export const createLog = (client: Client, options: LogOptions = {}): Log => {
 		};
 	};
 
-	/** The next batch: what is queued, and once, what is known per visit. */
+	// A keepalive request and a beacon may carry 64 KiB at most across what is in flight; over
+	// it the browser refuses the send and the batch is gone. So a batch is cut well under that,
+	// and one goes at a time.
+	const bytesPerBatch = 48_000;
+
+	/** The next batch: what is queued, up to the count and the bytes, and once, what is known per visit. */
 	const batchOf = (ended: boolean): Batch | undefined => {
 		if (queue.length === 0 && !ended) return undefined;
-		const entries = queue.splice(0, 500);
+		let take = 0;
+		let bytes = 0;
+		while (take < queue.length && take < perBatch) {
+			bytes += JSON.stringify(queue[take]).length + 1;
+			if (take > 0 && bytes > bytesPerBatch) break;
+			take += 1;
+		}
+		const entries = queue.splice(0, take);
 		const first = !sentStart;
 		sentStart = true;
 		const facts = first ? browser() : undefined;
@@ -215,26 +230,32 @@ export const createLog = (client: Client, options: LogOptions = {}): Log => {
 		};
 	};
 
-	const flush = async (): Promise<void> => {
-		const batch = batchOf(false);
-		if (batch === undefined || send === undefined) return;
-		try {
-			await send(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(batch), keepalive: true, credentials: 'same-origin' });
-		} catch {
-			// A batch that could not go is dropped: keeping it would make a page that cannot
-			// reach the server hold everything it did until it can.
+	let sending: Promise<void> | undefined;
+	const flush = (): Promise<void> => {
+		if (sending === undefined) {
+			sending = (async () => {
+				for (let batch = batchOf(false); batch !== undefined && send !== undefined; batch = batchOf(false)) {
+					try {
+						await send(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(batch), keepalive: true, credentials: 'same-origin' });
+					} catch {
+						// A batch that could not go is dropped: keeping it would make a page that
+						// cannot reach the server hold everything it did until it can.
+					}
+				}
+			})().finally(() => { sending = undefined; });
 		}
-		if (queue.length > 0) await flush();
+		return sending;
 	};
 
-	/** The leaving page's last batch, by the one delivery a browser makes for it. */
+	/** The leaving page's last batches, by the one delivery a browser makes for it. */
 	const beacon = guarded((): void => {
-		const batch = batchOf(true);
-		if (batch === undefined) return;
-		const body = JSON.stringify(batch);
 		const nav = win.navigator;
-		if (nav?.sendBeacon === undefined) { void send?.(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true, credentials: 'same-origin' }); return; }
-		nav.sendBeacon(url, win.Blob === undefined ? body : new win.Blob([body], { type: 'application/json' }));
+		for (let batch = batchOf(true); batch !== undefined; batch = batchOf(false)) {
+			const body = JSON.stringify(batch);
+			if (nav?.sendBeacon === undefined) { void send?.(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true, credentials: 'same-origin' }); continue; }
+			// A refused beacon is the browser's in-flight limit; what is left is gone with the page.
+			if (!nav.sendBeacon(url, win.Blob === undefined ? body : new win.Blob([body], { type: 'application/json' }))) return;
+		}
 	});
 
 	// --- the sources -----------------------------------------------------------------------------
@@ -246,14 +267,18 @@ export const createLog = (client: Client, options: LogOptions = {}): Log => {
 		offs.push(() => { target.removeEventListener(type, fn, options); });
 	};
 
+	// Every frame worth reading fits; past this a stack is a loop, and the server's own budget cuts
+	// it further.
+	const stackOf = (held: { stack?: unknown } | null | undefined): string | undefined =>
+		typeof held?.stack === 'string' ? held.stack.slice(0, 8000) : undefined;
+
 	listen(win, 'error', (event: { message?: unknown; filename?: unknown; lineno?: unknown; error?: unknown }) => {
-		const thrown = event.error as { stack?: unknown } | undefined;
-		record({ kind: 'error', message: trimmed(event.message, 2000) ?? asText(event.error), stack: typeof thrown?.stack === 'string' ? thrown.stack : undefined, file: event.filename, line: event.lineno });
+		record({ kind: 'error', message: trimmed(event.message, 2000) ?? asText(event.error), stack: stackOf(event.error as { stack?: unknown } | undefined), file: event.filename, line: event.lineno });
 	});
 	listen(win, 'unhandledrejection', (event: { reason?: unknown }) => {
 		const reason = event.reason as { message?: unknown; stack?: unknown } | null;
 		const message = reason !== null && typeof reason === 'object' && typeof reason.message === 'string' ? reason.message : asText(event.reason);
-		record({ kind: 'rejection', message: message.slice(0, 2000), stack: typeof reason?.stack === 'string' ? reason.stack : undefined });
+		record({ kind: 'rejection', message: message.slice(0, 2000), stack: stackOf(reason) });
 	});
 	listen(win, 'pagehide', () => { beacon(); });
 	listen(win.document, 'click', (event: { target?: unknown }) => { record({ kind: 'input', type: 'click', ...describe(event.target) }); }, true);

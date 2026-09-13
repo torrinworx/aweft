@@ -153,16 +153,60 @@ test('a batch goes over fetch, never over the socket, and carries the browser fa
 	log.stop();
 });
 
-test('pagehide sends the last batch by beacon, marked ended', () => {
+test('a batch is cut at the count asked for, and under the bytes a keepalive send may carry', async () => {
+	const { win } = fakeWindow();
+	const { client } = fakeClient();
+	const bodies: string[] = [];
+	const log = createLog(client, { window: win, batch: 3, fetch: async (_url, init) => { bodies.push(init.body); return new Response(); } });
+	for (let i = 0; i < 7; i += 1) log.write({ kind: 'note', i });   // and the status at start makes eight
+	await log.flush();
+	assert.deepEqual(bodies.map((body) => (JSON.parse(body) as Batch).entries.length), [3, 3, 2], 'the count is the option, not 500');
+
+	// Twenty errors with 4 KB stacks are 80 KB together, over what a keepalive request may carry
+	// (64 KiB); they go as several sends, each under it, and none is lost.
+	bodies.length = 0;
+	const heavy = createLog(client, { window: win, fetch: async (_url, init) => { bodies.push(init.body); return new Response(); } });
+	for (let i = 0; i < 20; i += 1) heavy.write({ kind: 'error', message: 'boom', stack: 'x'.repeat(4000) });
+	await heavy.flush();
+	assert.ok(bodies.length > 1, 'more than one send');
+	assert.ok(bodies.every((body) => body.length < 64 * 1024), `every send is under 64 KiB: ${bodies.map((b) => b.length).join(', ')}`);
+	assert.equal(bodies.reduce((n, body) => n + (JSON.parse(body) as Batch).entries.filter((e) => e.kind === 'error').length, 0), 20, 'every error went');
+	log.stop();
+	heavy.stop();
+});
+
+test('one send is in flight at a time, so the tick and a flush do not send over each other', async () => {
+	const { win } = fakeWindow();
+	const { client } = fakeClient();
+	let inFlight = 0;
+	let most = 0;
+	const log = createLog(client, {
+		window: win, batch: 1, flushMs: 1,
+		fetch: async () => { inFlight += 1; most = Math.max(most, inFlight); await new Promise((done) => setTimeout(done, 5)); inFlight -= 1; return new Response(); },
+	});
+	for (let i = 0; i < 4; i += 1) log.write({ kind: 'note', i });
+	const first = log.flush();
+	const second = log.flush();
+	await new Promise((done) => setTimeout(done, 8));   // a tick fires while the sends are in flight
+	await Promise.all([first, second]);
+	await log.flush();
+	assert.equal(most, 1);
+	log.stop();
+});
+
+test('pagehide sends the last batch by beacon, marked ended, and what is over one batch as more beacons', () => {
 	const { win, fire, beacons } = fakeWindow();
 	const { client } = fakeClient();
-	const log = createLog(client, { window: win, fetch: async () => new Response() });
+	const log = createLog(client, { window: win, batch: 2, fetch: async () => new Response() });
 	log.write({ kind: 'note' });
+	log.write({ kind: 'note' });
+	log.write({ kind: 'note' });   // and the status at start makes four
 	fire('pagehide', {});
-	assert.equal(beacons.length, 1);
+	assert.equal(beacons.length, 2);
 	const batch = JSON.parse(beacons[0]!.body) as Batch;
 	assert.equal(batch.ended, true);
 	assert.equal(batch.visit, log.visit);
+	assert.equal((JSON.parse(beacons[1]!.body) as Batch).entries.length, 2);
 	log.stop();
 });
 

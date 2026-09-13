@@ -51,13 +51,17 @@ password or hidden field. A key is named when it is two or more letters and digi
 `ArrowLeft`, `F5`); whatever a layout produces for a character, one code point or a base letter
 with its combining marks, is not. Browser facts once at start: the UA string as the browser
 gives it, `userAgentData` brands and platform where offered, viewport, screen, pixel ratio,
-colour scheme, reduced motion, language, touch. Batches go by `fetch` with `keepalive` every `flushMs` (4000)
-and by `sendBeacon` on `pagehide`; the visit id is minted with the stack's id source and held in
-memory only, so a reload is a new visit. It never throws into the page, and it never depends on
-the socket it records. `visit` is the id, `flush()` sends what is queued now, and `each(fn)` taps
-the stream for another consumer on the page. Options: `origin` (the page's own by default),
-`build`, `router`, `fetch`, `flushMs`, and `window` (the global one by default, a seam a test
-hands its own).
+colour scheme, reduced motion, language, touch. Batches go by `fetch` with `keepalive` every
+`flushMs` (4000) and by `sendBeacon` on `pagehide`, one send in flight at a time; a batch
+carries at most `batch` entries (500) and stays under 48000 bytes, because a keepalive request
+and a beacon may carry 64 KiB at most across what is in flight and the browser refuses the send
+over it. A stack is cut at 8000 characters on the page. The visit id is minted with the stack's
+id source and held in memory only, so a reload is a new visit. It never throws into the page,
+and it never depends on the socket it records. `visit` is the id, `flush()` sends what is queued
+now, and `each(fn)` taps the stream for another consumer on the page. Options: `origin` (the
+page's own by default), `build`, `router`, `fetch`, `flushMs`, `batch` (at or under
+`logs/Visits`'s, or the route refuses it), and `window` (the global one by default, a seam a
+test hands its own).
 
 **What is stored.** `visit:<id>`: `kind`, `user`, `build`, `browser`, `startedAt`, `endedAt`,
 `errors`, `entries`. `process:<id>`: `kind`, `build`, `startedAt`, `errors`, `entries`. An
@@ -144,8 +148,9 @@ anonymous sockets under the auth gate as two visits), `observe.test.ts` (every e
 written to the bound visit or the process document, `logs: true` read off the instance, a body
 never written, a binary result measured as bytes), `client.test.ts` (each source recorded through a fake window, console put back,
 a `_secret` commit recorded as shape with the path absent, a printable key absent, a key of a base letter
-and combining marks absent, a password field's key absent, the socket never touched, `sendBeacon` on `pagehide`, a throwing sink
-swallowed), `readers.test.ts` (each reader over a memory store), `views.test.ts` (the SQL views
+and combining marks absent, a password field's key absent, the socket never touched, a batch
+cut at the count and under the bytes a keepalive send may carry, one send in flight at a time,
+`sendBeacon` on `pagehide` for every batch left, a throwing sink swallowed), `readers.test.ts` (each reader over a memory store), `views.test.ts` (the SQL views
 over a throwaway database, skipped without one), `surface.test.ts`. `recipes/logs` drives a page in
 Chromium through the full-stack shape and reads the visit back with the readers.
 
