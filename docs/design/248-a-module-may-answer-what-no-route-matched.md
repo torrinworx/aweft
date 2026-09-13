@@ -1,5 +1,8 @@
 # 248: A module may answer what no route matched
 
+Amended by design 263: load order breaks ties by the order the sources are listed, so "its source
+is listed first" below is a lever the application holds.
+
 Amends design 072.
 
 ## Decision

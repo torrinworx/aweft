@@ -7,16 +7,33 @@ import { type Definition, order, resolve } from '../src/graph.ts';
 import { isPlainObject, merge } from '../src/merge.ts';
 import type { Candidate, ModuleExports } from '../src/contract.ts';
 
-const def = (name: string, deps: string[]): Definition =>
-	({ name, deps, factory: () => ({}), config: {}, extensions: {} });
+const def = (name: string, deps: string[], rank = 0): Definition =>
+	({ name, deps, factory: () => ({}), config: {}, extensions: {}, rank });
 
 const candidate = (name: string, exports: ModuleExports): Candidate => ({ name, exports: async () => exports });
 
 test('order puts every module after its dependencies and is the same whatever the insertion order', () => {
-	const a = new Map([['top', def('top', ['mid'])], ['mid', def('mid', ['base'])], ['base', def('base', [])]]);
+	const a = new Map([['top', def('top', ['mid'], 0)], ['mid', def('mid', ['base'], 1)], ['base', def('base', [], 2)]]);
 	const b = new Map([...a.entries()].reverse());
 	assert.deepEqual(order(a), ['base', 'mid', 'top']);
 	assert.deepEqual(order(b), ['base', 'mid', 'top']);
+});
+
+test('order breaks ties by rank, the listing order, and not by name', () => {
+	const listed = new Map([['zeta', def('zeta', [], 0)], ['alpha', def('alpha', [], 1)], ['mid', def('mid', [], 2)]]);
+	assert.deepEqual(order(listed), ['zeta', 'alpha', 'mid']);
+	// A dependency still comes first, wherever it was listed.
+	const pulled = new Map([['zeta', def('zeta', ['mid'], 0)], ['alpha', def('alpha', [], 1)], ['mid', def('mid', [], 2)]]);
+	assert.deepEqual(order(pulled), ['mid', 'zeta', 'alpha']);
+});
+
+test('resolve ranks a module by the candidate that implements it, not by one that only configures it', async () => {
+	const definition = await resolve('m', [
+		{ candidate: candidate('m', { config: { a: 1 } }), rank: 0 },
+		{ candidate: candidate('m', { default: () => ({}) }), rank: 7 },
+	]);
+	assert.equal(definition.rank, 7);
+	assert.deepEqual(definition.config, { a: 1 });
 });
 
 test('order treats a dependency outside the set as already satisfied', () => {

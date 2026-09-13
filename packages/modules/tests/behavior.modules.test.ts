@@ -28,15 +28,31 @@ test('requirement: a diamond instantiates the shared dependency once and every p
 	assert.equal(l, r);
 });
 
-test('requirement: the load order is deterministic for the same set of definitions, whatever order the sources listed them', async () => {
+test('requirement: the load order is dependency order, and otherwise the order the sources listed the modules', async () => {
 	const defs = {
 		c: impl(['a'], () => ({})), a: impl([], () => ({})), b: impl(['a'], () => ({})), d: impl(['b', 'c'], () => ({})),
 	};
 	const forward = createLoader({ sources: [fromBundle(defs)] });
 	const backward = createLoader({ sources: [fromBundle(Object.fromEntries(Object.entries(defs).reverse()))] });
-	await forward.load(['d']);
-	await backward.load(['d']);
-	assert.deepEqual(forward.loaded(), backward.loaded());
+	await forward.load(['a', 'b', 'c', 'd']);
+	await backward.load(['a', 'b', 'c', 'd']);
+	// The same sources in the same order give the same order, every time.
+	assert.deepEqual(forward.loaded(), ['a', 'c', 'b', 'd']);
+	assert.deepEqual(backward.loaded(), ['a', 'b', 'c', 'd']);
+	// Nothing about a name decides it: `zeta` listed first loads first.
+	const named = createLoader({ sources: [fromBundle({ zeta: impl([], () => ({})), alpha: impl([], () => ({})) })] });
+	await named.load(['alpha', 'zeta']);
+	assert.deepEqual(named.loaded(), ['zeta', 'alpha']);
+});
+
+test('requirement: across sources, a module loads in the place of the source that implements it, not of one that only configures it', async () => {
+	const own = fromBundle({ 'static/Files': { config: { dir: 'x' } }, 'app/Board': impl([], () => ({})) });
+	const uploads = fromBundle({ 'uploads/Serve': impl([], () => ({})) });
+	const statics = fromBundle({ 'static/Files': impl([], ({ config }) => config) });
+	const loader = createLoader({ sources: [own, uploads, statics] });
+	await loader.load(['static/Files', 'app/Board', 'uploads/Serve']);
+	assert.deepEqual(loader.loaded(), ['app/Board', 'uploads/Serve', 'static/Files']);
+	assert.deepEqual(loader.get('static/Files'), { dir: 'x' });
 });
 
 test('requirement: a module loaded by name and again as somebody\'s dependency is the same module', async () => {

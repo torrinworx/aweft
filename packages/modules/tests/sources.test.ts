@@ -46,6 +46,15 @@ test('a document lists the entries that carry a source, keyed by module name', a
 	assert.deepEqual(await names(fromDocument(doc)), ['plugin/A', 'plugin/B']);
 });
 
+test('a document lists sorted, whatever order its keys were written in, because a listing is a load order (design 263)', async () => {
+	const doc = createObject<Record<string, unknown>>({
+		'plugin/Zeta': createObject({ source: 'export default () => ({})' }),
+		'plugin/Mid': createObject({ source: 'export default () => ({})' }),
+		'plugin/Alpha': createObject({ source: 'export default () => ({})' }),
+	});
+	assert.deepEqual(await names(fromDocument(doc)), ['plugin/Alpha', 'plugin/Mid', 'plugin/Zeta']);
+});
+
 test('a document module compiles through the default compile and runs with its dependencies', async () => {
 	const doc = createObject<Record<string, unknown>>({
 		'p/Base': createObject({ source: 'export default () => ({ v: 3 })' }),

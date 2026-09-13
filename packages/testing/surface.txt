@@ -1,15 +1,18 @@
+type AdapterCheck: interface AdapterCheck { readonly name: string; run(make: MakeAdapter): Promise<void>; }
 type Applier: type Applier = (initial: DocumentJson, commits: readonly Commit[]) => DocumentJson;
 type CommitJson: interface CommitJson { readonly bytes: string; readonly deltas: readonly DeltaJson[]; readonly tag?: string; }
 type Connected: interface Connected { readonly socket: PairedSocket; readonly link: Link; readonly asks: Requests; readonly request: Request; }
 type DeltaJson: interface DeltaJson { readonly type: DeltaType; readonly id: string; readonly ref: RefJson; readonly value?: ValueJson; }
 type DocumentJson: interface DocumentJson { readonly root: string; readonly observables: Readonly<Record<string, ObservableJson>>; }
 type DriverCheck: interface DriverCheck { readonly name: string; run(make: MakeDriver): Promise<void>; }
+type FileAdapter: interface FileAdapter { readonly name: string; put(key: string, stream: ReadableStream<Uint8Array>, options: { readonly type: string; readonly size: number; }): Promise<void>; open(key: string): Promise<ReadableStream<Uint8Array> | undefined>; head(key: string): Promise<{ readonly size: number; } | undefined>; remove(key: string): Promise<void>; }
 type Fixture: interface Fixture { readonly name: string; readonly description: string; readonly initial: DocumentJson; readonly commits: readonly CommitJson[]; readonly final: DocumentJson; }
 type InvalidFixture: interface InvalidFixture { readonly name: string; readonly description: string; readonly stage: 'decode' | 'apply'; readonly reason: string; readonly bytes: string; readonly initial?: DocumentJson; }
 type ListenerCheck: interface ListenerCheck { readonly name: string; run(make: MakeListener): Promise<void>; }
 type LoadedModule: interface LoadedModule { readonly instance: unknown; stop(): Promise<void>; }
 type LoadedServer: interface LoadedServer { readonly server: Server; fetch(path: string, init?: RequestInit): Promise<Response>; open(options?: OpenOptions): Promise<Connected>; stop(): Promise<void>; }
 type MadeListener: interface MadeListener { readonly listener: Listener; url(): string; }
+type MakeAdapter: type MakeAdapter = () => Promise<FileAdapter> | FileAdapter;
 type MakeDriver: type MakeDriver = () => Promise<StoreDriver> | StoreDriver;
 type MakeListener: type MakeListener = () => Promise<MadeListener> | MadeListener;
 type MakeRunner: type MakeRunner = () => Runner;
@@ -32,6 +35,7 @@ type ValueJson: type ValueJson = null | boolean | number | string | { readonly b
 type Violation: interface Violation { readonly from: string; readonly to: string; readonly rule: 'upward-tier' | 'cross-plane' | 'unknown-package' | 'not-allowed'; readonly detail: string; }
 type WordSource: interface WordSource { readonly path: string; readonly text: string; }
 type WordViolation: interface WordViolation { readonly path: string; readonly line: number; readonly word: string; readonly fix: string; readonly text: string; }
+value adapterChecks: () => AdapterCheck[]
 value applyCommit: (doc: DocumentJson, commit: Commit) => DocumentJson
 value aweftPackageOf: (specifier: string) => string | undefined
 value canonicalJson: (value: unknown) => string

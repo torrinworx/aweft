@@ -89,6 +89,7 @@ aweft/
     static/                the static battery: a directory of files served for what no route matched
     health/                the health battery: one route that says the process is up and right
     logs/                  the logs battery: what a page and the server did, per visit, in the store
+    uploads/               the uploads battery: a file kept in a directory or a bucket, and served at /files/<id>
     jobs/                  a scheduler over an array the application hands in
     ssg/                   static generation
     build/                 transforms, in two modes
@@ -128,6 +129,7 @@ version in lockstep.
 | `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom |
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
 | `logs` | What a page and the server did, per visit, in the application's store: a client half that records the page, three server modules, and readers any process imports | Who may read a visit; whether to record; retention beyond its defaults; any URL but its one route; a typed value, a private-slot value, an IP |
+| `uploads` | A file from a page or a module: the bytes in a directory or an S3-compatible bucket through an adapter, the record in the store, served at `/files/<id>` with the type from the record; a client half that posts with progress; readers any process imports | Who may upload beyond the gate and `accept`; who may read beyond `public` and `allow`; deletion over the wire; expiry; what a file means (no index, resize, transcode); a storage setting from the environment; an IP |
 | `debug` | Reading a running document or commit back as text | Nothing. It may know everything; no runtime package may know it |
 
 ---
@@ -298,7 +300,7 @@ onboarding rule.
 | Future package | Tier | Why |
 |---|---|---|
 | `auth` | integrator | Sessions and identity are state, but a vertical slice crosses both planes |
-| `files` | split | A `store` driver plus a `ui` component. Two packages, because of the plane rule |
+| `files` | built as `uploads` | An integrator like the other batteries (design 262): the `ui` half is `FileDrop`, the storage half is an adapter behind the keeper, not a `store` driver |
 | `agent` | above `schema` | A language model writes state, and `schema` is what keeps the document well formed while it does |
 | `crdt` | data plane, beside `sync` | An alternative merge strategy behind the same commit interface |
 | `native` | client plane, beside `dom` | A different render target, parallel to the DOM binding |
@@ -335,6 +337,7 @@ indexed by the job rather than the package, are not in this table.
 | static | a generated site is served by the stack's own server in one process: a deep link hydrates in place, an unknown URL is 404 with the fallback page, the same URL under the shell setting is 200 and mounts live, and HEAD, the ETag and a climbing path answer as the rule says |
 | health | a deploy's verification: the endpoint polled until the shipped build is the one answering, then the two states a poll must not mistake for health, a store that stopped answering and a check that threw |
 | logs | a page recorded end to end in a browser and the visit read back: a page error, a rejection, a console error, a failed call on both sides, a commit's shape with a private slot absent, a typed character never stored, a non-character key kept, a refused write, sign-in mid-visit, and the browser facts |
+| uploads | a page under the gate uploads a picture from a drop zone with progress and it paints from `/files/<id>` with the type, the tag, `immutable`, `nosniff` and `sandbox`; an anonymous post is 403 before its body is read; a wrong type, wrong bytes, an oversized file and the application's own `accept` each refuse with their status and reason on the page; a module makes a file of its own; the readers list them; `remove` takes bytes and record; the static battery behind it answers unknown URLs and never a file |
 | build | the transforms build a real page; assert stripping is verified in the output |
 | testing | consumed by every other package's suite; its recipe is everyone else's |
 | debug | a bug found in a document the reader did not write, using only what the package prints |
@@ -418,8 +421,8 @@ the sandbox package's; the wall around the room is the operator's.
 ## Default modules, the batteries
 
 A full stack application should not start from nothing. The stack ships default module areas:
-`auth`, `email`, `files`, `geo`, `health`, `moderation`, `notifications`, `posts`, `state`,
-`static`, `uploads`, `users`.
+`auth`, `email`, `geo`, `health`, `logs`, `moderation`, `notifications`, `posts`, `state`,
+`static`, `uploads`, `users`. (`files` and `uploads` were one area, and are `uploads`.)
 
 The loader gives an application's own directory precedence over the library's, so an
 application overrides a default module by writing one with the same name, configures one
@@ -430,7 +433,7 @@ crosses the plane boundary, so these are integrators, not members of either plan
 
 ```
 @aweftjs/auth        server modules + client views + schema
-@aweftjs/files       upload and serve + components + a storage driver
+@aweftjs/uploads     upload and serve + a client half + storage adapters (built)
 @aweftjs/email       providers and templates
 @aweftjs/users       profiles and validation
 @aweftjs/posts       the generic content module
@@ -466,6 +469,17 @@ same visit. Batches go over HTTP to `logs/Record`, `logs/Visits` keeps the docum
 and the readers (`visit`, `visits`, `errors`, `prune`) plus a Metabase view read them back. It
 records no typed value, no IP, and no private-slot value, and it decides nothing about who may
 read a visit.
+
+The uploads battery is built (design 262). `@aweftjs/uploads` is a source of three server
+modules, two adapters and a client half. `uploads/Receive` answers `POST /api/uploads` with one
+file as the body, checked against the configured types and caps and the first bytes, streamed
+into storage through an adapter (`directory`, or `s3` signed with no dependency), then handed to
+the application's `accept` before the record is written; `uploads/Serve` answers `GET
+/files/<id>` from the record with a strong tag, `immutable`, `nosniff` and `sandbox`, behind
+`public` and an `allow` rule; `uploads/Files` is the keeper a module names in `deps` for `put`,
+`open` and `remove`. It is listed before `static` in `sources`, because the load order follows
+the listing (design 263) and `static/Files` answers everything it is asked. No delete route, no
+expiry, no IP: those stay with the application.
 
 They split per area rather than shipping as one package because an application that wants
 auth and not posts should not carry posts, and an agent reading `@aweftjs/auth` should find

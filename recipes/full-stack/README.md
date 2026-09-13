@@ -14,6 +14,9 @@ page/entry.tsx  ──▶  vite dev server  ──▶  backend/main.ts
                                            /ws   the socket, ws: true
 ```
 
+An application that loads the uploads battery adds `/files` beside `/api`, the path its files
+are served at (`recipes/uploads/page/vite.config.ts`).
+
 ## Run it by hand
 
 Two terminals, and the backend goes first.

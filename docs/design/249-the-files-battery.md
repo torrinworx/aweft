@@ -1,5 +1,8 @@
 # 249: The files battery
 
+Amended by design 262: this module never declines a request, so a module that answers a path
+under the same fallthrough, such as `uploads/Serve`, is listed before it in `sources`.
+
 ## Decision
 
 `@aweftjs/static` is a battery: a source of one server module, `static/Files`, that serves

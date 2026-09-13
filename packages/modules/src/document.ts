@@ -16,9 +16,13 @@ export const sourceOf = (document: object, name: string): string | undefined => 
 	return typeof source === 'string' ? source : undefined;
 };
 
-/** Every entry name that carries a source right now. */
+/**
+ * Every entry name that carries a source right now. Sorted, because two replicas of one
+ * document can hold its keys in two orders and a source's listing is its load order (design
+ * 263): a document lists the same way everywhere.
+ */
 export const entryNames = (document: object): string[] =>
-	Object.keys(document).filter((name) => sourceOf(document, name) !== undefined);
+	Object.keys(document).filter((name) => sourceOf(document, name) !== undefined).sort();
 
 /**
  * A source over a document.
