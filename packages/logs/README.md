@@ -63,7 +63,7 @@ them in the same visit.
 | `ask` | a call the page made: `name`, `ms`, `ok`, and the reason when it failed; never the args or the result |
 | `status` | the connection went connecting, open or closed |
 | `url` | the router's URL changed (when a router is handed in) |
-| `input` | a `click`, `keydown` or `submit`: a target descriptor, and for a key, the key when it is not a character |
+| `input` | a `click`, `keydown` or `submit`: a target descriptor, and for a key, the key when it is a named one (`Enter`, `ArrowLeft`), never what a layout produces for a character |
 
 **On the server**, by `logs/Observe` through the `observe` hook (design 260): a `call`
 (`name`, `ms`, `ok`, and the reason when it failed), a `request` (`method`, `path`, `status`,

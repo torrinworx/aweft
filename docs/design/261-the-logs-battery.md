@@ -47,9 +47,11 @@ every document a `share` hands back, through `skip(Infinity)` (design 259), as i
 client's `status`; the router's URL when handed a router; `click`, `keydown` and `submit` on
 the document as events with a target descriptor (tag, role, accessible label, theme segments
 from the class tokens), never a value, a key only when it is not printable, and nothing inside a
-password or hidden field. Browser facts once at start: the UA string as the browser gives it,
-`userAgentData` brands and platform where offered, viewport, screen, pixel ratio, colour scheme,
-reduced motion, language, touch. Batches go by `fetch` with `keepalive` every `flushMs` (4000)
+password or hidden field. A key is named when it is two or more letters and digits (`Enter`,
+`ArrowLeft`, `F5`); whatever a layout produces for a character, one code point or a base letter
+with its combining marks, is not. Browser facts once at start: the UA string as the browser
+gives it, `userAgentData` brands and platform where offered, viewport, screen, pixel ratio,
+colour scheme, reduced motion, language, touch. Batches go by `fetch` with `keepalive` every `flushMs` (4000)
 and by `sendBeacon` on `pagehide`; the visit id is minted with the stack's id source and held in
 memory only, so a reload is a new visit. It never throws into the page, and it never depends on
 the socket it records. `visit` is the id, `flush()` sends what is queued now, and `each(fn)` taps
@@ -141,8 +143,8 @@ timer over its bound),
 anonymous sockets under the auth gate as two visits), `observe.test.ts` (every event kind
 written to the bound visit or the process document, `logs: true` read off the instance, a body
 never written, a binary result measured as bytes), `client.test.ts` (each source recorded through a fake window, console put back,
-a `_secret` commit recorded as shape with the path absent, a printable key absent, a password
-field's key absent, the socket never touched, `sendBeacon` on `pagehide`, a throwing sink
+a `_secret` commit recorded as shape with the path absent, a printable key absent, a key of a base letter
+and combining marks absent, a password field's key absent, the socket never touched, `sendBeacon` on `pagehide`, a throwing sink
 swallowed), `readers.test.ts` (each reader over a memory store), `views.test.ts` (the SQL views
 over a throwaway database, skipped without one), `surface.test.ts`. `recipes/logs` drives a page in
 Chromium through the full-stack shape and reads the visit back with the readers.

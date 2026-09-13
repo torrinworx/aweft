@@ -87,11 +87,11 @@ export interface Log {
 }
 
 /**
- * The keys a `keydown` may record: the named ones, never a typed character. A character is one
- * code point, so `[...key]` counts code points rather than UTF-16 units, and an emoji or an
- * astral letter (two units, one code point) is a character too and is never recorded.
+ * The keys a `keydown` may record: the named ones (`Enter`, `ArrowLeft`, `F5`), never a typed
+ * character. A named key is letters and digits, two or more of them; what a layout produces for
+ * a character is anything else, one code point or a base letter with its combining marks.
  */
-const recordable = (key: unknown): key is string => typeof key === 'string' && [...key].length > 1;
+const recordable = (key: unknown): key is string => typeof key === 'string' && /^[A-Za-z0-9]{2,}$/.test(key);
 
 const trimmed = (text: unknown, max = 40): string | undefined => {
 	if (typeof text !== 'string') return undefined;

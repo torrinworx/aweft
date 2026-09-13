@@ -95,8 +95,11 @@ test('a keydown records a non-character key, never a character, and never a pass
 	fire('keydown', { target: secret, key: 'Enter' }, 'document');
 	// An emoji is two UTF-16 units but one code point: a typed character, never recorded.
 	fire('keydown', { target: field, key: '\uD83D\uDE00' }, 'document');
+	// A base letter with its combining marks, as a layout can hand a typed character: never recorded.
+	fire('keydown', { target: field, key: 'e\u0323\u0302' }, 'document');
+	fire('keydown', { target: field, key: 'ArrowLeft' }, 'document');
 	const keys = seen.filter((e) => e.kind === 'input').map((e) => e.key);
-	assert.deepEqual(keys, ['Enter', undefined, undefined, undefined]);
+	assert.deepEqual(keys, ['Enter', undefined, undefined, undefined, undefined, 'ArrowLeft']);
 	assert.equal(seen[0]!.label, 'Email');
 	assert.equal(seen[2]!.field, 'password');
 	log.stop();
