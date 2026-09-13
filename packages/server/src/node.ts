@@ -13,20 +13,29 @@ import type { SocketLike } from '@aweftjs/sync';
 
 import { type Listener, type ListenerHandlers, type Peer, serverError } from './contract.ts';
 
-/** What either kind of server takes. The two limits have no value of ours. */
+/** What either kind of server takes. */
 export interface NodeSettings {
 	/** Ping every open socket this often and terminate one that did not answer the last ping. Nothing pings without it. */
 	readonly heartbeatMs?: number | undefined;
-	/** The largest WebSocket message or HTTP body accepted, in bytes. Without it the transport's own bound stands, and a body is unbounded. */
+	/**
+	 * The largest WebSocket message or HTTP body accepted, in bytes: 1 MiB here (design 273).
+	 * `Infinity` removes the bound, and is the one way to.
+	 */
 	readonly maxPayload?: number | undefined;
 	/**
 	 * Behind a proxy you trust: read the scheme from `x-forwarded-proto` and the peer address
-	 * from the first entry of `x-forwarded-for`. Off, both come from the socket itself, and a
-	 * client that sends those headers is ignored. Set it only when a proxy is in front, because
-	 * with it any client can name its own address.
+	 * from the last entry of `x-forwarded-for`, the one that proxy appended, or with
+	 * `'x-real-ip'` from that header, for a proxy that sets it. Off, both come from the socket
+	 * itself, and a client that sends those headers is ignored. Set it only when a proxy is in
+	 * front, because with it whoever writes the header names the address.
 	 */
-	readonly forwarded?: boolean | undefined;
+	readonly forwarded?: boolean | 'x-real-ip' | undefined;
 }
+
+type Forwarded = false | 'x-forwarded-for' | 'x-real-ip';
+
+// The bound every listener starts with (design 273).
+const MAX_PAYLOAD = 1_048_576;
 
 /** A server of this listener's own, closed on `stop`. `port: 0` takes a free one, readable after `start`. */
 export interface OwnServer extends NodeSettings {
@@ -49,14 +58,16 @@ export interface NodeListener extends Listener {
 	readonly port: number | undefined;
 }
 
-const first = (header: string | string[] | undefined): string | undefined => {
-	const value = Array.isArray(header) ? header[0] : header;
-	const one = value?.split(',')[0]?.trim();
-	return one === undefined || one === '' ? undefined : one;
+// A proxy appends its view to the header the client sent, so the last entry is the proxy's
+// word and the first is the client's own (design 273).
+const last = (header: string | string[] | undefined): string | undefined => {
+	const value = Array.isArray(header) ? header.join(',') : header;
+	const entries = (value ?? '').split(',').map((one) => one.trim()).filter((one) => one !== '');
+	return entries[entries.length - 1];
 };
 
-const peerOf = (req: IncomingMessage, forwarded: boolean): Peer => ({
-	address: (forwarded ? first(req.headers['x-forwarded-for']) : undefined) ?? req.socket.remoteAddress,
+const peerOf = (req: IncomingMessage, forwarded: Forwarded): Peer => ({
+	address: (forwarded === false ? undefined : last(req.headers[forwarded])) ?? req.socket.remoteAddress,
 });
 
 /** A body that errors, and ends the request, once it has carried more than `max` bytes. */
@@ -77,9 +88,9 @@ const bounded = (req: IncomingMessage, max: number): ReadableStream => {
 };
 
 /** The web-standard request for what Node handed over, its body streamed rather than read. */
-const toRequest = (req: IncomingMessage, forwarded: boolean, maxPayload: number | undefined): Request => {
+const toRequest = (req: IncomingMessage, forwarded: Forwarded, maxPayload: number | undefined): Request => {
 	const encrypted = (req.socket as { encrypted?: boolean }).encrypted === true;
-	const scheme = (forwarded ? first(req.headers['x-forwarded-proto']) : undefined) ?? (encrypted ? 'https' : 'http');
+	const scheme = (forwarded === false ? undefined : last(req.headers['x-forwarded-proto'])) ?? (encrypted ? 'https' : 'http');
 	const url = `${scheme}://${req.headers.host ?? 'localhost'}${req.url ?? '/'}`;
 	const headers = new Headers();
 	for (const [name, value] of Object.entries(req.headers)) {
@@ -126,19 +137,26 @@ const refuseUpgrade = async (response: Response, socket: Duplex): Promise<void> 
  *
  * Params:
  *   options: `{ port, host }` for a server of its own, or `{ server }` for one the application
- *     made; either with `heartbeatMs`, `maxPayload` and `forwarded`, none of which has a
- *     value here
+ *     made; either with `heartbeatMs` (nothing pings without it), `maxPayload` (1 MiB here,
+ *     `Infinity` for none) and `forwarded` (off here)
  *
  * Returns: the listener, with `port` readable once started.
  *
- * Throws: a ServerError with reason `started` when it is already started. A request body over
- * `maxPayload` ends the body stream with `over-bound` rather than being read to the end.
+ * Throws: a ServerError with reason `started` when it is already started, and `invalid-option`
+ * when `maxPayload` is not a positive number or `Infinity`. A request body over `maxPayload`
+ * ends the body stream with `over-bound` rather than being read to the end.
  *
  * Example:
  *   const listener = node({ port: 8080, heartbeatMs: 30_000 });
  *   const server = createServer({ sources, store, gate, listener });
  */
 export const node = (options: NodeOptions): NodeListener => {
+	if (options.maxPayload !== undefined && !((Number.isInteger(options.maxPayload) && options.maxPayload > 0) || options.maxPayload === Infinity)) {
+		throw serverError('invalid-option', `maxPayload ${JSON.stringify(options.maxPayload)} is not a size`, 'Give maxPayload a positive number of bytes, or Infinity for no bound.');
+	}
+	// Infinity is the one spelling of "no bound"; `ws` spells it 0.
+	const bound = Number.isFinite(options.maxPayload ?? MAX_PAYLOAD) ? options.maxPayload ?? MAX_PAYLOAD : undefined;
+	const forwarded: Forwarded = options.forwarded === true ? 'x-forwarded-for' : options.forwarded === 'x-real-ip' ? 'x-real-ip' : false;
 	let server: HttpServer | undefined;
 	let wss: WebSocketServer | undefined;
 	let beat: ReturnType<typeof setInterval> | undefined;
@@ -178,22 +196,27 @@ export const node = (options: NodeOptions): NodeListener => {
 		start: async (handlers: ListenerHandlers) => {
 			if (server !== undefined) throw serverError('started', 'this listener is already started', 'Call stop before starting it again.');
 			const http = options.server ?? createHttpServer();
-			const accepting = new WebSocketServer({
-				noServer: true, ...(options.maxPayload === undefined ? {} : { maxPayload: options.maxPayload }),
-			});
+			const accepting = new WebSocketServer({ noServer: true, maxPayload: bound ?? 0 });
 
-			const forwarded = options.forwarded === true;
 			onRequest = (req, res) => {
+				// The fetch standard builds no Request for these, and TRACE would echo the request
+				// back with its headers. Nothing here answers them.
+				if (req.method === 'TRACE' || req.method === 'TRACK' || req.method === 'CONNECT') {
+					res.writeHead(405, { allow: 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS' });
+					res.end();
+					req.destroy();
+					return;
+				}
 				// A body that says up front it is over the bound is refused before it is read; one
 				// that lies, or says nothing, is cut off where it crosses the bound (`bounded`).
 				const declared = Number(req.headers['content-length']);
-				if (options.maxPayload !== undefined && Number.isFinite(declared) && declared > options.maxPayload) {
+				if (bound !== undefined && Number.isFinite(declared) && declared > bound) {
 					res.writeHead(413);
 					res.end();
 					req.destroy();
 					return;
 				}
-				void handlers.request(toRequest(req, forwarded, options.maxPayload), peerOf(req, forwarded))
+				void handlers.request(toRequest(req, forwarded, bound), peerOf(req, forwarded))
 					.then((response) => writeResponse(response, res))
 					.catch(() => {
 						// The handler answers every request itself; what reaches here is a body

@@ -4,6 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import type { Store } from '@aweftjs/store';
+
+import type { AuthContext } from '../src/index.ts';
 import type { Enter, UserDocument } from '../src/modules/Enter.ts';
 import type { Session } from '../src/modules/Session.ts';
 
@@ -76,18 +79,18 @@ test('POST /api/session signs up with 201 and in with 200, sets the cookie, and 
 	const route = enter.routes['POST /api/session']!;
 	const anonymous = { user: null, session: null };
 
-	const up = await route(jsonRequest('/api/session', 'POST', { email: 'ada@example.com', password: 'pw' }), anonymous);
+	const up = await route(jsonRequest('/api/session', 'POST', { email: 'ada@example.com', password: 'correct horse' }), anonymous);
 	assert.equal(up.status, 201);
 	const made = await up.json() as { user: string; created: boolean };
 	assert.equal(made.created, true);
 	assert.deepEqual(up.headers.getSetCookie(), ['session=AAAAAAAAAAAAAAAA; Path=/; HttpOnly; SameSite=Lax']);
 	assert.deepEqual(issued, [made.user]);
 
-	const back = await route(jsonRequest('/api/session', 'POST', { email: 'ADA@example.com', password: 'pw' }), anonymous);
+	const back = await route(jsonRequest('/api/session', 'POST', { email: 'ADA@example.com', password: 'correct horse' }), anonymous);
 	assert.equal(back.status, 200);
 	assert.deepEqual(await back.json(), { user: made.user, created: false });
 
-	const wrong = await route(jsonRequest('/api/session', 'POST', { email: 'ada@example.com', password: 'nope' }), anonymous);
+	const wrong = await route(jsonRequest('/api/session', 'POST', { email: 'ada@example.com', password: 'wrong horse' }), anonymous);
 	assert.equal(wrong.status, 401);
 	assert.deepEqual(await wrong.json(), { reasons: [{ code: 'password', message: 'the password is wrong' }] });
 	assert.equal(issued.length, 2, 'nothing was issued for the refusal');
@@ -105,5 +108,112 @@ test('POST /api/session signs up with 201 and in with 200, sets the cookie, and 
 	}
 	const notJson = await route(request('/api/session', { method: 'POST', body: 'email=x' }), anonymous);
 	assert.equal(notJson.status, 400);
+	await store.stop();
+});
+
+// --- the bounds on the route (design 275) ------------------------------------------------------
+
+const routeOf = async (config: Record<string, unknown> = {}) => {
+	const store = newStore();
+	const { session } = stubSession();
+	const { instance: enter } = await module<Enter>('Enter', store, { 'auth/Session': session }, config);
+	return { store, route: enter.routes['POST /api/session']! };
+};
+const from = (address: string | undefined): AuthContext => ({ user: null, session: null, address });
+const post = (email: string, password: string): Request => jsonRequest('/api/session', 'POST', { email, password });
+const users = async (store: Store, email: string): Promise<number> =>
+	(await store.find({ where: [{ field: 'email', op: 'eq', value: email }] })).length;
+
+test('a password under the floor or over the ceiling is refused before anything is hashed, and any composition of eight is taken', async () => {
+	const { store, route } = await routeOf();
+	const short = await route(post('ada@example.com', 'sevench'), from('1.1.1.1'));
+	assert.equal(short.status, 400);
+	assert.deepEqual(await short.json(), { reasons: [{ code: 'password', message: 'password is 8 to 256 characters' }] });
+	assert.equal((await route(post('ada@example.com', 'x'.repeat(257)), from('1.1.1.1'))).status, 400);
+	assert.equal(await users(store, 'ada@example.com'), 0, 'nothing was made for a refused password');
+	assert.equal((await route(post('ada@example.com', 'x'.repeat(256)), from('1.1.1.1'))).status, 201, 'exactly the ceiling');
+	assert.equal((await route(post('bo@example.com', '        '), from('1.1.1.1'))).status, 201, 'eight spaces');
+	assert.equal((await route(post('cy@example.com', '🧵🧵🧵🧵🧵🧵🧵🧵'), from('1.1.1.1'))).status, 201, 'eight characters, counted as characters and not code units');
+	assert.equal((await route(post('di@example.com', 'a'.repeat(7) + '🧵'), from('1.1.1.1'))).status, 201);
+	await store.stop();
+});
+
+test('the sixth attempt on one email in the window is 429 with Retry-After whatever the password, and a success clears the count', async () => {
+	const { store, route } = await routeOf({ attemptsWindowMs: 60_000 });
+	assert.equal((await route(post('ada@example.com', 'correct horse'), from('1.1.1.1'))).status, 201, 'the sign-up counts and then clears');
+	for (let i = 0; i < 5; i++) assert.equal((await route(post('ada@example.com', 'wrong horse'), from('1.1.1.1'))).status, 401, `wrong attempt ${String(i + 1)}`);
+	const sixth = await route(post('ADA@example.com ', 'correct horse'), from('2.2.2.2'));
+	assert.equal(sixth.status, 429, 'the right password, another address and another spelling of the email change nothing');
+	assert.equal(sixth.headers.get('retry-after'), '60');
+	assert.deepEqual(await sixth.json(), { reasons: [{ code: 'attempts', message: 'too many sign-in attempts; wait and try again' }] });
+	assert.equal((await route(post('bo@example.com', 'correct horse'), from('1.1.1.1'))).status, 201, 'another email has its own count');
+	await store.stop();
+
+	const cleared = await routeOf({ attemptsPerEmail: 2, attemptsWindowMs: 60_000 });
+	assert.equal((await cleared.route(post('ada@example.com', 'correct horse'), from('1.1.1.1'))).status, 201);
+	assert.equal((await cleared.route(post('ada@example.com', 'wrong horse'), from('1.1.1.1'))).status, 401);
+	assert.equal((await cleared.route(post('ada@example.com', 'correct horse'), from('1.1.1.1'))).status, 200, 'the second, and it clears');
+	assert.equal((await cleared.route(post('ada@example.com', 'wrong horse'), from('1.1.1.1'))).status, 401, 'counting from nothing again');
+	assert.equal((await cleared.route(post('ada@example.com', 'wrong horse'), from('1.1.1.1'))).status, 401);
+	assert.equal((await cleared.route(post('ada@example.com', 'correct horse'), from('1.1.1.1'))).status, 429);
+	await cleared.store.stop();
+});
+
+test('requests from one address are counted whatever the emails, twenty a window with nothing set, and another address goes on', async () => {
+	const { store, route } = await routeOf({ attemptsPerAddress: 3, attemptsWindowMs: 60_000 });
+	for (let i = 0; i < 3; i++) assert.equal((await route(post(`u${String(i)}@example.com`, 'correct horse'), from('9.9.9.9'))).status, 201);
+	const over = await route(post('u9@example.com', 'correct horse'), from('9.9.9.9'));
+	assert.equal(over.status, 429);
+	assert.equal(over.headers.get('retry-after'), '60');
+	assert.equal(await users(store, 'u9@example.com'), 0, 'nothing was made');
+	assert.equal((await route(post('u9@example.com', 'correct horse'), from('8.8.8.8'))).status, 201);
+	assert.equal((await route(post('u10@example.com', 'correct horse'), from(undefined))).status, 201, 'no address counts as one address');
+	await store.stop();
+
+	const shipped = await routeOf();
+	for (let i = 0; i < 20; i++) assert.equal((await shipped.route(post(`u${String(i)}@example.com`, 'correct horse'), from('9.9.9.9'))).status, 201);
+	assert.equal((await shipped.route(post('u20@example.com', 'correct horse'), from('9.9.9.9'))).status, 429, 'the twenty-first');
+	await shipped.store.stop();
+});
+
+test('hashing in flight is bounded: past the bound the route answers 503 with Retry-After and starts no hash', async () => {
+	const { store, route } = await routeOf({ hashesInFlight: 2, attemptsPerAddress: 100 });
+	const answers = await Promise.all([0, 1, 2, 3, 4].map((i) => route(post(`u${String(i)}@example.com`, 'correct horse'), from('1.1.1.1'))));
+	assert.deepEqual(answers.map((a) => a.status).sort(), [201, 201, 503, 503, 503]);
+	const busy = answers.find((a) => a.status === 503)!;
+	assert.equal(busy.headers.get('retry-after'), '1');
+	assert.deepEqual(await busy.json(), { reasons: [{ code: 'busy', message: 'too many sign-ins are being checked; try again in a moment' }] });
+	let made = 0;
+	for (let i = 0; i < 5; i++) made += await users(store, `u${String(i)}@example.com`);
+	assert.equal(made, 2, 'the three refused were never hashed or stored');
+	assert.equal((await route(post('u9@example.com', 'correct horse'), from('1.1.1.1'))).status, 201, 'room again once those finished');
+	await store.stop();
+});
+
+test('refusePassword is asked after the counts, sync or async, and a true refuses with 400', async () => {
+	const asked: string[] = [];
+	const { store, route } = await routeOf({ refusePassword: (p: string) => { asked.push(p); return p === 'password1'; } });
+	const refused = await route(post('ada@example.com', 'password1'), from('1.1.1.1'));
+	assert.equal(refused.status, 400);
+	assert.deepEqual(await refused.json(), { reasons: [{ code: 'password', message: 'that password is not allowed here' }] });
+	assert.equal((await route(post('ada@example.com', 'correct horse'), from('1.1.1.1'))).status, 201);
+	assert.deepEqual(asked, ['password1', 'correct horse']);
+	assert.equal(await users(store, 'ada@example.com'), 1);
+	await store.stop();
+
+	const async = await routeOf({ refusePassword: async () => true });
+	assert.equal((await async.route(post('ada@example.com', 'correct horse'), from('1.1.1.1'))).status, 400);
+	await async.store.stop();
+});
+
+test('a setting that is not a positive number, a ceiling under the floor, or a refusePassword that is not a function is refused when the module is made', async () => {
+	const store = newStore();
+	const { session } = stubSession();
+	for (const config of [
+		{ attemptsPerEmail: 0 }, { attemptsPerAddress: -1 }, { attemptsWindowMs: 'soon' }, { attemptsWindowMs: 2_147_483_648 },
+		{ hashesInFlight: 0 }, { passwordMin: 0 }, { passwordMax: 4 }, { refusePassword: 'no' },
+	]) {
+		await assert.rejects(module<Enter>('Enter', store, { 'auth/Session': session }, config), /invalid-config|invalid-limit/, JSON.stringify(config));
+	}
 	await store.stop();
 });

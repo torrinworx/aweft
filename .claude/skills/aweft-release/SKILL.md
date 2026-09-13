@@ -21,8 +21,10 @@ enforcing, and `AGENTS.md` under KEEPING ONE SOURCE OF TRUTH for the lockstep ru
 2. **The version.** Ask which one, unless the maintainer already said. Every package takes it,
    and so does every `^` range one package names another by. `npm run publishing` refuses the
    set if one package disagrees.
-3. **The gate.** `npm test` at the repo root. Read the exit code from its own output. Red
-   stops the release; nothing about a release is worth a workaround here.
+3. **The gate, then the audit.** `npm test` at the repo root, then `npm run audit`
+   (`npm audit --audit-level=high`). Read each exit code from its own output. Red stops the
+   release; nothing about a release is worth a workaround here, and a dependency with a known
+   hole is not published under this name.
 4. **Build.** `npm run build`. It writes each package's `dist/`, which no commit carries.
 5. **Prove the tarball, not the repo.** This is the step the gate cannot do, because every
    check in it runs against the source:

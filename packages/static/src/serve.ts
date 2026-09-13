@@ -101,9 +101,12 @@ const carries = (header: string | null, etag: string): boolean => {
  * Example:
  *   served(request, found, 'public, max-age=31536000, immutable');
  */
+/** On every answer: a browser that guesses a file's type from its bytes turns a text file into a script (design 276). */
+export const NOSNIFF: Readonly<Record<string, string>> = { 'x-content-type-options': 'nosniff' };
+
 export const served = (request: Request, found: Found, cache: string | undefined): Response => {
 	const etag = etagOf(found);
-	const headers: Record<string, string> = { etag };
+	const headers: Record<string, string> = { ...NOSNIFF, etag };
 	if (cache !== undefined) headers['cache-control'] = cache;
 	if (carries(request.headers.get('if-none-match'), etag)) return new Response(null, { status: 304, headers });
 
@@ -130,5 +133,5 @@ export const served = (request: Request, found: Found, cache: string | undefined
 export const answered = (request: Request, found: Found, status: number): Response =>
 	new Response(request.method === 'HEAD' ? null : body(found.file), {
 		status,
-		headers: { 'content-type': typeOf(found.file), 'content-length': String(found.size) },
+		headers: { ...NOSNIFF, 'content-type': typeOf(found.file), 'content-length': String(found.size) },
 	});

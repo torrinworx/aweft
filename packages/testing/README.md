@@ -195,6 +195,41 @@ it here would tie this package to one battery's routes and one idea of what a se
 [`recipes/full-stack/tests/board.test.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/full-stack/tests/board.test.ts)
 is those five lines.
 
+## The security suite
+
+`securityChecks({ gate })` is the suite a server passes rather than claims, the way a runner
+passes `roomChecks()`. Each case is one named obligation citing the ASVS 5.0 requirements it
+proves (`docs/security.md` has the table), run against a server you start, so an application
+that boots its own modules behind the same server proves the same things about itself.
+
+```ts
+import { loadServer, securityChecks } from '@aweftjs/testing';
+
+for (const c of securityChecks({ gate: 'auth/Gate' })) {
+	test(`${c.requirements.join(' ')}: ${c.name}`, () => c.run((given) => loadServer({
+		...given,
+		sources: [fromDirectory(modules), auth, ...given.sources],
+		store: createStore({ driver: memoryDriver(), declare: { ...paths } }),
+	})));
+}
+```
+
+`start` is yours: it loads the probe modules the suite hands it beside your own, starts under
+the gate the suite names (yours, with one rule of its own composed on top), passes the handlers
+the suite gives it, and answers `{ fetch, open, server, stop }`, which is what `loadServer`
+answers. The suite speaks the session routes by their documented shape, `POST` and `DELETE
+/api/session` as `@aweftjs/auth` answers them, and imports no battery; a target with no
+session battery fails the session cases at the first sign-up, naming that. Nothing is skipped.
+
+The suite is append-only: a case is added for every hole ever found and none is removed. It
+runs over the harness, where `fetch` may be handed a full URL, which is how the suite says a
+request arrived over TLS. A target over a real port would adapt `fetch` and `open` to it, and
+none ships: the transport's own bounds are pinned by the listener's tests.
+
+`npm run security` ties the suite to the table: every requirement the table gives to the stack
+names a case here or a test elsewhere that exists, and every case cites a requirement the table
+gives to the stack.
+
 ## Two ends of one socket
 
 `socketPair()` is what `loadServer` opens over, and it is exported because a suite that is about

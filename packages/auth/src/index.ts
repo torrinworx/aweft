@@ -26,11 +26,11 @@ export const auth: Source = fromBundle({
 
 /**
  * The paths the application declares on its store for these modules to query: `email` on
- * user documents, `user` on session documents.
+ * user documents, `user` and `expires` on session documents.
  *
  * Example:
  *   const store = createStore({ driver, declare: { ...paths, title: ['title'] } });
  */
-export const paths: Declaration = { email: ['email'], user: ['user'] };
+export const paths: Declaration = { email: ['email'], user: ['user'], expires: ['expires'] };
 
 export type { AuthContext } from './context.ts';

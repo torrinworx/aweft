@@ -1,4 +1,8 @@
 closed: Open a new connection and ask again.
+failed: Read what handlers.failed was told under the module's name.
+invalid-limit: Give count a positive number of hits per window.
+invalid-limit: Give windowMs a positive number of milliseconds, at most 2147483647.
+invalid-option: Give maxPayload a positive number of bytes, or Infinity for no bound.
 missing: Load the module, and give it a call function.
 missing: Name a module the sources list whose instance is a gate, or pass a Gate object.
 missing: Pass all three: createServer({ sources, gate, listener }).

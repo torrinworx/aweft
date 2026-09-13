@@ -13,7 +13,7 @@ test('the client subpath hands out the function and the source, and nothing else
 
 test('the entry hands out the source and the paths, and nothing else', () => {
 	assert.deepEqual(Object.keys(auth).sort(), ['auth', 'paths']);
-	assert.deepEqual(auth.paths, { email: ['email'], user: ['user'] });
+	assert.deepEqual(auth.paths, { email: ['email'], user: ['user'], expires: ['expires'] });
 });
 
 test('the source lists the five modules and evaluates none of them until asked', async () => {

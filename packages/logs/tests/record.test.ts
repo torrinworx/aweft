@@ -87,7 +87,9 @@ test('two anonymous sockets under the auth gate are two visits: each hears its o
 	b.socket.close();
 	await settle();
 	const kinds = async (id: string) => (await readVisit(store, id))!.entries.map((e) => `${String(e.kind)}${e.kind === 'call' ? `:${String(e.name)}` : ''}`);
-	assert.deepEqual(await kinds('va'), ['call:logs/Visits', 'call:app/Boom', 'closed'], 'the failed call and the close are a\'s');
+	// A call that throws a plain error is reported as well as answered, so the visit holds the
+	// call, the report and the close.
+	assert.deepEqual(await kinds('va'), ['call:logs/Visits', 'call:app/Boom', 'failed', 'closed'], 'the failed call, its report and the close are a\'s');
 	assert.deepEqual(await kinds('vb'), ['call:logs/Visits', 'closed'], 'b heard nothing of a\'s');
 	await server.stop();
 });

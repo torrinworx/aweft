@@ -552,6 +552,35 @@ test('public is true by default, so a gate that reads it serves a reader with no
 	}
 });
 
+test('every answer carries nosniff: the file, the 304, the unknown page, the bare 404 and the 405', async () => {
+	const it = await serving({ 'index.html': '<p>home</p>', 'notes.txt': '<script>alert(1)</script>', '404.html': '<p>gone</p>' });
+	try {
+		const file = await fetch(`${it.url}/notes.txt`);
+		assert.equal(file.status, 200);
+		assert.equal(file.headers.get('x-content-type-options'), 'nosniff', 'the file');
+		const again = await fetch(`${it.url}/notes.txt`, { headers: { 'if-none-match': file.headers.get('etag')! } });
+		assert.equal(again.status, 304);
+		assert.equal(again.headers.get('x-content-type-options'), 'nosniff', 'the 304');
+		const unknown = await fetch(`${it.url}/no/such/page`);
+		assert.equal(unknown.status, 404);
+		assert.equal(unknown.headers.get('x-content-type-options'), 'nosniff', 'the unknown page');
+		const refused = await fetch(`${it.url}/index.html`, { method: 'PUT' });
+		assert.equal(refused.status, 405);
+		assert.equal(refused.headers.get('x-content-type-options'), 'nosniff', 'the 405');
+	} finally {
+		await it.stop();
+	}
+	const bare = await serving({ 'index.html': '<p>home</p>' });
+	try {
+		const answer = await fetch(`${bare.url}/no/such/page`);
+		assert.equal(answer.status, 404);
+		assert.equal(await answer.text(), '');
+		assert.equal(answer.headers.get('x-content-type-options'), 'nosniff', 'the bare 404');
+	} finally {
+		await bare.stop();
+	}
+});
+
 test('setting public to false makes the same request 403, carrying the gate\'s reasons', async () => {
 	const it = await serving({ 'index.html': '<p>home</p>' }, { public: false }, true);
 	try {

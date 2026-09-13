@@ -128,6 +128,14 @@ whose server fetched an icon has to hand the client what the server got, as a pa
 waits for nothing, so a resolver alone leaves the client one drawing short of the markup it is
 taking over.
 
+A drawing that arrives this way is somebody else's markup, and `Icon` writes it into the page.
+So a body that can run or reach out is refused with `unsafe-body`, naming the icon: one
+carrying `<script`, an event attribute such as `onload=`, `<foreignObject`, a `javascript:`
+URL, or an `href` that does not begin with `#`. A `<use href="#id">` and a `fill="url(#id)"`
+pass. The refusal is thrown, not answered as null, so the page hears which source refused and
+why rather than falling through to the next. An installed set is read at build time and is not
+read for this.
+
 ## When something is missing
 
 A set you have not installed:

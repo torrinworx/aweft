@@ -14,7 +14,7 @@ const isPublic = (instance: unknown): boolean =>
 export default ({ imports }: ModuleProps): ServerGate<AuthContext> => {
 	const Session = imports.Session as Session;
 	return {
-		identify: (request) => Session.whoIs(request),
+		identify: (request, peer) => Session.whoIs(request, peer),
 		access: ({ name, instance }: Named, context) => {
 			if (isPublic(instance) || userOf(context) !== null) return [];
 			return [{ code: 'private', message: `${name} needs a signed-in user` }];
