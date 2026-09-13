@@ -92,6 +92,18 @@ test('an error over the byte cap is still counted and still found by the error r
 	await stop();
 });
 
+test('an entry over the byte cap loses its stack before its name, so a failed call still says which module', async () => {
+	const store = newStore();
+	const { instance, stop } = await visits(store, { entry: 200 });
+	await instance.record({ visit: 'v6c', entries: [entry('failed', { name: 'app/Save', message: 'boom', stack: 'z'.repeat(2000) })] }, null);
+	const seen = (await readVisit(store, 'v6c'))!.entries[0]!;
+	assert.equal(seen.name, 'app/Save', 'the name is small and stays');
+	assert.equal(seen.message, 'boom');
+	assert.equal(seen.stack, undefined, 'the stack is what went');
+	assert.equal(seen.capped, true);
+	await stop();
+});
+
 test('a visit fills to its cap, then holds one capped entry and drops the rest', async () => {
 	const store = newStore();
 	const { instance, stop } = await visits(store, { perVisit: 3, batch: 10 });

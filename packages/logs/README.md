@@ -56,7 +56,7 @@ them in the same visit.
 
 | kind | what it holds |
 |---|---|
-| `error`, `rejection` | an uncaught error or a rejected promise: message, and stack when there is one (trimmed to the byte cap, keeping the kind) |
+| `error`, `rejection` | an uncaught error or a rejected promise: message, and stack when there is one (the first thing to go under the server's byte cap) |
 | `console` | a `console.error` or `console.warn` the page made: `level` and `message` |
 | `commit` | a shared document changed: the `topic`, the `paths` touched, the delta count, the bytes; never a value |
 | `refused`, `fault` | a share the server refused a write to, or a topic that faulted |
@@ -139,7 +139,7 @@ export const config = {
 	keep: 30,            // days a document is kept; the sweep runs on start and hourly
 	build: process.env.BUILD_SHA ?? null,
 	batch: 500,          // entries a batch may carry
-	entry: 4096,         // bytes an entry may take; over it it is trimmed to fit, keeping its kind
+	entry: 4096,         // bytes an entry may take; over it the stack, args, result, paths and reasons go first, then the message is cut
 	perVisit: 10_000,    // entries a visit may hold; the last is capped and the rest are dropped
 	batchesPerMinute: 60,
 	visitsPerMinute: 600,

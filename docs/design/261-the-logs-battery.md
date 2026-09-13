@@ -62,7 +62,10 @@ hands its own).
 entry is one flat object of primitives: `at`, `side` (`page` or `server`), `kind`, and the
 fields of the kind, with anything structured written as JSON text, so a row in the store is a
 row in a view. `errors` counts the entries of kind `error`, `rejection`, `failed`, and `console`
-at level `error`. The battery truncates its own documents' tails, since nothing replays them.
+at level `error`. An entry over the byte budget loses the fields that make one large first (the
+stack, a call's args and result, a commit's paths, a refusal's reasons) and keeps its kind and
+its names, so a failed call over the budget still says which module; only past that is the
+message cut. The battery truncates its own documents' tails, since nothing replays them.
 `paths` declares `build`, `startedAt` and `errors` for the application's store, beside auth's
 `user`.
 
@@ -131,7 +134,8 @@ that wants a line in the record calls `write`.
 
 `packages/logs/tests/`: `visits.test.ts` (the documents, the caps, `write` with and without a
 context, binding, the sweep, the process document rotating when full, two first writes opening
-a document once, `invalid-config` for a wrong type and for a timer over its bound),
+a document once, a trimmed entry keeping its name, `invalid-config` for a wrong type and for a
+timer over its bound),
 `record.test.ts` (the route: a batch kept, `user` from the cookie and kept across a sign-out,
 `browser` and `build` written once, `ended`, a body that is not a batch, 429 over each cap, two
 anonymous sockets under the auth gate as two visits), `observe.test.ts` (every event kind

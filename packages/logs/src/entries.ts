@@ -87,17 +87,21 @@ export const entryOf = (fields: Readonly<Record<string, unknown>>, side: 'page' 
 export const full = (entry: Entry): Entry => ({ at: entry.at, side: entry.side, kind: 'capped', of: entry.kind });
 
 /**
- * An entry trimmed to fit a byte budget, keeping its kind so an error stays an error and a
- * reader still groups it: `at`, `side`, `kind`, `capped: true`, and as much of `message` as the
- * budget leaves. Everything else is dropped, because the stack is what makes an entry large.
+ * An entry trimmed to fit a byte budget. The fields that make an entry large go first: the
+ * stack, a call's args and result, a commit's paths, a refusal's reasons. What is left keeps
+ * its kind and its names, so an error stays an error, a failed call still says which module,
+ * and a reader still groups it; `capped: true` says it was cut. When that is still over,
+ * `message` is cut to what the budget leaves, and past that only `at`, `side` and `kind` stay.
  */
 export const trim = (entry: Entry, budget: number): Entry => {
-	const base: Entry = { at: entry.at, side: entry.side, kind: entry.kind, capped: true };
-	if (typeof entry.message !== 'string') return base;
+	const { stack: _stack, args: _args, result: _result, paths: _paths, reasons: _reasons, message, ...rest } = entry;
+	let base: Entry = { ...rest, capped: true };
+	if (JSON.stringify(base).length > budget) base = { at: entry.at, side: entry.side, kind: entry.kind, capped: true };
+	if (typeof message !== 'string') return base;
 	// The room a `,"message":"..."` slot leaves, less what escaping a character can add; slice to
 	// it, then confirm, because a run of quotes or backslashes still doubles under JSON.
 	const room = budget - JSON.stringify(base).length - ',"message":""'.length;
-	let message = room > 0 ? entry.message.slice(0, room) : '';
-	while (message.length > 0 && JSON.stringify({ ...base, message }).length > budget) message = message.slice(0, -8);
-	return message === '' ? base : { ...base, message };
+	let cut = room > 0 ? message.slice(0, room) : '';
+	while (cut.length > 0 && JSON.stringify({ ...base, message: cut }).length > budget) cut = cut.slice(0, -8);
+	return cut === '' ? base : { ...base, message: cut };
 };
