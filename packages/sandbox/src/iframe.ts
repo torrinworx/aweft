@@ -1,10 +1,11 @@
-// A browser frame as the room (design 069).
+// A browser frame as the room (designs 069 and 281).
 //
 // The frame has `sandbox="allow-scripts"` and not `allow-same-origin`, so it has an opaque
 // origin: no cookie, no storage, no reach into the page that made it. Its content security
 // policy allows scripts only inline, from `data:` (the default compile imports module text
 // that way), and from the origin the `inside` module is served from. That is the browser's
-// boundary, and this runner claims exactly that.
+// boundary, and this runner claims exactly that. `allow` opens what a page in the room needs
+// to paint, styles, images, fonts and media, and never a script or a connection.
 //
 // The DOM is described structurally, so this file typechecks with no DOM library and the
 // package stays isomorphic; a test hands in a fake, a page hands in `document`.
@@ -32,9 +33,23 @@ export interface MessageChannelLike {
 	readonly port2: unknown;
 }
 
+/** What a page in the room may load beyond scripts (design 281). Each list is origins. */
+export interface FrameAllow {
+	/** Inline styles: what a themed page writes. */
+	readonly styles?: boolean | undefined;
+	/** Images from the inside origin, `data:`, `blob:` and these origins. */
+	readonly images?: readonly string[] | undefined;
+	/** Fonts from the inside origin, `data:`, `blob:` and these origins. */
+	readonly fonts?: readonly string[] | undefined;
+	/** Audio and video from the inside origin, `data:`, `blob:` and these origins. */
+	readonly media?: readonly string[] | undefined;
+}
+
 export interface FrameOptions {
 	/** The URL of the room's `@aweftjs/sandbox/inside` module, as the frame can import it. */
 	readonly inside: string;
+	/** What the frame may load beyond scripts. Nothing when left off. */
+	readonly allow?: FrameAllow | undefined;
 	/** Where the frame goes. A frame runs only once it is in a document. */
 	readonly into: { appendChild(node: FrameLike): unknown };
 	/** An import map for the frame, when `inside` is served unbundled. */
@@ -45,13 +60,34 @@ export interface FrameOptions {
 	readonly MessageChannel?: (new () => MessageChannelLike) | undefined;
 }
 
+/**
+ * A URL cut to its origin and to the characters a directive may hold, so a value cannot end
+ * the directive or the attribute. The same rule for `inside` as for every origin in `allow`.
+ */
 const originOf = (url: string): string => {
 	const at = url.indexOf('/', url.indexOf('//') + 2);
-	return at < 0 ? url : url.slice(0, at);
+	return (at < 0 ? url : url.slice(0, at)).replace(/[^A-Za-z0-9.:/\-\[\]*]/g, '');
 };
 
 /** JSON that is safe inside a `<script>`: a closing tag in it cannot end the script early. */
 const inScript = (value: unknown): string => JSON.stringify(value).replaceAll('<', '\\u003c');
+
+/**
+ * The frame's policy. `default-src 'none'` refuses everything not named; scripts are named
+ * as they always were, and `allow` names the rest. `connect-src` is never written, so it
+ * stays refused whatever `allow` says. Every origin, `inside` included, goes in as `originOf`
+ * cuts it.
+ */
+const policyOf = (inside: string, allow: FrameAllow): string => {
+	const origin = originOf(inside);
+	const directives = [`default-src 'none'`, `script-src 'unsafe-inline' data: ${origin}`];
+	if (allow.styles === true) directives.push(`style-src 'unsafe-inline'`);
+	const sources = (named: readonly string[]): string => [origin, 'data:', 'blob:', ...named.map(originOf)].join(' ');
+	if (allow.images !== undefined) directives.push(`img-src ${sources(allow.images)}`);
+	if (allow.fonts !== undefined) directives.push(`font-src ${sources(allow.fonts)}`);
+	if (allow.media !== undefined) directives.push(`media-src ${sources(allow.media)}`);
+	return directives.join('; ');
+};
 
 /**
  * A runner whose room is a sandboxed iframe.
@@ -61,6 +97,8 @@ const inScript = (value: unknown): string => JSON.stringify(value).replaceAll('<
  *     frame may load scripts from
  *   options.into: where the frame is appended
  *   options.importMap: the frame's import map, when the inside module is not bundled
+ *   options.allow: inline styles, and the origins images, fonts and media may come from
+ *     beyond the inside origin, `data:` and `blob:`; scripts and connections never widen
  *
  * Returns: a runner. The frame it makes is `element` once started, so a page can size it.
  *
@@ -83,10 +121,12 @@ export const iframe = (options: FrameOptions): Runner & { readonly element: Fram
 
 	let frame: FrameLike | undefined;
 	let channel: Channel | undefined;
+	/** Ends a `start` still waiting on the frame's load, so a room stopped first does not wait forever. */
+	let abandon: ((error: Error) => void) | undefined;
 
 	const html = [
 		'<!doctype html><html><head>',
-		`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' data: ${originOf(options.inside)}">`,
+		`<meta http-equiv="Content-Security-Policy" content="${policyOf(options.inside, options.allow ?? {})}">`,
 		options.importMap === undefined ? '' : `<script type="importmap">${inScript({ imports: options.importMap })}</script>`,
 		'</head><body><script type="module">',
 		'const take = (event) => {',
@@ -103,11 +143,13 @@ export const iframe = (options: FrameOptions): Runner & { readonly element: Fram
 		get element() {
 			return frame;
 		},
-		start: () => new Promise<Channel>((resolve) => {
+		start: () => new Promise<Channel>((resolve, reject) => {
 			const made = doc.createElement('iframe');
 			frame = made;
+			abandon = reject;
 			made.setAttribute('sandbox', 'allow-scripts');
 			made.addEventListener('load', () => {
+				abandon = undefined;
 				const ports = new Channel();
 				channel = fromMessagePort(ports.port1);
 				made.contentWindow?.postMessage('aweft:room', '*', [ports.port2]);
@@ -120,6 +162,8 @@ export const iframe = (options: FrameOptions): Runner & { readonly element: Fram
 			channel?.close();
 			frame?.remove();
 			frame = undefined;
+			abandon?.(sandboxError('closed', 'the frame was removed before it loaded', 'Stop the room once createSandbox has answered, or take closed from it as the frame leaving first.'));
+			abandon = undefined;
 		},
 	};
 };

@@ -2,6 +2,7 @@
 // (design 069). Types only; nothing here runs code.
 
 import { codecError } from '@aweftjs/codec';
+import type { Derived } from '@aweftjs/core';
 import type { Channel } from '@aweftjs/sync';
 
 /**
@@ -34,6 +35,46 @@ export interface SandboxOptions {
 	readonly handlers?: SandboxHandlers | undefined;
 	/** Limits the host keeps. None ship. */
 	readonly limits?: SandboxLimits | undefined;
+	/**
+	 * Documents shared into the room under their keys, writable both ways (design 278). Each is
+	 * an observable; `modules`, `room`, `calls` and `route` are reserved names.
+	 */
+	readonly documents?: Readonly<Record<string, object>> | undefined;
+	/** The console levels the room forwards to `handlers.console`. `['error', 'warn']` unless given. */
+	readonly console?: readonly string[] | undefined;
+	/** What answers the room's asks: the page's client. With none, every ask is refused. */
+	readonly client?: ClientLike | undefined;
+	/** The page in the room: the act it shows and the route document the tail crosses on (design 279). */
+	readonly page?: PageOptions | undefined;
+}
+
+/** What the host holds that a room's `ask` goes through. Shaped on the page's client, without naming it. */
+export interface ClientLike {
+	ask(name: string, args?: unknown): Promise<unknown>;
+	readonly status: Derived<string>;
+}
+
+/** What a room with a page in it is told. */
+export interface PageOptions {
+	/** The act the room's stage shows, by module name. */
+	readonly act: string;
+	/** The host's copy of the route document, an observable object from `createObject`. */
+	readonly route: object;
+}
+
+/**
+ * One line that left the room as data (design 280): an uncaught error, an unhandled rejection
+ * or a console call on a level the host named.
+ */
+export interface Report {
+	readonly kind: 'error' | 'rejection' | 'console';
+	/** The console method, for `console`. */
+	readonly level?: string;
+	readonly message: string;
+	/** Taken in the room's realm; `''` when there was none. */
+	readonly stack: string;
+	/** The act on screen, when the room knows it. */
+	readonly module?: string;
 }
 
 export interface SandboxHandlers {
@@ -41,6 +82,10 @@ export interface SandboxHandlers {
 	readonly applied?: ((name: string, action: 'reloaded' | 'unloaded') => void) | undefined;
 	/** A reload inside the room failed. `error` is the message, because only data crosses. */
 	readonly failed?: ((name: string, error: string) => void) | undefined;
+	/** An uncaught error or an unhandled rejection inside the room, as data. */
+	readonly error?: ((entry: Report) => void) | undefined;
+	/** A console call inside the room on a level named in `console`. */
+	readonly console?: ((level: string, text: string, stack: string) => void) | undefined;
 }
 
 export interface SandboxLimits {
@@ -121,11 +166,13 @@ export interface Sandbox {
  * An error this package raises, with a reason a caller can branch on.
  *
  * Reasons: `not-data` (an argument, a result or a prop that is not plain data; `path` names
- * it), `refused` (a name that is not granted), `missing` (a name that is granted but not
- * exposed, or a function the instance does not have), `malformed` (a row the other end wrote
- * that is not a call), `timeout`, `closed`, `failed` (the function threw; `message` carries
- * what it said), `no-page` (the iframe runner found no document and no MessageChannel), and
- * the loader's own reasons passed through unchanged.
+ * it), `refused` (a name that is not granted, or an ask with no client to answer it),
+ * `missing` (a name that is granted but not exposed, or a function the instance does not
+ * have), `malformed` (a row the other end wrote that is not a call), `reserved` (a document
+ * named as one of the room's own topics), `not-shared` (a document the host did not share),
+ * `timeout`, `closed`, `failed` (the function threw; `message` carries what it said),
+ * `no-page` (the iframe runner found no document and no MessageChannel), and the loader's
+ * own reasons passed through unchanged.
  */
 export interface SandboxError extends Error {
 	readonly reason: string;
@@ -147,4 +194,12 @@ export interface RoomDocument extends Record<string, unknown> {
 	follow: boolean;
 	/** By exposed name, JSON text of the instance's function names. */
 	exposed: Record<string, string>;
+	/** The names the host shared beside the room's own (design 278). */
+	documents: string[];
+	/** The console levels that cross (design 280). */
+	console: string[];
+	/** The host client's status, mirrored; `closed` when the host has no client. */
+	status: string;
+	/** The act on screen, or null in a compute room. */
+	page: { act: string } | null;
 }
