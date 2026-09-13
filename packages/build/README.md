@@ -27,7 +27,7 @@ library's.
 // Anywhere, a browser included, for source that did not exist at build time.
 import { transform } from '@aweftjs/build';
 
-const { code, map } = transform(source, { filename: 'page.tsx', release: true });
+const { code, map } = transform(source, { filename: 'page.tsx', release: true, defaultH: '@aweftjs/ui' });
 ```
 
 ```
