@@ -6,8 +6,6 @@ export interface AuthContext {
 	readonly session: string | null;
 }
 
-export const ANONYMOUS: AuthContext = { user: null, session: null };
-
 /** The user on a context, when the context is one of ours and has one. */
 export const userOf = (context: unknown): string | null => {
 	const user: unknown = (context as { user?: unknown } | null)?.user;

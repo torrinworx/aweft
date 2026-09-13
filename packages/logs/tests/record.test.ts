@@ -70,3 +70,24 @@ test('the socket binds the connection to a visit, so a server event lands in it'
 	assert.equal(call?.ok, false);
 	await server.stop();
 });
+
+test('two anonymous sockets under the auth gate are two visits: each hears its own calls and its own close', async () => {
+	const store = newStore();
+	const { handlers, server } = await started({
+		'app/Boom': { default: () => ({ public: true, call: () => { throw new Error('module blew up'); } }) },
+	}, { store, withAuth: true });
+	const a = await connectTo(handlers);
+	const b = await connectTo(handlers);
+	await settle();
+	await a.asks.ask('logs/Visits', { visit: 'va' });
+	await b.asks.ask('logs/Visits', { visit: 'vb' });
+	await a.asks.ask('app/Boom').catch(() => undefined);
+	await settle();
+	a.socket.close();
+	b.socket.close();
+	await settle();
+	const kinds = async (id: string) => (await readVisit(store, id))!.entries.map((e) => `${String(e.kind)}${e.kind === 'call' ? `:${String(e.name)}` : ''}`);
+	assert.deepEqual(await kinds('va'), ['call:logs/Visits', 'call:app/Boom', 'closed'], 'the failed call and the close are a\'s');
+	assert.deepEqual(await kinds('vb'), ['call:logs/Visits', 'closed'], 'b heard nothing of a\'s');
+	await server.stop();
+});
