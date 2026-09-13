@@ -1,5 +1,5 @@
-// The public surface, by name. Written from designs 088 to 097, never from the module, so an
-// export that appears without being decided turns this red.
+// The public surface, by name. Written from designs 088 to 097 and 277, never from the module, so
+// an export that appears without being decided turns this red.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import * as build from '../src/index.ts';
 
 test('the entry file exports exactly what was decided', () => {
-	assert.deepEqual(Object.keys(build).sort(), ['TransformError', 'aweft', 'mangle', 'transform']);
+	assert.deepEqual(Object.keys(build).sort(), ['TEXT_PROPS', 'TransformError', 'aweft', 'mangle', 'transform']);
 });
 
 test('every export does the job it is for', () => {
@@ -18,6 +18,7 @@ test('every export does the job it is for', () => {
 	assert.equal(result.map.version, 3);
 
 	assert.equal(build.aweft().transform(source, 'a.ts')?.code, result.code);
+	assert.ok(build.TEXT_PROPS.has('placeholder') && !build.TEXT_PROPS.has('href'));
 	assert.ok(build.mangle.pattern.test('internal_'));
 	const fault = new build.TransformError('unclosed-element: <p> is open. Close it.', 3, 'unclosed-element', 'Close it.');
 	assert.ok(fault instanceof Error);
