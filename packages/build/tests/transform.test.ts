@@ -83,8 +83,8 @@ test('a subtree inside a component call still hoists', () => {
 });
 
 test('a literal attribute that removes itself is left out of the prototype', () => {
-	const out = code(`${dom}export const a = h('div', { hidden: false, id: null, title: true, tabindex: 2 });`);
-	assert.match(out, /_template\(\["div",\{"title":true,"tabindex":2\}\], \[\]\)/);
+	const out = code(`${dom}export const a = h('div', { hidden: false, id: null, title: true, tabindex: 0 });`);
+	assert.match(out, /_template\(\["div",\{"title":true,"tabindex":0\}\], \[\]\)/);
 });
 
 test('a generated name dodges one the file already uses', () => {

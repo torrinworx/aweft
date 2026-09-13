@@ -91,6 +91,6 @@ export const readCall = (node: Node, reader: CallReader): Element | null => {
 	const children = childrenOf(args.slice(2), reader);
 	if (children === null) return null;
 
-	const element: Element = { tag, properties, children, fallback: () => reader.inner(node) };
+	const element: Element = { tag, properties, children, at: node.start, fallback: () => reader.inner(node) };
 	return element;
 };

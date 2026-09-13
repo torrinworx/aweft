@@ -1,3 +1,4 @@
+axe-not-installed: Install axe-core as a devDependency, or say where the script is with options.locate.
 dependency-not-stubbed: Add an entry under imports for every name the module lists in deps.
 fix-missing: Give the refusal a third argument saying what to do about it.
 fix-not-literal: Write the fix as a plain string; move anything variable into the detail.

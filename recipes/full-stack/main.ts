@@ -22,6 +22,8 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
 
+import { audit, walk } from '@aweftjs/testing/browser';
+
 const here = fileURLToPath(new URL('.', import.meta.url));
 
 let checks = 0;
@@ -102,6 +104,22 @@ try {
 	check(await view.textContent('#mine') === `the board of ${who}`,
 		'and the socket after the reconnect carried it, so the gated module answered');
 	check(problems.length === 0, `the page threw nothing and wrote no error to the console${problems.length === 0 ? '' : `: ${problems.join(', ')}`}`);
+
+	// --- can everyone use it ------------------------------------------------------------------
+
+	// axe over the page as it stands, in both colour schemes, and a Tab walk: every control reached,
+	// every one showing a ring, none holding the focus. The build already refused what the source
+	// settles; this is what only the rendered page can say.
+	console.log('\nthe page, read the way a screen reader and a keyboard read it');
+	for (const scheme of ['light', 'dark'] as const) {
+		await view.emulateMedia({ colorScheme: scheme });
+		const { violations } = await audit(view);
+		for (const violation of violations) console.log(`       ${violation.rule}: ${violation.help} at ${violation.nodes.map((node) => node.target).join(', ')}`);
+		check(violations.length === 0, `axe finds nothing to fix in ${scheme}`);
+	}
+	const walked = await walk(view);
+	for (const problem of walked.problems) console.log(`       ${problem.reason} at ${problem.target}: ${problem.fix}`);
+	check(walked.problems.length === 0, `Tab reaches every control (${String(walked.stops.length)}), each one rings, and none keeps the focus`);
 } finally {
 	await browser.close();
 	await dev.close();

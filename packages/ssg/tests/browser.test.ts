@@ -22,7 +22,7 @@ after(() => rmSync(space, { recursive: true, force: true }));
 
 const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 
-const BLANK = '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>';
+const BLANK = '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>';
 
 /** Build one page with the bundler plugin and serve it. */
 const page = async (name: string, entry: string): Promise<{ url: string; close(): Promise<void> }> => {

@@ -23,6 +23,8 @@ export interface Element {
 	readonly tag: string | null;
 	readonly properties: readonly Property[];
 	readonly children: readonly Child[];
+	/** The offset in the source the element opens at, for a refusal to point at. */
+	readonly at: number;
 	/** The code for this element when it is not hoisted into a template. */
 	fallback(): string;
 }

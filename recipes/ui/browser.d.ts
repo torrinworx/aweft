@@ -60,20 +60,6 @@ declare const document: {
 	readonly documentElement: RecipeElement;
 };
 
-/** axe-core, as the preview page reaches it once the script tag is in. */
-interface AxeViolation {
-	readonly id: string;
-	readonly help: string;
-	readonly nodes: readonly { readonly html: string }[];
-}
-
-declare const axe: {
-	run(target: unknown, options: { runOnly: { type: string; values: string[] } }): Promise<{
-		readonly violations: readonly AxeViolation[];
-		readonly passes: readonly unknown[];
-	}>;
-};
-
 declare const window: {
 	scrollTo(x: number, y: number): void;
 	readonly scrollY: number;

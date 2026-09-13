@@ -8,7 +8,12 @@ A neighbouring module is a relative specifier whose last path segment is `assert
 without an extension, which is how every `assert` in this repo is imported.
 
 Once the calls are gone, the import specifier goes too if nothing else in the file still names
-it, and the whole import declaration goes if that was its only specifier.
+it, and the whole import declaration goes if that was its only specifier. The same holds for any
+other import the file named only inside those calls: a helper that fed an assert and nothing else
+has no use left, so its specifier goes, and its declaration when it was the last. An import the
+file never named at all is the author's own and stays. A page check written as one assert
+statement over a helper (design 266) leaves a release build with neither the statement nor the
+helper's import.
 
 Three things are deliberately left alone:
 

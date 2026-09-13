@@ -5,10 +5,13 @@
 // puts it in, and the one analytics event a click is worth.
 
 import { type Derived, all, mutable } from '@aweftjs/core';
-import { type Mounter, mount } from '@aweftjs/dom';
+import { type Cleanup, type ElementLike, type Mounted, type Mounter, mount } from '@aweftjs/dom';
 
+import { checkNamed } from './access.ts';
+import { assert } from './assert.ts';
 import { h } from './h.ts';
 import { InputContext } from './input.ts';
+import { mountedElement } from './popup.tsx';
 import { LoaderContext } from './suspend.tsx';
 import { LoadingDots } from './loading-dots.tsx';
 import { controlStates, elementFor, sizeSegments } from './control.ts';
@@ -76,61 +79,71 @@ const isPromise = (value: unknown): value is Promise<unknown> =>
  *   <Button label="Save" onClick={() => save(form)} />
  *   <Button label="Docs" href="https://example.com/docs" type="quiet" />
  */
-export const Button = (props: ButtonProps): Mounter => (elem, _item, before, context) => {
-	const {
-		label, type, size, icon, iconPosition, disabled, loading, round, inline,
-		href, hrefNewTab, onClick, track, element, theme, children, ...rest
-	} = props;
+export const Button = (props: ButtonProps, _cleanup: Cleanup, mounted: Mounted): Mounter => {
+	// The element on the page, read back out of the mount once there is one (designs 133, 153).
+	// Dev only: this statement and the one in the mounter that fills `live` both leave a release
+	// build, which keeps the bare declaration and nothing that reads it (designs 097, 266).
+	let live: (() => ElementLike | null) | undefined;
+	assert(checkNamed(mounted, () => live?.() ?? null), 'the name check never refuses on its own');
 
-	const busy: Derived<boolean> = isWritable(loading)
-		? (loading as unknown as Derived<boolean>)
-		: mutable(false);
-	// Disabled or loading is one cell, because the element takes one attribute and the theme takes
-	// one segment.
-	const off = all([disabled ?? false, busy]).map(([stopped, pending]) => Boolean(stopped) || Boolean(pending));
-	const states = controlStates(off, props);
+	return (elem, _item, before, context) => {
+		const {
+			label, type, size, icon, iconPosition, disabled, loading, round, inline,
+			href, hrefNewTab, onClick, track, element, theme, children, ...rest
+		} = props;
 
-	const spinner = LoaderContext.read(context).loading ?? LoadingDots;
+		const busy: Derived<boolean> = isWritable(loading)
+			? (loading as unknown as Derived<boolean>)
+			: mutable(false);
+		// Disabled or loading is one cell, because the element takes one attribute and the theme takes
+		// one segment.
+		const off = all([disabled ?? false, busy]).map(([stopped, pending]) => Boolean(stopped) || Boolean(pending));
+		const states = controlStates(off, props);
 
-	const press = (event: unknown): void => {
-		if (off.get()) return;
-		if (track !== false) {
-			InputContext.fire(context, 'click', { component: 'Button', label, href });
-		}
-		const answer = onClick?.(event);
-		if (!isPromise(answer)) return;
-		// A promise the handler returned is what says the button is busy. It is cleared however the
-		// promise ends, so a save that fails does not leave a button nobody can press again;
-		// reporting the rejection is the handler's own business.
-		busy.set(true);
-		answer.then(() => { busy.set(false); }, () => { busy.set(false); });
+		const spinner = LoaderContext.read(context).loading ?? LoadingDots;
+
+		const press = (event: unknown): void => {
+			if (off.get()) return;
+			if (track !== false) {
+				InputContext.fire(context, 'click', { component: 'Button', label, href });
+			}
+			const answer = onClick?.(event);
+			if (!isPromise(answer)) return;
+			// A promise the handler returned is what says the button is busy. It is cleared however the
+			// promise ends, so a save that fails does not leave a button nobody can press again;
+			// reporting the rejection is the handler's own business.
+			busy.set(true);
+			answer.then(() => { busy.set(false); }, () => { busy.set(false); });
+		};
+
+		const linked = href !== undefined && href !== null;
+		const mark = through(busy, (pending) => (pending ? h(spinner, {}) : (icon ?? null)));
+		// The icon slot is first in the array whichever side it is drawn on, so the reading order for
+		// a screen reader stays icon then label and only the flex order moves.
+		const body = iconPosition === 'right'
+			? [label ?? null, mark, ...(children ?? [])]
+			: [mark, label ?? null, ...(children ?? [])];
+
+		const shared: Record<string, unknown> = {
+			...rest,
+			theme: ['button', type, sizeSegments(size), round ? 'round' : null, inline ? 'inline' : null, theme, ...states.segments],
+			isHovered: states.isHovered,
+			isClicked: states.isClicked,
+			onClick: press,
+		};
+
+		const own: Record<string, unknown> = linked
+			? {
+				href: through(off, (stopped) => (stopped ? null : href)),
+				target: hrefNewTab === false ? null : '_blank',
+				rel: hrefNewTab === false ? null : 'noopener noreferrer',
+				'aria-disabled': through(off, (stopped) => (stopped ? 'true' : null)),
+			}
+			: { type: 'button', disabled: off };
+
+		const node = h(elementFor(element, ...(linked ? ['a', 'button'] : ['button', 'a'])), { ...shared, ...own }, ...body);
+		const remove = mount(elem, node, before, context);
+		assert((live = mountedElement(remove, before)) !== null, 'the element is read back out of the mount');
+		return remove;
 	};
-
-	const linked = href !== undefined && href !== null;
-	const mark = through(busy, (pending) => (pending ? h(spinner, {}) : (icon ?? null)));
-	// The icon slot is first in the array whichever side it is drawn on, so the reading order for
-	// a screen reader stays icon then label and only the flex order moves.
-	const body = iconPosition === 'right'
-		? [label ?? null, mark, ...(children ?? [])]
-		: [mark, label ?? null, ...(children ?? [])];
-
-	const shared: Record<string, unknown> = {
-		...rest,
-		theme: ['button', type, sizeSegments(size), round ? 'round' : null, inline ? 'inline' : null, theme, ...states.segments],
-		isHovered: states.isHovered,
-		isClicked: states.isClicked,
-		onClick: press,
-	};
-
-	const own: Record<string, unknown> = linked
-		? {
-			href: through(off, (stopped) => (stopped ? null : href)),
-			target: hrefNewTab === false ? null : '_blank',
-			rel: hrefNewTab === false ? null : 'noopener noreferrer',
-			'aria-disabled': through(off, (stopped) => (stopped ? 'true' : null)),
-		}
-		: { type: 'button', disabled: off };
-
-	const node = h(elementFor(element, ...(linked ? ['a', 'button'] : ['button', 'a'])), { ...shared, ...own }, ...body);
-	return mount(elem, node, before, context);
 };

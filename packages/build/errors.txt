@@ -1,12 +1,20 @@
 attribute-needs-value: Give the attribute a value, or drop the = to make it true.
 bad-attribute-name: Start the attribute with a name, or close the tag.
+button-needs-name: Put text inside the button, or give it an aria-label.
+click-needs-role: Make it a <button>, or give it a role and a tabindex so the keyboard reaches it.
+control-needs-label: Give it an id and a <label for> naming it, wrap it in a <label>, or give it an aria-label.
 empty-expression: Put an expression in the braces, or drop them to make the attribute true.
+frame-needs-title: Give the frame a title that says what it holds.
+heading-needs-text: Put the heading's text inside it, or drop the heading.
+image-needs-alt: Give the image an alt that says what it shows, or alt="" for a decorative one.
 invalid-escape: Use an escape the template accepts, or write the character itself.
+link-needs-href: Give the link an href, or make it a <button> when it does something on the page.
 mismatched-closing-tag: Name the element being closed, or write </> for the innermost one.
 namespaced-attribute: Write the attribute name without a colon in it.
 namespaced-tag: Write the tag as a plain name or a member expression.
 nothing-to-close: Remove the closing tag, or open the element it closes.
 spread-needs-hole: Put the object in a hole, written as =${object}.
+tabindex-positive: Use 0 to join the tab order where the element sits, or -1 to reach it from code only.
 tag-needs-name: Put a tag name after the <, or write the tag as a hole.
 unclosed-element: Close the element, or write it as <tag /> if it has no children.
 unknown-default-h: Set it to @aweftjs/dom or @aweftjs/ui, or leave it unset to compile a file with no h of its own against dom.

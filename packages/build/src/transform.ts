@@ -11,6 +11,7 @@
 import MagicString from 'magic-string';
 import { parse } from '@babel/parser';
 
+import { checkAccess } from './access.ts';
 import { type Node, forEachChild } from './ast.ts';
 import { type CallReader, readCall } from './call.ts';
 import type { Element, Property } from './element.ts';
@@ -100,8 +101,10 @@ const pluginsFor = (filename: string | undefined): ('jsx' | 'typescript')[] => {
  * `mismatched-closing-tag`, `nothing-to-close`, `unterminated-closing-tag`, `tag-needs-name`,
  * `bad-attribute-name`, `attribute-needs-value`, `unterminated-attribute`, `spread-needs-hole`,
  * `unterminated-comment`, `invalid-escape`, `namespaced-tag`, `namespaced-attribute`,
- * `empty-expression` or `unsupported-child`. Source the parser cannot read throws the parser's
- * own error instead.
+ * `empty-expression` or `unsupported-child`; or one of the access rules (design 265):
+ * `image-needs-alt`, `control-needs-label`, `click-needs-role`, `tabindex-positive`,
+ * `link-needs-href`, `button-needs-name`, `heading-needs-text` or `frame-needs-title`. Source
+ * the parser cannot read throws the parser's own error instead.
  *
  * Example:
  *   const { code, map } = transform(source, { filename: 'app.tsx', release: true });
@@ -241,13 +244,17 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 		if (isMarkup(node)) return readMarkup(node, markupTagOf(node) === UI ? uiMarkupReader : domMarkupReader);
 		if (isDomHCall(node)) {
 			const element = readCall(node, callReader);
-			if (element !== null) return hoister.emit(element);
+			if (element !== null) return emit(element);
 			return iconCall(node) ?? inner(node);
 		}
 		return inner(node);
 	};
 
-	const emit = (element: Element): string => hoister.emit(element);
+	// The access rules run before hoisting, over the tree as it was written (design 265).
+	const emit = (element: Element): string => {
+		checkAccess(element);
+		return hoister.emit(element);
+	};
 
 	// The two `h` names are asked for when an element is printed as a call, never when it hoists,
 	// so the import below is emitted for calls that are actually in the output.

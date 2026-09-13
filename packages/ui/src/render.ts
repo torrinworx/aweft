@@ -13,6 +13,7 @@ import {
 	createElement, hydrate as domHydrate, mount as domMount, render as domRender,
 } from '@aweftjs/dom';
 
+import { pageLanguage, pageTitle } from './access.ts';
 import { assert } from './assert.ts';
 import { type HeadList, attachHead, createHeadList } from './head-list.ts';
 import { type Ids, type Registry, createIds, createRegistry, hold } from './registry.ts';
@@ -220,6 +221,9 @@ const heldBy = (target: ParentLike): Held | null => {
 	return slot[OWNED] ??= { own: null, attached: new Map(), tags: new Set() };
 };
 
+const LANGUAGE = 'the page declares no language: put lang="en", or the language it is written in, on its <html> element';
+const TITLE = 'the page has no title: put a <title> in its head, or a <Title> on the page';
+
 /** The render a mount into this target gets when the caller named none. */
 const documentRender = (target: ParentLike): Render => {
 	const held = heldBy(target);
@@ -292,6 +296,9 @@ export const mount = (target: ParentLike, item: unknown, before?: Remove, render
 	const own = render ?? documentRender(target);
 	const remove = domMount(target, item, before, rooted(own));
 	const detach = attachFor(target, own, false);
+	// Dev only: each statement leaves a release build (designs 097, 266).
+	assert(pageLanguage(target) !== '', LANGUAGE);
+	assert(pageTitle(target) !== '', TITLE);
 	return (arg) => {
 		if (arg !== undefined) return remove(arg);
 		detach();
@@ -357,6 +364,8 @@ export const hydrate = (target: ParentLike, item: unknown, render?: Render): Hyd
 	const own = render ?? documentRender(target);
 	const remove = domHydrate(target, item, rooted(own));
 	const detach = attachFor(target, own, true);
+	assert(pageLanguage(target) !== '', LANGUAGE);
+	assert(pageTitle(target) !== '', TITLE);
 	const stop: Remove = (arg) => {
 		if (arg !== undefined) return remove(arg);
 		detach();

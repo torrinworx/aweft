@@ -11,7 +11,7 @@ type BadgeProps: interface BadgeProps { readonly label?: unknown; readonly type?
 value Breadcrumb: (props: BreadcrumbProps) => Mounter
 type BreadcrumbItem: interface BreadcrumbItem { readonly label?: unknown; readonly href?: unknown; }
 type BreadcrumbProps: interface BreadcrumbProps { readonly items?: unknown; readonly label?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
-value Button: (props: ButtonProps) => Mounter
+value Button: (props: ButtonProps, _cleanup: Cleanup, mounted: Mounted) => Mounter
 type ButtonProps: interface ButtonProps { readonly label?: unknown; readonly type?: unknown; readonly size?: unknown; readonly icon?: unknown; readonly iconPosition?: string; readonly disabled?: unknown; readonly loading?: unknown; readonly round?: unknown; readonly inline?: unknown; readonly href?: unknown; readonly hrefNewTab?: unknown; readonly onClick?: (event: unknown) => unknown; readonly track?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Card: (props: CardProps) => unknown
 type CardProps: interface CardProps { readonly title?: unknown; readonly description?: unknown; readonly foot?: unknown; readonly type?: unknown; readonly tight?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }

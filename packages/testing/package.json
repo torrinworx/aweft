@@ -29,6 +29,11 @@
 			"aweft-source": "./src/postgres.ts",
 			"types": "./dist/postgres.d.ts",
 			"default": "./dist/postgres.js"
+		},
+		"./browser": {
+			"aweft-source": "./src/browser.ts",
+			"types": "./dist/browser.d.ts",
+			"default": "./dist/browser.js"
 		}
 	},
 	"scripts": {
@@ -51,17 +56,23 @@
 	"devDependencies": {
 		"embedded-postgres": "^18.4.0-beta.17",
 		"pg": "^8.23.0",
-		"@types/pg": "^8.23.1"
+		"@types/pg": "^8.23.1",
+		"axe-core": "^4.13.0",
+		"playwright": "^1.62.1"
 	},
 	"peerDependencies": {
 		"embedded-postgres": "^18.4.0-beta.17",
-		"pg": "^8.23.0"
+		"pg": "^8.23.0",
+		"axe-core": "^4.13.0"
 	},
 	"peerDependenciesMeta": {
 		"embedded-postgres": {
 			"optional": true
 		},
 		"pg": {
+			"optional": true
+		},
+		"axe-core": {
 			"optional": true
 		}
 	},

@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { chromium } from 'playwright';
 
+import { audit, walk as tabWalk } from '@aweftjs/testing/browser';
 import { context, dark, light } from '@aweftjs/ui';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -345,18 +346,21 @@ try {
 	assert.equal(still.transitionDuration, '0s', 'and nothing at all when it is not');
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
 
-	// --- axe over the preview page ----------------------------------------------------------------
+	// --- axe and a Tab walk over the preview page --------------------------------------------------
 
-	await page.addScriptTag({ path: fileURLToPath(import.meta.resolve('axe-core/axe.min.js')) });
-	const audit = await page.evaluate(async () => axe.run(document, {
-		runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
-	}));
-	for (const violation of audit.violations) {
-		console.error(`axe ${violation.id}: ${violation.help} (${String(violation.nodes.length)} node(s))`);
+	const audited = await audit(page);
+	for (const violation of audited.violations) {
+		console.error(`axe ${violation.rule}: ${violation.help} (${String(violation.nodes.length)} node(s))`);
 		for (const node of violation.nodes) console.error(`  ${node.html}`);
 	}
-	assert.equal(audit.violations.length, 0, 'axe found nothing to fix on the preview page');
-	console.log(`recipes/ui: axe passed ${String(audit.passes.length)} rules with no violation`);
+	assert.equal(audited.violations.length, 0, 'axe found nothing to fix on the preview page');
+	console.log(`recipes/ui: axe passed ${String(audited.passes)} rules with no violation`);
+
+	// Every control on the page is reached by Tab, rings when it is, and lets the focus go on.
+	const walked = await tabWalk(page);
+	for (const problem of walked.problems) console.error(`walk ${problem.reason} at ${problem.target}: ${problem.fix}`);
+	assert.equal(walked.problems.length, 0, 'a Tab walk over the preview page found nothing to fix');
+	console.log(`recipes/ui: Tab stopped on ${String(walked.stops.length)} controls, every one with a ring`);
 
 	// --- the catalogue: one page per component, in both modes --------------------------------------
 
@@ -797,7 +801,8 @@ try {
 	await page.waitForFunction(() => {
 		const menu = document.querySelector('#menu-light-list');
 		return menu !== null && menu.getBoundingClientRect().height > 0
-			&& getComputedStyle(menu)['transform'] === 'none';
+			&& getComputedStyle(menu)['transform'] === 'none'
+			&& getComputedStyle(menu)['visibility'] === 'visible';
 	});
 	const actions = await page.evaluate(() => {
 		const menu = document.querySelector('#menu-light-list')!;
@@ -931,10 +936,13 @@ try {
 	// Every select on the page has a list of its own in the popup sink, so each is reached by the id
 	// its own control names rather than by the role.
 	await page.click('#select-open-light');
+	// Placed, not only laid out: `Detached` keeps a popup hidden for the frame between opening
+	// and knowing where it goes, and a read in that frame sees it at the top of the page.
 	await page.waitForFunction(() => {
 		const list = document.querySelector('#select-open-light-list');
 		return list !== null && list.getBoundingClientRect().width > 0
-			&& getComputedStyle(list)['transform'] === 'none';
+			&& getComputedStyle(list)['transform'] === 'none'
+			&& getComputedStyle(list)['visibility'] === 'visible';
 	});
 	const drawn = await page.evaluate(() => {
 		const control = document.querySelector('#select-open-light')!.getBoundingClientRect();
@@ -1348,25 +1356,28 @@ try {
 
 	// --- axe over every page, with both modes showing ------------------------------------------------
 
-	await page.addScriptTag({ path: fileURLToPath(import.meta.resolve('axe-core/axe.min.js')) });
-
 	/** Whatever page is showing, audited whole. */
 	const audits = async (what: string): Promise<number> => {
-		const found = await page.evaluate(async () => axe.run(document, {
-			runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
-		}));
+		const found = await audit(page);
 		for (const violation of found.violations) {
-			console.error(`axe ${violation.id}: ${violation.help} (${String(violation.nodes.length)} node(s))`);
+			console.error(`axe ${violation.rule}: ${violation.help} (${String(violation.nodes.length)} node(s))`);
 			for (const node of violation.nodes) console.error(`  ${node.html}`);
 		}
 		assert.equal(found.violations.length, 0, `axe found nothing to fix ${what}`);
-		return found.passes.length;
+		return found.passes;
 	};
 
 	let rules = 0;
+	let stops = 0;
 	for (const name of listed) {
 		await show(name);
 		rules = await audits(`on the ${name} page`);
+		// Tab through the page: every control reached, ringed where it lands, and let go of. This
+		// is the walk over every component the package ships, in both modes at once.
+		const walked = await tabWalk(page);
+		for (const problem of walked.problems) console.error(`walk ${problem.reason} at ${problem.target}: ${problem.fix}`);
+		assert.equal(walked.problems.length, 0, `a Tab walk over the ${name} page found nothing to fix`);
+		stops += walked.stops.length;
 		// Every control is the native element. The tags are checked one page at a time above; this
 		// is the sweep that says no page anywhere drew a slider or a tick box out of divs.
 		const drawn = await page.evaluate(() =>
@@ -1374,7 +1385,7 @@ try {
 		assert.equal(drawn, 0, `nothing on the ${name} page is a drawn slider or a drawn tick box`);
 	}
 	console.log(`recipes/ui: axe passed ${String(listed.length)} catalogue pages, `
-		+ `${String(rules)} rules on the last of them, with no violation`);
+		+ `${String(rules)} rules on the last of them, with no violation; Tab stopped on ${String(stops)} controls across them`);
 
 	// And again with a popup list open, because that markup is this package's and nothing else on
 	// the page audits it (designs 224, 225). Twice rather than once: a mousedown outside a list is
