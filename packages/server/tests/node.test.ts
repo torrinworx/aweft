@@ -3,7 +3,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpServer, request as httpRequest } from 'node:http';
 
 import { createObject } from '@aweftjs/core';
 import { connect, fromWebSocket, requests } from '@aweftjs/sync';
@@ -159,8 +159,8 @@ test('a whole connection end to end: the handshake cookie identifies it, a share
 	await server.stop();
 });
 
-test('forwarded reads the proxy headers for the scheme and the peer, and without it they are ignored', async () => {
-	for (const forwarded of [true, false]) {
+test('forwarded reads the scheme and the proxy\'s own entry for the peer, x-real-ip reads that header, and off they are ignored', async () => {
+	for (const forwarded of [true, 'x-real-ip', false] as const) {
 		const listener = node({ port: 0, host: '127.0.0.1', forwarded });
 		const seen: string[] = [];
 		await listener.start({
@@ -168,16 +168,75 @@ test('forwarded reads the proxy headers for the scheme and the peer, and without
 			socket: async (request, peer) => { seen.push(`ws ${new URL(request.url).protocol} ${String(peer.address)}`); return new Response(null, { status: 404 }); },
 		});
 		const base = `127.0.0.1:${String(listener.port)}`;
-		await fetch(`http://${base}/`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-for': '203.0.113.9, 10.0.0.2' } });
+		// The client wrote 203.0.113.9 into the header it sent; the proxy appended what it saw,
+		// 10.0.0.2, and set x-real-ip to the same (design 273).
+		const headers = { 'x-forwarded-proto': 'https', 'x-forwarded-for': '203.0.113.9, 10.0.0.2', 'x-real-ip': '10.0.0.2' };
+		await fetch(`http://${base}/`, { headers });
 		await fetch(`http://${base}/`);
-		const ws = new WebSocket(`ws://${base}/`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-for': '203.0.113.9' } });
+		const ws = new WebSocket(`ws://${base}/`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-for': '10.0.0.2', 'x-real-ip': '10.0.0.2' } });
 		await new Promise<void>((done) => { ws.once('unexpected-response', () => done()); ws.once('error', () => done()); });
 		await listener.stop();
-		if (forwarded) {
-			assert.deepEqual(seen, ['https: 203.0.113.9', 'http: 127.0.0.1', 'ws https: 203.0.113.9']);
-		} else {
+		if (forwarded === false) {
 			assert.deepEqual(seen, ['http: 127.0.0.1', 'http: 127.0.0.1', 'ws http: 127.0.0.1']);
+		} else {
+			assert.deepEqual(seen, ['https: 10.0.0.2', 'http: 127.0.0.1', 'ws https: 10.0.0.2'], `forwarded: ${String(forwarded)}`);
 		}
+	}
+});
+
+test('TRACE is 405 and echoes nothing, before any handler sees it', async () => {
+	const listener = node({ port: 0, host: '127.0.0.1' });
+	let seen = 0;
+	await listener.start({ request: async () => { seen += 1; return new Response('handled'); }, socket: async () => () => {} });
+	const answer = await new Promise<{ status: number; body: string }>((done, fail) => {
+		const req = httpRequest({ host: '127.0.0.1', port: listener.port, method: 'TRACE', path: '/', headers: { 'x-secret': 'never echoed' } }, (res) => {
+			let body = '';
+			res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+			res.on('end', () => done({ status: res.statusCode ?? 0, body }));
+		});
+		req.on('error', fail);
+		req.end();
+	});
+	assert.equal(answer.status, 405);
+	assert.equal(answer.body, '');
+	assert.equal(seen, 0);
+	await listener.stop();
+});
+
+test('a body and a frame are bounded at 1 MiB with no option, Infinity removes the bound, and a bad size is refused', async () => {
+	for (const bad of [0, -1, 0.5, Number.NaN, '1024']) {
+		assert.throws(() => node({ port: 0, maxPayload: bad as number }), (e: ServerError) => e.reason === 'invalid-option', JSON.stringify(bad));
+	}
+	for (const [label, options, over] of [
+		['nothing set', {}, false],
+		['Infinity', { maxPayload: Infinity }, true],
+	] as const) {
+		const listener = node({ port: 0, host: '127.0.0.1', ...options });
+		const heard: number[] = [];
+		await listener.start({
+			request: async (request) => new Response(String((await request.text()).length)),
+			socket: async () => (socket) => { socket.addEventListener('message', (event) => { heard.push(String(event.data).length); }); },
+		});
+		const base = `127.0.0.1:${String(listener.port)}`;
+		const big = 'x'.repeat(1_048_577);
+		const declared = (await fetch(`http://${base}/`, { method: 'POST', body: big })).status;
+		assert.equal(declared, over ? 200 : 413, `${label}: a declared 1 MiB plus one`);
+		assert.equal((await fetch(`http://${base}/`, { method: 'POST', body: 'x'.repeat(1_048_576) })).status, 200, `${label}: exactly 1 MiB`);
+		const ws = new WebSocket(`ws://${base}/`);
+		await new Promise((done) => ws.once('open', done));
+		const closed = new Promise<number | 'open'>((done) => { ws.once('close', (code) => done(code)); setTimeout(() => done('open'), 1500); });
+		ws.send(big);
+		const outcome = await closed;
+		if (over) {
+			assert.equal(outcome, 'open', `${label}: the frame was taken`);
+			await settle();
+			assert.deepEqual(heard, [1_048_577]);
+			ws.close();
+		} else {
+			assert.equal(outcome, 1009, `${label}: a frame over the bound closes the socket`);
+			assert.deepEqual(heard, []);
+		}
+		await listener.stop();
 	}
 });
 
