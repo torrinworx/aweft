@@ -89,6 +89,7 @@ aweft/
     static/                the static battery: a directory of files served for what no route matched
     health/                the health battery: one route that says the process is up and right
     logs/                  the logs battery: what a page and the server did, per visit, in the store
+    notify/                the notify battery: one send to a person over inbox, email and push, the inbox shared live
     jobs/                  a scheduler over an array the application hands in
     ssg/                   static generation
     build/                 transforms, in two modes
@@ -128,6 +129,7 @@ version in lockstep.
 | `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom |
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
 | `logs` | What a page and the server did, per visit, in the application's store: a client half that records the page, three server modules, and readers any process imports | Who may read a visit; whether to record; retention beyond its defaults; any URL but its one route; a typed value, a private-slot value, an IP |
+| `notify` | One send to a user or an address over the channels its level picks: an inbox document per user shared live on their connections, email over Resend, push over FCM, each channel's outcome recorded; a client half that hands a page the inbox and registers a device | Who may send to whom; any cap but the one per recipient; templates; whether a `url` is safe to render; any URL; a page writing the inbox; a device endpoint reaching a page |
 | `debug` | Reading a running document or commit back as text | Nothing. It may know everything; no runtime package may know it |
 
 ---
@@ -331,6 +333,7 @@ indexed by the job rather than the package, are not in this table.
 | static | a generated site is served by the stack's own server in one process: a deep link hydrates in place, an unknown URL is 404 with the fallback page, the same URL under the shell setting is 200 and mounts live, and HEAD, the ETag and a climbing path answer as the rule says |
 | health | a deploy's verification: the endpoint polled until the shipped build is the one answering, then the two states a poll must not mistake for health, a store that stopped answering and a check that threw |
 | logs | a page recorded end to end in a browser and the visit read back: a page error, a rejection, a console error, a failed call on both sides, a commit's shape with a private slot absent, a typed character never stored, a non-character key kept, a refused write, sign-in mid-visit, and the browser facts |
+| notify | two pages of one signed-in user hear a module's send live and mark it read for each other, a device registered from the page, email and push against two fake services with the record on the item, a dead device forgotten, a failed mail kept, a forged write refused, the per-recipient cap, a restart over the same driver, and a server with no store doing a contact form's job |
 | build | the transforms build a real page; assert stripping is verified in the output |
 | testing | consumed by every other package's suite; its recipe is everyone else's |
 | debug | a bug found in a document the reader did not write, using only what the package prints |
@@ -414,8 +417,8 @@ the sandbox package's; the wall around the room is the operator's.
 ## Default modules, the batteries
 
 A full stack application should not start from nothing. The stack ships default module areas:
-`auth`, `email`, `files`, `geo`, `health`, `moderation`, `notifications`, `posts`, `state`,
-`static`, `uploads`, `users`.
+`auth`, `files`, `geo`, `health`, `logs`, `moderation`, `notify`, `posts`, `state`, `static`,
+`uploads`, `users`. Email is a channel of `notify`, not an area of its own.
 
 The loader gives an application's own directory precedence over the library's, so an
 application overrides a default module by writing one with the same name, configures one
@@ -427,14 +430,14 @@ crosses the plane boundary, so these are integrators, not members of either plan
 ```
 @aweftjs/auth        server modules + client views + schema
 @aweftjs/files       upload and serve + components + a storage driver
-@aweftjs/email       providers and templates
+@aweftjs/notify      one send over inbox, email and push + the inbox on the page
 @aweftjs/users       profiles and validation
 @aweftjs/posts       the generic content module
 @aweftjs/geo         geocoding and map components
 @aweftjs/moderation  image and text moderation
 ```
 
-`aweft`, the meta-package, bundles the common set, so `npm i aweft` gets auth, users, email
+`aweft`, the meta-package, bundles the common set, so `npm i aweft` gets auth, users, notify
 and files working. `auth`'s server half is built (design 074), its client half on
 `@aweftjs/client` (design 183, 185), and its views ship as page modules a stage loads by name
 (design 245): a battery's view is a module like any other, and the application puts it on a URL
@@ -462,6 +465,18 @@ same visit. Batches go over HTTP to `logs/Record`, `logs/Visits` keeps the docum
 and the readers (`visit`, `visits`, `errors`, `prune`) plus a Metabase view read them back. It
 records no typed value, no IP, and no private-slot value, and it decides nothing about who may
 read a visit.
+
+The notify battery is built (design 268). `@aweftjs/notify` is a source of three server modules
+and a client half. `notify/Send` is the broker any module names in `deps`: one `send` to
+`{ user }` or `{ email }`, over the channels its level picks (the inbox; push; email) unless the
+send names them, with what each channel did written into the answer and onto the item, and a
+channel that fails never losing the message or throwing out of the send. `notify/Inbox` keeps
+`inbox:<user>`, the last two hundred items, shared live on every connection of theirs and
+written only by the server; the page marks items read through the one call. `notify/Devices`
+keeps `devices:<user>`, never shared, for push. Email is Resend and push is FCM v1, both over
+`fetch` with no dependency, chosen by configuration, and the application's own sender or pusher
+is a function in the same configuration. One cap ships, per recipient per hour. Who may send to
+whom, every per-sender cap and every template stay in the module that calls `send`.
 
 They split per area rather than shipping as one package because an application that wants
 auth and not posts should not carry posts, and an agent reading `@aweftjs/auth` should find

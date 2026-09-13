@@ -19,6 +19,7 @@
 		"static":  { "tier": "integrator", "plane": "server", "imports": "*" },
 		"health":  { "tier": "integrator", "plane": "server", "imports": "*" },
 		"logs":    { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
+		"notify":  { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
 		"testing": { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
 		"debug":   { "tier": "integrator", "plane": "isomorphic", "imports": "*" },
 		"build":   { "tier": "integrator", "plane": "isomorphic", "imports": "*" }

@@ -255,8 +255,9 @@ that is what one module for both means, and `auth/Check` exists so a form can as
 
 ## What waits
 
-Email verification and password reset wait for the email battery. The client half ships no sign-in
-or sign-up view, so a page writes its own form and calls `enter`.
+Email verification and password reset wait on a sender, which `@aweftjs/notify` now is: a send
+with `channels: ['email']` and the mail's `html`. Neither route is built yet. The client half ships
+no sign-in or sign-up view, so a page writes its own form and calls `enter`.
 
 The design notes are in
 [`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 071 and 074, and 185
