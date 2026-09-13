@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { MessageChannel } from 'node:worker_threads';
 import { spawnSync } from 'node:child_process';
 
-import { apply, atomic, createObject, idOf, observer, snapshot } from '@aweftjs/core';
+import { apply, atomic, createArray, createObject, idOf, observer, snapshot } from '@aweftjs/core';
 import { canonicalJson, settle as settleRounds, socketPair } from '@aweftjs/testing';
 
 // This suite settled for twenty rounds before the harness shipped one, and its convergence checks
@@ -855,4 +855,119 @@ test('an end with nothing can share first or second, and gets the document eithe
 		assert.equal(minted.n, 8);
 		left.close();
 	}
+});
+
+// --- what lands at a replica ---------------------------------------------------------------
+
+// A splice that removes and inserts in one call anchors the new positions on the survivors
+// either side of the removed span. Anchoring on the removed elements instead sorts the
+// insertions among what is gone, and the replica, which orders by position, disagrees with
+// the source, which has the array it edited.
+test('a splice that removes and inserts leaves the replica in the order the source has', async () => {
+	const source = createObject<Doc>({ list: createArray(['a', 'b', 'c', 'd', 'e']) });
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
+	a.share('list', source);
+	const replica = await b.share<Doc>('list').ready;
+	await settle();
+
+	const list = source.list as string[];
+	list.splice(1, 2, 'x', 'y', 'z');
+	list.splice(0, 1, 'w');
+	list.splice(list.length - 1, 1, 'v', 'u');
+	list.splice(2, 3);
+	await settle();
+
+	assert.deepEqual([...(replica.list as string[])], [...list]);
+	assert.deepEqual([...list], ['w', 'x', 'v', 'u']);
+	a.close();
+	b.close();
+});
+
+// A slot whose observable is replaced by another names a new id. What follows is addressed to
+// the new one and lands; what is still addressed to the old one is refused as unreachable,
+// because the old observable is not in the document any more.
+test('after a slot is replaced with another observable, deltas reach the new one and the old one is unreachable', async () => {
+	const first = createObject<Doc>({ n: 1 });
+	const source = createObject<Doc>({ child: first });
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
+	a.share('doc', source);
+	const replica = await b.share<Doc>('doc').ready;
+	await settle();
+
+	const second = createObject<Doc>({ n: 10 });
+	source.child = second;
+	second.n = 11;
+	await settle();
+	assert.equal((replica.child as Doc).n, 11, 'the write into the replacement crossed');
+	assert.equal(idOf(replica.child) !== undefined && String(idOf(replica.child)), String(idOf(second)));
+
+	const stale: Commit = {
+		deltas: [{ type: 'replace', id: idOf(first), ref: { kind: 'object', key: 'n' }, value: 99 }],
+	};
+	assert.throws(() => apply(replica, stale), (error: { reason?: string }) => error.reason === 'unreachable');
+	assert.equal((replica.child as Doc).n, 11, 'nothing landed from the stale commit');
+	a.close();
+	b.close();
+});
+
+// Detaching an observable and putting it back at the same slot inside one block cancels the
+// two edge deltas. A write made after the re-attach is still in the block's commit, and it
+// has to reach the tracker and the replica even though the container deltas cancelled: an
+// engine that marks the re-added observable as new, and so skips recording its writes because
+// its whole state would go out with the attach, sends nothing at all once the attach is gone.
+test('a write after a detach and re-attach in one block still crosses, though the edge deltas cancelled', async () => {
+	const child = createObject<Doc>({ n: 1 });
+	const source = createObject<Doc>({ child });
+	const outgoing: Commit[] = [];
+	const tracker = track(source, ({ commit, landed }) => {
+		if (!landed) outgoing.push(commit);
+	});
+
+	atomic(() => {
+		delete source.child;
+		source.child = child;
+		child.n = 2;
+	});
+	assert.equal(outgoing.length, 1);
+	assert.deepEqual(outgoing[0]!.deltas.map((d) => d.type), ['replace'], 'the edge deltas cancelled and the write stayed');
+	tracker.stop();
+
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
+	a.share('doc', source);
+	const replica = await b.share<Doc>('doc').ready;
+	await settle();
+	atomic(() => {
+		delete source.child;
+		source.child = child;
+		child.n = 3;
+	});
+	await settle();
+	assert.equal((replica.child as Doc).n, 3);
+	a.close();
+	b.close();
+});
+
+// The outbox sends at the end of the tick. Closing the link before the tick ends must send
+// what the outbox holds first, or the last write before a close is the one write that never
+// leaves, and a page that writes and navigates away loses exactly its final keystroke.
+test('closing the link sends what is still queued this tick before the channel ends', async () => {
+	const source = createObject<Doc>({ title: 'draft' });
+	const [x, y] = inProcess();
+	const a = connect(x);
+	const b = connect(y);
+	a.share('doc', source);
+	const replica = await b.share<Doc>('doc').ready;
+	await settle();
+
+	source.title = 'final';
+	a.close();
+	await settle();
+	assert.equal(replica.title, 'final');
+	b.close();
 });
