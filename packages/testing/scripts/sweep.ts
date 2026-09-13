@@ -45,9 +45,9 @@ if (copied.status !== 0) {
 	process.exit(1);
 }
 rmSync(join(copy, '.git'), { recursive: true, force: true });
-// Other worktrees under the checkout are not the tree being swept, and each has its own
+// Other checkouts kept under .claude are not the tree being swept, and each has its own
 // node_modules.
-rmSync(join(copy, '.claude', 'worktrees'), { recursive: true, force: true });
+rmSync(join(copy, '.claude'), { recursive: true, force: true });
 
 // An interrupt would otherwise leave the whole copy behind in the temp directory.
 const cleanUp = (): void => rmSync(scratch, { recursive: true, force: true });
