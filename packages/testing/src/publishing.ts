@@ -72,6 +72,14 @@ export const checkPublishing = (manifests: readonly PublishManifest[]): string[]
 		}
 
 		for (const [subpath, entry] of Object.entries(manifest.exports ?? {})) {
+			// A data file is the same bytes for a checkout and a consumer, so it is one entry with no
+			// conditions; what it needs is to ship (design 278, `text.json`).
+			if (typeof entry === 'string' && entry.endsWith('.json')) {
+				if (!(manifest.files ?? []).includes(entry.replace(/^\.\//, ''))) {
+					say(`exports ${subpath} as data and does not name it in files, so it would not ship`);
+				}
+				continue;
+			}
 			const conditions = conditionsOf(entry);
 			if (conditions === null) {
 				say(`exports ${subpath} as one file, which serves a checkout or a consumer but not both`);
