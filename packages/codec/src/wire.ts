@@ -348,11 +348,6 @@ export const readArg = (r: Reader, info: number): number => {
 let textDecoder: InstanceType<typeof TextDecoder> | null = null;
 
 export const readValue = (r: Reader, depth = 0): WireValue => {
-	if (depth >= MAX_DEPTH) {
-		throw codecError('nesting-too-deep', `past ${MAX_DEPTH} levels`,
-			'Flatten the value, or split it across several commits.');
-	}
-
 	need(r, 1);
 	const initial = r.bytes[r.offset++]!;
 	const major = initial >> 5;
@@ -388,6 +383,13 @@ export const readValue = (r: Reader, depth = 0): WireValue => {
 	}
 
 	if (major === 4) {
+		// A level is an array: the commit is the first, a ref inside a delta the fourth. The
+		// ninth is refused before its length is read, and a scalar inside the eighth is not
+		// past eight levels.
+		if (depth >= MAX_DEPTH) {
+			throw codecError('nesting-too-deep', `past ${MAX_DEPTH} levels`,
+				'Flatten the value, or split it across several commits.');
+		}
 		const n = readArg(r, info);
 		// Every item costs at least one byte, so a length beyond what is left is a lie and
 		// there is no reason to allocate for it.

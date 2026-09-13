@@ -46,6 +46,11 @@ const texts = [
 	// UTF-8 lengths, so the comparison reaches the characters rather than stopping at length.
 	'\u{1f600}', '\uffffa', '\ue000a', 'a\uffff', '\u{10ffff}', '\uffff\uffff',
 	'\u{1f600}\u{1f600}', '\uffff\uffffab', '\u{1f600}ab', '\uffff\uffff\uffff',
+	// The last character of each UTF-8 width and the first of the next, so a byte count that
+	// draws a line one code unit off disagrees with the bytes somewhere in this list.
+	String.fromCharCode(0x7f), String.fromCharCode(0x80), String.fromCharCode(0x7ff),
+	String.fromCharCode(0x800), String.fromCharCode(0xd7ff), String.fromCharCode(0xe000),
+	String.fromCodePoint(0x10000), String.fromCharCode(0x80) + 'a', 'a' + String.fromCharCode(0x7f),
 ];
 
 const positions = [

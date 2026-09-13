@@ -172,3 +172,50 @@ test('heads at and past the one-byte boundary, derived by hand from the specific
 		'9819' + 'f6'.repeat(25),
 	);
 });
+
+test('eight levels of nesting decode and the ninth is refused before its length is read', () => {
+	// Section 6.1 counts a level as an array: a commit is the first and a ref inside a delta the
+	// fourth. So eight nested arrays are eight levels, and the ninth is what is past them.
+	assert.deepEqual(decodeValue(bytesFromHex('81'.repeat(8) + '00')), [[[[[[[[0]]]]]]]]);
+	rejects('81'.repeat(9) + '00', 'nesting-too-deep');
+	// An empty ninth array is still a ninth array.
+	rejects('81'.repeat(8) + '80', 'nesting-too-deep');
+	// A hostile length on the ninth is never read, so it cannot be mistaken for truncation.
+	rejects('81'.repeat(8) + '9bffffffffffffffff', 'nesting-too-deep');
+});
+
+test('a float spelling a whole number at either end of the exact range is refused', () => {
+	// Section 6.2: whole and within plus or minus 2^53 is an integer, the ends included, so
+	// the float spelling of -2^53 is non-canonical like that of 2^53 above. The bytes are
+	// IEEE 754 by hand: sign bit set, exponent 1076, no mantissa.
+	rejects('fbc340000000000000', 'non-canonical-float');
+	// One past each end is a float, because no integer spelling holds it.
+	roundTrip(2 ** 53 + 2);
+	roundTrip(-(2 ** 53) - 2);
+});
+
+test('a surrogate pair is judged at the edges of the low half', () => {
+	const lone = (s: string): void =>
+		assert.throws(() => encodeValue(s), (e: CodecError) => e.reason === 'lone-surrogate', JSON.stringify(s));
+
+	// The first and last low surrogates pair; a high surrogate followed by anything else does not.
+	roundTrip('\u{10000}');
+	roundTrip('\u{10ffff}');
+	lone('\ud800\udbff');
+	lone('\ud800a');
+	lone('\ud800');
+	// A low surrogate on its own, at both ends of its range.
+	lone('\udc00');
+	lone('\udfff');
+});
+
+test('a value with no encoding is refused by the writer, with the reason a caller can branch on', () => {
+	const unsupported: unknown[] = [undefined, {}, () => 0, new Map(), 10n, Symbol('s'), new Date(0)];
+	for (const value of unsupported) {
+		assert.throws(
+			() => encodeValue(value as WireValue),
+			(e: CodecError) => e.reason === 'unsupported-value',
+			`${typeof value} should have no encoding`,
+		);
+	}
+});
