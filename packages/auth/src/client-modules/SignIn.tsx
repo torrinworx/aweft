@@ -4,7 +4,7 @@
 // opinion about who may see what. Where to go afterwards is the application's.
 
 import { mutable } from '@aweftjs/core';
-import { Button, TextField, h } from '@aweftjs/ui';
+import { Button, TextField, h, text } from '@aweftjs/ui';
 
 import type { Auth } from '../auth-client.ts';
 
@@ -33,7 +33,7 @@ interface SignInProps {
 }
 
 export default ({ imports }: { imports: Readonly<Record<string, unknown>> }): {
-	title: string;
+	title: unknown;
 	component: (props: SignInProps) => unknown;
 } => {
 	const session = imports['Session'] as Auth;
@@ -74,7 +74,7 @@ export default ({ imports }: { imports: Readonly<Record<string, unknown>> }): {
 
 		return (
 			<form
-				aria-label="Sign in"
+				aria-label={text('Sign in')}
 				style={LAYOUT}
 				onSubmit={(event: unknown) => {
 					(event as { preventDefault(): void }).preventDefault();
@@ -82,15 +82,15 @@ export default ({ imports }: { imports: Readonly<Record<string, unknown>> }): {
 				}}
 			>
 				<TextField
-					label="Email"
+					label={text('Email')}
 					value={email}
 					error={emailProblem}
-					placeholder="you@example.com"
+					placeholder={text('you@example.com')}
 					name="email"
 					autocomplete="email"
 				/>
 				<TextField
-					label="Password"
+					label={text('Password')}
 					value={password}
 					error={passwordProblem}
 					password
@@ -101,10 +101,10 @@ export default ({ imports }: { imports: Readonly<Record<string, unknown>> }): {
 				<p role="alert">{problem}</p>
 				{/* `Button` is a `type="button"`, so the click is the submit and the form's own
 				    handler is what the Enter key reaches. */}
-				<Button label="Sign in" loading={busy} disabled={busy} onClick={submit} />
+				<Button label={text('Sign in')} loading={busy} disabled={busy} onClick={submit} />
 			</form>
 		);
 	};
 
-	return { title: 'Sign in', component };
+	return { title: text('Sign in'), component };
 };

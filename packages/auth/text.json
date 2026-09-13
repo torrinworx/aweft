@@ -1,0 +1,14 @@
+{
+	"Email": [
+		"src/client-modules/SignIn.tsx"
+	],
+	"Password": [
+		"src/client-modules/SignIn.tsx"
+	],
+	"Sign in": [
+		"src/client-modules/SignIn.tsx"
+	],
+	"you@example.com": [
+		"src/client-modules/SignIn.tsx"
+	]
+}
