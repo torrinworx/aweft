@@ -9,16 +9,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { mutable } from '@aweftjs/core';
-import { fromBundle } from '@aweftjs/modules';
+import { createLoader, fromBundle } from '@aweftjs/modules';
 import type { Source } from '@aweftjs/modules';
-import { createDocument, parseHtml, toHtml } from '@aweftjs/dom';
+import { createDocument, mount as mountInto, parseHtml, toHtml } from '@aweftjs/dom';
 import { createRouter } from '@aweftjs/dom/router';
-import type { LightDocument } from '@aweftjs/dom';
+import type { LightDocument, Mounter } from '@aweftjs/dom';
 import {
 	LoaderContext, Shown, Stage, StageContext, Title,
-	context, h, hydrate, mount, render,
+	claimTail, context, h, hydrate, mount, render,
 } from '@aweftjs/ui';
-import type { Render, StageValue } from '@aweftjs/ui';
+import type { Render, StageValue, TailClaim } from '@aweftjs/ui';
 
 /** Let the deliveries a write started run. */
 const settle = async (): Promise<void> => {
@@ -697,7 +697,7 @@ test('a nested stage shares the loader, and one with sources of its own is refus
 			acts: { '': (): unknown => h(StageContext, { sources: [outer], acts: { '': page('x') } } as never, h(Stage, {})) },
 			initial: '',
 		} as never, h(Stage, {}))),
-		/cannot take sources of its own/,
+		/cannot take sources or a loader of its own/,
 	);
 });
 
@@ -977,5 +977,191 @@ test('a refused act key that takes parameters is refused, naming the rule', () =
 			refused: '*rest',
 		} as never, h(Stage, {}))),
 		/refused act and that key takes parameters/,
+	);
+});
+
+// --- a routed child that is not a stage, and a loader handed in (design 282) -----------------
+
+test('claimTail follows the parent\'s tail, hands back its base and router, and a second claimant gets null', async () => {
+	const router = createRouter({ url: '/app/3/notes/7' });
+	const document = createDocument();
+	const seen: string[] = [];
+	const bases: string[] = [];
+	let claim: TailClaim | null = null;
+	let second: TailClaim | null | undefined;
+	let released = 0;
+
+	const Frame = (): Mounter => (elem, _item, before, context) => {
+		claim = claimTail(context);
+		second = claimTail(context);
+		const stopTail = claim!.tail.effect((tail) => { seen.push(String(tail)); bases.push(claim!.base); });
+		const remove = mountInto(elem, h('iframe', {}), before, context);
+		return (arg) => {
+			if (arg !== undefined) return remove(arg);
+			stopTail();
+			released += 1;
+			claim!.release();
+			return remove();
+		};
+	};
+	const Host = (): unknown => h('main', {}, h(Frame as never, {}));
+
+	const stop = mount(document.body as never, h(StageContext, {
+		router,
+		acts: { 'app/:id': Host, other: page('other') },
+	} as never, h(Stage, {})));
+
+	assert.ok(claim !== null, 'a routed child under an act gets the claim');
+	assert.equal(second, null, 'and the second asker gets nothing, as a second nested stage would');
+	assert.equal((claim as TailClaim).router, router, 'the tree\'s router');
+	assert.deepEqual(seen, ['notes/7'], 'the tail the act did not take');
+	assert.deepEqual(bases, ['app/3'], 'the path the room\'s URLs sit under, as StageEntry.prefix spells it');
+
+	router.push('/app/3/settings');
+	await settle();
+	assert.deepEqual(seen, ['notes/7', 'settings'], 'the claim follows the tail without the act being rebuilt');
+	assert.equal(released, 0);
+
+	router.push('/other');
+	await settle();
+	assert.equal(released, 1, 'leaving the act releases the claim');
+
+	router.push('/app/9/x');
+	await settle();
+	assert.equal(bases.at(-1), 'app/9', 'the base is read on each ask, so a new match is a new base');
+	assert.equal(seen.at(-1), 'x', 'and the next claimant under the new act has the tail');
+	stop();
+	assert.equal(released, 2);
+
+	assert.equal(claimTail(context()), null, 'null above every stage');
+	const swapper = createDocument();
+	let bare: TailClaim | null | undefined;
+	const Probe = (): Mounter => (elem, _item, before, context) => { bare = claimTail(context); return mountInto(elem, null, before, context); };
+	const stopBare = mount(swapper.body as never, h(StageContext, { acts: { '': Probe as never }, initial: '' } as never, h(Stage, {})));
+	assert.ok(bare !== null && bare !== undefined, 'a stage with no router still hands out its tail');
+	assert.equal(bare!.router, null, 'with no router in the tree');
+	stopBare();
+});
+
+/** An act with a stage of its own, counting how often the stage built it. */
+const shell = (builds: { count: number }) => (): unknown => {
+	builds.count += 1;
+	return h('section', { id: 'docs' }, h(StageContext, {
+		acts: { '': page('index'), 'guide/:name': (inner: { stage: StageValue }): unknown => page(`guide-${inner.stage.params.get()['name'] ?? ''}`)() },
+	} as never, h(Stage, {})));
+};
+
+test('a stage under a * act routes on the path it parked, whose prefix is what stands before it (design 282)', async () => {
+	const router = createRouter({ url: '/docs/guide/install' });
+	const document = createDocument();
+	const own: Render = context();
+	const builds = { count: 0 };
+	const params: Record<string, string>[] = [];
+	const inner = shell(builds);
+	const Docs = (props: { stage: StageValue }): unknown => { params.push(props.stage.params.get()); return inner(); };
+	const stop = mount(document.body as never, h(StageContext, {
+		router,
+		acts: { 'docs/*': Docs as never, '': page('home') },
+	} as never, h(Stage, {})), undefined, own);
+	assert.equal(textOf(document), '<section id="docs"><main id="guide-install">guide-install</main></section>', 'what the * parked is the child\'s tail');
+	assert.deepEqual(params, [{}], 'and the * took no parameter');
+	assert.equal(own.stage.items[1]!.prefix, 'docs', 'the child sits under what stands before the *');
+
+	router.push('/docs');
+	await settle();
+	assert.equal(textOf(document), '<section id="docs"><main id="index">index</main></section>', 'an empty tail is the child\'s index');
+	stop();
+});
+
+test('a * act is not rebuilt when its tail changes, and a *rest act is, because the rest is its parameter (designs 123 and 282)', async () => {
+	// Under `*`: the tail belongs to the child stage, so two moves are two child changes and the
+	// act itself is built once.
+	const router = createRouter({ url: '/docs/guide/install' });
+	const document = createDocument();
+	const builds = { count: 0 };
+	const stop = mount(document.body as never, h(StageContext, {
+		router,
+		acts: { 'docs/*': shell(builds) as never, '': page('home') },
+	} as never, h(Stage, {})));
+	assert.equal(builds.count, 1);
+	router.push('/docs/guide/setup');
+	await settle();
+	assert.equal(textOf(document), '<section id="docs"><main id="guide-setup">guide-setup</main></section>', 'the child followed the tail');
+	router.push('/docs');
+	await settle();
+	assert.equal(textOf(document), '<section id="docs"><main id="index">index</main></section>');
+	assert.equal(builds.count, 1, 'the act was built once across two moves');
+	stop();
+
+	// Under `*rest`: the rest is a parameter, a parameter change is a different page, and the act
+	// took everything, so its child stage has no tail and sits on its index.
+	const named = createRouter({ url: '/docs/guide/install' });
+	const other = createDocument();
+	const rebuilt = { count: 0 };
+	const stopNamed = mount(other.body as never, h(StageContext, {
+		router: named,
+		acts: { 'docs/*rest': shell(rebuilt) as never, '': page('home') },
+	} as never, h(Stage, {})));
+	assert.equal(textOf(other), '<section id="docs"><main id="index">index</main></section>', 'a *rest leaves no tail');
+	named.push('/docs/guide/setup');
+	await settle();
+	named.push('/docs');
+	await settle();
+	assert.equal(rebuilt.count, 3, 'the act was built once per move');
+	stopNamed();
+});
+
+test('a stage given a loader loads a named act from it, inherits it below, and never closes it', async () => {
+	const stops: string[] = [];
+	const map = {
+		'site/Home.ts': { default: (props: Record<string, unknown>) => ({ component: page(`home-${String(props['client'])}`), stop: () => { stops.push('home'); } }) },
+		'site/Shared.ts': { default: () => ({ stop: () => { stops.push('shared'); } }) },
+		'site/Deep.ts': { deps: ['site/Shared'], default: () => ({ component: (): unknown => h(StageContext, { acts: { '': 'site/Leaf' } } as never, h(Stage, {})) }) },
+		'site/Leaf.ts': { default: () => ({ component: page('leaf') }) },
+	};
+	const loader = createLoader({ sources: [source(map)], props: { client: 'mine' } });
+	const router = createRouter({ url: '/' });
+	const document = createDocument();
+	const stop = mount(document.body as never, h(StageContext, {
+		router, loader, acts: { '': 'site/Home', deep: 'site/Deep' },
+	} as never, h(Stage, {})));
+	await loaded();
+	assert.equal(textOf(document), '<main id="home-mine">home-mine</main>', 'the act came from the loader handed in, with the props its builder chose');
+
+	router.push('/deep');
+	await loaded();
+	await loaded();
+	assert.equal(textOf(document), '<main id="leaf">leaf</main>', 'a nested stage resolved a name through the loader handed in');
+	assert.deepEqual(stops, ['home'], 'the act left was let go of');
+	assert.deepEqual([...loader.loaded()], ['site/Shared', 'site/Deep', 'site/Leaf']);
+
+	stop();
+	await loaded();
+	assert.deepEqual([...loader.loaded()], ['site/Shared'], 'the stage let go of what it was showing and left the loader to its owner');
+	assert.deepEqual(stops, ['home'], 'the shared dependency was never stopped: it is the loader owner\'s');
+});
+
+test('a loader beside sources, or on a nested stage, is a loud assert, and a client beside a loader too', () => {
+	const map = { 'site/Home.ts': act('home') };
+	const loader = createLoader({ sources: [source(map)] });
+	assert.throws(
+		() => mount(createDocument().body as never, h(StageContext, {
+			sources: [source(map)], loader, acts: { '': 'site/Home' }, initial: '',
+		} as never, h(Stage, {}))),
+		/given sources and a loader/,
+	);
+	assert.throws(
+		() => mount(createDocument().body as never, h(StageContext, {
+			loader,
+			acts: { '': (): unknown => h(StageContext, { loader, acts: { '': page('x') } } as never, h(Stage, {})) },
+			initial: '',
+		} as never, h(Stage, {}))),
+		/cannot take sources or a loader of its own/,
+	);
+	assert.throws(
+		() => mount(createDocument().body as never, h(StageContext, {
+			loader, client: {}, acts: { '': 'site/Home' }, initial: '',
+		} as never, h(Stage, {}))),
+		/given a client and no sources/,
 	);
 });

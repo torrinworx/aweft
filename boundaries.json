@@ -6,7 +6,7 @@
 		"sync":    { "tier": 4, "plane": "isomorphic", "imports": ["codec", "core"] },
 		"store":   { "tier": 4, "plane": "isomorphic", "imports": ["codec", "core"] },
 		"modules": { "tier": 5, "plane": "isomorphic", "imports": ["codec", "core"] },
-		"sandbox": { "tier": 5, "plane": "isomorphic", "imports": ["codec", "core", "modules", "sync"] },
+		"sandbox": { "tier": 7, "plane": "isomorphic", "imports": ["codec", "core", "modules", "sync", "dom", "client", "ui"] },
 		"dom":     { "tier": 6, "plane": "client", "imports": ["codec", "core"] },
 		"client":  { "tier": 6, "plane": "client", "imports": ["codec", "core", "sync"] },
 		"server":  { "tier": 6, "plane": "server", "imports": ["codec", "core", "modules", "sync"] },

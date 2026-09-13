@@ -107,7 +107,7 @@ type StageAct: interface StageAct { readonly name: string; readonly loader: bool
 value StageContext: StageContextComponent
 type StageContextComponent: interface StageContextComponent { (props: StageProps): unknown; read(context: unknown): StageValue | null; node(context: unknown): ContextNode<StageValue | null> | null; use<P extends Record<string, unknown>>(build: (stage: StageValue | null) => Component<P>): Component<P>; }
 type StageEntry: interface StageEntry { readonly acts: readonly StageAct[]; readonly prefix: string; readonly parent: StageEntry | null; readonly fallback: string | null; readonly current: string | null; }
-type StageProps: interface StageProps { readonly acts: Readonly<Record<string, Act>>; readonly template?: Component; readonly fallback?: string; readonly initial?: string; readonly router?: Router; readonly sources?: readonly Source[]; readonly client?: unknown; readonly refused?: string; readonly children?: unknown[]; }
+type StageProps: interface StageProps { readonly acts: Readonly<Record<string, Act>>; readonly template?: Component; readonly fallback?: string; readonly initial?: string; readonly router?: Router; readonly sources?: readonly Source[]; readonly loader?: Loader; readonly client?: unknown; readonly refused?: string; readonly children?: unknown[]; }
 type StageValue: interface StageValue { readonly current: Derived<string | null>; readonly params: Derived<Readonly<Record<string, string>>>; readonly query: Derived<Record<string, string>>; open(options: OpenOptions): void; close(): void; }
 value Style: (props: TagProps) => unknown
 type Subdivision: interface Subdivision { readonly code: string; readonly name: string; }
@@ -123,6 +123,7 @@ type TableProps: interface TableProps { readonly columns?: readonly (TableColumn
 value Tabs: (props: TabsProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
 type TabsProps: interface TabsProps { readonly value?: unknown; readonly tabs?: unknown; readonly orientation?: unknown; readonly type?: unknown; readonly size?: unknown; readonly label?: unknown; readonly onChange?: (next: unknown, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type TagProps: interface TagProps { readonly key?: string; readonly children?: unknown[]; readonly [attribute: string]: unknown; }
+type TailClaim: interface TailClaim { readonly tail: Derived<string>; readonly base: string; readonly router: Router | null; release(): void; }
 value TextArea: (props: TextAreaProps) => Mounter
 type TextAreaProps: interface TextAreaProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly placeholder?: unknown; readonly maxHeight?: unknown; readonly onEnter?: (event: unknown) => void; readonly onKeyDown?: (event: unknown) => void; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value TextField: (props: TextFieldProps) => Mounter
@@ -151,6 +152,7 @@ value ValidateContext: (props: ValidateContextProps) => Mounter
 type ValidateContextProps: interface ValidateContextProps { readonly value?: unknown; readonly children?: unknown[]; }
 type ValidateProps: interface ValidateProps { readonly value?: unknown; readonly validate?: unknown; readonly signal?: unknown; readonly valid?: unknown; readonly error?: unknown; readonly showError?: unknown; readonly icon?: unknown; readonly type?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value categories: (children: readonly unknown[], names: readonly string[], fallback?: string | undefined) => Category[]
+value claimTail: (context: unknown) => TailClaim | null
 value context: (options?: ContextOptions) => Render
 value createContext: <T>(def: T, transform?: Transform<T>) => Context<T>
 value dark: Readonly<Record<string, Readonly<Record<string, unknown>>>>

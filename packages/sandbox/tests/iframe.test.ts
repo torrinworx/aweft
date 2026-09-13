@@ -64,6 +64,17 @@ test('the iframe runner refuses to run without a document and a MessageChannel',
 	assert.throws(() => iframe({ inside: 'x', into: { appendChild: () => {} } }), (e: SandboxError) => e.reason === 'no-page');
 });
 
+test('a hostile inside URL cannot end the policy or the attribute: its origin is cut like every other', async () => {
+	const { frame, runner } = setup('https://page.test"><script>alert(1)</script><meta x="');
+	await runner.start();
+	const srcdoc = frame.attrs.srcdoc!;
+	assert.ok(!srcdoc.includes('<script>alert(1)'), 'no script from the inside string reached the markup');
+	assert.ok(!srcdoc.includes('<meta x='), 'nor a second element');
+	assert.match(policyOf(frame)['script-src']!, /^'unsafe-inline' data: https:\/\/page\.test[A-Za-z0-9]*$/, 'the origin, with the rest stripped');
+	assert.equal(Object.keys(policyOf(frame)).length, 2, 'and no directive beyond the two');
+	await runner.stop();
+});
+
 test('a bare inside URL with no path still yields a usable script-src origin', async () => {
 	const { frame } = setup('https://rooms.example');
 	// originOf returns the whole string when there is no path after the host.
@@ -71,4 +82,56 @@ test('a bare inside URL with no path still yields a usable script-src origin', a
 	await runner.start();
 	assert.match(frame.attrs.srcdoc!, /script-src 'unsafe-inline' data: https:\/\/rooms\.example"/);
 	await runner.stop();
+});
+
+/** The policy the frame was given, as directive name to its sources. */
+const policyOf = (frame: { attrs: Record<string, string> }): Record<string, string> => {
+	const content = /Content-Security-Policy" content="([^"]*)"/.exec(frame.attrs.srcdoc!)![1]!;
+	return Object.fromEntries(content.split('; ').map((directive) => {
+		const at = directive.indexOf(' ');
+		return [directive.slice(0, at), directive.slice(at + 1)];
+	}));
+};
+
+test('allow opens styles, images, fonts and media and nothing else (design 284)', async () => {
+	const inside = 'https://rooms.example:8443/room/inside.js';
+	const bare = setup(inside);
+	await bare.runner.start();
+	assert.deepEqual(policyOf(bare.frame), {
+		'default-src': "'none'",
+		'script-src': "'unsafe-inline' data: https://rooms.example:8443",
+	}, 'with no allow the policy is what it always was');
+
+	const opened = fakeFrame();
+	const runner = iframe({
+		inside, into: { appendChild: () => {} }, document: { createElement: () => opened }, MessageChannel: fakeChannel(),
+		allow: { styles: true, images: ['https://cdn.example/avatars/'], fonts: [], media: ['https://media.example:9000/x', 'https://cdn.example'] },
+	});
+	await runner.start();
+	assert.deepEqual(policyOf(opened), {
+		'default-src': "'none'",
+		'script-src': "'unsafe-inline' data: https://rooms.example:8443",
+		'style-src': "'unsafe-inline'",
+		'img-src': 'https://rooms.example:8443 data: blob: https://cdn.example',
+		'font-src': 'https://rooms.example:8443 data: blob:',
+		'media-src': 'https://rooms.example:8443 data: blob: https://media.example:9000 https://cdn.example',
+	});
+	assert.ok(!opened.attrs.srcdoc!.includes('connect-src'), 'connect-src is never written, so it stays under default-src none');
+	assert.equal(opened.attrs.sandbox, 'allow-scripts', 'the sandbox attribute does not widen');
+	await runner.stop();
+
+	// An origin that tries to end the directive or the attribute is cut to the characters an
+	// origin may hold, and a list with no styles adds no style-src.
+	const hostile = fakeFrame();
+	const r2 = iframe({
+		inside, into: { appendChild: () => {} }, document: { createElement: () => hostile }, MessageChannel: fakeChannel(),
+		allow: { images: ['https://x.example; connect-src *', 'https://y.example"><script>'] },
+	});
+	await r2.start();
+	const policy = policyOf(hostile);
+	assert.equal(policy['img-src'], 'https://rooms.example:8443 data: blob: https://x.exampleconnect-src* https://y.examplescript');
+	assert.equal(policy['connect-src'], undefined, 'no origin can smuggle a directive in');
+	assert.equal(policy['style-src'], undefined, 'no styles were asked for');
+	assert.ok(!hostile.attrs.srcdoc!.includes('"><script>'), 'nor end the attribute');
+	await r2.stop();
 });

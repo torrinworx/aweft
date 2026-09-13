@@ -1614,7 +1614,8 @@ mount(document.body, (
 router.links(document.body);
 ```
 
-`StageContext` holds the acts and, given a router, the URL. `Stage` renders whichever act is
+`StageContext` holds the acts and, given a router, the URL; a nested stage under a routed act
+needs none, because it follows its parent's. `Stage` renders whichever act is
 current, inside the template. They are two components because one that did template selection, URL
 matching, child coordination and the accessibility work at once would be unchangeable.
 
@@ -1623,9 +1624,11 @@ the `refused` act's component is what shows under that name, so a test asking wh
 showing reads the page rather than `current`.
 
 **An act key** is a path with no leading slash. `''` is the index and matches `/` only. `:name`
-takes one segment, and one trailing `*name` takes the rest. A key whose whole text is the path wins
-outright, and otherwise a literal segment beats `:name`, `:name` beats `*name`, and the longer
-pattern breaks a tie. There are no optional segments and no patterns.
+takes one segment, and one trailing `*name` takes the rest. A trailing bare `*` takes no segment
+and no parameter: it matches any path and parks everything from it as the tail for a stage inside
+the act, which is not rebuilt when that tail moves. A key whose whole text is the path wins
+outright, and otherwise a literal segment beats `:name`, `:name` beats `*name` and `*`, and the
+longer pattern breaks a tie. There are no optional segments and no patterns.
 
 **An act** is the component, or the name of a module. A component act may carry `entries()`, an
 async function returning the parameter sets a static walk should render it at; nothing in this
