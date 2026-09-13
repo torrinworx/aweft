@@ -10,7 +10,8 @@ The short version:
   tier table, regenerates and compares every package's public surface and refusal vocabulary,
   checks the theme contract and the security table, runs every package's tests with coverage,
   and runs every recipe. A change is done when the gate is green, and a result is reported with
-  the command and its exit code.
+  the command and its exit code. `npm install` at the root points git's hooks at `.githooks/`,
+  where `pre-push` runs the gate and `npm audit` before anything leaves the machine.
 - A security claim is a row in `docs/security/asvs.csv` with its check beside it; `docs/security.md`
   says what the stack owns and what an application built on it still owns. To report a
   vulnerability, `SECURITY.md`.

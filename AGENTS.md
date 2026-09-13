@@ -309,8 +309,9 @@ Rules of evidence:
 
 ### ARCHITECTURAL COORDINATION
 
-The machine enforces, on every run of the root gate (`npm test`; there is no remote and no
-CI, the gate is the machine):
+The machine enforces, on every run of the root gate (`npm test`; there is no CI: the gate runs
+on this machine, and `.githooks/pre-push` runs it with `npm audit` before anything is pushed,
+which `npm install` at the root installs through the `prepare` script):
 
 - **The tier rule**: a package imports from its own tier or below, never upward, never
   across the client/server plane, with exactly the two named exceptions in
@@ -350,6 +351,9 @@ CI, the gate is the machine):
   row the stack owns names a case of `securityChecks()`, a test or a document section that does
   not exist, or a case cites a requirement the table does not give to the stack (design 270).
   `npm run security` runs it. A security claim is a row in that table with its check beside it.
+- **The push hook**: `packages/testing/scripts/check-hooks.ts` fails when git's hooks path is
+  not `.githooks` or the hook there cannot run, so a checkout whose `npm install` never ran the
+  `prepare` script cannot pass the gate either. `npm run hooks` runs it.
 
 #### Optional external dependencies
 
