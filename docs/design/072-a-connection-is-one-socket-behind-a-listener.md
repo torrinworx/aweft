@@ -41,7 +41,9 @@ later load introduces is answered 500 by the request that meets it, and reported
 **Failure.** A `connection` hook that throws closes the connection. A route that throws
 answers 500. Both, and a throw out of the gate, reach `handlers.failed(name, error)`;
 without a handler the error is raised where nothing catches it, as `follow` does. A
-`call` that throws answers its caller and is not reported, because the caller heard.
+`call` that throws a refusal answers its caller with it and is not reported, because the caller
+heard what the module meant it to; one that throws anything else answers `failed` with nothing
+of the error and is reported (design 272).
 
 `server` decides nothing about who may write a commit (that is `accept`, per share), which
 modules load (the application's), or any limit or interval.

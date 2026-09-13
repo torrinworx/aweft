@@ -31,9 +31,11 @@ const todo = (title: string, done = false): Todo => createObject<Todo>({ title, 
 
 const Item = ({ each: item }: { each: Todo }) => {
 	const done = observer(item).path('done');
+	const title = observer(item).path('title');
+	// The box is named by the title beside it (the access rules, design 265).
 	return h('li', { class: done.bool('done', null) },
-		h('input', { type: 'checkbox', $checked: done, $onchange: () => { item.done = !item.done; } }),
-		' ', observer(item).path('title'),
+		h('input', { type: 'checkbox', 'aria-label': title, $checked: done, $onchange: () => { item.done = !item.done; } }),
+		' ', title,
 	);
 };
 

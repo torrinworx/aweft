@@ -14,6 +14,7 @@ import { controlStates, elementFor } from './control.ts';
 import { drag } from './drag.ts';
 import { fromHsv, hsvOf, readColour, writeColour } from './color.ts';
 import { h } from './h.ts';
+import { text } from './text.ts';
 import { isWritable, through } from './source.ts';
 
 /** What `ColorPicker` takes. Everything not named here goes to the wrapper. */
@@ -198,7 +199,7 @@ export const ColorPicker = (
 			},
 			role: 'slider',
 			tabindex: through(disabled, (held) => (held ? '-1' : '0')),
-			'aria-label': 'Saturation and brightness',
+			'aria-label': text('Saturation and brightness'),
 			'aria-valuemin': '0',
 			'aria-valuemax': '100',
 			'aria-valuenow': through(saturation, (held) => String(held)),
@@ -209,12 +210,12 @@ export const ColorPicker = (
 			...grip.keys,
 		})),
 		h(Slider, {
-			label: 'Hue', value: hue, min: 0, max: 360, disabled, track: false, onInput: putOut,
+			label: text('Hue'), value: hue, min: 0, max: 360, disabled, track: false, onInput: putOut,
 			theme: ['colorpicker_track', 'hue'],
 		}),
 		alphaOn
 			? h(Slider, {
-				label: 'Opacity', value: opacity, min: 0, max: 100, disabled, track: false,
+				label: text('Opacity'), value: opacity, min: 0, max: 100, disabled, track: false,
 				onInput: putOut, theme: ['colorpicker_track'], style: { background: opacityTrack },
 			})
 			: null));

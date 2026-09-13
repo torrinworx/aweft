@@ -31,6 +31,7 @@ import type { Connection } from '@aweftjs/server';
 import { node } from '@aweftjs/server/node';
 import { createStore, memoryDriver } from '@aweftjs/store';
 import type { RequestError, SocketLike } from '@aweftjs/sync';
+import { audit } from '@aweftjs/testing/browser';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 
@@ -230,16 +231,10 @@ view.on('pageerror', (error) => problems.push(String(error)));
 const trace = (): Promise<string[]> =>
 	view.evaluate(() => (globalThis as unknown as { aweftTrace?: string[] }).aweftTrace ?? []);
 
-const audit = async (what: string): Promise<void> => {
-	await view.addScriptTag({ path: fileURLToPath(import.meta.resolve('axe-core/axe.min.js')) });
-	const found = await view.evaluate(async () => await (globalThis as unknown as {
-		axe: { run(root: unknown, options: unknown): Promise<{ violations: { id: string; help: string; nodes: { html: string }[] }[] }> };
-		document: unknown;
-	}).axe.run((globalThis as unknown as { document: unknown }).document, {
-		runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] },
-	}));
+const audited = async (what: string): Promise<void> => {
+	const found = await audit(view);
 	for (const violation of found.violations) {
-		console.error(`  axe ${violation.id}: ${violation.help}`);
+		console.error(`  axe ${violation.rule}: ${violation.help}`);
 		for (const node of violation.nodes) console.error(`    ${node.html}`);
 	}
 	check(found.violations.length === 0, `axe found nothing to fix on the sign-in form ${what}`);
@@ -252,7 +247,7 @@ try {
 	await view.waitForSelector('form[aria-label="Sign in"]');
 	check(new URL(view.url()).pathname === '/notes', 'a gated page while anonymous keeps its URL');
 	check(await view.$('#notes') === null, 'and shows the sign-in act instead of the page');
-	await audit('in light mode');
+	await audited('in light mode');
 
 	// The whole form is one act, and signing up through it is the same call as signing in. The
 	// form still picks no URL: on success it calls the `retry` the stage handed it, so the act
@@ -309,7 +304,7 @@ try {
 	await view.emulateMedia({ colorScheme: 'dark' });
 	await view.goto(`${http}/join`);
 	await view.waitForSelector('form[aria-label="Sign in"]');
-	await audit('in dark mode');
+	await audited('in dark mode');
 } finally {
 	await browser.close();
 }

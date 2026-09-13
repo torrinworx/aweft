@@ -1,5 +1,8 @@
 # 181: `TextModifiers` run over the label, after one internal resolve step
 
+Amended by design 278: the resolve step is filled. A `label` that is a text token resolves to
+the string its catalog holds before the modifiers run, so a modifier matches the translated word.
+
 ## Decision
 
 `TextModifiers` is a context holding a list of `{ check, return }`. `Typography` runs the list

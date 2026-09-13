@@ -1,0 +1,29 @@
+type Channel: type Channel = 'inbox' | 'email' | 'push';
+type Delivery: type Delivery = { readonly ok: true; readonly [detail: string]: unknown; } | { readonly ok: false; readonly error: string; } | { readonly skipped: string; };
+type DeliveryRecord: type DeliveryRecord = Readonly<Partial<Record<Channel, Delivery>>>;
+type Device: interface Device { readonly platform: 'android' | 'ios' | 'desktop' | 'web'; readonly transport: 'fcm' | 'none'; readonly endpoint: string | null; readonly seenAt: number; }
+type Devices: interface Devices { call(args: unknown, context: unknown): Promise<{ devices: number; }>; list(user: string): Promise<Readonly<Record<string, Device>>>; forget(user: string, device: string): Promise<void>; }
+type EmailSetting: type EmailSetting = { readonly resend: { readonly key: string; readonly from: string; readonly endpoint?: string | undefined; }; } | Sender | null;
+type Inbox: interface Inbox { connection(connection: Connection): Promise<(() => Promise<void>) | undefined>; call(args: unknown, context: unknown): Promise<{ marked: number; }>; append(user: string, item: Item): Promise<void>; delivered(user: string, id: string, record: DeliveryRecord): Promise<void>; stop(): Promise<void>; }
+type Item: interface Item { readonly id: string; readonly at: number; readonly level: Level; readonly title: string; readonly body: string; readonly url: string | null; readonly tag: string | null; readonly readAt: number | null; readonly delivery: string; }
+type Level: type Level = 'info' | 'warn' | 'error';
+type Mail: interface Mail { readonly to: string; readonly subject: string; readonly text: string; readonly html: string; readonly replyTo?: string | undefined; }
+type PushData: type PushData = Readonly<Record<string, string>>;
+type PushOutcome: type PushOutcome = Delivery & { readonly stale?: boolean; };
+type PushSetting: type PushSetting = { readonly fcm: { readonly account: string; readonly endpoint?: string | undefined; readonly tokenUrl?: string | undefined; }; } | Pusher | null;
+type Pusher: type Pusher = (data: PushData, endpoints: readonly string[]) => Promise<PushOutcome[]>;
+type Recipient: type Recipient = { readonly user: string; } | { readonly email: string; };
+type Send: interface Send { send(options: SendOptions): Promise<Sent>; }
+type SendOptions: interface SendOptions { readonly to: Recipient; readonly title: string; readonly body?: string | undefined; readonly level?: Level | undefined; readonly channels?: readonly Channel[] | undefined; readonly url?: string | null | undefined; readonly tag?: string | null | undefined; readonly html?: string | undefined; readonly replyTo?: string | undefined; readonly private?: boolean | undefined; }
+type Sender: type Sender = (mail: Mail) => Promise<Delivery>;
+type Sent: interface Sent { readonly id: string; readonly at: number; readonly delivery: DeliveryRecord; }
+value notify: Source
+./client type Channel: type Channel = 'inbox' | 'email' | 'push';
+./client type Delivery: type Delivery = { readonly ok: true; readonly [detail: string]: unknown; } | { readonly ok: false; readonly error: string; } | { readonly skipped: string; };
+./client type DeliveryRecord: type DeliveryRecord = Readonly<Partial<Record<Channel, Delivery>>>;
+./client type Device: interface Device { readonly platform: 'android' | 'ios' | 'desktop' | 'web'; readonly transport: 'fcm' | 'none'; readonly endpoint: string | null; readonly seenAt: number; }
+./client type InboxView: interface InboxView { readonly items: readonly Item[] | undefined; readonly ready: Promise<readonly Item[]>; readonly unread: Derived<number>; read(ids?: readonly string[]): Promise<number>; register(registration: Registration): Promise<number>; forget(device: string): Promise<number>; stop(): void; }
+./client type Item: interface Item { readonly id: string; readonly at: number; readonly level: Level; readonly title: string; readonly body: string; readonly url: string | null; readonly tag: string | null; readonly readAt: number | null; readonly delivery: string; }
+./client type Level: type Level = 'info' | 'warn' | 'error';
+./client type Registration: interface Registration { readonly device: string; readonly platform: Device['platform']; readonly transport: Device['transport']; readonly endpoint?: string | null | undefined; }
+./client value createInbox: (client: Client) => InboxView

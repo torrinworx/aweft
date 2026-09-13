@@ -94,6 +94,8 @@ aweft/
     static/                the static battery: a directory of files served for what no route matched
     health/                the health battery: one route that says the process is up and right
     logs/                  the logs battery: what a page and the server did, per visit, in the store
+    uploads/               the uploads battery: a file kept in a directory or a bucket, and served at /files/<id>
+    notify/                the notify battery: one send to a person over inbox, email and push, the inbox shared live
     jobs/                  a scheduler over an array the application hands in
     ssg/                   static generation
     build/                 transforms, in two modes
@@ -125,14 +127,16 @@ version in lockstep.
 | `sandbox` | The window: a loader on the far end of a link, the grants, calls as rows, and the runners that make a room; and the page halves, a host act that puts the frame on the page and shares the documents the application names, and the stage inside the frame over the tail of the page's URL | What the code it runs is for; what wall is around the room; who may load, grant or call; how many rooms and for how long; what a granted name lets a module do; whether a write from the room is acceptable |
 | `dom` | Mounting, hydration, static render, URL and history, and the prototype a hoisted template is instanced from | Storage, transport, components |
 | `client` | One connection to a server for the life of a page: the socket, the link and the requests attached before it opens, asks, share handles that keep one document object across reconnects, the retry | Who is on the connection, what a document means, which documents a page shares; users, sessions, cookies; components |
-| `ui` | Components, theming, and the stage: the acts a URL reaches, and the loader it builds over the sources it was given so an act can be a module name | Storage, transport, server; what a connection is, and who is on it |
+| `ui` | Components, theming, the stage: the acts a URL reaches, and the loader it builds over the sources it was given so an act can be a module name; and the text a page shows, looked up in the render's language where it mounts | Storage, transport, server; what a connection is, and who is on it; which language a visitor gets, and where a catalog comes from |
 | `icons` | Turning an installed icon set into modules a page imports: one icon, a whole set, the standard names, and a resolver for a name known only at run time | Which sets an application installs, whether a page fetches, what an icon looks like; any icon data of its own |
 | `server` | Building the loader from the sources the application names and loading every module they list; accepting connections and requests through a listener; one socket as a link and a call channel; running the modules' `connection`, `call` and `routes` hooks behind the gate the application supplies | Who is on a connection, who may reach a module, who may write a commit, what a module is for; users, sessions, storage; component internals |
 | `auth` | The gate that reads `public`, sessions as documents, sign-in and sign-up, the per-user state document, as server modules; the client half over a `client` connection: `user` as a cell, `enter`, `leave`, `state` and `check`; and a source of two page modules, `auth/Session` and the `auth/SignIn` form | Which application loads it; which URL any of it is on; who may see a page |
 | `jobs` | When a row runs, over an observable array the application hands in: the timers, the cron arithmetic, `last` written onto the row | What a job does; who may add, edit or remove a row; storage; queues, retries, catch-up; modules; component internals |
-| `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom |
+| `build` | The transforms: markup and JSX to `h` calls, a static subtree to a template `dom` instances, assert calls out of a release build, the text a page shows found and answered, and the release mangle pattern | Which bundler an application uses; whether a page writes JSX, markup or `h`; what a custom `h` does; when source that arrives at run time is compiled, or by whom; whether a missing translation fails a build |
 | `testing` | Conformance suites and harnesses for every layer | Nothing. It may know everything |
 | `logs` | What a page and the server did, per visit, in the application's store: a client half that records the page, three server modules, and readers any process imports | Who may read a visit; whether to record; retention beyond its defaults; any URL but its one route; a typed value, a private-slot value, an IP |
+| `uploads` | A file from a page or a module: the bytes in a directory or an S3-compatible bucket through an adapter, the record in the store, served at `/files/<id>` with the type from the record; a client half that posts with progress; readers any process imports | Who may upload beyond the gate and `accept`; who may read beyond `public` and `allow`; deletion over the wire; expiry; what a file means (no index, resize, transcode); a storage setting from the environment; an IP |
+| `notify` | One send to a user or an address over the channels its level picks: an inbox document per user shared live on their connections, email over Resend, push over FCM, each channel's outcome recorded; a client half that hands a page the inbox and registers a device | Who may send to whom; any cap but the one per recipient; templates; whether a `url` is safe to render; any URL; a page writing the inbox; a device endpoint reaching a page |
 | `debug` | Reading a running document or commit back as text | Nothing. It may know everything; no runtime package may know it |
 
 ---
@@ -226,6 +230,13 @@ superseded it.
 | One connection to a server | `client`, on the client plane beside `dom`: an instance, never a singleton; the socket made and the link and the requests attached before it opens; `url` the page's own origin and never sniffed; `open(url)` the one seam a Node program hands in | 183 |
 | Coming back after a drop | The handle keeps one document object for its whole life, every new socket re-shares that object and resyncs it, and the server's state wins over edits made while there was no socket; 500 ms doubling to 10 s, and at once on `online` or the tab becoming visible | 184 |
 | Who a page is | `auth/client` hands identity as a cell: `undefined`, `null`, or the id, asked over the socket the page opens anyway, and `auth/Session` gains the `call` that answers it. `enter` and `leave` reconnect, because identity is fixed per connection, and `state()` refuses an anonymous connection instead of waiting | 185 |
+| The security standard | ASVS 5.0 at level 2, the WCAG analogue: `docs/security/asvs.csv` gives every level 1 and 2 requirement an owner, a `stack` row names the check that proves it, and `npm run security` fails when the check does not exist | 270 |
+| Proof of a server | `securityChecks()` in `testing`, append-only, one named obligation each citing its requirements, run against a server the caller starts; the auth battery and the scaffold run it against themselves | 271 |
+| Before the gate | A count per address over a sliding window and the Origin rule, both in `createServer` with values, checked before `identify`; a call that throws anything but a refusal answers `failed` and is reported | 272 |
+| The listener's bounds | A body and a frame at 1 MiB unless `maxPayload` says otherwise, `Infinity` for none; `forwarded` reads the proxy's own entry, or `x-real-ip` | 273 |
+| A drawing from a URL | Refused when it can run or reach out; the resolver throws `unsafe-body` naming the icon | 274 |
+| Sign-in bounded | Attempts per email and per address, hashes in flight, a password of eight to 256 characters of any composition, `refusePassword` for a list; a session that ended is swept after `keep` days; the gate hands the address on | 275 |
+| Nosniff | Every answer from static and from the server carries `X-Content-Type-Options: nosniff` | 276 |
 
 ---
 
@@ -256,6 +267,10 @@ primary author. A convention will not prevent that. A dependency will.
 - the **recording host** (`recordingDocument`), a light document from `dom` that writes down
   every node operation, so a test asserts what a mount did and not only what the tree looks
   like after. It is the DOM mock: nothing pulls in a browser emulation
+- the **page checks** (`audit` and `walk` on the `/browser` subpath), axe-core over the page a
+  test drives and a Tab walk over its controls, so an application's drive fails on what only
+  the rendered page shows (design 267). The page is structural and the package imports no
+  browser driver
 
 It grows these as the packages that need them arrive.
 
@@ -304,7 +319,7 @@ onboarding rule.
 | Future package | Tier | Why |
 |---|---|---|
 | `auth` | integrator | Sessions and identity are state, but a vertical slice crosses both planes |
-| `files` | split | A `store` driver plus a `ui` component. Two packages, because of the plane rule |
+| `files` | built as `uploads` | An integrator like the other batteries (design 262): the `ui` half is `FileDrop`, the storage half is an adapter behind the keeper, not a `store` driver |
 | `agent` | above `schema` | A language model writes state, and `schema` is what keeps the document well formed while it does |
 | `crdt` | data plane, beside `sync` | An alternative merge strategy behind the same commit interface |
 | `native` | client plane, beside `dom` | A different render target, parallel to the DOM binding |
@@ -337,10 +352,12 @@ indexed by the job rather than the package, are not in this table.
 | client | a page against a real listener: a share and an ask made before the socket opens both arrive, the server is restarted underneath it, and the page comes back on its own with the same state document object holding what the server wrote while it was down, with an ask made while it was down answered on the new socket |
 | auth | inside the server recipe: sign up over HTTP, connect with the cookie, the state document shared and persisted, sign out and the old cookie is anonymous; and, in the client recipe, a page whose every part is a module signs up through `auth/SignIn`, reads `user`, opens `state` and signs out |
 | jobs | a scheduled job runs, persists an effect, and survives a restart |
-| ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM |
+| ssg | a real multi-page site generates, serves, and hydrates without wiping the DOM; and a site written in one language is written in three, with a stored act compiled where it runs, and hydrates in each |
 | static | a generated site is served by the stack's own server in one process: a deep link hydrates in place, an unknown URL is 404 with the fallback page, the same URL under the shell setting is 200 and mounts live, and HEAD, the ETag and a climbing path answer as the rule says |
 | health | a deploy's verification: the endpoint polled until the shipped build is the one answering, then the two states a poll must not mistake for health, a store that stopped answering and a check that threw |
 | logs | a page recorded end to end in a browser and the visit read back: a page error, a rejection, a console error, a failed call on both sides, a commit's shape with a private slot absent, a typed character never stored, a non-character key kept, a refused write, sign-in mid-visit, and the browser facts |
+| uploads | a page under the gate uploads a picture from a drop zone with progress and it paints from `/files/<id>` with the type, the tag, `immutable`, `nosniff` and `sandbox`; an anonymous post is 403 before its body is read; a wrong type, wrong bytes, an oversized file and the application's own `accept` each refuse with their status and reason on the page; a module makes a file of its own; the readers list them; `remove` takes bytes and record; the static battery behind it answers unknown URLs and never a file |
+| notify | two pages of one signed-in user hear a module's send live and mark it read for each other, a device registered from the page, email and push against two fake services with the record on the item, a dead device forgotten, a failed mail kept, a forged write refused, the per-recipient cap, a restart over the same driver, and a server with no store doing a contact form's job |
 | build | the transforms build a real page; assert stripping is verified in the output |
 | testing | consumed by every other package's suite; its recipe is everyone else's |
 | debug | a bug found in a document the reader did not write, using only what the package prints |
@@ -426,8 +443,9 @@ the sandbox package's; the wall around the room is the operator's.
 ## Default modules, the batteries
 
 A full stack application should not start from nothing. The stack ships default module areas:
-`auth`, `email`, `files`, `geo`, `health`, `moderation`, `notifications`, `posts`, `state`,
-`static`, `uploads`, `users`.
+`auth`, `geo`, `health`, `logs`, `moderation`, `notify`, `posts`, `state`, `static`, `uploads`,
+`users`. (`files` and `uploads` were one area, and are `uploads`. Email is a channel of `notify`,
+not an area of its own.)
 
 The loader gives an application's own directory precedence over the library's, so an
 application overrides a default module by writing one with the same name, configures one
@@ -438,16 +456,16 @@ crosses the plane boundary, so these are integrators, not members of either plan
 
 ```
 @aweftjs/auth        server modules + client views + schema
-@aweftjs/files       upload and serve + components + a storage driver
-@aweftjs/email       providers and templates
+@aweftjs/uploads     upload and serve + a client half + storage adapters (built)
+@aweftjs/notify      one send over inbox, email and push + the inbox on the page (built)
 @aweftjs/users       profiles and validation
 @aweftjs/posts       the generic content module
 @aweftjs/geo         geocoding and map components
 @aweftjs/moderation  image and text moderation
 ```
 
-`aweft`, the meta-package, bundles the common set, so `npm i aweft` gets auth, users, email
-and files working. `auth`'s server half is built (design 074), its client half on
+`aweft`, the meta-package, bundles the common set, so `npm i aweft` gets auth, users, notify
+and uploads working. `auth`'s server half is built (design 074), its client half on
 `@aweftjs/client` (design 183, 185), and its views ship as page modules a stage loads by name
 (design 245): a battery's view is a module like any other, and the application puts it on a URL
 by naming it in its acts map. No battery picks a URL.
@@ -474,6 +492,28 @@ same visit. Batches go over HTTP to `logs/Record`, `logs/Visits` keeps the docum
 and the readers (`visit`, `visits`, `errors`, `prune`) plus a Metabase view read them back. It
 records no typed value, no IP, and no private-slot value, and it decides nothing about who may
 read a visit.
+
+The uploads battery is built (design 262). `@aweftjs/uploads` is a source of three server
+modules, two adapters and a client half. `uploads/Receive` answers `POST /api/uploads` with one
+file as the body, checked against the configured types and caps and the first bytes, streamed
+into storage through an adapter (`directory`, or `s3` signed with no dependency), then handed to
+the application's `accept` before the record is written; `uploads/Serve` answers `GET
+/files/<id>` from the record with a strong tag, `immutable`, `nosniff` and `sandbox`, behind
+`public` and an `allow` rule; `uploads/Files` is the keeper a module names in `deps` for `put`,
+`open` and `remove`. It is listed before `static` in `sources`, because the load order follows
+the listing (design 263) and `static/Files` answers everything it is asked. No delete route, no
+expiry, no IP: those stay with the application.
+The notify battery is built (design 268). `@aweftjs/notify` is a source of three server modules
+and a client half. `notify/Send` is the broker any module names in `deps`: one `send` to
+`{ user }` or `{ email }`, over the channels its level picks (the inbox; push; email) unless the
+send names them, with what each channel did written into the answer and onto the item, and a
+channel that fails never losing the message or throwing out of the send. `notify/Inbox` keeps
+`inbox:<user>`, the last two hundred items, shared live on every connection of theirs and
+written only by the server; the page marks items read through the one call. `notify/Devices`
+keeps `devices:<user>`, never shared, for push. Email is Resend and push is FCM v1, both over
+`fetch` with no dependency, chosen by configuration, and the application's own sender or pusher
+is a function in the same configuration. One cap ships, per recipient per hour. Who may send to
+whom, every per-sender cap and every template stay in the module that calls `send`.
 
 They split per area rather than shipping as one package because an application that wants
 auth and not posts should not carry posts, and an agent reading `@aweftjs/auth` should find
@@ -567,6 +607,9 @@ Four passes, in the order a node reaches them: markup in a template literal beco
 JSX becomes `h` calls resolved by ordinary scope, a static subtree becomes a template `dom`
 instances per document (design 089, 093, 094), and a release build loses its assert calls
 (design 097). Hoisting happens only where `h` is provably `dom`'s in that file (design 092).
+A fifth, off unless asked for: every literal a page shows becomes a `text()` call from `ui`,
+looked up in the render's language where it mounts, and the keys are answered so a build can
+write the catalog (design 277, 278).
 
 The transform's own risk is changing what a program means, so the package's suite is an
 equivalence suite: each fixture runs as written and transformed, mounted, rendered and

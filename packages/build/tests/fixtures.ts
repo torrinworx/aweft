@@ -251,7 +251,7 @@ export const create = () => {
 	const on = mutable(false);
 	const clicked = () => undefined;
 	return {
-		item: h('form', { class: 'f' }, h('input', { type: 'checkbox', $checked: on, $onclick: clicked }), h('span', { title: on })),
+		item: h('form', { class: 'f' }, h('input', { type: 'checkbox', 'aria-label': 'on', $checked: on, $onclick: clicked }), h('span', { title: on })),
 		edit: () => on.set(true),
 	};
 };`,
@@ -260,7 +260,7 @@ export const create = () => {
 	const on = mutable(false);
 	const clicked = () => undefined;
 	return {
-		item: <form class="f"><input type="checkbox" $checked={on} $onclick={clicked}/><span title={on}/></form>,
+		item: <form class="f"><input type="checkbox" aria-label="on" $checked={on} $onclick={clicked}/><span title={on}/></form>,
 		edit: () => on.set(true),
 	};
 };`,
@@ -330,7 +330,7 @@ export const create = () => {
 	{
 		name: 'markup with a bare attribute, a bare value and a closing slash',
 		source: `${dom}
-export const create = () => ({ item: html\`<div hidden id=plain><input type="text" /><br/></div>\` });`,
+export const create = () => ({ item: html\`<div hidden id=plain><input type="text" aria-label=plain /><br/></div>\` });`,
 	},
 	{
 		name: 'markup with several roots and a line break in text',
@@ -411,8 +411,8 @@ export const create = () => ({ item: h('ul', {}, [h('li', {}, 'a'), h('li', {}, 
 	{
 		name: 'an attribute whose literal value removes it',
 		source: `${dom}
-export const create = () => ({ item: h('div', { hidden: false, id: null, title: true, tabindex: 2 }, 'x') });`,
-		jsx: `export const create = () => ({ item: <div hidden={false} id={null} title tabindex={2}>x</div> });`,
+export const create = () => ({ item: h('div', { hidden: false, id: null, title: true, tabindex: 0 }, 'x') });`,
+		jsx: `export const create = () => ({ item: <div hidden={false} id={null} title tabindex={0}>x</div> });`,
 	},
 	{
 		// The property is written after the children, so it rewrites what they put there. Apply it

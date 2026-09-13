@@ -28,6 +28,7 @@ import { controlStates, elementFor, sizeSegments } from './control.ts';
 import { dialogControl } from './dialog.ts';
 import { empty, wireField } from './field.ts';
 import { h } from './h.ts';
+import { text } from './text.ts';
 import { listBox } from './listbox.ts';
 import { mountedElement } from './popup.tsx';
 import { isSource, isWritable, through } from './source.ts';
@@ -230,7 +231,7 @@ export const Chooser = (
 		// with no options at all, and what the person needs to know is that their own search found
 		// none of them.
 		const nothing = found.map((now) =>
-			(now.asked !== '' && now.rows.length === 0 ? h('p', { theme: ['chooser_none'] }, none ?? 'Nothing matches that.') : null));
+			(now.asked !== '' && now.rows.length === 0 ? h('p', { theme: ['chooser_none'] }, none ?? text('Nothing matches that.')) : null));
 
 		const grid = h('div', {
 			id: listId,
@@ -260,11 +261,11 @@ export const Chooser = (
 			},
 		},
 		h('div', { theme: ['chooser_head'] },
-			h('h2', { id: titleId, theme: ['text', 'lg'] }, title ?? label ?? 'Choose'),
+			h('h2', { id: titleId, theme: ['text', 'lg'] }, title ?? label ?? text('Choose')),
 			h(Button, {
 				type: 'quiet',
 				round: true,
-				'aria-label': 'Close',
+				'aria-label': text('Close', { context: 'dialog' }),
 				icon: h(Icon, { name: 'x' }),
 				onClick: () => { shut(); },
 			})),
@@ -272,9 +273,9 @@ export const Chooser = (
 			id: searchId,
 			theme: 'chooser_search',
 			value: query,
-			placeholder: search ?? 'Search',
+			placeholder: search ?? text('Search'),
 			leading: h(Icon, { name: 'search' }),
-			'aria-label': search ?? 'Search',
+			'aria-label': search ?? text('Search'),
 			role: 'combobox',
 			'aria-controls': listId,
 			'aria-expanded': 'true',

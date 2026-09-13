@@ -4,9 +4,9 @@
 // it is asked to and what that needs, and lets go of what it is asked to let go of. Which
 // modules, when, how many and for how long are the caller's.
 
-import type { Candidate, ModuleProps, Source } from './contract.ts';
+import type { ModuleProps, Source } from './contract.ts';
 import { modulesError } from './contract.ts';
-import { type Definition, order, resolve } from './graph.ts';
+import { type Definition, type Ranked, order, resolve } from './graph.ts';
 
 /**
  * A loader: the loaded graph and the tools that change it.
@@ -94,9 +94,13 @@ export const createLoader = (
 	// A module being instantiated, so two loads asking for it at once build it once.
 	const pending = new Map<string, Promise<unknown>>();
 
-	/** Every candidate of every source, by name, in precedence order. Lists; evaluates nothing. */
-	const listAll = async (): Promise<Map<string, Candidate[]>> => {
-		const byName = new Map<string, Candidate[]>();
+	/**
+	 * Every candidate of every source, by name, in precedence order, each with its place in the
+	 * listing. Lists; evaluates nothing.
+	 */
+	const listAll = async (): Promise<Map<string, Ranked[]>> => {
+		const byName = new Map<string, Ranked[]>();
+		let rank = 0;
 		for (const source of sources) {
 			// Precedence is between sources, not within one. Two candidates with one name in a
 			// single source (thing.js beside thing.ts) would shadow each other in silence.
@@ -111,7 +115,7 @@ export const createLoader = (
 				seen.add(candidate.name);
 				let list = byName.get(candidate.name);
 				if (list === undefined) byName.set(candidate.name, (list = []));
-				list.push(candidate);
+				list.push({ candidate, rank: rank++ });
 			}
 		}
 		return byName;

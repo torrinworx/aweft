@@ -159,7 +159,7 @@ doubled.socket.close();
 await closed(doubled.socket);
 
 // Sign in again with the wrong password, then the right one; sign out; the old cookie is anonymous.
-const wrong = await fetch(`${http}/api/session`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'ada@example.com', password: 'wrong' }) });
+const wrong = await fetch(`${http}/api/session`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'ada@example.com', password: 'wrong horse' }) });
 check(wrong.status === 401, 'a wrong password is 401');
 const signIn = await fetch(`${http}/api/session`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'Ada@Example.com', password: 'correct horse battery staple' }) });
 const second = signIn.headers.getSetCookie()[0]!.split(';')[0]!;

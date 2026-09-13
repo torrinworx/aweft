@@ -1,4 +1,4 @@
-type AuthContext: interface AuthContext { readonly user: string | null; readonly session: string | null; }
+type AuthContext: interface AuthContext { readonly user: string | null; readonly session: string | null; readonly address?: string | undefined; }
 value auth: Source
 value paths: Readonly<Record<string, readonly string[]>>
 ./client type Auth: interface Auth { readonly user: Derived<string | null | undefined>; enter(email: string, password: string): Promise<Entered>; leave(): Promise<void>; state<T extends object>(): Handle<T>; check(email: string): Promise<boolean>; stop(): void; }
@@ -9,3 +9,4 @@ value paths: Readonly<Record<string, readonly string[]>>
 ./client type Fetcher: type Fetcher = (url: string, init: FetchInit) => Promise<FetchResponse>;
 ./client value authClient: Source
 ./client value createAuth: (client: Client, options?: AuthOptions) => Auth
+./text.json data ./text.json

@@ -44,8 +44,9 @@ saying so is worth more than the workaround.
    `node --import @aweftjs/build/loader main.ts` from the application root. A `.tsx` file
    that imports no `h` of its own is given `dom`'s unless `AWEFT_DEFAULT_H=@aweftjs/ui` is
    set, and that value has to be the `defaultH` the vite config passes, or a page rendered on
-   the server and bundled for the browser will not hydrate. `packages/build/README.md`;
-   `recipes/ssg/`.
+   the server and bundled for the browser will not hydrate. The same holds for `AWEFT_TEXT=1`
+   and the config's `text: true`, which the scaffold sets. `packages/build/README.md`;
+   `recipes/ssg/`, `recipes/translated-site/`.
 5. **A page reaches a backend in development through a same-origin proxy.** The cookie belongs
    to the page's origin, so the dev server proxies the auth routes and a socket path of its own
    (`/ws`, with `ws: true`) to the backend, and the page names that path in
@@ -61,8 +62,14 @@ saying so is worth more than the workaround.
    a package fails at import time by design, and needing one is a finding to report, not a
    thing to work around.
 3. Before saying it is done, drive the page in a real browser: every state reachable by
-   keyboard, both modes, no page error and nothing written to the console at error level.
-   `recipes/full-stack/main.ts` shows the two listeners and `recipes/ui/main.ts` the walk.
+   keyboard, both modes, no page error and nothing written to the console at error level, and
+   `audit` and `walk` from `@aweftjs/testing/browser` over the page with nothing to report.
+   `recipes/full-stack/main.ts` shows the two listeners and both checks, and
+   `recipes/accessible-page/` a page that passes them and three that do not. The build refuses
+   an element no one can read (`packages/build/README.md`, The access rules) and the mount throws
+   on a nameless `Button` and a page with no `lang` or title; what those and the audit cannot
+   read stays yours: meaning carried by colour alone, the reading order, headings that describe
+   their section, time limits, consistent navigation, an error message that says what to do.
    Tests for an application are `node --test` files run under the loader.
 4. A stack bug found while building gets its test in the stack's package, in this repo, and
    the fix goes upstream; the application never carries a patched copy. The rest of this file
@@ -303,8 +310,9 @@ Rules of evidence:
 
 ### ARCHITECTURAL COORDINATION
 
-The machine enforces, on every run of the root gate (`npm test`; there is no remote and no
-CI, the gate is the machine):
+The machine enforces, on every run of the root gate (`npm test`; there is no CI: the gate runs
+on this machine, and `.githooks/pre-push` runs it with `npm audit` before anything is pushed,
+which `npm install` at the root installs through the `prepare` script):
 
 - **The tier rule**: a package imports from its own tier or below, never upward, never
   across the client/server plane, with exactly the two named exceptions in
@@ -339,6 +347,14 @@ CI, the gate is the machine):
   the vocabulary of how the stack was built rather than what it is (who decided a thing,
   when, through which review) and names what to write instead. `npm run words` runs it, and
   the root gate runs it first.
+- **The security table**: `packages/testing/scripts/check-security.ts` reads
+  `docs/security/asvs.csv`, one row per ASVS 5.0 requirement with its owner, and fails when a
+  row the stack owns names a case of `securityChecks()`, a test or a document section that does
+  not exist, or a case cites a requirement the table does not give to the stack (design 270).
+  `npm run security` runs it. A security claim is a row in that table with its check beside it.
+- **The push hook**: `packages/testing/scripts/check-hooks.ts` fails when git's hooks path is
+  not `.githooks` or the hook there cannot run, so a checkout whose `npm install` never ran the
+  `prepare` script cannot pass the gate either. `npm run hooks` runs it.
 
 #### Optional external dependencies
 

@@ -14,6 +14,9 @@ page/entry.tsx  ──▶  vite dev server  ──▶  backend/main.ts
                                            /ws   the socket, ws: true
 ```
 
+An application that loads the uploads battery adds `/files` beside `/api`, the path its files
+are served at (`recipes/uploads/page/vite.config.ts`).
+
 ## Run it by hand
 
 Two terminals, and the backend goes first.
@@ -30,7 +33,7 @@ Open what vite prints, sign up with any email and password, and the page tells y
 ## What the gate does with it
 
 ```
-AWEFT_DEFAULT_H=@aweftjs/ui node --import @aweftjs/build/loader recipes/full-stack/main.ts
+AWEFT_DEFAULT_H=@aweftjs/ui AWEFT_TEXT=1 node --import @aweftjs/build/loader recipes/full-stack/main.ts
 ```
 
 It starts the backend on port 0, starts the dev server against that port programmatically, and
@@ -38,6 +41,14 @@ drives the page in Chromium. Every check can only pass through the proxy: the bo
 document the server holds and reaches the browser over the socket, the public ask is answered on the
 same socket, and signing up sets a cookie on the dev server's origin that the socket after the
 reconnect carries to the gated module. It exits nonzero when a check fails.
+
+## The text a page shows
+
+`page/vite.config.ts` turns the transform's `text` option on, so a build writes `page/text/source.json`
+with every string the page shows, and the page is ready for a second language the day it needs one: a
+catalog beside it and `context({ locale, catalog })` at the mount (`packages/ui/README.md`, The text
+a page shows). A process that renders these pages on a server says the same thing with `AWEFT_TEXT=1`
+beside `AWEFT_DEFAULT_H`, or the two sides compile one file differently and the page will not hydrate.
 
 ## The one decision in here
 

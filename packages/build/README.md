@@ -1,7 +1,8 @@
 # @aweftjs/build
 
 The transforms. It compiles markup and JSX to `h` calls, replaces a static subtree with a
-template made once and cloned per use, and removes assert calls from a release build. It
+template made once and cloned per use, removes assert calls from a release build, and, when
+asked, finds every string a page shows so it can be looked up in the reader's language. It
 decides nothing else: not which bundler you use, not whether you write JSX, markup or `h` by
 hand, not what a custom `h` does, and not when source that arrives at run time is compiled.
 
@@ -32,7 +33,7 @@ const { code, map } = transform(source, { filename: 'page.tsx', release: true, d
 
 ```
 # A Node process, which has no bundler config to put an option in.
-AWEFT_DEFAULT_H=@aweftjs/ui node --import @aweftjs/build/loader build-site.ts
+AWEFT_DEFAULT_H=@aweftjs/ui AWEFT_TEXT=1 node --import @aweftjs/build/loader build-site.ts
 ```
 
 Both produce the same bytes for the same input, and there is a fixture suite that says so
@@ -144,11 +145,44 @@ hoists nothing anywhere in it, including the elements the shadow never reaches. 
 deliberate, because following a shadow properly needs real scope analysis, and the blunt rule can
 only be wrong in the direction of hoisting less.
 
+### The access rules
+
+Every element the transform reads, in whichever notation wrote it, goes through eight rules
+before anything is hoisted, and a fault is a `TransformError` at the element like any other
+(design 265). Each is a case a screen reader or a keyboard cannot recover from, and each is
+decidable from the source alone.
+
+| reason | refused | write instead |
+| --- | --- | --- |
+| `image-needs-alt` | `<img src="a.png" />` | `alt="what it shows"`, or `alt=""` for decoration |
+| `control-needs-label` | `<input />` on its own | an `id` with a `<label for>`, a `<label>` around it, or an `aria-label` |
+| `click-needs-role` | `<div $onclick={go}>` | a `<button>`, or a `role` and a `tabindex` |
+| `tabindex-positive` | `tabindex="1"` | `0` to join the tab order where it sits, `-1` to reach it from code |
+| `link-needs-href` | `<a>docs</a>` | an `href`, or a `<button>` when it acts on the page |
+| `button-needs-name` | `<button />` | text inside it, or an `aria-label` |
+| `heading-needs-text` | `<h2 />` | the heading's text, or no heading |
+| `frame-needs-title` | `<iframe src="/map" />` | a `title` saying what it holds |
+
+An `input` whose literal `type` is `hidden`, `submit`, `button`, `reset` or `image` needs no
+label. Natively interactive elements (`a`, `button`, `input`, `select`, `textarea`, `summary`,
+`details`, `option`, `label`, `audio`, `video`) may take a click as they are.
+
+The rules read what the source says and stop there. An attribute given as an expression is
+present: `alt={caption}` passes whatever `caption` holds. A spread makes the element unknowable
+and it passes. A component is not read itself, and the elements written inside it are. The Node
+loader compiles `.tsx` only, so an `h` call in a `.ts` file meets the rules in a bundle and not
+under `node --import @aweftjs/build/loader`. A `label` counts only when it is around the control in the same JSX, template or
+`h` call; a label in another expression pairs through an `id`. What the source cannot settle, a
+rendered page can: `audit` from
+[`@aweftjs/testing/browser`](https://github.com/torrinworx/aweft/blob/main/packages/testing/README.md)
+runs axe over the page a test drives.
+
 ### Assert stripping
 
 With `release: true`, a statement that is nothing but a call to a name imported by name from a
 neighbouring `assert` module is removed, and the import goes with it when nothing else in the
-file still names it.
+file still names it. So does any other import the file named only inside those calls: a helper
+an assert fed on has no use left. An import the file never names is left alone.
 
 ```ts
 import { assert } from './assert.ts';   // removed with its last call
@@ -166,6 +200,62 @@ A string literal shaped `set:name`, on the `name` prop of the `Icon` a file boun
 `@aweftjs/ui`, becomes an import of that one icon and the plugin and loader answer that import.
 [`@aweftjs/icons`](https://github.com/torrinworx/aweft/blob/main/packages/icons/README.md)'s
 README says exactly which names move and which are left for run time.
+
+### The text a page shows
+
+`aweft({ text: true })`, `transform(source, { text: true })`, or `AWEFT_TEXT=1` for the loader.
+Off by default. On, in a file whose `h` is `@aweftjs/ui`'s, every literal a person reads becomes
+a `text()` call from `@aweftjs/ui`, which looks the string up in the render's catalog where the
+page mounts (`packages/ui/README.md`, The text a page shows):
+
+```tsx
+<input placeholder="Search" name="q" />
+<p>Save changes</p>
+```
+
+compiles to
+
+```tsx
+import { text as _text } from '@aweftjs/ui';
+<input placeholder={_text("Search")} name="q" />
+<p>{_text("Save changes")}</p>
+```
+
+What moves: every literal text child of an element, in JSX, markup and a hand-written `h` call
+alike, and every string literal on a text prop. The text props are `TEXT_PROPS` on this package:
+`label`, `title`, `description`, `placeholder`, `alt`, `error`, `caption`, `aria-label`,
+`aria-description`, `aria-placeholder`, `aria-valuetext` and `aria-roledescription`. A `class`,
+an `href`, a `name`, a `type` or an `id` is a word for the machine and never moves.
+
+What is left alone: text with no letter in it (punctuation, a number, a separator); an element
+with a literal `translate="no"` and everything under it; a prop given as an expression; the props
+of an element carrying a spread, whose children still move; a file compiled against `dom`'s `h`,
+which comes out byte for byte as it went in; and a file under `node_modules`, because a package
+ships compiled files a server render reads as they are. A string built at run time is never a
+literal: write it as a message, `text('{n, plural, one {# item} other {# items}}', { n })`,
+which is also the only way it translates. A sentence with an element inside it is one message
+with a tag, `text('Read <link>the docs</link>', { link })`, not two literals.
+
+**What the transform answers.** `transform` gains `text` on its result: every key the file's
+tokens look up, each once, the wrapped literals and the `text()` calls the page wrote itself, a
+literal `context` folded in as `source|context`. A page that compiles a stored module at run time
+keeps that list beside the source, since the build below never saw it.
+
+**What the plugin writes.** When the bundle closes, `text/source.json` under the bundler's root:
+every key, sorted, with the files it came from relative to the root, and the keys every installed
+`@aweftjs` package ships in its `text.json` folded in under that name. It then reads each
+`text/<tag>.json` beside it and warns about the keys that catalog lacks and the entries it holds
+that no file uses. It never fails a build for either: what to do about a missing translation is
+yours. The loader writes nothing, because a process that renders pages is not a build.
+
+**Both sides must agree.** A page rendered on a server with the option off and bundled with it
+on has different trees on the two sides, one text node against one component per string, and
+does not hydrate. `AWEFT_TEXT` is the loader's word for the plugin's `text`, as `AWEFT_DEFAULT_H`
+is for `defaultH`, and the scaffold in `recipes/full-stack` sets both. Set to anything but a yes
+or a no it is refused when the loader starts.
+
+**What it costs.** A literal that hoisted into the template is a hole filled by a component call,
+about 0.7 µs per text in Chromium and a bracket pair in the static markup, measured in design 277.
 
 ## The release mangle
 
@@ -187,13 +277,17 @@ nothing; it is here so that the rename, when it happens, is a rename and nothing
 ## What it never decides
 
 Which bundler you use. Whether you write JSX, markup or `h` by hand. What a custom `h` does.
-When source that arrives at run time is compiled, or by whom.
+When source that arrives at run time is compiled, or by whom. Which language a page shows, and
+whether a missing translation fails a build.
 
 ## Proven by
 
 [`recipes/build/main.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/build/main.ts)
 builds a real page through the transforms, runs it in all three modes, and checks that a release
-build of the binding's own source has no asserts left in it. The package's own suite is the
+build of the binding's own source has no asserts left in it.
+[`recipes/translated-site`](https://github.com/torrinworx/aweft/tree/main/recipes/translated-site)
+builds a site with the text option on, reads the source catalog back, and hydrates the pages
+in three languages. The package's own suite is the
 equivalence suite: every fixture runs twice, once as written and once transformed, mounted,
 rendered and hydrated, over a document whose nodes clone and one whose nodes do not.
 

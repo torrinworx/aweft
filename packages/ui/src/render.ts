@@ -13,6 +13,7 @@ import {
 	createElement, hydrate as domHydrate, mount as domMount, render as domRender,
 } from '@aweftjs/dom';
 
+import { pageLanguage, pageTitle } from './access.ts';
 import { assert } from './assert.ts';
 import { type HeadList, attachHead, createHeadList } from './head-list.ts';
 import { type Ids, type Registry, createIds, createRegistry, hold } from './registry.ts';
@@ -20,6 +21,9 @@ import { type Sheet, createSheet } from './sheet.ts';
 import type { StageEntry } from './stage-entry.ts';
 
 const UI: unique symbol = Symbol('aweft.ui');
+
+/** A language's translations: the key a text token looks up, to the message to show for it. */
+export type Catalog = Readonly<Record<string, string>>;
 
 /** Everything one render owns. */
 export interface Render {
@@ -33,29 +37,97 @@ export interface Render {
 	readonly ids: Ids;
 	/** Where a popup mounts: `PopupContext` renders what is in here, after everything else. */
 	readonly popups: Registry;
+	/** The language this render shows, a BCP 47 tag, when the page named one (design 278). */
+	readonly locale?: string;
+	/** The translations a text token looks up, when the page handed any. */
+	readonly catalog?: Catalog;
+}
+
+/**
+ * What a page may say about the language a render shows. Both take `undefined` as well as
+ * nothing, so an entry writes `context({ locale, catalog })` whether or not this page has a
+ * catalog.
+ */
+export interface ContextOptions {
+	/** A BCP 47 tag, `fr` or `fr-CA`. Plural rules, numbers and `localeOf` follow it. */
+	readonly locale?: string | undefined;
+	/** The translations for that language. A key with no entry shows its source. */
+	readonly catalog?: Catalog | undefined;
 }
 
 /** The context value `ui` threads: the render, plus one slot per live context provider. */
 export type Context = Readonly<Record<symbol, unknown>>;
 
+const USED: unique symbol = Symbol('aweft.ui.text.used');
+
 /**
  * Make the systems for one render.
+ *
+ * Params:
+ *   options: `locale`, the language the render shows, and `catalog`, its translations. Both
+ *            optional; a render with neither shows every text token's source
  *
  * Returns: a fresh object sharing nothing with any other render. Hand it to `mount`, `render`
  * or `hydrate`, or let those make their own.
  *
  * Example:
- *   const ui = context();
+ *   const ui = context({ locale: 'fr', catalog: fr });
  *   const markup = await render(h(App, {}), { context: ui });
  *   const css = ui.theme.markup();
  */
-export const context = (): Render => ({
-	theme: createSheet(),
-	head: createHeadList(),
-	stage: createRegistry<StageEntry>(),
-	ids: createIds(),
-	popups: createRegistry(),
-});
+export const context = (options: ContextOptions = {}): Render => {
+	// An empty tag is no tag: `languageOf` on a page with no `lang` answers `''`, and an entry
+	// hands that straight in.
+	const locale = options.locale === undefined || options.locale === '' ? undefined : options.locale;
+	const render: Render = {
+		theme: createSheet(),
+		head: createHeadList(),
+		stage: createRegistry<StageEntry>(),
+		ids: createIds(),
+		popups: createRegistry(),
+		...(locale === undefined ? {} : { locale }),
+		...(options.catalog === undefined ? {} : { catalog: options.catalog }),
+	};
+	// Symbol slots rather than fields: a page reads the keys through `usedText` and never writes
+	// into the set, and the brand is what lets `textOf` take a render as well as a mount context.
+	const slots = render as unknown as Record<symbol, unknown>;
+	slots[USED] = new Set<string>();
+	slots[RENDER] = true;
+	return render;
+};
+
+const RENDER: unique symbol = Symbol('aweft.ui.render');
+
+/** Whether a value is a render `context()` made, rather than the opaque value a mount threads. */
+export const isRender = (value: unknown): value is Render =>
+	value !== null && typeof value === 'object' && (value as Record<symbol, unknown>)[RENDER] === true;
+
+/**
+ * The render a value names: the render itself when handed one, and otherwise the one a mount
+ * context carries, or null for a context with no `ui` systems.
+ */
+export const renderOf = (value: unknown): Render | null =>
+	(isRender(value) ? value : has(value) ? use(value) : null);
+
+/** Record a key a text token looked up in this render, so a walk can say what a catalog lacks. */
+export const recordText = (render: Render, key: string): void => {
+	(render as unknown as Record<symbol, Set<string> | undefined>)[USED]?.add(key);
+};
+
+/**
+ * The keys the text tokens of a render looked up, in the order they were first asked for.
+ *
+ * Params:
+ *   render: a render that has mounted or rendered a page
+ *
+ * Returns: the keys. A key is here whether or not the catalog had an entry for it, which is
+ * what lets a static walk report the entries a catalog lacks and the ones nothing uses.
+ *
+ * Example:
+ *   const missing = usedText(ui).filter((key) => catalog[key] === undefined);
+ */
+export const usedText = (render: Render): readonly string[] =>
+	[...((render as unknown as Record<symbol, Set<string> | undefined>)[USED] ?? [])];
 
 /** The context value a fresh render starts from. */
 const rooted = (render: Render): Context => ({ [UI]: render });
@@ -220,6 +292,9 @@ const heldBy = (target: ParentLike): Held | null => {
 	return slot[OWNED] ??= { own: null, attached: new Map(), tags: new Set() };
 };
 
+const LANGUAGE = 'the page declares no language: put lang="en", or the language it is written in, on its <html> element';
+const TITLE = 'the page has no title: put a <title> in its head, or a <Title> on the page';
+
 /** The render a mount into this target gets when the caller named none. */
 const documentRender = (target: ParentLike): Render => {
 	const held = heldBy(target);
@@ -292,6 +367,9 @@ export const mount = (target: ParentLike, item: unknown, before?: Remove, render
 	const own = render ?? documentRender(target);
 	const remove = domMount(target, item, before, rooted(own));
 	const detach = attachFor(target, own, false);
+	// Dev only: each statement leaves a release build (designs 097, 266).
+	assert(pageLanguage(target) !== '', LANGUAGE);
+	assert(pageTitle(target) !== '', TITLE);
 	return (arg) => {
 		if (arg !== undefined) return remove(arg);
 		detach();
@@ -357,6 +435,8 @@ export const hydrate = (target: ParentLike, item: unknown, render?: Render): Hyd
 	const own = render ?? documentRender(target);
 	const remove = domHydrate(target, item, rooted(own));
 	const detach = attachFor(target, own, true);
+	assert(pageLanguage(target) !== '', LANGUAGE);
+	assert(pageTitle(target) !== '', TITLE);
 	const stop: Remove = (arg) => {
 		if (arg !== undefined) return remove(arg);
 		detach();

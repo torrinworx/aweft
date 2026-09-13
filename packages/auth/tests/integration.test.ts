@@ -28,11 +28,11 @@ const started = async () => {
 test('sign up over HTTP, connect with the cookie, share the state, sign out, and the old cookie is anonymous', async () => {
 	const { store, seen, handlers, server } = await started();
 
-	const signUp = await handlers.request(jsonRequest('/api/session', 'POST', { email: 'ada@example.com', password: 'pw' }), peer);
+	const signUp = await handlers.request(jsonRequest('/api/session', 'POST', { email: 'ada@example.com', password: 'correct horse' }), peer);
 	assert.equal(signUp.status, 201);
 	const { user } = await signUp.json() as { user: string };
 	const cookie = signUp.headers.getSetCookie()[0]!.split(';')[0]!;
-	assert.match(cookie, /^session=[A-Za-z0-9_-]{16}$/);
+	assert.match(cookie, /^session=[A-Za-z0-9_-]{22}$/);
 
 	const ada = asClient(await connectTo(handlers, cookie));
 	const state = await ada.link.share<Record<string, unknown>>('state').ready;

@@ -67,6 +67,10 @@ would say the URL exists and what exists is the files' word.
 **The body is a stream** over the file, never the file read whole, so a large bundle is not held
 in memory for as long as the socket takes. HEAD carries the same headers and no body.
 
+**Every answer carries `X-Content-Type-Options: nosniff`**: the file, the 304, the unknown page,
+the bare 404 and the 405. A browser that guessed a file's type from its bytes could turn a text
+file into a script, and this module serves bytes it did not write.
+
 **`Content-Type`** comes from a table of the common web extensions kept in this package; the text
 types carry `charset=utf-8`. An extension the table does not name, and a name with no extension,
 is `application/octet-stream`. **`Content-Length`** is the file's size.

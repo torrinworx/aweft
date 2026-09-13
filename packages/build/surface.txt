@@ -1,9 +1,10 @@
 type Mangle: interface Mangle { readonly pattern: RegExp; readonly terser: { readonly mangle: { readonly properties: { readonly regex: RegExp; }; }; }; readonly esbuild: { readonly mangleProps: RegExp; }; }
-type Plugin: interface Plugin { readonly name: string; readonly enforce: 'pre'; config(): { oxc: { jsx: 'preserve'; }; }; transform(code: string, id: string): { code: string; map: string; } | null; resolveId(source: string, importer?: string): Promise<string | null>; load(id: string): Promise<string | null>; }
+type Plugin: interface Plugin { readonly name: string; readonly enforce: 'pre'; config(): { oxc: { jsx: 'preserve'; }; }; configResolved(config: { root?: string; }): void; transform(code: string, id: string): { code: string; map: string; } | null; closeBundle(): Promise<void>; resolveId(source: string, importer?: string): Promise<string | null>; load(id: string): Promise<string | null>; }
 type SourceMap: interface SourceMap { readonly version: number; readonly sources: readonly string[]; readonly names: readonly string[]; readonly mappings: string; toString(): string; toUrl(): string; }
+value TEXT_PROPS: ReadonlySet<string>
 value TransformError: typeof TransformError
-type TransformOptions: interface TransformOptions { readonly filename?: string; readonly release?: boolean; readonly defaultH?: '@aweftjs/dom' | '@aweftjs/ui'; }
-type TransformResult: interface TransformResult { readonly code: string; readonly map: SourceMap; }
+type TransformOptions: interface TransformOptions { readonly filename?: string; readonly release?: boolean; readonly defaultH?: '@aweftjs/dom' | '@aweftjs/ui'; readonly text?: boolean; }
+type TransformResult: interface TransformResult { readonly code: string; readonly map: SourceMap; readonly text: readonly string[]; }
 value aweft: (options?: Omit<TransformOptions, "filename">) => Plugin
 value mangle: Mangle
 value transform: (source: string, options?: TransformOptions) => TransformResult

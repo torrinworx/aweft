@@ -22,7 +22,7 @@ interface Wiring {
 	readonly context: unknown;
 	readonly loader: Loader;
 	readonly gate: Gate;
-	readonly report: (name: string, error: unknown, context?: unknown) => void;
+	readonly report: (name: string, error: unknown, context?: unknown, soft?: boolean) => void;
 	readonly emit: Emit;
 }
 
@@ -44,6 +44,10 @@ const callOf = (instance: unknown): Call | undefined => {
 /** What an `ask` is refused or fails with; the reason and reasons cross to the asker. */
 const asking = (reason: string, detail: string, fix: string, reasons?: readonly unknown[]): Error =>
 	reasons === undefined ? codecError(reason, detail, fix) : Object.assign(codecError(reason, detail, fix), { reasons });
+
+/** Thrown on purpose, in the stack's shape: a reason a caller can branch on. */
+const isRefusal = (error: unknown): boolean =>
+	error !== null && typeof error === 'object' && typeof (error as { reason?: unknown }).reason === 'string';
 
 export const openConnection = ({ socket, request, context, loader, gate, report, emit }: Wiring): Live => {
 	const channel = fromWebSocket(socket);
@@ -122,7 +126,14 @@ export const openConnection = ({ socket, request, context, loader, gate, report,
 		}
 		const instance = loader.get(name);
 		emit({ kind: 'call', at, name, ...(instance === undefined ? {} : { instance }), args, outcome, ms: Date.now() - at }, context);
-		if ('error' in outcome) throw outcome.error;
+		if ('error' in outcome) {
+			// A refusal was thrown for the caller and crosses whole. Anything else is the module's
+			// own bug, whose message names things the caller has no business reading; the operator
+			// hears it and the caller hears that it failed (design 272).
+			if (isRefusal(outcome.error)) throw outcome.error;
+			report(name, outcome.error, context, true);
+			throw asking('failed', 'the call failed', 'Read what handlers.failed was told under the module\'s name.');
+		}
 		return outcome.result;
 	});
 

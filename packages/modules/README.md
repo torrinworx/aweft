@@ -52,6 +52,15 @@ objects one level at a time, arrays and everything else replaced whole. When sev
 carry one name, the earliest source's implementation wins and every source's config
 contributes, earliest winning.
 
+**The load order is dependency order, then the order you listed.** A module loads after
+everything it depends on; between modules that do not depend on each other, the one whose
+source is earlier in `sources` loads first, and within one source the one listed first. A
+module in several sources takes the place of the source that implements it, so a file that only
+configures a library module does not move it. A directory lists sorted, a bundle in the order of
+its map, a document sorted. `loaded()` is that order, and a server walks it: the first module to
+answer a request no route matched is the answer, so a module that answers everything goes in the
+last source.
+
 Whatever the factory returns is the instance. If it has a `stop` function, `unload` calls and
 awaits it. Nothing else is read off an instance.
 

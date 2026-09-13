@@ -16,7 +16,7 @@ const packagesDir = new URL('packages/', root);
 // lowering a floor is a policy change and happens in this file together with AGENTS.md.
 const FLOORS: Record<string, number> = {
 	core: 90, schema: 90, sync: 90, store: 90, modules: 90, sandbox: 90, dom: 90, codec: 90,
-	ui: 80, icons: 80, server: 80, auth: 80, jobs: 80, ssg: 80, static: 80, health: 80, logs: 80, build: 80, testing: 80,
+	ui: 80, icons: 80, server: 80, auth: 80, jobs: 80, ssg: 80, static: 80, health: 80, logs: 80, uploads: 80, notify: 80, build: 80, testing: 80,
 };
 
 let failed = false;

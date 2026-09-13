@@ -330,3 +330,27 @@ test('an icon named at build time draws what the run-time lookup draws', async (
 	assert.match(drawn.markup, /viewBox="0 0 24 24"/, 'the set\'s root size reached the element');
 	assert.match(drawn.markup, /<path/, 'and the drawing is in the page');
 });
+
+/** The same page with its two literals written as text tokens by hand, which is what the option writes. */
+const uiCallsText = uiCalls
+	.replace("import { h } from '@aweftjs/ui';", "import { h, text } from '@aweftjs/ui';")
+	.replace("h('h1', {}, 'Gallery')", "h('h1', {}, text('Gallery'))")
+	.replace("h('button', { theme: ['button', tone], onClick: () => clicks.set(clicks.get() + 1) }, 'press')",
+		"h('button', { theme: ['button', tone], onClick: () => clicks.set(clicks.get() + 1) }, text('press'))");
+
+test('a ui file compiled with the text option means what the same page with hand-written tokens means (design 277)', async () => {
+	assert.notEqual(uiCallsText, uiCalls, 'the fixture rewrote both literals');
+	const plain = await loadModule(space.dir, 'uitextplain', uiCallsText);
+	const compiled = transform(uiJsx, { filename: 'page.tsx', text: true });
+	assert.deepEqual(compiled.text, ['Gallery', 'press']);
+	const built = await loadModule(space.dir, 'uitextbuilt', compiled.code);
+	await compare('ui text', plain.create as () => Page, built.create as () => Page);
+
+	// Against the page with no tokens at all: the same elements and the same characters, and the
+	// only difference is the bracket pair each token mounts under.
+	const untouched = await loadModule(space.dir, 'uitextoff', uiCalls);
+	const one = await uiRendered(untouched.create as () => Page);
+	const two = await uiRendered(built.create as () => Page);
+	assert.equal(two.markup.replace(/<!--\[-->|<!--\]-->/g, ''), one.markup.replace(/<!--\[-->|<!--\]-->/g, ''));
+	assert.equal(two.css, one.css);
+});

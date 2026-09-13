@@ -202,8 +202,10 @@ const page = `<!doctype html><html><head><style data-aweft>${ui.theme.markup()}<
 `mount`, `render` and `hydrate` each make one and thread it through `dom`'s context. It carries
 `theme` (this render's class cache and stylesheet), `ids` (the counter behind an
 `aria-labelledby`, counting from zero per render so a server and a browser agree), `popups`,
-`head` (the page's head tags, and `head.markup()`) and `stage` (one entry per live
-`StageContext`).
+`head` (the page's head tags, and `head.markup()`), `stage` (one entry per live `StageContext`),
+and the language the page shows: `context({ locale, catalog })`, which the text tokens below look
+up. `usedText(ui)` answers the keys a render's tokens looked up, which is what a static walk reads
+to say what a catalog lacks.
 
 `render` holds the head list and the stage list for the length of the call, so a caller can read
 both after the page has been taken down. A render object is therefore for one page.
@@ -459,6 +461,13 @@ hydration agree), and wires `aria-describedby` and `aria-invalid` for you. Give 
 the bare element, and naming it is yours.
 [`packages/ui/tests/controls.test.ts`](https://github.com/torrinworx/aweft/blob/main/packages/ui/tests/controls.test.ts)
 finds every control by its role and its name.
+
+**A `Button` with no name throws where it mounts, in development** (design 266). Its name is its
+`label`, its text, an `aria-label` or `title` on it, or a `label` on the `Icon` inside it; a button
+that is only an unlabelled icon has none, a screen reader says "button" and nothing else, and the
+mount throws with those three ways to name it. The button is read once it and what is inside it are
+on the page, so a labelled `Icon` counts, and a static `render()` reads it the same way. A release
+build has no check: the statements are gone.
 
 **One document is one render.** The ids come off the render's counter, which starts at zero every
 time (design 109), so two named renders mounted into the same document mint the same ids and their
@@ -1004,8 +1013,9 @@ over, and a label that is neither a string nor a number renders as given. A rege
 flag is a loud assert naming the flag, because a pattern that finds one match is almost never what
 was meant. A cell label runs the pass again when it changes.
 
-**The label goes through one internal resolve step first.** Today it answers the string it was
-given. It is the seam translation would fill, and nothing about it is exported.
+**The label goes through one resolve step first.** A text token resolves to its string in the
+render's language before the modifiers run, so a modifier matches the translated word; anything
+else is the label as given (design 278).
 
 **What it never does.** No editing: nothing swaps an input in on a click and nothing measures text
 with a span, because editing is `TextField`'s job and a page composes the two. No width cap: a
@@ -1017,6 +1027,82 @@ shows the whole family in both modes, and the gallery's modifier demo is
 [`recipes/ui/page.tsx`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/page.tsx), both
 driven by
 [`recipes/ui/main.ts`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/main.ts).
+
+## The text a page shows
+
+```tsx
+import { context, isText, localeOf, mount, text, textOf } from '@aweftjs/ui';
+
+mount(document.body, <App />, undefined, context({ locale: 'fr', catalog: fr }));
+```
+
+`text('Save')` is a token: what a string a person reads becomes, so it can be looked up where the
+page mounts. With the build's `text` option on (`packages/build/README.md`), every literal a page
+shows is one already, and a page writes the call itself for a string built in code, a plural, or a
+sentence with an element inside it. A render with no `catalog` shows every token's source, so a
+page written this way runs before it has a second language.
+
+| export | what it is |
+|---|---|
+| `text(source, values?)` | a token: mountable as a child, and resolved by `h` in a prop, by `Typography` in a label, and by a head component in a tag |
+| `context({ locale, catalog })` | the language a render shows and its translations, a plain object from key to message |
+| `textOf(context, value)` | the string a token, a string or a number shows in a render, for code that needs characters: a document title set by hand. Takes the mount context or the render `context()` made, so a server module resolves against a render of its own |
+| `localeOf(context)` | the render's BCP 47 tag, for a date or a number formatted with `Intl` |
+| `isText(value)` | whether a value is a token |
+| `usedText(render)` | the keys a render's tokens looked up |
+
+**A token resolves where it mounts.** As a child it is a component, so `dom` mounts it and a
+hydration pairs it beside a static sibling. An act module's `title` may be a token too, and the
+stage announces it in the page's language. In any prop, `h` claims it the way it claims `theme`:
+the resolved string is written into a cell `dom` binds under the same name, so `placeholder`,
+`title`, `alt` and `aria-label` carry the translation on the server's node after a hydration and
+on a fresh one after a mount. `Typography` resolves a token `label` before its modifiers, and a
+head component resolves a token child or attribute when it declares its tag. A token that mounts
+under `dom`'s own `mount`, with no `ui` systems, shows its source. The key is the source string,
+or `source|context` when the call names a `context` word: `text('Close', { context: 'dialog' })`
+is the key `Close|dialog`, which is how one word with two meanings gets two entries.
+
+**The message syntax** is a subset of ICU MessageFormat, read here with no dependency:
+
+| written | means |
+|---|---|
+| `Hello {name}` | the value under `name`; a cell is followed |
+| `{n, plural, one {# item} other {# items}}` | the branch `Intl.PluralRules(locale)` picks for `n`, `=0` and friends matching the exact number first; `#` is `n` formatted for the locale; `other` is required |
+| `{kind, select, book {a book} other {a thing}}` | the branch named by the value of `kind`, `other` when none matches; `other` is required |
+| `Read <link>the docs</link>` | the value under `link`, a function from the inner content to what to mount; with no function under that name the inner content stands alone |
+| `'{'`, `'}'`, `'<'`, `'#'`, `''` | that character; an apostrophe quotes up to the next apostrophe, and stands for itself in front of anything else |
+
+Branches nest. A message that cannot be read is a loud assert naming the offset and what was
+expected there; in a release build it shows as written. Every parse is cached by source.
+
+```tsx
+<p>{text('{n, plural, one {# item} other {# items}}', { n: count })}</p>
+<p>{text('Read <link>the docs</link>', { link: (inner) => <a href="/docs">{inner}</a> })}</p>
+<Button label={text('Save')} />
+```
+
+**A cell among the values is followed.** A plural over a count (`mutable(1)` from
+`@aweftjs/core`) re-renders as the count moves, through one subscription per cell; a token with
+plain values costs no subscription at all.
+
+**This package's own strings are tokens too**, and `text.json` beside its `package.json`,
+reachable as `@aweftjs/ui/text.json`, lists their keys, so an application's catalog can carry
+`Close`, `Search`, `Previous` and the rest beside its own words. It ships no translation. The
+build folds those keys into the source catalog it writes. `auth` ships the same for its sign-in
+form.
+
+**What it never decides.** Which language a visitor gets: a page reads a URL, a header, a cookie
+or a setting and hands `context()` the answer. Where a catalog comes from: a file the entry
+imports, a document a store holds, or an object the page built; this package reads none of them.
+No fallback chain: `fr-CA` is one catalog, not `fr` with overrides, and an application that wants
+the chain merges the two objects. The language is fixed per render: a switch is a remount or a
+navigation, never a cell every token follows.
+
+**`text` is also the name of the theme family `Typography` renders on.** A theme entry and an
+export are different namespaces, and both are the plain word for what they are.
+
+[`recipes/translated-site`](https://github.com/torrinworx/aweft/tree/main/recipes/translated-site)
+is a site written once and launched in three languages, hydrated in Chromium in each.
 
 ## Display
 
@@ -1482,6 +1568,20 @@ theme does not use are yours to define outright.
 the pair is below 4.5:1, this package says so in the console, with the ratio, the target and the
 role to use. Theme-derived pairs only, and the call is not in a release build.
 
+**Two dev-mode throws, on the page itself** (design 266). The first `mount` or `hydrate` into a
+browser page throws when `<html>` has no `lang`, and then when the document has no title, each with
+its fix: `lang="en"` (or the page's language) on the root, and a `<title>` in the shell or a `Title`
+on the page. The page is read once, in the same tick as the mount, so a shell that carries a
+`<title>` is what a page should have for the first paint; a `Title` the page mounts is attached
+before the check reads it. A light document, a server render and a document inside a frame are not
+read. A release build has neither check.
+
+What these and the contrast warning cannot see, a test can: `audit` and `walk` from
+[`@aweftjs/testing/browser`](https://github.com/torrinworx/aweft/blob/main/packages/testing/README.md)
+run axe and a Tab walk over the page a test drives, and the build refuses the faults the source
+settles ([`@aweftjs/build`](https://github.com/torrinworx/aweft/blob/main/packages/build/README.md),
+The access rules).
+
 ## Routing
 
 ```tsx
@@ -1735,6 +1835,27 @@ interaction and is not in a page's markup at all. `Tooltip` and `Popup` avoid th
 their element back out of the mount that put it in the document (design 153), which `Modal`
 cannot do until `dom` says which node a mount put in the document and lets a component write an
 attribute a hydration reconciles rather than compares.
+
+**A token is not a string.** `label.length`, `'' + label` and `String(label)` on a token answer a
+function's, because the string only exists in a render. `textOf(context, label)` is the string,
+and every place inside this package that reads a label uses it. A token in a prop that is not
+text is written as its string all the same: in `class` beside a `theme` it is lost to the theme's
+class, and in a handler it is a string where a function was wanted.
+
+**Where a token's cells are not followed.** A head tag resolves a token once, when it declares
+its tag, so a `<Title>` over a plural whose count moves keeps its first string; and a
+`Typography` whose `label` is a cell holding a token follows the cell, not a cell inside the
+token's values. A token child, a token in a prop, and a token `label` written directly all follow
+their cells.
+
+**The parse cache grows with distinct sources.** A message parses once per source string and the
+parts are kept for the life of the process, so a token whose source is built at run time
+(`text(\`${word} items\`)`) parses and keeps one entry per distinct string. Write the message
+once and put the word in a hole.
+
+**A `Button` whose `label` cell starts empty throws in development.** The name check reads the
+button as it first mounts, and a cell that fills in later is a nameless button at that moment.
+Give the button a static `aria-label` for the empty state, which a screen reader wants in any case.
 
 ## The design notes
 

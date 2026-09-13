@@ -5,12 +5,14 @@
 // reader exists separately from the two that print an `h` call from nothing.
 
 import type { Node } from './ast.ts';
-import type { Child, Element, Property } from './element.ts';
+import { type Child, type Element, type Property, emitCall } from './element.ts';
 import { literalOr } from './jsx.ts';
 
 export interface CallReader {
 	/** Whether a node is a call to `dom`'s `h`. */
 	isCall(node: Node): boolean;
+	/** The name the call was written against, for an element a pass rewrote and so has to print. */
+	h(): string;
 	/** The code for an expression, with anything nested already transformed. */
 	code(node: Node): string;
 	/** The source of a node with only what is inside it transformed, leaving the node itself as
@@ -91,6 +93,11 @@ export const readCall = (node: Node, reader: CallReader): Element | null => {
 	const children = childrenOf(args.slice(2), reader);
 	if (children === null) return null;
 
-	const element: Element = { tag, properties, children, fallback: () => reader.inner(node) };
+	// The call as written, comments and all, unless a pass replaced a literal in it: then only the
+	// model knows what the element holds, and it is printed from there like the other notations.
+	const element: Element = {
+		tag, properties, children, at: node.start, rewritten: false,
+		fallback: () => (element.rewritten ? emitCall(reader.h(), JSON.stringify(tag), element, reader.emit) : reader.inner(node)),
+	};
 	return element;
 };

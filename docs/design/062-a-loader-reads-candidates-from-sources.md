@@ -1,5 +1,8 @@
 # 062: A loader reads candidates from sources, and a document is one of them
 
+Amended by design 263: the order of `sources` is the load order as well as the precedence, and a
+document source lists its entries sorted.
+
 ## Decision
 
 A source answers `candidates()`: a list of `{ name, exports() }`, where `exports()` evaluates

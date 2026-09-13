@@ -228,6 +228,15 @@ export const connect = (channel: Channel, options: LinkOptions = {}): Link => {
 		end(topic, 'root-mismatch', message, true);
 	};
 
+	// A state answers an open that wanted one, and nothing else (design 044). Applied when this
+	// end did not ask, it would move the document past `accept`, which is the one rule the other
+	// end must not get around. Loud at both ends, and the topic ends.
+	const unwanted = (topic: Topic, theirTopic: number): void => {
+		const message = `${topic.name} was sent a state this end did not ask for`;
+		post.send({ kind: 'fault', topic: theirTopic, reason: 'unwanted-state', message });
+		end(topic, 'unwanted-state', message, true);
+	};
+
 	const pair = (topic: Topic, frame: OpenFrame): void => {
 		topic.theirs = frame.topic;
 		if (topic.document === undefined) {
@@ -367,7 +376,7 @@ export const connect = (channel: Channel, options: LinkOptions = {}): Link => {
 		}
 
 		if (frame.kind === 'commits') onCommits(topic, frame.first, frame.commits);
-		else if (frame.kind === 'state') onState(topic, frame.commit);
+		else if (frame.kind === 'state') { if (topic.wanted) onState(topic, frame.commit); else unwanted(topic, frame.topic); }
 		else if (frame.kind === 'refused') onRefused(topic, frame.seq, frame.reasons);
 		else end(topic, 'left', `the other end left ${topic.name}`, true);
 	};

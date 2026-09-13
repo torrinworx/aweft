@@ -8,7 +8,7 @@ import * as server from '../src/index.ts';
 import * as node from '../src/node.ts';
 
 test('the main entry hands out exactly what the calls decided', () => {
-	assert.deepEqual(Object.keys(server).sort(), ['createServer', 'open']);
+	assert.deepEqual(Object.keys(server).sort(), ['createServer', 'open', 'sliding']);
 });
 
 test('the node subpath hands out the listener and nothing else', () => {

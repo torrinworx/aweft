@@ -23,6 +23,13 @@ export interface Element {
 	readonly tag: string | null;
 	readonly properties: readonly Property[];
 	readonly children: readonly Child[];
+	/** The offset in the source the element opens at, for a refusal to point at. */
+	readonly at: number;
+	/**
+	 * Whether a pass replaced a literal in this element's own properties or children, so a
+	 * fallback has to print it from this model rather than from the source it was read out of.
+	 */
+	rewritten: boolean;
 	/** The code for this element when it is not hoisted into a template. */
 	fallback(): string;
 }

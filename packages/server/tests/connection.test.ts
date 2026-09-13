@@ -82,7 +82,7 @@ test('a call is routed to the named module after the gate, with progress streami
 	await server.stop();
 });
 
-test('a call that throws answers its caller with failed and is not reported', async () => {
+test('a call that throws a refusal answers its caller with it and is not reported', async () => {
 	const failed: string[] = [];
 	const { handlers, server } = await started({
 		'app/Grumpy': instance(() => ({ call: () => { throw Object.assign(new Error('not now'), { reason: 'busy' }); } })),
@@ -90,6 +90,45 @@ test('a call that throws answers its caller with failed and is not reported', as
 	const client = asClient(await connectTo(handlers));
 	await assert.rejects(client.asks.ask('app/Grumpy'), (e: RequestError) => e.reason === 'busy' && e.message === 'not now');
 	assert.deepEqual(failed, []);
+	client.socket.close();
+	await server.stop();
+});
+
+test('without a failed handler a call that throws is written to the console and the process goes on', () => {
+	const helpers = new URL('./helpers.ts', import.meta.url).href;
+	const script = `
+		import { createServer, open } from '@aweftjs/server';
+		import { asClient, connectTo, fakeListener, instance, sourceOf } from '${helpers}';
+		const source = sourceOf({ 'app/Broken': instance(() => ({ call: () => { throw new Error('module blew up'); } })) });
+		const listening = fakeListener();
+		const server = createServer({ sources: [source], gate: open, listener: listening.listener });
+		await server.start();
+		const client = asClient(await connectTo(listening.handlers()));
+		const heard = await client.asks.ask('app/Broken').catch((e) => e.reason + ': ' + e.message);
+		console.log('caller heard ' + heard);
+		setTimeout(() => { console.log('still alive'); process.exit(0); }, 200);
+	`;
+	const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+		cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8', timeout: 20_000,
+	});
+	assert.equal(run.status, 0, `the process should have lived: ${run.stdout} ${run.stderr}`);
+	assert.match(run.stdout, /caller heard failed: failed: the call failed\./);
+	assert.doesNotMatch(run.stdout, /blew up/, 'nothing of the error reached the caller');
+	assert.match(run.stdout, /still alive/);
+	assert.match(run.stderr, /app\/Broken: a call threw/);
+	assert.match(run.stderr, /module blew up/);
+});
+
+test('a call that throws anything else answers failed with nothing of the error, and the error is reported', async () => {
+	const failed: string[] = [];
+	const { handlers, server } = await started({
+		'app/Broken': instance(() => ({ call: () => { throw new TypeError('cannot read secret of /srv/users/ada.json'); } })),
+		'app/Bare': instance(() => ({ call: () => { throw 'a string with a secret in it'; } })),
+	}, failed);
+	const client = asClient(await connectTo(handlers));
+	await assert.rejects(client.asks.ask('app/Broken'), (e: RequestError) => e.reason === 'failed' && !e.message.includes('secret') && !e.message.includes('/srv'));
+	await assert.rejects(client.asks.ask('app/Bare'), (e: RequestError) => e.reason === 'failed' && !e.message.includes('secret'));
+	assert.deepEqual(failed, ['app/Broken: cannot read secret of /srv/users/ada.json', 'app/Bare: undefined']);
 	client.socket.close();
 	await server.stop();
 });

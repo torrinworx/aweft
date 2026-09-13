@@ -24,8 +24,10 @@ const violations = checkManifests(manifests, [], {
 	// The boundary scanner parses source the way the compiler does, and the compiler is
 	// already the one root toolchain. The database is the throwaway cluster on the `/postgres`
 	// subpath (design 254): optional peers, so nothing here installs one for a consumer, and
-	// devDependencies as well because this package's own suite starts a real cluster.
-	'@aweftjs/testing': ['typescript', 'embedded-postgres', 'pg', '@types/pg'],
+	// devDependencies as well because this package's own suite starts a real cluster. axe-core
+	// is the audit on the `/browser` subpath (design 267), an optional peer the same way, and
+	// playwright is dev only: the suite drives a real page, the subpath imports no driver.
+	'@aweftjs/testing': ['typescript', 'embedded-postgres', 'pg', '@types/pg', 'axe-core', 'playwright'],
 	// The frame runner's escape suite runs in a real browser, because no fake DOM enforces an
 	// iframe's isolation (design 070). Dev only, this package only.
 	'@aweftjs/sandbox': ['playwright'],

@@ -221,6 +221,8 @@ export const readMarkup = (node: Node, reader: MarkupReader): string => {
 			tag: frame.tag,
 			properties: frame.properties,
 			children: frame.children,
+			at: frame.at,
+			rewritten: false,
 			fallback: () => emitCall(reader.h(), frame.code, element, reader.emit),
 		};
 		top().children.push({ kind: 'element', element });

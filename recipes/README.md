@@ -27,12 +27,16 @@ Start here if you know what you are trying to build.
 | `icons/` | Icons named three ways, and what each way puts in the bundle | ui, icons, build |
 | `routed-site/` | A site with real URLs: nested pages, a page with a parameter, a page that arrives later, a dialog the back button dismisses, and a title per page | core, dom, ui, build |
 | `ssg/` | A routed site written out as files, served by anything, and taken over in place when the browser gets to it | dom, ui, build, ssg |
+| `translated-site/` | A site written in one language and launched in three: the build finds every string and writes the catalog an agent fills, each language is a tree of pages with the plural rules of its own, a stored act is compiled where it runs, and the Ukrainian page hydrates in place | core, modules, ui, build, ssg |
 | `static/` | A generated site served by the stack's own server: one process is the whole deployment, and the page still comes alive where it stands | modules, server, ui, build, ssg, static |
 | `health/` | A deploy's verification: the health endpoint polled until the shipped build is the one answering, and the two states a poll must not mistake for health | store, modules, server, auth, health |
 | `logs/` | A page recorded end to end in a browser and the visit read back: an error, a rejection, a console line, a failed call on both sides, a commit's shape with a private slot absent, a typed character never stored, sign-in mid-visit | store, modules, server, auth, logs, ui, client |
+| `uploads/` | A page uploads pictures under the gate and they paint from `/files/<id>`; each refusal reaches the page with its reason, a module makes a file of its own, and the static battery behind it never sees a file | store, modules, server, auth, static, uploads, ui, client |
+| `notify/` | Two pages of one user hear a send live and mark it read for each other, a device registered from the page, email and push against two fakes, a failed mail kept, a forged write refused, a restart, and a server with no store sending a contact form's mail | store, modules, server, auth, notify, ui, client |
 | `room/` | An act module stored on the server, run in a frame on the page: the board it shares reaches the server, its ask carries the page's identity, its own stage navigates on the page's URL under the host act, an error inside reaches the page's logs, and the frame paints but cannot fetch | sandbox, server, auth, logs, ui, client, build |
 | `documents-on-postgres/` | Documents kept in Postgres: a writer killed mid-edit, eight processes opening one name at once, and a path declared after the data was there | store |
 | `posts-to-pages/` | Pages written while the application runs: a post published over a socket becomes a page, and a scheduled full write refreshes the sitemap | store, modules, server, jobs, ui, ssg |
+| `accessible-page/` | A page everyone can use, driven by keyboard and audited in both modes, and each guardrail catching one page written wrong: the build refusing an element no one can read, the mount throwing on a nameless button and a page with no language, `audit` and `walk` reading what only the rendered page shows | build, ui, testing |
 | `backend/` | The boot pattern to copy: a twelve-line boot file and a folder of modules, one holding a document, one the rules, one a scheduler, one the gate, and one configuring a battery module | store, modules, server, auth, jobs, client |
 
 ## By package
@@ -41,7 +45,7 @@ Start here if you know which package you need and want to see it do its hardest 
 each of these has to demonstrate is the table in `docs/architecture.md`.
 
 `codec/`, `core/`, `schema/`, `sync/`, `store/`, `modules/`, `sandbox/`, `server/`, `jobs/`,
-`dom/`, `ui/`, `icons/`, `build/`, `ssg/`, `static/`, `health/`, `logs/`, `debug/`.
+`dom/`, `ui/`, `icons/`, `build/`, `ssg/`, `static/`, `health/`, `logs/`, `uploads/`, `notify/`, `debug/`.
 
 ## What a recipe is
 

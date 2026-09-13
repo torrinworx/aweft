@@ -11,6 +11,7 @@
 import MagicString from 'magic-string';
 import { parse } from '@babel/parser';
 
+import { checkAccess } from './access.ts';
 import { type Node, forEachChild } from './ast.ts';
 import { type CallReader, readCall } from './call.ts';
 import type { Element, Property } from './element.ts';
@@ -20,6 +21,7 @@ import { type JsxReader, readJsx } from './jsx.ts';
 import { type MarkupReader, readMarkup } from './markup.ts';
 import { freshName, freshPrefix, readBindings } from './bindings.ts';
 import { stripAsserts } from './asserts.ts';
+import { createTextPass, recordCalls } from './text.ts';
 
 const DOM = '@aweftjs/dom';
 const UI = '@aweftjs/ui';
@@ -47,6 +49,14 @@ export interface TransformOptions {
 	 * `theme` prop is written out as a literal attribute that nothing reads.
 	 */
 	readonly defaultH?: '@aweftjs/dom' | '@aweftjs/ui';
+	/**
+	 * Find the text the page shows (design 277). In a file whose `h` is `@aweftjs/ui`'s, every
+	 * literal text child and every string literal on a text prop becomes a `text()` call from
+	 * `@aweftjs/ui`, and the keys are answered as `text` on the result. Off, nothing changes and
+	 * the list is empty. A page rendered on a server and bundled for a browser must agree on it,
+	 * as on `defaultH`, or the two disagree about every text node.
+	 */
+	readonly text?: boolean;
 }
 
 /** A source map in the shape every bundler and every browser reads. */
@@ -72,6 +82,12 @@ export interface SourceMap {
 export interface TransformResult {
 	readonly code: string;
 	readonly map: SourceMap;
+	/**
+	 * With `text` on, every key the file's text tokens look up, each once: the literals the pass
+	 * wrapped, then the `text()` calls the page wrote itself, a `context` word folded in as
+	 * `source|context`. Empty with `text` off.
+	 */
+	readonly text: readonly string[];
 }
 
 /** `.ts` is TypeScript without JSX, because `<T>x` there is a type assertion, not an element. */
@@ -91,17 +107,20 @@ const pluginsFor = (filename: string | undefined): ('jsx' | 'typescript')[] => {
  * Params:
  *   source: the file's text
  *   options: `filename`, whose extension picks the dialect and which names the map; `release`,
- *            which removes assert calls
+ *            which removes assert calls; `defaultH`, the package a file with no `h` gets one
+ *            from; `text`, which finds the text the page shows
  *
- * Returns: the transformed code and its source map.
+ * Returns: the transformed code, its source map, and the text keys it found.
  *
  * Throws: a `TransformError` for a fault in the markup or the JSX, carrying `at`, the offset
  * in the source. Its `reason` names the rule broken: `unterminated-tag`, `unclosed-element`,
  * `mismatched-closing-tag`, `nothing-to-close`, `unterminated-closing-tag`, `tag-needs-name`,
  * `bad-attribute-name`, `attribute-needs-value`, `unterminated-attribute`, `spread-needs-hole`,
  * `unterminated-comment`, `invalid-escape`, `namespaced-tag`, `namespaced-attribute`,
- * `empty-expression` or `unsupported-child`. Source the parser cannot read throws the parser's
- * own error instead.
+ * `empty-expression` or `unsupported-child`; or one of the access rules (design 265):
+ * `image-needs-alt`, `control-needs-label`, `click-needs-role`, `tabindex-positive`,
+ * `link-needs-href`, `button-needs-name`, `heading-needs-text` or `frame-needs-title`. Source
+ * the parser cannot read throws the parser's own error instead.
  *
  * Example:
  *   const { code, map } = transform(source, { filename: 'app.tsx', release: true });
@@ -139,6 +158,13 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 	// `build` does not carry `ui`'s vocabulary (design 108).
 	const hoister = createHoister(hoisting, templateName, freshPrefix('_t', bindings.names), !uiIsH);
 	const icons = createIconImports(freshPrefix('_icon', bindings.names));
+	// Wrapping only where `h` is provably `ui`'s: that is what says a `text()` will be resolved,
+	// and a `dom` file is left byte for byte as it was (design 277). A call the file wrote itself is
+	// answered whatever its `h` is, since a helper with no element in it still names a message.
+	const finding = options.text === true && uiIsH;
+	const answering = options.text === true && bindings.uiText !== null;
+	const textName = bindings.uiText ?? freshName('_text', bindings.names);
+	const texts = createTextPass(textName);
 
 	let usedJsxH = false;
 	let usedDomMarkupH = false;
@@ -241,13 +267,19 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 		if (isMarkup(node)) return readMarkup(node, markupTagOf(node) === UI ? uiMarkupReader : domMarkupReader);
 		if (isDomHCall(node)) {
 			const element = readCall(node, callReader);
-			if (element !== null) return hoister.emit(element);
+			if (element !== null) return emit(element);
 			return iconCall(node) ?? inner(node);
 		}
 		return inner(node);
 	};
 
-	const emit = (element: Element): string => hoister.emit(element);
+	// The access rules run before hoisting, over the tree as it was written (design 265), and the
+	// text pass after them, so a rule reads the literal the page wrote.
+	const emit = (element: Element): string => {
+		checkAccess(element);
+		if (finding) texts.wrap(element);
+		return hoister.emit(element);
+	};
 
 	// The two `h` names are asked for when an element is printed as a call, never when it hoists,
 	// so the import below is emitted for calls that are actually in the output.
@@ -294,9 +326,10 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 		code,
 		emit,
 	};
-	const callReader: CallReader = { isCall: isDomHCall, code, inner, emit };
+	const callReader: CallReader = { isCall: isDomHCall, h: () => primaryH ?? 'h', code, inner, emit };
 
 	for (const found of inside(program)) magic.overwrite(found.start, found.end, code(found));
+	if (answering) recordCalls(program, bindings.uiText!, texts);
 
 	if (options.release === true && bindings.assert !== null) {
 		stripAsserts(program, bindings.assert, magic);
@@ -311,6 +344,7 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 	if (!uiIsH && bindings.uiH === null && usedUiMarkupH) fromUi.push(`h as ${uiMarkupH}`);
 	if (usedJoined) fromDom.push(`joined as ${joinedName}`);
 	if (hoister.declarations.length > 0) (uiIsH ? fromUi : fromDom).push(`template as ${templateName}`);
+	if (texts.used && bindings.uiText === null) fromUi.push(`text as ${textName}`);
 
 	const preamble = [
 		icons.declarations.length > 0 ? `${icons.declarations.join('\n')}\n` : '',
@@ -328,5 +362,6 @@ export const transform = (source: string, options: TransformOptions = {}): Trans
 	return {
 		code: magic.toString(),
 		map: magic.generateMap({ hires: true, includeContent: true, ...(filename === undefined ? {} : { source: filename }) }) as unknown as SourceMap,
+		text: options.text === true ? texts.keys : [],
 	};
 };

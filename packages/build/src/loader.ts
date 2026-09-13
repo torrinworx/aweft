@@ -108,11 +108,33 @@ const settingOf = (): TransformOptions['defaultH'] | undefined => {
 	return named as TransformOptions['defaultH'];
 };
 
+/**
+ * The environment variable a Node process turns the text pass on with (design 277), for the
+ * same reason `AWEFT_DEFAULT_H` exists: a server render and a bundle have to compile one file the
+ * same way, and `--import` has nowhere to hang an option.
+ */
+const TEXT_SETTING = 'AWEFT_TEXT';
+
+const ON = ['1', 'true', 'on'];
+const OFF = ['0', 'false', 'off'];
+
+/** Whether this process asked for the text pass, checked. */
+const textOf = (): boolean => {
+	const named = process.env[TEXT_SETTING];
+	if (named === undefined || named === '') return false;
+	const said = named.toLowerCase();
+	if (ON.includes(said)) return true;
+	if (OFF.includes(said)) return false;
+	throw codecError('unknown-text-setting', `${TEXT_SETTING}=${named}`,
+		'Set it to 1 to find the text a page shows, or leave it unset.');
+};
+
 // Read here rather than per file, so a process that sets it to something this cannot honour is
 // stopped as it starts rather than at whichever `.tsx` happens to be imported first, or never at
 // all in a run that compiles none. A worker takes its environment when it is made, so the value
 // cannot change under a running process anyway.
 const DEFAULT_H = settingOf();
+const TEXT = textOf();
 
 /** What the parser or the transform said about where the fault is: `:line:column`, or nothing. */
 const positionOf = (fault: unknown, source: string): string => {
@@ -143,7 +165,9 @@ const positionOf = (fault: unknown, source: string): string => {
  * `TransformError` for a rule a compiled template cannot meet, and the parser's own `SyntaxError`
  * for source it cannot read. Neither names the file on its own, and a stack into a parser is not
  * where the reader has to look. `AWEFT_DEFAULT_H` set to anything but the two package names is
- * refused when this module loads, before any file is read and whether or not one ever is.
+ * refused when this module loads, before any file is read and whether or not one ever is, and so
+ * is `AWEFT_TEXT` set to anything but a yes or a no. With `AWEFT_TEXT=1` the text pass runs on
+ * every file, as it does under `aweft({ text: true })`.
  */
 export const load = async (url: string, context: unknown, nextLoad: NextLoad): Promise<LoadResult> => {
 	if (url.startsWith(SCHEME)) {
@@ -162,7 +186,11 @@ export const load = async (url: string, context: unknown, nextLoad: NextLoad): P
 	try {
 		// Written this way rather than `defaultH: named`, because the repo compiles with
 		// `exactOptionalPropertyTypes` and an explicit undefined is not the same as an absent field.
-		code = transform(source, DEFAULT_H === undefined ? { filename } : { filename, defaultH: DEFAULT_H }).code;
+		code = transform(source, {
+			filename,
+			...(DEFAULT_H === undefined ? {} : { defaultH: DEFAULT_H }),
+			...(TEXT ? { text: true } : {}),
+		}).code;
 	} catch (fault) {
 		const where = positionOf(fault, source);
 		const said = fault instanceof Error ? fault.message : String(fault);

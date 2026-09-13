@@ -211,6 +211,17 @@ export interface ServerHandlers {
 	readonly failed?: ((name: string, error: unknown) => void) | undefined;
 }
 
+/** The bounds checked before the gate (design 272). */
+export interface Limits {
+	/**
+	 * How many requests and handshakes one peer address may make inside a sliding window;
+	 * `{ count: 600, windowMs: 60000 }` here. Over it, 429 with `Retry-After`, and for a
+	 * handshake no socket opens. `false` removes the count. The address is the listener's word:
+	 * behind a proxy, the listener needs `forwarded`, or every request is one address.
+	 */
+	readonly requests?: { readonly count: number; readonly windowMs: number } | false | undefined;
+}
+
 export interface ServerOptions {
 	/** Where the modules come from. `start` loads every module every source lists (design 240). */
 	readonly sources: readonly Source[];
@@ -224,6 +235,16 @@ export interface ServerOptions {
 	readonly gate: Gate | string;
 	readonly listener: Listener;
 	readonly handlers?: ServerHandlers | undefined;
+	/** The bounds checked before the gate; each has a value here (design 272). */
+	readonly limits?: Limits | undefined;
+	/**
+	 * Where a browser may send a state-changing request or a handshake from (design 272). A
+	 * request carrying an `Origin` header naming another host is 403, and no socket opens; a
+	 * `GET`, `HEAD` or `OPTIONS` passes, and so does a request with no `Origin` header, which
+	 * is a client that is not a browser. Here, the request's own host and port; a list adds
+	 * origins such as `https://app.example`; `'any'` removes the rule.
+	 */
+	readonly origins?: readonly string[] | 'any' | undefined;
 }
 
 export interface Server {
@@ -260,7 +281,10 @@ export interface Server {
  * (a route or a `request` hook answered with something else; reported, never thrown to a
  * caller), `started`,
  * `over-bound` (a request body past the listener's `maxPayload`), `refused` (the gate refused
- * an ask) and `closed` (an ask on a connection that has ended).
+ * an ask), `closed` (an ask on a connection that has ended), `failed` (the module's `call`
+ * threw something that is not a refusal; the caller hears only that, and the error is
+ * reported), `invalid-limit` (a count or window that is not a positive number) and
+ * `invalid-option` (a listener setting of the wrong shape).
  */
 export interface ServerError extends Error {
 	readonly reason: string;

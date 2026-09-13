@@ -9,8 +9,10 @@ export { template } from './template.ts';
 export { mark, categories } from './mark.ts';
 export type { Category, Mark, Marked, MarkMaker } from './mark.ts';
 
-export { context, hydrate, mount, render, use } from './render.ts';
-export type { Render } from './render.ts';
+export { context, hydrate, mount, render, use, usedText } from './render.ts';
+export type { Catalog, ContextOptions, Render } from './render.ts';
+export { isText, localeOf, text, textOf } from './text.ts';
+export type { TextSource, TextToken, TextValues } from './text.ts';
 export type { Hydrated } from '@aweftjs/dom';
 export type { Ids, Registry } from './registry.ts';
 

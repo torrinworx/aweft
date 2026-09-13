@@ -1,0 +1,29 @@
+type Accept: type Accept = (upload: Upload, context: unknown) => { readonly reasons: readonly Refusal[]; } | undefined | void | Promise<{ readonly reasons: readonly Refusal[]; } | undefined | void>;
+type Adapter: interface Adapter { readonly name: string; put(key: string, stream: ReadableStream<Uint8Array>, options: PutOptions): Promise<void>; open(key: string): Promise<ReadableStream<Uint8Array> | undefined>; head(key: string): Promise<{ readonly size: number; } | undefined>; remove(key: string): Promise<void>; }
+type Allow: type Allow = (upload: UploadRecord, context: unknown) => { readonly reasons: readonly Refusal[]; } | undefined | void | Promise<{ readonly reasons: readonly Refusal[]; } | undefined | void>;
+type Files: interface Files { readonly adapter: Adapter; readonly types: readonly string[]; capFor(type: string): number; put(bytes: Uint8Array | ReadableStream<Uint8Array>, fields: PutFields): Promise<UploadRecord>; receive(stream: ReadableStream<Uint8Array>, fields: ReceiveFields, context: unknown): Promise<UploadRecord>; get(id: string): Promise<UploadRecord | undefined>; open(id: string): Promise<{ readonly record: UploadRecord; readonly stream: ReadableStream<Uint8Array>; } | undefined>; remove(id: string): Promise<boolean>; stop(): Promise<void>; }
+type Primitive: type Primitive = string | number | boolean | null;
+type PutFields: interface PutFields { readonly type: string; readonly name?: string | null | undefined; readonly size?: number | undefined; readonly user?: string | null | undefined; readonly meta?: Readonly<Record<string, unknown>> | undefined; }
+type PutOptions: interface PutOptions { readonly type: string; readonly size: number; }
+type Receive: interface Receive { readonly public: boolean; readonly routes: { readonly 'POST /api/uploads': (request: Request, context: unknown) => Promise<Response>; }; }
+type ReceiveFields: interface ReceiveFields { readonly type: string; readonly name: string | null; readonly size: number; }
+type Refused: interface Refused extends Error { readonly reason: string; readonly reasons: readonly Refusal[]; }
+type Serve: interface Serve { readonly public: boolean; request(request: Request, context: unknown): Promise<Response | undefined>; }
+type Upload: interface Upload { readonly id: string; readonly name: string | null; readonly type: string; readonly size: number; readonly sha256: string; readonly user: string | null; bytes(): Promise<Uint8Array>; }
+type UploadFilter: interface UploadFilter { readonly user?: string; readonly sha256?: string; readonly type?: string; readonly since?: number; readonly limit?: number; }
+type UploadRecord: interface UploadRecord { readonly id: string; readonly url: string; readonly user: string | null; readonly name: string | null; readonly type: string; readonly size: number; readonly sha256: string; readonly at: number; readonly storage: { readonly adapter: string; readonly key: string; }; readonly meta: Readonly<Record<string, Primitive>> | null; }
+value directory: (path: string) => Adapter
+value keyOf: (key: string) => string
+value paths: Readonly<Record<string, readonly string[]>>
+value records: (store: Store, filter?: UploadFilter) => Promise<UploadRecord[]>
+value upload: (store: Store, id: string) => Promise<UploadRecord | undefined>
+value uploads: Source
+./client type FileLike: interface FileLike { readonly size: number; readonly type: string; readonly name?: string | undefined; }
+./client type RequestLike: interface RequestLike { open(method: string, url: string): void; setRequestHeader(name: string, value: string): void; send(body: unknown): void; abort(): void; readonly status: number; readonly responseText: string; withCredentials: boolean; onload: (() => void) | null; onerror: (() => void) | null; onabort: (() => void) | null; readonly upload: { onprogress: ((event: { readonly lengthComputable: boolean; readonly loaded: number; readonly total: number; }) => void) | null; }; }
+./client type UploadError: interface UploadError extends Error { readonly reason: 'refused' | 'network' | 'aborted'; readonly status: number; readonly reasons: readonly Refusal[]; }
+./client type UploadOptions: interface UploadOptions { readonly name?: string | undefined; readonly type?: string | undefined; readonly progress?: ((fraction: number) => void) | undefined; readonly signal?: AbortSignal | undefined; }
+./client type Uploads: interface Uploads { upload(file: FileLike, options?: UploadOptions): Promise<UploadRecord>; url(id: string): string; }
+./client type UploadsOptions: interface UploadsOptions { readonly origin?: string | undefined; readonly request?: (() => RequestLike) | undefined; }
+./client value createUploads: (options?: UploadsOptions) => Uploads
+./s3 type S3Options: interface S3Options { readonly endpoint: string; readonly region: string; readonly bucket: string; readonly accessKey: string; readonly secretKey: string; readonly prefix?: string | undefined; }
+./s3 value s3: (options: S3Options) => Adapter

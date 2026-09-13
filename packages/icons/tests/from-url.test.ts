@@ -171,3 +171,35 @@ test('a request that cannot reach the far end is left to reject', async () => {
 	// would tell the stack the set does not have the icon, which is a different thing.
 	await assert.rejects(fromUrl('http://127.0.0.1:1')('lucide:check'));
 });
+
+test('a drawing that can run or reach out is refused as unsafe-body, naming the icon, and a plain one passes', async () => {
+	const bodies: Record<string, string> = {
+		script: '<script>alert(1)</script><path d="M0 0h1"/>',
+		onload: '<path d="M0 0h1" onload="alert(1)"/>',
+		onbegin: '<animate attributeName="x" onbegin="alert(1)"/>',
+		slashed: '<animate attributeName="opacity" dur="0.1s"/onbegin="alert(1)"/>',
+		quoted: '<path d="M0 0h1"fill="none"onload="alert(1)"/>',
+		foreign: '<foreignObject><div>html</div></foreignObject>',
+		javascript: '<a href="javascript:alert(1)"><path d="M0 0h1"/></a>',
+		image: '<image href="https://evil.test/track.png"/>',
+		use: '<use xlink:href="https://evil.test/sprite.svg#a"/>',
+		spaced: '<use href = "http://evil.test/x"/>',
+		plain: WEDGE,
+		fragment: '<use href="#shape"/><defs><path id="shape" d="M0 0h1"/></defs>',
+		gradient: '<path d="M0 0h1" fill="url(#grad)"/>',
+		unquoted: '<use href=#a/>',
+	};
+	const it = await service((set, wanted) => ({ status: 200, body: JSON.stringify({ prefix: set, icons: { [wanted]: { body: bodies[wanted] ?? '' } } }) }));
+	const resolve = fromUrl(it.base);
+	try {
+		for (const name of ['script', 'onload', 'onbegin', 'slashed', 'quoted', 'foreign', 'javascript', 'image', 'use', 'spaced']) {
+			await assert.rejects(resolve(`lucide:${name}`), (e: Error & { reason?: string }) => e.reason === 'unsafe-body' && e.message.includes(`lucide:${name}`), name);
+		}
+		for (const name of ['plain', 'fragment', 'gradient', 'unquoted']) {
+			const data = await resolve(`lucide:${name}`);
+			assert.equal(data?.body, bodies[name], name);
+		}
+	} finally {
+		await it.close();
+	}
+});

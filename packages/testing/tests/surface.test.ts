@@ -13,9 +13,9 @@ test('the entry file exports exactly what was decided', () => {
 	const decided = [
 		'applyCommit', 'aweftPackageOf', 'canonicalJson',
 		'checkEdge', 'checkFixture', 'checkGraph', 'checkInvalidFixture', 'checkManifests',
-		'checkPublishing',
+		'checkPublishing', 'checkSecurityTable', 'parseSecurityTable', 'securityChecks',
 		'commitToJson', 'deltaFromJson', 'deltaToJson',
-	'driverChecks',
+	'adapterChecks', 'driverChecks',
 		'errorLines', 'errorsOf',
 		'idFromText', 'idToText',
 		'listenerChecks',

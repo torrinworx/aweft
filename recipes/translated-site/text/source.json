@@ -1,0 +1,113 @@
+{
+	"A photo of the team": [
+		"site.tsx"
+	],
+	"About": [
+		"site.tsx"
+	],
+	"Breadcrumb": [
+		"@aweftjs/ui/text.json"
+	],
+	"Choose": [
+		"@aweftjs/ui/text.json"
+	],
+	"Close|dialog": [
+		"@aweftjs/ui/text.json"
+	],
+	"Drop a file here, or choose one": [
+		"@aweftjs/ui/text.json"
+	],
+	"Drop files here, or choose them": [
+		"@aweftjs/ui/text.json"
+	],
+	"Email": [
+		"@aweftjs/auth/text.json"
+	],
+	"Home": [
+		"site.tsx"
+	],
+	"Hue": [
+		"@aweftjs/ui/text.json"
+	],
+	"Name": [
+		"site.tsx"
+	],
+	"Next": [
+		"@aweftjs/ui/text.json"
+	],
+	"Not found": [
+		"site.tsx"
+	],
+	"Notes": [
+		"site.tsx"
+	],
+	"Nothing here.": [
+		"site.tsx"
+	],
+	"Nothing matches that.": [
+		"@aweftjs/ui/text.json"
+	],
+	"Opacity": [
+		"@aweftjs/ui/text.json"
+	],
+	"Pagination": [
+		"@aweftjs/ui/text.json"
+	],
+	"Password": [
+		"@aweftjs/auth/text.json"
+	],
+	"Previous": [
+		"@aweftjs/ui/text.json"
+	],
+	"Read <link>the docs</link> first": [
+		"site.tsx"
+	],
+	"Saturation and brightness": [
+		"@aweftjs/ui/text.json"
+	],
+	"Save": [
+		"site.tsx"
+	],
+	"Save now": [
+		"site.tsx"
+	],
+	"Search": [
+		"@aweftjs/ui/text.json"
+	],
+	"Sign in": [
+		"@aweftjs/auth/text.json"
+	],
+	"This line has no French entry": [
+		"site.tsx"
+	],
+	"Translated site": [
+		"site.tsx"
+	],
+	"Welcome": [
+		"site.tsx"
+	],
+	"Written once, shown in three languages.": [
+		"site.tsx"
+	],
+	"Your name": [
+		"site.tsx"
+	],
+	"only one file is accepted": [
+		"@aweftjs/ui/text.json"
+	],
+	"up to {size}": [
+		"@aweftjs/ui/text.json"
+	],
+	"you@example.com": [
+		"@aweftjs/auth/text.json"
+	],
+	"{n, plural, one {# item} other {# items}}": [
+		"site.tsx"
+	],
+	"{name} is not one of the accepted types": [
+		"@aweftjs/ui/text.json"
+	],
+	"{name} is over the {size} limit": [
+		"@aweftjs/ui/text.json"
+	]
+}

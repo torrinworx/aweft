@@ -9,18 +9,21 @@ import type { AuthContext } from '../src/index.ts';
 
 import { module, newStore, peer, request } from './helpers.ts';
 
-test('identify hands the request to the session, and access allows public always and private with a user', async () => {
+test('identify hands the request and the peer to the session, and access allows public always and private with a user', async () => {
 	const store = newStore();
 	const seen: Request[] = [];
-	const whoIs = async (req: Request) => { seen.push(req); return { context: { user: 'u_1', session: 't' } }; };
+	const whoIs = async (req: Request, from?: { address: string | undefined }) => {
+		seen.push(req);
+		return { context: { user: 'u_1', session: 't', address: from?.address } };
+	};
 	const { instance: gate } = await module<Gate<AuthContext>>('Gate', store, { 'auth/Session': { whoIs } });
 
 	const req = request('/');
-	assert.deepEqual(await gate.identify(req, peer), { context: { user: 'u_1', session: 't' } });
+	assert.deepEqual(await gate.identify(req, peer), { context: { user: 'u_1', session: 't', address: '127.0.0.1' } });
 	assert.equal(seen[0], req);
 
-	const signedIn = { user: 'u_1', session: 't' };
-	const anonymous = { user: null, session: null };
+	const signedIn = { user: 'u_1', session: 't', address: undefined };
+	const anonymous = { user: null, session: null, address: undefined };
 	assert.deepEqual(await gate.access({ name: 'auth/Check', instance: { public: true } }, anonymous), []);
 	assert.deepEqual(await gate.access({ name: 'auth/State', instance: {} }, signedIn), []);
 	assert.deepEqual(await gate.access({ name: 'auth/State', instance: {} }, anonymous), [{ code: 'private', message: 'auth/State needs a signed-in user' }]);

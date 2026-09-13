@@ -547,3 +547,17 @@ test('any slot a document can hold survives the round trip, over seeded random d
 	assert.ok(Object.keys(referenced).length > 0, 'the run drew no references at all');
 	await store.stop();
 });
+
+test('a value that reads as SQL is a value, whether it is written, queried for or read back', async () => {
+	const store = createStore({ driver: postgresDriver(await freshPool()), declare: { title: ['title'] } });
+	const hostile = `'; DROP TABLE aweft_rows; -- "x" \\ $1`;
+	const handle = await store.open('hostile');
+	(handle.root as Doc).title = hostile;
+	await store.settled(handle);
+	await store.close(handle);
+	assert.deepEqual((await store.find({ where: [{ field: 'title', op: 'eq', value: hostile }] })).map((f) => f.doc), ['hostile']);
+	const again = await store.open('hostile');
+	assert.equal((again.root as Doc).title, hostile);
+	await store.close(again);
+	await store.stop();
+});

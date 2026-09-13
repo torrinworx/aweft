@@ -1,15 +1,18 @@
+type AdapterCheck: interface AdapterCheck { readonly name: string; run(make: MakeAdapter): Promise<void>; }
 type Applier: type Applier = (initial: DocumentJson, commits: readonly Commit[]) => DocumentJson;
 type CommitJson: interface CommitJson { readonly bytes: string; readonly deltas: readonly DeltaJson[]; readonly tag?: string; }
 type Connected: interface Connected { readonly socket: PairedSocket; readonly link: Link; readonly asks: Requests; readonly request: Request; }
 type DeltaJson: interface DeltaJson { readonly type: DeltaType; readonly id: string; readonly ref: RefJson; readonly value?: ValueJson; }
 type DocumentJson: interface DocumentJson { readonly root: string; readonly observables: Readonly<Record<string, ObservableJson>>; }
 type DriverCheck: interface DriverCheck { readonly name: string; run(make: MakeDriver): Promise<void>; }
+type FileAdapter: interface FileAdapter { readonly name: string; put(key: string, stream: ReadableStream<Uint8Array>, options: { readonly type: string; readonly size: number; }): Promise<void>; open(key: string): Promise<ReadableStream<Uint8Array> | undefined>; head(key: string): Promise<{ readonly size: number; } | undefined>; remove(key: string): Promise<void>; }
 type Fixture: interface Fixture { readonly name: string; readonly description: string; readonly initial: DocumentJson; readonly commits: readonly CommitJson[]; readonly final: DocumentJson; }
 type InvalidFixture: interface InvalidFixture { readonly name: string; readonly description: string; readonly stage: 'decode' | 'apply'; readonly reason: string; readonly bytes: string; readonly initial?: DocumentJson; }
 type ListenerCheck: interface ListenerCheck { readonly name: string; run(make: MakeListener): Promise<void>; }
 type LoadedModule: interface LoadedModule { readonly instance: unknown; stop(): Promise<void>; }
 type LoadedServer: interface LoadedServer { readonly server: Server; fetch(path: string, init?: RequestInit): Promise<Response>; open(options?: OpenOptions): Promise<Connected>; stop(): Promise<void>; }
 type MadeListener: interface MadeListener { readonly listener: Listener; url(): string; }
+type MakeAdapter: type MakeAdapter = () => Promise<FileAdapter> | FileAdapter;
 type MakeDriver: type MakeDriver = () => Promise<StoreDriver> | StoreDriver;
 type MakeListener: type MakeListener = () => Promise<MadeListener> | MadeListener;
 type MakeRunner: type MakeRunner = () => Runner;
@@ -17,6 +20,7 @@ type Manifest: interface Manifest { readonly name: string; readonly dependencies
 type ModuleUnderTest: interface ModuleUnderTest { readonly exports: ModuleExports; readonly imports?: Readonly<Record<string, unknown>>; readonly config?: Readonly<Record<string, unknown>>; readonly props?: Readonly<Record<string, unknown>>; }
 type ObservableJson: interface ObservableJson { readonly kind: ObservableKind; readonly slots: Readonly<Record<string, ValueJson>>; }
 type OpenOptions: interface OpenOptions { readonly headers?: Record<string, string> | undefined; readonly url?: string | undefined; readonly peer?: Peer | undefined; }
+type Opened: interface Opened { readonly socket: { readonly readyState: number; send(data: string | Uint8Array): void; close(): void; }; readonly link: Link; readonly asks: Requests; }
 type PackageInfo: interface PackageInfo { readonly tier: number | 'integrator'; readonly plane: Plane; readonly imports: readonly string[] | '*'; }
 type PairedSocket: interface PairedSocket extends SocketLike { peer: PairedSocket | undefined; readonly sent: (Uint8Array | string)[]; readonly thrown: unknown[]; fire(type: string, event: { data?: unknown; }): void; }
 type Plane: type Plane = 'client' | 'server' | 'isomorphic';
@@ -24,7 +28,14 @@ type PublishManifest: interface PublishManifest { readonly name: string; readonl
 type Recording: interface Recording { readonly document: DocumentLike & { readonly body: ElementLike; readonly head: ElementLike; }; readonly ops: string[]; }
 type RefJson: interface RefJson { readonly kind: ObservableKind; readonly key: string; }
 type RoomCheck: interface RoomCheck { readonly name: string; run(make: MakeRunner): Promise<void>; }
+type SecurityCase: interface SecurityCase { readonly name: string; readonly requirements: readonly string[]; }
+type SecurityCheck: interface SecurityCheck { readonly name: string; readonly requirements: readonly string[]; run(start: StartTarget): Promise<void>; }
+type SecurityRow: interface SecurityRow { readonly id: string; readonly level: string; readonly owner: string; readonly check: string; }
+type SecurityTarget: interface SecurityTarget { fetch(path: string, init?: RequestInit): Promise<Response>; open(options?: { readonly headers?: Record<string, string> | undefined; readonly url?: string | undefined; }): Promise<Opened>; readonly server: Server; stop(): Promise<void>; }
+type StartOptions: interface StartOptions { readonly sources: readonly Source[]; readonly gate: Gate | string; readonly handlers: { failed(name: string, error: unknown): void; }; }
+type StartTarget: type StartTarget = (options: StartOptions) => Promise<SecurityTarget>;
 type StoreDriver: interface StoreDriver { write(write: { doc: string; root: string; rootKind: string; rows: readonly { id: string; kind: string; edge?: { parent: string; slot: string; } | null; set: Record<string, unknown>; unset: readonly string[]; }[]; dropped: readonly string[]; body: Uint8Array; project?: Record<string, unknown>; }): Promise<number>; declare(declaration: Readonly<Record<string, readonly string[]>>): Promise<void>; find(lookup: { where: { field: string; op: string; value: unknown; }; sort?: { field: string; direction: 'asc' | 'desc'; }; limit?: number; after?: string; }): Promise<{ doc: string; fields: Record<string, unknown>; cursor: string; }[]>; scan(limit: number, after?: string): Promise<{ doc: string; fields: Record<string, unknown>; cursor: string; }[]>; create(doc: string, root: string, rootKind: string): Promise<boolean>; read(doc: string): Promise<{ root: string; rootKind: string; rows: unknown[]; } | null>; since(doc: string, seq: number): Promise<{ seq: number; body: Uint8Array; }[]>; head(doc: string): Promise<number>; truncate(doc: string, seq: number): Promise<void>; forget(doc: string, ids: readonly string[]): Promise<void>; remove(doc: string): Promise<void>; close(): Promise<void>; }
+type TestExists: type TestExists = (file: string, text: string, kind: 'test' | 'doc') => boolean;
 type ThemeSource: interface ThemeSource { readonly path: string; readonly text: string; }
 type ThemeViolation: interface ThemeViolation { readonly path: string; readonly line: number; readonly where: string; readonly property: string; readonly literal: string; readonly fix: string; }
 type ThrownRefusal: interface ThrownRefusal { readonly reason: string; readonly fix: string; }
@@ -32,6 +43,7 @@ type ValueJson: type ValueJson = null | boolean | number | string | { readonly b
 type Violation: interface Violation { readonly from: string; readonly to: string; readonly rule: 'upward-tier' | 'cross-plane' | 'unknown-package' | 'not-allowed'; readonly detail: string; }
 type WordSource: interface WordSource { readonly path: string; readonly text: string; }
 type WordViolation: interface WordViolation { readonly path: string; readonly line: number; readonly word: string; readonly fix: string; readonly text: string; }
+value adapterChecks: () => AdapterCheck[]
 value applyCommit: (doc: DocumentJson, commit: Commit) => DocumentJson
 value aweftPackageOf: (specifier: string) => string | undefined
 value canonicalJson: (value: unknown) => string
@@ -41,6 +53,7 @@ value checkGraph: (edges: readonly (readonly [string, string])[], table: Readonl
 value checkInvalidFixture: (f: InvalidFixture, applier?: Applier) => void
 value checkManifests: (manifests: readonly Manifest[], allowed: readonly string[], perPackage?: Readonly<Record<string, readonly string[]>>) => string[]
 value checkPublishing: (manifests: readonly PublishManifest[]) => string[]
+value checkSecurityTable: (rows: readonly SecurityRow[], cases: readonly SecurityCase[], testExists: TestExists) => string[]
 value checkTheme: (files: readonly ThemeSource[]) => ThemeViolation[]
 value checkWords: (sources: readonly WordSource[]) => WordViolation[]
 value commitToJson: (commit: Commit, bytes: Uint8Array<ArrayBufferLike>) => CommitJson
@@ -58,12 +71,14 @@ value loadModule: (test: ModuleUnderTest) => Promise<LoadedModule>
 value loadServer: (options: Omit<ServerOptions, "listener">) => Promise<LoadedServer>
 value modelApplier: Applier
 value moduleSpecifiers: (source: string, fileName?: string) => string[]
+value parseSecurityTable: (text: string) => SecurityRow[]
 value randomBelow: (random: () => number, bound: number) => number
 value randomFrom: (seed: number) => () => number
 value recordingDocument: () => Recording
 value refFromJson: (r: RefJson) => Ref
 value refToJson: (ref: Ref) => RefJson
 value roomChecks: () => RoomCheck[]
+value securityChecks: (options: { readonly gate: string | Gate<unknown>; }) => SecurityCheck[]
 value seedFrom: (text: string) => number
 value settle: (rounds?: number) => Promise<void>
 value shuffle: <T>(items: readonly T[], seed: number) => T[]
@@ -75,6 +90,17 @@ value themeTokens: (files: readonly ThemeSource[]) => string[]
 value valueFromJson: (v: ValueJson) => Value
 value valueToJson: (v: Value) => ValueJson
 value wordRules: () => readonly { readonly word: string; readonly fix: string; }[]
+./browser type AuditNode: interface AuditNode { readonly target: string; readonly html: string; }
+./browser type AuditOptions: interface AuditOptions { readonly root?: string; readonly tags?: readonly string[]; readonly locate?: () => string; }
+./browser type AuditResult: interface AuditResult { readonly violations: readonly AuditViolation[]; readonly passes: number; }
+./browser type AuditViolation: interface AuditViolation { readonly rule: string; readonly impact: string | null; readonly wcag: readonly string[]; readonly help: string; readonly helpUrl: string; readonly nodes: readonly AuditNode[]; }
+./browser type PageLike: interface PageLike { evaluate(source: string): Promise<unknown>; addScriptTag(options: { readonly content: string; }): Promise<unknown>; readonly keyboard: { press(key: string): Promise<void>; }; }
+./browser type Stop: interface Stop { readonly tag: string; readonly id: string | null; readonly role: string | null; readonly name: string; readonly ring: boolean; }
+./browser type WalkOptions: interface WalkOptions { readonly limit?: number; }
+./browser type WalkProblem: interface WalkProblem { readonly reason: 'focus-not-visible' | 'focus-stuck' | 'focus-loops' | 'unreachable' | 'never-cycles'; readonly fix: string; readonly target: string; }
+./browser type WalkResult: interface WalkResult { readonly stops: readonly Stop[]; readonly problems: readonly WalkProblem[]; }
+./browser value audit: (page: PageLike, options?: AuditOptions) => Promise<AuditResult>
+./browser value walk: (page: PageLike, options?: WalkOptions) => Promise<WalkResult>
 ./postgres type Load: type Load = (name: 'embedded-postgres' | 'pg') => Promise<unknown>;
 ./postgres type PoolLike: interface PoolLike { query(text: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[]; }>; connect(): Promise<{ query(text: string, values?: readonly unknown[]): Promise<{ rows: unknown[]; rowCount: number | null; }>; release(): void; }>; end(): Promise<void>; }
 ./postgres type Throwaway: interface Throwaway { readonly port: number; pool(): Promise<PoolLike>; stop(): Promise<void>; }
