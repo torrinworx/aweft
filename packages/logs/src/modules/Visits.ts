@@ -73,6 +73,13 @@ const numberOf = (config: Readonly<Record<string, unknown>>, key: keyof typeof d
 	return held;
 };
 
+// Over 2^31 - 1 milliseconds Node fires a timer after one millisecond instead.
+const timerOf = (config: Readonly<Record<string, unknown>>, key: 'sweepMs' | 'idleMs'): number => {
+	const ms = numberOf(config, key);
+	if (ms > 2_147_483_647) throw refuse(`${key} ${String(ms)}, more than a timer holds`, 'Give that setting at most 2147483647 milliseconds, about 24.8 days.');
+	return ms;
+};
+
 const over = (what: string): Error =>
 	codecError('capped', `${what} is over the cap`, 'Send fewer, or raise the cap in logs/Visits\'s config.');
 
@@ -105,13 +112,13 @@ export default async (props: ModuleProps): Promise<Visits> => {
 	const { config } = props;
 	const store: Store = storeOf(props);
 	const keep = numberOf(config, 'keep');
-	const sweepMs = numberOf(config, 'sweepMs');
+	const sweepMs = timerOf(config, 'sweepMs');
 	const batch = numberOf(config, 'batch');
 	const entryBytes = numberOf(config, 'entry');
 	const perVisit = numberOf(config, 'perVisit');
 	const batchesPerMinute = numberOf(config, 'batchesPerMinute');
 	const visitsPerMinute = numberOf(config, 'visitsPerMinute');
-	const idleMs = numberOf(config, 'idleMs');
+	const idleMs = timerOf(config, 'idleMs');
 	if (config.build !== null && typeof config.build !== 'string') {
 		throw refuse(`build ${JSON.stringify(config.build)}`, 'Give build a string, such as a commit hash, or null.');
 	}

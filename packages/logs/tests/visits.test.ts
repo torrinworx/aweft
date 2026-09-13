@@ -222,7 +222,12 @@ test('a store that does not declare startedAt is refused at load, with the fix',
 	await assert.rejects(visits(bare), (e: unknown) => reasonOf(e) === 'undeclared');
 });
 
-test('a config value of the wrong type is refused at load', async () => {
+test('a config value of the wrong type is refused at load, and a timer setting a timer cannot hold', async () => {
 	await assert.rejects(visits(newStore(), { keep: 0 }), (e: unknown) => reasonOf(e) === 'invalid-config');
 	await assert.rejects(visits(newStore(), { build: 42 }), (e: unknown) => reasonOf(e) === 'invalid-config');
+	// Over 2^31 - 1 milliseconds Node fires a timer after one millisecond instead.
+	await assert.rejects(visits(newStore(), { sweepMs: 2 ** 31 }), (e: unknown) => reasonOf(e) === 'invalid-config');
+	await assert.rejects(visits(newStore(), { idleMs: 2 ** 31 }), (e: unknown) => reasonOf(e) === 'invalid-config');
+	const { stop } = await visits(newStore(), { sweepMs: 2 ** 31 - 1 });
+	await stop();
 });

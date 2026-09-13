@@ -143,6 +143,7 @@ export const config = {
 	perVisit: 10_000,    // entries a visit may hold; the last is capped and the rest are dropped
 	batchesPerMinute: 60,
 	visitsPerMinute: 600,
+	sweepMs: 3_600_000,  // and idleMs: at most 2147483647, what a timer can hold
 };
 ```
 

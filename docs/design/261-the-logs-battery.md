@@ -21,7 +21,8 @@ the page calls `createLog`, and nothing is read but through the store.
   last one is a `capped` sentinel and the rest are dropped), `batchesPerMinute` 60 (per visit),
   `visitsPerMinute` 600 (new visits, this process), `idleMs` 60000 (a visit document is held
   open this long after its last batch), `build` null (written into this process's document). A
-  value of the wrong type is refused at load with `invalid-config`. The process document has
+  value of the wrong type is refused at load with `invalid-config`, as is a timer setting over
+  what a timer can hold (2147483647 ms). The process document has
   the same cap and a different answer to it: once the next entry would be its sentinel, the
   module closes it and opens a fresh `process:<id>`, so the record goes on and the full one
   waits for the sweep.
@@ -130,7 +131,7 @@ that wants a line in the record calls `write`.
 
 `packages/logs/tests/`: `visits.test.ts` (the documents, the caps, `write` with and without a
 context, binding, the sweep, the process document rotating when full, two first writes opening
-a document once, `invalid-config`),
+a document once, `invalid-config` for a wrong type and for a timer over its bound),
 `record.test.ts` (the route: a batch kept, `user` from the cookie and kept across a sign-out,
 `browser` and `build` written once, `ended`, a body that is not a batch, 429 over each cap, two
 anonymous sockets under the auth gate as two visits), `observe.test.ts` (every event kind
