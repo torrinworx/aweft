@@ -27,6 +27,7 @@ Start here if you know what you are trying to build.
 | `icons/` | Icons named three ways, and what each way puts in the bundle | ui, icons, build |
 | `routed-site/` | A site with real URLs: nested pages, a page with a parameter, a page that arrives later, a dialog the back button dismisses, and a title per page | core, dom, ui, build |
 | `ssg/` | A routed site written out as files, served by anything, and taken over in place when the browser gets to it | dom, ui, build, ssg |
+| `translated-site/` | A site written in one language and launched in three: the build finds every string and writes the catalog an agent fills, each language is a tree of pages with the plural rules of its own, a stored act is compiled where it runs, and the Ukrainian page hydrates in place | core, modules, ui, build, ssg |
 | `static/` | A generated site served by the stack's own server: one process is the whole deployment, and the page still comes alive where it stands | modules, server, ui, build, ssg, static |
 | `health/` | A deploy's verification: the health endpoint polled until the shipped build is the one answering, and the two states a poll must not mistake for health | store, modules, server, auth, health |
 | `logs/` | A page recorded end to end in a browser and the visit read back: an error, a rejection, a console line, a failed call on both sides, a commit's shape with a private slot absent, a typed character never stored, sign-in mid-visit | store, modules, server, auth, logs, ui, client |
