@@ -45,6 +45,12 @@ reasoned that nothing round-trips through `snapshot` to persist. True, and besid
 `store` round-trips through `snapshot` to **open**. The claim is corrected here rather than
 left standing.
 
+## Evidence
+
+`packages/store/tests/behavior.store.test.ts`: a document holding an alias to an observable that
+lost its attach edge reopens with that slot gone and `handle.droppedSlots` naming it, and a document
+that dropped nothing reports an empty list.
+
 ## What would reverse this
 
 `fromSnapshot` gaining a way to take observables nothing attaches, which is already wanted for

@@ -56,3 +56,12 @@ test('a malformed id is refused rather than padded or truncated', () => {
 	reason(() => idFromText('AAAAAAAAAAAAAAA+'), 'invalid-id');
 	reason(() => idFromText('AAAAAAAAAAAAAA=='), 'invalid-id');
 });
+
+test('an id character outside the ASCII table is refused, not read as the letter A', () => {
+	// The reverse table has 128 entries. The character just past it has to be refused the same
+	// way as a punctuation mark inside it, or it decodes as zero bits and the id round trips to
+	// a different text.
+	const past = 'AAAAAAAAAAAAAAA' + String.fromCharCode(128);
+	assert.throws(() => idFromText(past), (e: CodecError) => e.reason === 'invalid-id');
+	assert.throws(() => idFromText('AAAAAAAAAAAAAAA' + String.fromCharCode(255)), (e: CodecError) => e.reason === 'invalid-id');
+});

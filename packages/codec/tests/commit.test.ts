@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { assertId, assertPosition, bytesFromHex, bytesToHex } from '../src/index.ts';
+import { assertId, assertPosition, assertValue, bytesFromHex, bytesToHex, idToText, slotKeyOf } from '../src/index.ts';
 import { type WireValue, type CodecError, encodeValue } from '../src/index.ts';
 import {
 	type Commit, type Delta, type Id, type Position, type Tag, type Value,
@@ -248,4 +248,55 @@ test('a reference is told from a primitive by its shape, not by being an object'
 	assert.equal(isReference({} as Value), false);
 	assert.equal(isReference(new Date() as unknown as Value), false);
 	assert.equal(isReference({ kind: 'object', id: B } as unknown as Value), false, 'no edge');
+});
+
+test('a slot key is the name a document files the slot under, one spelling per kind', () => {
+	const position = assertPosition(Uint8Array.of(0x80, 0x01));
+	assert.equal(slotKeyOf({ kind: 'object', key: 'title' }), 'title');
+	assert.equal(slotKeyOf({ kind: 'object', key: '' }), '');
+	assert.equal(slotKeyOf({ kind: 'array', key: position }), '8001');
+	assert.equal(slotKeyOf({ kind: 'map', key: A }), idToText(A));
+	// A map slot's key is an id, and a key of the wrong width is refused as one.
+	reason(() => slotKeyOf({ kind: 'map', key: badId(Uint8Array.of(1, 2, 3)) }), 'invalid-id');
+});
+
+test('a value a document may hold passes the check, and one it may not is refused by name', () => {
+	const held: Value[] = [
+		null, true, false, 0, -0, 1.5, Number.MAX_SAFE_INTEGER, 2 ** 60, '', 'text', 'a\u{1f600}b',
+		new Uint8Array(0), Uint8Array.of(255),
+		{ edge: 'attach', kind: 'object', id: B }, { edge: 'alias', kind: 'map', id: C },
+	];
+	for (const value of held) assertValue(value);
+
+	reason(() => assertValue(Number.NaN), 'invalid-number');
+	reason(() => assertValue(Number.POSITIVE_INFINITY), 'invalid-number');
+	reason(() => assertValue(Number.NEGATIVE_INFINITY), 'invalid-number');
+	reason(() => assertValue('\ud800'), 'lone-surrogate');
+	for (const value of [undefined, {}, [], () => 0, 10n, Symbol('s'), new Date(0)]) {
+		reason(() => assertValue(value as Value), 'invalid-value');
+	}
+});
+
+test('a commit or a delta of the wrong shape is refused from either side of the width', () => {
+	const delta = [0, A, [0, 'a'], 1];
+	// A commit is the deltas, or the deltas and a tag: nothing shorter, nothing longer.
+	reason(() => decodeCommit(encodeValue([])), 'invalid-commit');
+	reason(() => decodeCommit(encodeValue([[delta], Uint8Array.of(1, 2, 3, 4), 'more'])), 'invalid-commit');
+	// A delta is three items for a remove and four otherwise, and it is an array.
+	reason(() => decodeCommit(encodeValue([[[0, A]]])), 'invalid-delta');
+	reason(() => decodeCommit(encodeValue([[[0, A, [0, 'a'], 1, 'more']]])), 'invalid-delta');
+	reason(() => decodeCommit(encodeValue([['not a delta']])), 'invalid-delta');
+	// A ref is a kind and a key, and a reference a kind index the format names.
+	reason(() => decodeCommit(encodeValue([[[0, A, [0, 'a', 'more'], 1]]])), 'invalid-ref');
+	reason(() => decodeCommit(encodeValue([[[0, A, [0], 1]]])), 'invalid-ref');
+	reason(() => decodeCommit(encodeValue([[[0, A, [0, 'a'], [0, 9, B]]]])), 'unknown-ref-kind');
+});
+
+test('a tag arriving in bytes is held to the same width as one going out', () => {
+	const delta = [0, A, [0, 'a'], 1];
+	// The encoder refuses these widths, so the bytes are built by hand to reach the decoder.
+	reason(() => decodeCommit(encodeValue([[delta], new Uint8Array(MIN_TAG_BYTES - 1)])), 'invalid-tag');
+	reason(() => decodeCommit(encodeValue([[delta], new Uint8Array(MAX_TAG_BYTES + 1)])), 'invalid-tag');
+	assert.equal(decodeCommit(encodeValue([[delta], new Uint8Array(MIN_TAG_BYTES)])).tag?.length, MIN_TAG_BYTES);
+	assert.equal(decodeCommit(encodeValue([[delta], new Uint8Array(MAX_TAG_BYTES)])).tag?.length, MAX_TAG_BYTES);
 });

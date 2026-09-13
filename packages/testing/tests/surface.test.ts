@@ -26,6 +26,8 @@ test('the entry file exports exactly what was decided', () => {
 		'seedFrom', 'settle', 'shuffle', 'slotKeyOf', 'socketPair',
 		'surfaceOf', 'surfaceProgram',
 		'checkTheme', 'themeTokens', 'checkWords', 'wordRules',
+		// What a suite has to name, and the operator sweep's finder and flip (designs 285, 287).
+		'checkExercised', 'sweepSites', 'flipSite',
 		'valueFromJson', 'valueToJson',
 	];
 

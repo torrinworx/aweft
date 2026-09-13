@@ -51,6 +51,11 @@ for (const name of readdirSync(packagesDir).sort()) {
 	}
 
 	const args = [
+		// The suites import their package by name, and the name resolves to compiled output unless
+		// the source is asked for (design 256). `.npmrc` asks on every npm script, but a child
+		// process does not inherit the parent's flags, and a run started with `node` directly would
+		// measure a stale `dist/` and report a number that is not the tree's. So the ask is here.
+		'--conditions=aweft-source',
 		// `ui`'s source is .tsx, which Node cannot load on its own. The loader is this stack's own
 		// transform, so every gate run compiles the repo with its own compiler (design 110).
 		'--import', '@aweftjs/build/loader',
@@ -67,7 +72,12 @@ for (const name of readdirSync(packagesDir).sort()) {
 	}
 
 	console.log(`\n${name}: branch threshold ${threshold}`);
-	const run = spawnSync(process.execPath, [...args, ...tests], { cwd: root, stdio: 'inherit' });
+	// A suite that spawns a process of its own gets the same ask through the environment, the
+	// way npm passes it, because a child does not inherit its parent's flags.
+	const options = [process.env['NODE_OPTIONS'] ?? '', '--conditions=aweft-source'].join(' ').trim();
+	const run = spawnSync(process.execPath, [...args, ...tests], {
+		cwd: root, stdio: 'inherit', env: { ...process.env, NODE_OPTIONS: options },
+	});
 	if (run.status !== 0) failed = true;
 }
 

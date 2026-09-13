@@ -7,7 +7,7 @@
 // node reloads it together with everything that depends on it. Nothing in the module system
 // knows there is a link, a document store, or an operator.
 //
-// Run: node examples/modules/main.ts
+// Run: node recipes/modules/main.ts
 
 import { fileURLToPath } from 'node:url';
 

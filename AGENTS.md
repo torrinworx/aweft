@@ -170,7 +170,8 @@ A package is foundational-complete only when all of the following hold:
    not reach an editor hovering the function. The package has a README that shows the job
    it is for, because item 8 has nothing to run on without one.
 2. The root gate is green, including the package's branch coverage threshold.
-3. Every public export is exercised by the package's own suite, and every export a
+3. Every public export is exercised by the package's own suite (`npm run exercised` checks that
+   the name is there, design 285), and every export a
    `@aweftjs/testing` harness covers goes through that harness rather than around it.
    The harness is the discipline where one exists; it is not a reason to invent harness
    surface whose only consumer is this rule.
@@ -263,6 +264,15 @@ What must exist:
   `package.json`, and `packages/testing/scripts/run-tests.ts` runs every package's tests in a
   coverage pass scoped to that package's own sources, failing below the declared number. Line
   coverage is not gated. Thresholds only ratchet upward; lowering one needs a design note.
+- **A suite names its own surface and its own refusals** (design 285): every value export in a
+  package's `surface.txt` and every reason in its `errors.txt` is named by a test in that
+  package's own suite, outside `surface.test.ts` and `internal.*`. Checked by
+  `packages/testing/scripts/check-exercised.ts`, `npm run exercised`, over the packages the script
+  lists; the list only grows, and `testing` is exempt because its surface is everyone else's suite.
+- **The operator sweep** (design 287): `npm run sweep -- <package>` flips one operator at a time
+  in that package's sources and prints the flips its suite let through. It runs beside the gate,
+  not in it. A change to a package's tests runs it, and every survivor is either killed by a test
+  or written down as equivalent with the reason.
 - **Conformance fixtures**: `spec/fixtures` is the normative suite for the wire format.
   The gate's conformance suite fails on any byte a regeneration would change. Changing a
   fixture requires a `spec/CHANGELOG.md` entry.

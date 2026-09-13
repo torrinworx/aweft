@@ -7,7 +7,7 @@
 // release build of the binding's own source is checked for asserts the same way: by reading what
 // came out, not by trusting that a pass ran.
 //
-// Run: node examples/build/main.ts
+// Run: node recipes/build/main.ts
 
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

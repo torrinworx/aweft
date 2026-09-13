@@ -226,8 +226,10 @@ const flush = (): void => {
 		for (const [watcher, told] of [...node.watchers]) {
 			if (told === node.version) continue;
 			// Recorded before the call, so a watcher that throws is still caught up rather
-			// than retried with the same value forever.
-			node.watchers.set(watcher, node.version);
+			// than retried with the same value forever. Recorded only while it is still
+			// subscribed: one an earlier watcher stopped in this same delivery is still told
+			// this value, and is never put back to hear the next.
+			if (node.watchers.has(watcher)) node.watchers.set(watcher, node.version);
 			try {
 				watcher(node.value);
 			} catch (error) {

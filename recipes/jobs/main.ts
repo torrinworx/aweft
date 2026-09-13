@@ -4,7 +4,7 @@
 // what the jobs do lands in a second document. The operator drives the clock, which is how
 // you find out what a schedule will do next week without waiting for next week.
 //
-// Run: node examples/jobs/main.ts
+// Run: node recipes/jobs/main.ts
 
 import { createArray, createObject } from '@aweftjs/core';
 import { createScheduler } from '@aweftjs/jobs';

@@ -9,7 +9,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createObject, mutable, observer } from '../src/index.ts';
+import { spawnSync } from 'node:child_process';
+
+import { all, createArray, createObject, fromEvent, mutable, observer } from '../src/index.ts';
 
 interface Doc extends Record<string, unknown> {
 	title?: string;
@@ -173,4 +175,204 @@ test('an effect that writes its scope during its initial call still unsubscribes
 
 	doc.title = 'later';
 	assert.deepEqual(seen, ['raw', 'cooked']);
+});
+
+test('a watcher stopped by another watcher in one delivery hears that value and no later one', () => {
+	// Two watchers share one derived value, so they share one node. The first stops the second
+	// while the value is being handed round. The second was already owed this value, and the
+	// bookkeeping that records what it was told must not put it back to hear the next.
+	const cell = mutable(1);
+	const doubled = cell.map((v) => v * 2);
+	const seen: string[] = [];
+	let stopSecond: (() => void) | null = null;
+
+	const stopFirst = doubled.watch((v) => {
+		seen.push(`first ${String(v)}`);
+		if (v === 4) stopSecond?.();
+	});
+	stopSecond = doubled.watch((v) => seen.push(`second ${String(v)}`));
+
+	cell.set(2);
+	cell.set(3);
+	assert.deepEqual(seen, ['first 4', 'second 4', 'first 6']);
+	stopFirst();
+
+	// The same on a bare cell, where each watcher has a node of its own.
+	const bare = mutable(1);
+	const heard: string[] = [];
+	let stopB: (() => void) | null = null;
+	const stopA = bare.watch((v) => {
+		heard.push(`a ${String(v)}`);
+		if (v === 2) stopB?.();
+	});
+	stopB = bare.watch((v) => heard.push(`b ${String(v)}`));
+	bare.set(2);
+	bare.set(3);
+	assert.deepEqual(heard.filter((h) => h.startsWith('b')), [], 'the stopped watcher hears nothing after');
+	assert.deepEqual(heard.filter((h) => h.startsWith('a')), ['a 2', 'a 3']);
+	stopA();
+});
+
+test('a watcher added by another watcher in one delivery hears only the values after it', () => {
+	const cell = mutable(1);
+	const doubled = cell.map((v) => v * 2);
+	const seen: string[] = [];
+	let stopLate: (() => void) | null = null;
+
+	const stopEarly = doubled.watch((v) => {
+		seen.push(`early ${String(v)}`);
+		if (v === 4 && stopLate === null) stopLate = doubled.watch((w) => seen.push(`late ${String(w)}`));
+	});
+
+	cell.set(2);
+	cell.set(3);
+	assert.deepEqual(seen, ['early 4', 'early 6', 'late 6']);
+	stopEarly();
+	stopLate!();
+});
+
+test('a map watcher that throws does not stop the next change from being computed and delivered', () => {
+	const cell = mutable(1);
+	let runs = 0;
+	const doubled = cell.map((v) => {
+		runs += 1;
+		return v * 2;
+	});
+	const seen: number[] = [];
+
+	const stop = doubled.watch((v) => {
+		seen.push(v);
+		if (v === 4) throw new Error('once');
+	});
+	const before = runs;
+
+	assert.throws(() => cell.set(2), /once/);
+	cell.set(3);
+	assert.deepEqual(seen, [4, 6]);
+	assert.equal(runs, before + 2, 'one recompute per change, and none retrying the throw');
+	stop();
+});
+
+test('an unwrap watcher that re-points the outer value is handed the value it was told, then the new target', () => {
+	const a = mutable('a1');
+	const b = mutable('b1');
+	const outer = mutable<unknown>(a);
+	const seen: unknown[] = [];
+
+	const stop = outer.unwrap().watch((v) => {
+		seen.push(v);
+		if (v === 'a2') outer.set(b);
+	});
+
+	// The retarget made inside the delivery is its own delivery, after this one.
+	a.set('a2');
+	assert.deepEqual(seen, ['a2', 'b1']);
+	// The old inner chain was let go.
+	a.set('a3');
+	assert.deepEqual(seen, ['a2', 'b1']);
+	b.set('b2');
+	assert.deepEqual(seen, ['a2', 'b1', 'b2']);
+	stop();
+});
+
+test('two watchers on one derived value share one transform run per change, and reads cost nothing', () => {
+	const cell = mutable(1);
+	let runs = 0;
+	const plusOne = cell.map((v) => {
+		runs += 1;
+		return v + 1;
+	});
+	const heard: number[] = [];
+
+	const stopA = plusOne.watch((v) => heard.push(v));
+	const stopB = plusOne.watch((v) => heard.push(v));
+	const live = runs;
+
+	cell.set(2);
+	assert.equal(runs, live + 1);
+	assert.deepEqual(heard, [3, 3]);
+
+	plusOne.get();
+	plusOne.get();
+	assert.equal(runs, live + 1, 'a live value is read from its cache');
+	stopA();
+	stopB();
+});
+
+test('a watcher subscribing to its own chain inside its first delivery does not keep the upstream live', () => {
+	let listeners = 0;
+	const target = {
+		handlers: new Set<(event: string) => void>(),
+		addEventListener(_type: string, fn: (event: string) => void) {
+			listeners += 1;
+			this.handlers.add(fn);
+		},
+		removeEventListener(_type: string, fn: (event: string) => void) {
+			listeners -= 1;
+			this.handlers.delete(fn);
+		},
+		fire(event: string) {
+			for (const fn of [...this.handlers]) fn(event);
+		},
+	};
+	const events = fromEvent<string>(target, 'tick').map((e) => e ?? 'none');
+	let stopInner: (() => void) | null = null;
+
+	const stopOuter = events.watch(() => {
+		if (stopInner === null) stopInner = events.watch(() => undefined);
+	});
+	target.fire('one');
+	assert.notEqual(stopInner, null, 'the inner subscription was made during the delivery');
+	assert.equal(listeners, 1, 'one listener on the target however many watchers');
+
+	stopOuter();
+	assert.equal(listeners, 1, 'the inner watcher still holds the upstream');
+	stopInner!();
+	assert.equal(listeners, 0, 'and the last one to leave releases it');
+});
+
+test('a wildcard scope reads as undefined through all and effect rather than throwing', () => {
+	const doc = createObject<Record<string, unknown>>({ list: createArray([1]) });
+	const wild = observer(doc).skip(1);
+
+	assert.deepEqual(all([wild, 'plain']).get(), [undefined, 'plain']);
+
+	const seen: unknown[] = [];
+	const stop = wild.effect((v) => seen.push(v));
+	(doc['list'] as number[]).push(2);
+	assert.deepEqual(seen, [undefined, undefined], 'it runs for the change it heard, with no single value');
+	stop();
+});
+
+test('a derived value over a path nothing holds yet reads undefined, hears the path arrive, and stops clean', () => {
+	const doc = createObject<Record<string, unknown>>();
+	let runs = 0;
+	const named = observer(doc).path('a', 'b').map((v) => {
+		runs += 1;
+		return v === undefined ? 'none' : v;
+	});
+	const seen: unknown[] = [];
+
+	const stop = named.watch((v) => seen.push(v));
+	assert.equal(named.get(), 'none');
+
+	doc['a'] = createObject<Record<string, unknown>>({ b: 1 });
+	assert.deepEqual(seen, [1]);
+
+	stop();
+	const after = runs;
+	(doc['a'] as Record<string, unknown>)['b'] = 2;
+	assert.deepEqual(seen, [1]);
+	assert.equal(runs, after, 'nothing is left registered to run the transform');
+});
+
+test('a stopped watcher and a drained delivery hold nothing: what the watcher closed over is collectable', () => {
+	// Run in a child with the collector exposed, so the check is a real collection and not a
+	// guess about what a queue still points at.
+	const run = spawnSync(process.execPath, [
+		'--conditions=aweft-source', '--expose-gc', '--import', '@aweftjs/build/loader',
+		new URL('./held.ts', import.meta.url).pathname,
+	], { encoding: 'utf8', timeout: 30_000 });
+	assert.equal(run.status, 0, run.stderr);
+	assert.deepEqual(run.stdout.trim().split('\n'), ['cell watcher: released', 'document listener: released']);
 });

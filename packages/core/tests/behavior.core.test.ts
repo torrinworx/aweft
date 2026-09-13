@@ -10,10 +10,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-	RefusedError, alias, atomic, createArray, createObject, intercept, isReachable, observer,
-	parentOf, snapshot, textIdOf,
+	RefusedError, alias, apply, atomic, createArray, createMap, createObject, fromSnapshot, idOf,
+	intercept, isReachable, observer, parentOf, snapshot, textIdOf,
 } from '../src/index.ts';
-import type { Change } from '../src/index.ts';
+import type { Change, Commit } from '../src/index.ts';
 
 interface Doc extends Record<string, unknown> {
 	a?: number;
@@ -546,4 +546,173 @@ test('a rule covers the document, however deep the observable it was registered 
 
 	assert.throws(() => { doc.a = 1; }, RefusedError, 'a write at the root is refused');
 	assert.throws(() => { leaf.n = 2; }, RefusedError, 'and so is one at the leaf');
+});
+
+test('a path with no keys names the same place as the observer it came from', () => {
+	const doc = createObject<Doc>({ a: 1 });
+	const root = observer(doc);
+	const same = root.path();
+	const heard: number[] = [];
+
+	assert.equal(same.get(), doc, 'it reads the observable itself');
+	const stop = same.watch((change) => heard.push(change.deltas.length));
+	doc.b = 2;
+	assert.deepEqual(heard, [1], 'and hears what the root hears');
+	assert.equal(same.path('a').get(), 1, 'and narrows from the same place');
+	stop();
+});
+
+test('a slot holding the empty string or zero reads as that value, not as missing', () => {
+	const doc = createObject<Record<string, unknown>>({ zero: 0, empty: '', off: false });
+
+	assert.equal(observer(doc).path('zero').get(), 0);
+	assert.equal(observer(doc).path('empty').get(), '');
+	assert.equal(observer(doc).path('off').get(), false);
+	// A path that walks through such a value finds nothing beneath it and says so quietly.
+	assert.equal(observer(doc).path('zero', 'deeper').get(), undefined);
+	assert.equal(observer(doc).path('empty', 'deeper').get(), undefined);
+});
+
+test('an array index past the end reads as undefined, the way a plain array answers', () => {
+	const list = createArray([1, 2, 3]);
+	const doc = createObject<Doc>({ list });
+
+	assert.equal(observer(list).path(2).get(), 3);
+	assert.equal(observer(list).path(3).get(), undefined);
+	assert.equal(observer(list).path(99).get(), undefined);
+	assert.equal(observer(doc).path('list', 99).get(), undefined);
+	assert.equal(observer(doc).path('list', 99, 'deeper').get(), undefined);
+});
+
+test('an effect on a scope whose first call writes the scope is told the written value', () => {
+	// The subscription is made before the first read, so the write inside that read is heard.
+	const doc = createObject<Record<string, unknown>>({ k: 'raw' });
+	const seen: unknown[] = [];
+
+	const stop = observer(doc).path('k').effect((v) => {
+		seen.push(v);
+		if (v === 'raw') doc['k'] = 'cooked';
+	});
+
+	assert.deepEqual(seen, ['raw', 'cooked']);
+	stop();
+	doc['k'] = 'later';
+	assert.deepEqual(seen, ['raw', 'cooked']);
+});
+
+test('the inverse of an array replace carries the value that sat at that position', () => {
+	const doc = createObject<Record<string, unknown>>();
+	const list = createArray<unknown>(['a', 'b', 'c']);
+	doc['list'] = list;
+
+	let undo: Commit | undefined;
+	const stop = observer(doc).watch((change) => { undo = change.inverse(); }, { inverse: true });
+	list[1] = 'B';
+	stop();
+
+	assert.deepEqual([...list], ['a', 'B', 'c']);
+	apply(doc, undo!);
+	assert.deepEqual([...list], ['a', 'b', 'c'], 'the value from before the replace, in the same position');
+	assert.equal(undo!.deltas.length, 1);
+	assert.equal(undo!.deltas[0]?.type, 'replace');
+});
+
+test('a map watcher reads the map as the commit left it: the deleted entry is already gone', () => {
+	const doc = createObject<Record<string, unknown>>();
+	const entries = createMap<number>();
+	doc['entries'] = entries;
+	const key = createObject<Record<string, unknown>>();
+	entries.set(key, 1);
+	let inside: boolean | undefined;
+	let size: number | undefined;
+
+	const stop = observer(entries).watch(() => {
+		inside = entries.has(key);
+		size = entries.size;
+	});
+	entries.delete(key);
+	assert.equal(inside, false);
+	assert.equal(size, 0);
+	stop();
+});
+
+test('a map entry is filed under an id, and moving it is a removal on one key and an add on another', () => {
+	// Design 286. The key is a slot name: the value's own id is unrelated to it unless `add`
+	// chose it, and nothing moves an entry, so a move is two deltas a copy applies as such.
+	const doc = createObject<Record<string, unknown>>();
+	const entries = createMap<Record<string, unknown>>();
+	doc['entries'] = entries;
+	const from = createObject<Record<string, unknown>>();
+	const to = createObject<Record<string, unknown>>();
+	const child = createObject<Record<string, unknown>>({ n: 1 });
+	entries.set(from, child);
+	assert.notEqual(entries.keys()[0], textIdOf(child), 'filed under the chosen id, not its own');
+	assert.equal(entries.get(from), child);
+
+	const copy = fromSnapshot(snapshot(doc)) as Record<string, unknown>;
+	const before = textIdOf(child);
+	const oldKey: string[] = [];
+	const newKey: string[] = [];
+	let moved: Commit | undefined;
+	const stops = [
+		observer(entries).path(textIdOf(from)).watch((change) => oldKey.push(...change.deltas.map((d) => d.type))),
+		observer(entries).path(textIdOf(to)).watch((change) => newKey.push(...change.deltas.map((d) => d.type))),
+		observer(doc).watch((change) => { moved = { deltas: change.deltas }; }),
+	];
+
+	atomic(() => {
+		entries.delete(from);
+		entries.set(to, child);
+	});
+
+	assert.deepEqual(oldKey, ['remove']);
+	assert.deepEqual(newKey, ['add']);
+	assert.equal(textIdOf(child), before, 'the value keeps its id across the move');
+	assert.equal(entries.get(to), child);
+	assert.equal(entries.has(from), false);
+
+	apply(copy, moved!);
+	const copied = copy['entries'] as ReturnType<typeof createMap<Record<string, unknown>>>;
+	assert.deepEqual(copied.keys(), [textIdOf(to)], 'a copy holds the entry under the new key only');
+	assert.equal(textIdOf(copied.get(to)!), before);
+	for (const stop of stops) stop();
+});
+
+test('a subtree arriving with an alias inside it carries the alias, not the slots of what it names', () => {
+	// Everything a subtree holds is new to the document it lands in, so its slots go out with
+	// it. An alias inside it names something the document already holds, and that thing's slots
+	// are not new: sending them again would re-add slots a receiver already has.
+	const other = createObject<Record<string, unknown>>({ a: 1, b: 2 });
+	const doc = createObject<Record<string, unknown>>({ other });
+	let arrived: Change | undefined;
+	const stop = observer(doc).watch((change) => { arrived = change; });
+
+	doc['holder'] = createObject<Record<string, unknown>>({ x: alias(other), y: 1 });
+	stop();
+
+	assert.equal(arrived!.deltas.length, 3, 'the attach of holder, and its two slots');
+	for (const delta of arrived!.deltas) assert.notDeepEqual(delta.id, idOf(other), 'none addressed to what the alias names');
+});
+
+test('ignore names a slot below the scope, never the scope itself or the slot the wildcard matched', () => {
+	// `path('a').ignore('a')` drops writes at doc.a.a. A write at doc.a is the scope's own
+	// slot and is heard; the ignore list is one level down from wherever the scope ends.
+	type Loose = Record<string, unknown>;
+	const doc = createObject<Loose>({ a: createObject<Loose>({ a: 1, x: 1 }) });
+	let own = 0;
+	const stopOwn = observer(doc).path('a').ignore('a').watch(() => { own += 1; });
+	doc['a'] = createObject<Loose>({ a: 2 });
+	(doc['a'] as Loose)['a'] = 3;
+	stopOwn();
+	assert.equal(own, 1, 'the write at doc.a is heard; the one at doc.a.a is ignored');
+
+	// `skip(1).ignore('x')` drops writes at doc.<any>.x. A write at doc.x is the slot the
+	// wildcard itself matched, and it is heard.
+	let matched = 0;
+	const stopMatched = observer(doc).skip(1).ignore('x').watch(() => { matched += 1; });
+	doc['x'] = 1;
+	(doc['a'] as Loose)['x'] = 2;
+	(doc['a'] as Loose)['y'] = 2;
+	stopMatched();
+	assert.equal(matched, 2, 'doc.x and doc.a.y are heard; doc.a.x is ignored');
 });

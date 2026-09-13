@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-	alias, apply, atomic, createArray, createMap, createObject, idOf, snapshot,
+	alias, apply, atomic, createArray, createMap, createObject, idOf, kindOf, snapshot,
 } from '@aweftjs/core';
 import { canonicalJson, randomBelow, randomFrom } from '@aweftjs/testing';
-import { asCommit, reconcile } from '@aweftjs/sync';
+import { asCommit, mirror, reconcile, rootFrom } from '@aweftjs/sync';
 
 const rebuild = (source: object): object => {
 	const copy = createObject(undefined, idOf(source));
@@ -192,4 +192,53 @@ test('over a random edit stream, a replica rebuilt and a replica corrected both 
 		equal(corrected, source, `corrected replica at round ${round}`);
 		equal(rebuild(source), source, `rebuilt replica at round ${round}`);
 	}
+});
+
+test('rootFrom mints an empty root of the kind and id it is given, and refuses a kind that is not one', () => {
+	const id = idOf(createObject());
+	for (const kind of ['object', 'array', 'map'] as const) {
+		const root = rootFrom(id, kind);
+		assert.equal(kindOf(root), kind);
+		assert.deepEqual(idOf(root), id, 'the id is the one asked for, so commits about it are reachable');
+		assert.equal(asCommit(root), undefined, 'it holds nothing');
+	}
+	assert.throws(() => rootFrom(id, 'set' as never), /kind-conflict/);
+});
+
+test('mirror keeps a second document in step with the first, both ways, until stopped', async () => {
+	const source = createObject<Record<string, unknown>>({ title: 'draft', list: createArray([1]) });
+	const settle = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
+
+	const { document, stop } = mirror(source);
+	assert.notEqual(document, source, 'a second document, not the same object');
+	assert.deepEqual(idOf(document), idOf(source), 'of the same identity');
+	await settle();
+	assert.equal(canonicalJson(snapshot(document)), canonicalJson(snapshot(source)), 'starting where the source is');
+
+	source['title'] = 'one';
+	await settle();
+	assert.equal((document as Record<string, unknown>)['title'], 'one', 'a source write reaches the copy');
+
+	(document as Record<string, unknown>)['title'] = 'two';
+	await settle();
+	assert.equal(source['title'], 'two', 'and a copy write reaches the source');
+
+	stop();
+	source['title'] = 'three';
+	await settle();
+	assert.equal((document as Record<string, unknown>)['title'], 'two', 'nothing crosses after stop');
+});
+
+test('mirror moves a target that holds something else to the source, and refuses a source that is not a document', async () => {
+	const source = createObject<Record<string, unknown>>({ title: 'theirs' });
+	const target = createObject<Record<string, unknown>>({ title: 'mine', extra: 1 }, idOf(source));
+	const settle = (): Promise<void> => new Promise((done) => setTimeout(done, 0));
+
+	const { document, stop } = mirror(source, target);
+	assert.equal(document, target, 'the target handed in is the document kept in step');
+	await settle();
+	assert.equal(canonicalJson(snapshot(target)), canonicalJson(snapshot(source)), 'moved to the source, extra slot and all');
+	stop();
+
+	assert.throws(() => mirror({ not: 'a document' }), /not-observable/);
 });

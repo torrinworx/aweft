@@ -313,10 +313,15 @@ writes a document, sends the writing process a `SIGKILL`, and reopens what survi
 
 ## One thing to know about aliases
 
-A snapshot holds what a document holds, so an observable nothing attaches is not in one. If a
+An observable has one home, the slot it was assigned into; `alias(observable)` from `core` puts
+a second name for it in another slot without giving it a second home, and `delete` on the home
+slot takes it out of the document while the alias still names it. A snapshot holds what a
+document holds, so an observable nothing attaches is not in one. If a
 slot still names that observable through `alias`, opening the document would mean rebuilding a
 snapshot that names what it does not contain, which `fromSnapshot` refuses. So `store` drops
-that slot when it opens the document rather than failing to open it at all. See design 050.
+that slot when it opens the document rather than failing to open it at all, and the handle says
+which slots went: `handle.droppedSlots` is a list of `<id>.<slot>`, empty when nothing was
+dropped, so an application can log the loss where it happened. See design 050.
 
 ## What this does not do
 

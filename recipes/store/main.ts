@@ -5,7 +5,7 @@
 // SIGKILL of a real child, not a close and reopen, because a clean shutdown is exactly the
 // case a store gets right by accident.
 //
-// Run: node examples/store/main.ts
+// Run: node recipes/store/main.ts
 
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
