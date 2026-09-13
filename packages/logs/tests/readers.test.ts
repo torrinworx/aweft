@@ -35,6 +35,19 @@ test('visits lists by user, build and error, newest first, without opening', asy
 	assert.deepEqual((await visits(store, { errors: true })).map((v) => v.id), ['visit:new']);
 });
 
+test('visits answers the limit in visits: a process document or an application\'s own takes no slot', async () => {
+	const store = newStore();
+	const keeper = await seed(store);
+	await keeper.record({ visit: 'v1', entries: [entry('status')] }, null);
+	// A document of the application's own that happens to declare the same paths.
+	const own = await store.open('order:1');
+	Object.assign(own.root as Record<string, unknown>, { kind: 'order', startedAt: Date.now() + 1000, errors: 0 });
+	await store.settled(own);
+	await store.close(own);
+	await keeper.write({ kind: 'failed', name: 'app/X', message: 'server side' });   // the process document, newest of all
+	assert.deepEqual((await visits(store, { limit: 1 })).map((v) => v.id), ['visit:v1']);
+});
+
 test('errors groups a message across builds with count, visit count, first and last seen', async () => {
 	const store = newStore();
 	const keeper = await seed(store);

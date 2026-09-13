@@ -112,7 +112,9 @@ const wheres = ({ user, build, since, errors }: VisitFilter): Where[] => {
 	if (user !== undefined) out.push({ field: 'user', op: 'eq', value: user });
 	if (build !== undefined) out.push({ field: 'build', op: 'eq', value: build });
 	if (errors === true) out.push({ field: 'errors', op: 'gt', value: 0 });
-	out.push({ field: 'startedAt', op: 'gte', value: since ?? 0 });
+	// In the query, not after it: a process document or an application's own would otherwise
+	// take a slot of the limit and the answer would come up short.
+	out.push({ field: 'kind', op: 'eq', value: 'visit' }, { field: 'startedAt', op: 'gte', value: since ?? 0 });
 	return out;
 };
 
@@ -128,7 +130,7 @@ const wheres = ({ user, build, since, errors }: VisitFilter): Where[] => {
  */
 export const visits = async (store: Store, filter: VisitFilter = {}): Promise<VisitSummary[]> => {
 	const found = await store.find({ where: wheres(filter), sort: { field: 'startedAt', direction: 'desc' }, limit: filter.limit ?? 100 });
-	return found.filter(({ doc }) => doc.startsWith('visit:')).map(({ doc, fields }) => ({
+	return found.map(({ doc, fields }) => ({
 		id: doc,
 		user: (fields.user as string | null | undefined) ?? null,
 		build: (fields.build as string | null | undefined) ?? null,

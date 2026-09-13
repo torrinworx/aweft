@@ -22,10 +22,9 @@ the page calls `createLog`, and nothing is read but through the store.
   `visitsPerMinute` 600 (new visits, this process), `idleMs` 60000 (a visit document is held
   open this long after its last batch), `build` null (written into this process's document). A
   value of the wrong type is refused at load with `invalid-config`, as is a timer setting over
-  what a timer can hold (2147483647 ms). The process document has
-  the same cap and a different answer to it: once the next entry would be its sentinel, the
-  module closes it and opens a fresh `process:<id>`, so the record goes on and the full one
-  waits for the sweep.
+  what a timer can hold (2147483647 ms). The process document has the same cap and a
+  different answer to it: once the next entry would be its sentinel, the module closes it and
+  opens a fresh `process:<id>`, so the record goes on and the full one waits for the sweep.
 - `logs/Record`, public unless configured otherwise, answers `POST /api/logs` with a batch
   `{ visit, build?, browser?, ended?, entries }`: 200 with `{ kept }`, 400 with reasons for a
   body that is not a batch, 429 with reasons over a cap. HTTP is the only transport for a
@@ -72,8 +71,8 @@ at level `error`. An entry over the byte budget loses the fields that make one l
 stack, a call's args and result, a commit's paths, a refusal's reasons) and keeps its kind and
 its names, so a failed call over the budget still says which module; only past that is the
 message cut. The battery truncates its own documents' tails, since nothing replays them.
-`paths` declares `build`, `startedAt` and `errors` for the application's store, beside auth's
-`user`.
+`paths` declares `kind`, `build`, `startedAt` and `errors` for the application's store, beside
+auth's `user`; `kind` is what lets `visits` ask for visits in the query rather than after it.
 
 **The readers**, exported from the root for a script, a harness or a job: `visit(store, id)`
 answers one document as plain data with its entries in time order; `visits(store, { user,
@@ -141,17 +140,19 @@ that wants a line in the record calls `write`.
 `packages/logs/tests/`: `visits.test.ts` (the documents, the caps, `write` with and without a
 context, binding, the sweep, the process document rotating when full, two first writes opening
 a document once, a trimmed entry keeping its name, `invalid-config` for a wrong type and for a
-timer over its bound),
-`record.test.ts` (the route: a batch kept, `user` from the cookie and kept across a sign-out,
-`browser` and `build` written once, `ended`, a body that is not a batch, 429 over each cap, two
-anonymous sockets under the auth gate as two visits), `observe.test.ts` (every event kind
-written to the bound visit or the process document, `logs: true` read off the instance, a body
-never written, a binary result measured as bytes), `client.test.ts` (each source recorded through a fake window, console put back,
-a `_secret` commit recorded as shape with the path absent, a printable key absent, a key of a base letter
+timer over its bound), `record.test.ts` (the route: a batch kept, `user` from the cookie and
+kept across a sign-out, `browser` and `build` written once, `ended`, a body that is not a
+batch, 429 over each cap, two anonymous sockets under the auth gate as two visits),
+`observe.test.ts` (every event kind written to the bound visit or the process document,
+`logs: true` read off the instance, a body never written, a binary result measured as bytes),
+`client.test.ts` (each source recorded through a fake window, console put back, a `_secret`
+commit recorded as shape with the path absent, a printable key absent, a key of a base letter
 and combining marks absent, a password field's key absent, the socket never touched, a batch
 cut at the count and under the bytes a keepalive send may carry, one send in flight at a time,
-`sendBeacon` on `pagehide` for every batch left, a throwing sink swallowed), `readers.test.ts` (each reader over a memory store), `views.test.ts` (the SQL views
-over a throwaway database, skipped without one), `surface.test.ts`. `recipes/logs` drives a page in
+`sendBeacon` on `pagehide` for every batch left, a throwing sink swallowed),
+`readers.test.ts` (each reader over a memory store, `visits` answering its limit in visits),
+`views.test.ts` (the SQL views over a throwaway database, skipped without one),
+`surface.test.ts`. `recipes/logs` drives a page in
 Chromium through the full-stack shape and reads the visit back with the readers.
 
 ## What would reverse this

@@ -28,13 +28,13 @@ export const logs: Source = fromBundle({
 
 /**
  * The paths the application declares on its store for these modules and the readers to query:
- * `build`, `startedAt` and `errors` on visit and process documents. `user` is the auth
+ * `kind`, `build`, `startedAt` and `errors` on visit and process documents. `user` is the auth
  * battery's declaration and the same path, so spreading both declares it once.
  *
  * Example:
  *   const store = createStore({ driver, declare: { ...paths } });
  */
-export const paths: Declaration = { user: ['user'], build: ['build'], startedAt: ['startedAt'], errors: ['errors'] };
+export const paths: Declaration = { user: ['user'], kind: ['kind'], build: ['build'], startedAt: ['startedAt'], errors: ['errors'] };
 
 export { errors, prune, visit, visits } from './readers.ts';
 export type { ErrorGroup, VisitRecord, VisitSummary } from './readers.ts';
