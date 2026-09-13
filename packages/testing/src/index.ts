@@ -16,6 +16,9 @@ export { listenerChecks } from './listeners.ts';
 export type { ListenerCheck, MadeListener, MakeListener } from './listeners.ts';
 export type { DriverCheck, MakeDriver, StoreDriver } from './drivers.ts';
 
+export { adapterChecks } from './adapters.ts';
+export type { AdapterCheck, FileAdapter, MakeAdapter } from './adapters.ts';
+
 export { checkManifests } from './manifests.ts';
 export type { Manifest } from './manifests.ts';
 
