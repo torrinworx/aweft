@@ -59,7 +59,8 @@
 	"devDependencies": {
 		"@aweftjs/build": "^0.1.0",
 		"@aweftjs/testing": "^0.1.0",
-		"country-region-data": "^4.1.0"
+		"country-region-data": "^4.1.0",
+		"marked": "^18.0.13"
 	},
 	"aweft": {
 		"tier": 7,

@@ -66,6 +66,8 @@ value LoadingDots: (props: LoadingDotsProps) => unknown
 type LoadingDotsProps: interface LoadingDotsProps { readonly type?: unknown; readonly size?: unknown; readonly label?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type Mark: interface Mark { (name: string, props?: Record<string, unknown> | null, ...children: unknown[]): Marked; readonly then: MarkMaker; readonly else: MarkMaker; readonly case: MarkMaker; readonly default: MarkMaker; readonly popup: MarkMaker; readonly anchor: MarkMaker; readonly tabs: MarkMaker; readonly panels: MarkMaker; readonly [slot: string]: MarkMaker; }
 type MarkMaker: type MarkMaker = ((props?: Record<string, unknown>, ...children: unknown[]) => unknown) & { readonly [MAKER]: string; };
+value Markdown: (props: MarkdownProps) => Mounter
+type MarkdownProps: interface MarkdownProps { readonly source?: unknown; readonly modifiers?: unknown; readonly code?: (text: string, language: string | null) => unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type Marked: interface Marked { readonly [MARKED]: string; readonly name: string; readonly props: Record<string, unknown> & { readonly children: unknown[]; }; }
 value Menu: (props: MenuProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
 type MenuGroup: interface MenuGroup { readonly heading?: unknown; readonly items?: readonly MenuItem[]; }

@@ -10,7 +10,7 @@
 // of its own: there is no `Sheet` export to name one after (design 202).
 
 import {
-	Button, Default, Modal, Stage, StageContext, TextField, h,
+	Button, Default, Head, Meta, Modal, Stage, StageContext, TextField, h,
 } from '@aweftjs/ui';
 import type { StageValue } from '@aweftjs/ui';
 
@@ -23,8 +23,11 @@ export const order = 41;
 export const Example: ExampleComponent = (props) => {
 	const at = ids(props.mode);
 
+	// The two dialogs are acts, and every declared act is a page to a static walk; the head says
+	// they are not to be found, as `@aweftjs/ssg`'s README asks of a dialog.
 	const Editor = (): unknown => (
 		<div theme="column">
+			<Head><Meta name="robots" content="noindex" /></Head>
 			<p theme="text" id={at('editing')}>Editing, in a modal the stage opened.</p>
 			<TextField label="Title" id={at('modal-field')} />
 		</div>
@@ -32,6 +35,7 @@ export const Example: ExampleComponent = (props) => {
 
 	const Filters = (): unknown => (
 		<div theme="column">
+			<Head><Meta name="robots" content="noindex" /></Head>
 			<p theme="text" id={at('filtering')}>A sheet: the same dialog, against the right edge.</p>
 			<TextField label="Contains" id={at('sheet-field')} />
 		</div>

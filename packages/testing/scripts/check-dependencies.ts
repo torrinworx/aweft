@@ -53,7 +53,9 @@ const violations = checkManifests(manifests, [], {
 	// host's own `Intl.DisplayNames` and the flags from the code (design 251). An optional peer, so
 	// nothing here installs it, and a devDependency as well because the suite and the catalogue read
 	// the real list.
-	'@aweftjs/ui': ['country-region-data'],
+	// `marked` is the second implementation the markdown corpus test compares this package's own
+	// parser against (design 288): dev only, this package only, and never what renders.
+	'@aweftjs/ui': ['country-region-data', 'marked'],
 	// The Postgres driver's obligations are transactional, and nothing but a real server enforces a
 	// row lock (design 160). Dev only, this package only: the driver takes a pool the application
 	// made and imports none of these.

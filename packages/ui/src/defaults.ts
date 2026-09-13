@@ -1539,4 +1539,62 @@ defineTheme({
 		margin: 0,
 		background: '$border',
 	},
+
+	// The blocks `Markdown` renders (design 288), each a name an application overrides. No colour
+	// is named here: the roles carry both modes.
+	markdown: {
+		display: 'flex',
+		flexDirection: 'column',
+		alignItems: 'stretch',
+		gap: '$space3',
+		minWidth: 0,
+		fontFamily: '$font',
+		color: '$foreground',
+	},
+	markdown_heading: { marginTop: '$space3' },
+	// A long unbroken run, a URL in a code span, wraps inside the measure rather than widening it.
+	markdown_paragraph: { overflowWrap: 'anywhere' },
+	markdown_code: {
+		margin: 0,
+		padding: '$space3',
+		overflowX: 'auto',
+		whiteSpace: 'pre',
+		fontFamily: '$fontMono',
+		fontSize: '$textSm',
+		lineHeight: '$textSmLine',
+		background: '$surface',
+		color: '$surfaceForeground',
+		border: '$borderWidth solid $border',
+		borderRadius: '$radius',
+	},
+	markdown_inline: {
+		padding: '0 $space',
+		borderRadius: '$radiusSm',
+		fontFamily: '$fontMono',
+		fontSize: '$textSm',
+		background: '$muted',
+		color: '$foreground',
+	},
+	markdown_list: {
+		margin: 0,
+		paddingLeft: '$space6',
+		display: 'flex',
+		flexDirection: 'column',
+		gap: '$space',
+	},
+	markdown_item: { margin: 0 },
+	// A task item hides its bullet, because the box is the mark.
+	markdown_item_task: { display: 'flex', alignItems: 'baseline', gap: '$space2', listStyleType: 'none' },
+	markdown_tabular: { margin: 0 },
+	markdown_quote: {
+		$quoteBar: '3px',
+		margin: 0,
+		paddingLeft: '$space3',
+		borderLeft: '$quoteBar solid $border',
+		color: '$mutedForeground',
+	},
+	markdown_rule: { extends: 'divider', width: '100%' },
+	markdown_link: { color: '$link', textDecoration: 'underline' },
+	markdown_bold: { fontWeight: 600 },
+	markdown_italic: { fontStyle: 'italic' },
 });
