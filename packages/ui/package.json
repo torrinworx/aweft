@@ -16,7 +16,8 @@
 		"src",
 		"README.md",
 		"surface.txt",
-		"errors.txt"
+		"errors.txt",
+		"text.json"
 	],
 	"description": "Components and theming: a wrapping h, the theme engine, contexts, popups, suspend and marks.",
 	"exports": {
@@ -34,7 +35,8 @@
 			"aweft-source": "./src/icon-names.ts",
 			"types": "./dist/icon-names.d.ts",
 			"default": "./dist/icon-names.js"
-		}
+		},
+		"./text.json": "./text.json"
 	},
 	"scripts": {
 		"prepack": "node ../build/scripts/build-package.ts",

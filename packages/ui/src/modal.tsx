@@ -15,6 +15,7 @@ import { dialogControl } from './dialog.ts';
 import { elementFor } from './control.ts';
 import { empty } from './field.ts';
 import { h } from './h.ts';
+import { text } from './text.ts';
 import { use } from './render.ts';
 
 /**
@@ -142,7 +143,7 @@ export const Modal = (
 			h(Button, {
 				type: 'quiet',
 				round: true,
-				'aria-label': 'Close',
+				'aria-label': text('Close', { context: 'dialog' }),
 				icon: h(Icon, { name: 'x' }),
 				onClick: () => { control.close(); },
 			})),

@@ -6,12 +6,14 @@
 // library.
 
 import { type Mounter, mount } from '@aweftjs/dom';
+import { mutable } from '@aweftjs/core';
 
 import { h } from './h.ts';
 import { assert } from './assert.ts';
 import { createContext } from './contexts.ts';
 import { elementFor } from './control.ts';
 import { isSource, through } from './source.ts';
+import { cellsOf, isText, textOf } from './text.ts';
 
 /** One rule for turning part of a label into something else. Keys beyond these two are ignored. */
 export interface TextModifier {
@@ -42,12 +44,13 @@ export const TextModifiers = createContext<TextModifier[]>([], (raw, parent) => 
 });
 
 /**
- * The seam a translation step later fills.
+ * The string a label shows: a text token resolved in the render, anything else as given.
  *
- * Today it answers the string it was given. It is not exported: nothing outside this package has
- * a value to put in it yet (design 181).
+ * The one resolve step before the modifiers (design 181), so a modifier matches the translated
+ * word (design 278).
  */
-const resolve = (text: string): string => text;
+const resolve = (context: unknown, label: unknown): unknown =>
+	(isText(label) ? textOf(context, label) : label);
 
 const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -102,11 +105,12 @@ const matchesIn = (text: string, modifiers: readonly TextModifier[]): Found[] =>
 const NONE: TextModifier[] = [];
 
 /** The label as children: gaps as text, and each match as whatever its modifier answers. */
-const textOf = (label: unknown, modifiers: readonly TextModifier[]): unknown => {
+const labelOf = (context: unknown, raw: unknown, modifiers: readonly TextModifier[]): unknown => {
+	const label = resolve(context, raw);
 	if (label === null || label === undefined) return null;
 	if (typeof label !== 'string' && typeof label !== 'number') return label;
 
-	const text = resolve(String(label));
+	const text = String(label);
 	const matches = matchesIn(text, modifiers);
 	if (matches.length === 0) return text;
 
@@ -186,11 +190,29 @@ export const Typography = (props: TypographyProps): Mounter => (elem, _item, bef
 	const modifiers = TextModifiers.read(context);
 	const held = isSource(type) ? type.get() : type;
 
+	// A token whose values hold a cell re-resolves as the cell moves, through one cell of its own
+	// the modifiers then run over. A token with plain values costs no subscription at all.
+	const cells = isText(label) ? cellsOf(label) : [];
+	let shown: unknown = label;
+	let stops: (() => void)[] = [];
+	if (cells.length > 0) {
+		const cell = mutable<unknown>(textOf(context, label));
+		let building = true;
+		stops = cells.map((source) => source.effect(() => { if (!building) cell.set(textOf(context, label)); }));
+		building = false;
+		shown = cell;
+	}
+
 	const node = h(
 		element === null || element === undefined ? elementOf(held) : elementFor(element),
 		{ ...rest, theme: ['text', through(type, segmentsOf), theme] },
-		through(label, (value) => textOf(value, modifiers)),
+		through(shown, (value) => labelOf(context, value, modifiers)),
 		...(children ?? []),
 	);
-	return mount(elem, node, before, context);
+	const remove = mount(elem, node, before, context);
+	return (arg) => {
+		if (arg !== undefined) return remove(arg);
+		for (const stop of stops) stop();
+		return remove();
+	};
 };

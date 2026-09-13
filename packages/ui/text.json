@@ -1,0 +1,54 @@
+{
+	"Breadcrumb": [
+		"src/breadcrumb.tsx"
+	],
+	"Choose": [
+		"src/chooser.tsx"
+	],
+	"Close|dialog": [
+		"src/chooser.tsx",
+		"src/modal.tsx"
+	],
+	"Drop a file here, or choose one": [
+		"src/file-checks.ts"
+	],
+	"Drop files here, or choose them": [
+		"src/file-checks.ts"
+	],
+	"Hue": [
+		"src/color-picker.tsx"
+	],
+	"Next": [
+		"src/pagination.tsx"
+	],
+	"Nothing matches that.": [
+		"src/chooser.tsx"
+	],
+	"Opacity": [
+		"src/color-picker.tsx"
+	],
+	"Pagination": [
+		"src/pagination.tsx"
+	],
+	"Previous": [
+		"src/pagination.tsx"
+	],
+	"Saturation and brightness": [
+		"src/color-picker.tsx"
+	],
+	"Search": [
+		"src/chooser.tsx"
+	],
+	"only one file is accepted": [
+		"src/file-checks.ts"
+	],
+	"up to {size}": [
+		"src/file-checks.ts"
+	],
+	"{name} is not one of the accepted types": [
+		"src/file-checks.ts"
+	],
+	"{name} is over the {size} limit": [
+		"src/file-checks.ts"
+	]
+}

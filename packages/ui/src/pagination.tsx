@@ -10,6 +10,7 @@ import { all } from '@aweftjs/core';
 import { Button } from './button.tsx';
 import { elementFor } from './control.ts';
 import { h } from './h.ts';
+import { text } from './text.ts';
 import { isWritable } from './source.ts';
 
 /** What `Pagination` takes. Everything not named here goes to the `<nav>`. */
@@ -109,7 +110,7 @@ export const Pagination = (
 				h(Button, {
 					type: 'quiet',
 					size,
-					label: 'Previous',
+					label: text('Previous'),
 					disabled: at <= 1,
 					onClick: (event: unknown) => { go(at - 1, event); },
 				}),
@@ -126,7 +127,7 @@ export const Pagination = (
 				h(Button, {
 					type: 'quiet',
 					size,
-					label: 'Next',
+					label: text('Next'),
 					disabled: at >= pages,
 					onClick: (event: unknown) => { go(at + 1, event); },
 				}),
@@ -135,7 +136,7 @@ export const Pagination = (
 
 		const node = h(elementFor(element, 'nav'), {
 			...rest,
-			'aria-label': label ?? 'Pagination',
+			'aria-label': label ?? text('Pagination'),
 			theme: ['pagination', theme],
 		}, buttons);
 

@@ -12,6 +12,7 @@ import { type Mounter, mount } from '@aweftjs/dom';
 
 import { elementFor } from './control.ts';
 import { h } from './h.ts';
+import { text } from './text.ts';
 import { through } from './source.ts';
 
 /** One level of the trail. */
@@ -74,7 +75,7 @@ export const Breadcrumb = (props: BreadcrumbProps): Mounter => (elem, _item, bef
 
 	const node = h(elementFor(element, 'nav'), {
 		...rest,
-		'aria-label': label ?? 'Breadcrumb',
+		'aria-label': label ?? text('Breadcrumb'),
 		theme: ['breadcrumb', theme],
 	}, h('ol', { theme: ['breadcrumb_list'] }, trail));
 
