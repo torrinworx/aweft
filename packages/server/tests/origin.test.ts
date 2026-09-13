@@ -88,6 +88,30 @@ test('a listed origin passes, and any removes the rule', async () => {
 	await any.server.stop();
 });
 
+test('every answer carries nosniff, the module\'s own or the server\'s, a redirect included', async () => {
+	const { handlers, server } = await started({
+		sources: [sourceOf({
+			'app/Echo': instance(() => ({
+				public: true,
+				routes: {
+					'GET /hi': () => new Response('hi'),
+					'GET /away': () => Response.redirect('http://app.test/hi', 302),
+					'GET /mine': () => new Response('typed', { headers: { 'x-content-type-options': 'mine' } }),
+				},
+			})),
+		})],
+	});
+	assert.equal((await handlers.request(request('/hi'), peer)).headers.get('x-content-type-options'), 'nosniff', 'a route\'s answer');
+	assert.equal((await handlers.request(request('/nothing'), peer)).headers.get('x-content-type-options'), 'nosniff', 'the server\'s own 404');
+	assert.equal((await handlers.request(request('/hi', { method: 'POST', headers: { origin: 'https://evil.test' } }), peer)).headers.get('x-content-type-options'), 'nosniff', 'a refusal before the gate');
+	const away = await handlers.request(request('/away'), peer);
+	assert.equal(away.status, 302);
+	assert.equal(away.headers.get('location'), 'http://app.test/hi');
+	assert.equal(away.headers.get('x-content-type-options'), 'nosniff', 'a redirect, whose own headers cannot be written');
+	assert.equal((await handlers.request(request('/mine'), peer)).headers.get('x-content-type-options'), 'mine', 'a module that set the header keeps its word');
+	await server.stop();
+});
+
 test('the rule runs before the gate, so a refused request never reaches identify', async () => {
 	let identified = 0;
 	const { handlers, server } = await started({ gate: { identify: () => { identified += 1; return { context: {} }; }, access: () => [] } });

@@ -7,7 +7,7 @@ import { codecError } from '@aweftjs/codec';
 import type { ModuleProps } from '@aweftjs/modules';
 
 import { pathOf } from '../rule.ts';
-import { answered, cacheFor, fileAt, fileOf, served } from '../serve.ts';
+import { NOSNIFF, answered, cacheFor, fileAt, fileOf, served } from '../serve.ts';
 
 export const defaults = {
 	dir: 'dist',
@@ -61,7 +61,7 @@ export default ({ config }: ModuleProps): Files => {
 	// because nothing here keeps a listing and a rebuilt site replaces that page too.
 	const unknown = async (request: Request): Promise<Response> => {
 		const found = await fileOf(join(dir, shell ? 'shell.html' : '404.html'));
-		if (found === undefined) return new Response(null, { status: 404 });
+		if (found === undefined) return new Response(null, { status: 404, headers: NOSNIFF });
 		return answered(request, found, shell ? 200 : 404);
 	};
 
@@ -76,7 +76,7 @@ export default ({ config }: ModuleProps): Files => {
 			// 405 only over a file. On a URL with no file it would say the URL exists, and what
 			// exists is the files' word, not this module's.
 			if (request.method !== 'GET' && request.method !== 'HEAD') {
-				return new Response(null, { status: 405, headers: { allow: 'GET, HEAD' } });
+				return new Response(null, { status: 405, headers: { ...NOSNIFF, allow: 'GET, HEAD' } });
 			}
 			return served(request, found, cacheFor(headers, path));
 		},

@@ -22,6 +22,22 @@ const json = (status: number, body: unknown, headers: Record<string, string> = {
 // The values every server starts with (design 272). Each is one option away from another.
 const REQUESTS = { count: 600, windowMs: 60_000 };
 
+// Every answer says its type is its type (design 276), unless the module already said so. A
+// redirect's headers cannot be written, so it is rebuilt with the header; a network error has
+// no headers to carry and is answered as it is.
+const nosniff = (response: Response): Response => {
+	if (response.headers.has('x-content-type-options')) return response;
+	try {
+		response.headers.set('x-content-type-options', 'nosniff');
+		return response;
+	} catch {
+		if (response.type === 'error') return response;
+		const headers = new Headers(response.headers);
+		headers.set('x-content-type-options', 'nosniff');
+		return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+	}
+};
+
 const empty = (status: number): Response => new Response(null, { status });
 
 /** A loaded instance is a gate when it carries the two functions, and nothing else is asked of it. */
@@ -212,7 +228,7 @@ export const createServer = (options: ServerOptions): Server => {
 			const { method } = request;
 			const path = new URL(request.url).pathname;
 			emit({ kind: 'request', at, method, path, status: response.status, ms: Date.now() - at, ...(name === undefined ? {} : { name }) }, context);
-			return response;
+			return nosniff(response);
 		};
 
 		const onSocket = async (request: Request, peer: Peer): Promise<Response | Accept> => {
