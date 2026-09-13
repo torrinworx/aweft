@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createObject } from '@aweftjs/core';
+import type { Commit, WireReason } from '@aweftjs/sync';
 
 import { createServer, open } from '../src/index.ts';
 import type { Connection, Gate, ServerEvent } from '../src/index.ts';
@@ -124,6 +125,37 @@ test('a commit a share refuses is heard as refused, with the topic and the reaso
 	assert.equal(refused[0]!.topic, 'board');
 	assert.deepEqual(refused[0]!.reasons, [{ code: 'keep', message: 'nothing is removed' }]);
 	assert.equal(board.title, 'renamed', 'and the module\'s own rule still decided');
+});
+
+test('an accept that answers nothing accepts, and one that throws is heard as refused with accept-threw', async () => {
+	const heard: Heard[] = [];
+	const board = createObject<Record<string, unknown>>({ title: 'kept' });
+	const { handlers, server } = await started({
+		'app/Board': instance(() => ({
+			connection: ({ link }: Connection) => {
+				link.share('board', board, {
+					// A module written in plain JS answers nothing on the happy path, as sync allows.
+					accept: ((commit: Commit) => { if (commit.deltas.some((d) => d.type === 'remove')) throw new Error('nothing is removed'); }) as unknown as (commit: Commit) => readonly WireReason[],
+				});
+			},
+		})),
+		'log/Observe': observing('log/Observe', heard),
+	});
+	const client = asClient(await connectTo(handlers));
+	const copy = await client.link.share<Record<string, unknown>>('board').ready;
+	await settle();
+	copy.title = 'renamed';
+	await settle();
+	delete copy.title;
+	await settle();
+	client.socket.close();
+	await settle();
+	await server.stop();
+
+	assert.equal(board.title, 'renamed', 'an accept that answered nothing let the commit in');
+	const refused = heard.filter(({ event }) => event.kind === 'refused').map(({ event }) => event as Extract<ServerEvent, { kind: 'refused' }>);
+	assert.deepEqual(refused.map((event) => event.reasons), [[{ code: 'accept-threw', message: 'nothing is removed' }]], 'the throw is the one refusal heard');
+	assert.equal(refused[0]!.topic, 'board');
 });
 
 test('a hook that throws is heard as failed under its name, with the connection\'s context', async () => {

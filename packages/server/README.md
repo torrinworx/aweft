@@ -185,7 +185,8 @@ request) and `closed` (with `ms` since it opened); `call` (the module asked for 
 where the error is its `missing`, `refused` or `closed`; `request` (method, path,
 status, `ms`, and `name`, the module whose route or `request` hook answered, absent when the
 server answered itself; never the body); `refused` (a commit a share's `accept` turned away,
-with the topic and the reasons); `failed` (what reaches `handlers.failed`). `context` is what
+with the topic and the reasons; an `accept` that throws is a refusal with the one reason
+`accept-threw`, as sync reads it); `failed` (what reaches `handlers.failed`). `context` is what
 `identify` answered for that connection or request, and the same reference reaches every hook
 and every event of one connection, so an observer that tells connections apart keys on it. The
 hook is not gated, because the server is telling its own modules what it did. Nothing waits

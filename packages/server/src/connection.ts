@@ -4,7 +4,7 @@
 import { codecError } from '@aweftjs/codec';
 import type { Loader } from '@aweftjs/modules';
 import { connect, fromWebSocket, requests } from '@aweftjs/sync';
-import type { SocketLike } from '@aweftjs/sync';
+import type { SocketLike, WireReason } from '@aweftjs/sync';
 
 import { type Connection, type Ending, type Gate, type GatedLink, type Outcome, type ServerModule, serverError } from './contract.ts';
 import type { Emit } from './observe.ts';
@@ -63,12 +63,20 @@ export const openConnection = ({ socket, request, context, loader, gate, report,
 					'Pass accept in the share handlers, or open for the trusted case.',
 				);
 			}
-			// The module's rule, with the server told each time it refused (design 260).
+			// The module's rule, with the server told each time it refused (design 260). Sync reads
+			// nothing back as accepted and a throw as a refusal, and both still mean that here.
 			const accept = handlers.accept;
 			return link.share(name, document, {
 				...handlers,
 				accept: (commit) => {
-					const reasons = accept(commit);
+					let reasons: readonly WireReason[];
+					try {
+						reasons = accept(commit) ?? [];
+					} catch (error) {
+						const message = error instanceof Error ? error.message : String(error);
+						emit({ kind: 'refused', at: Date.now(), topic: name, reasons: [{ code: 'accept-threw', message }] }, context);
+						throw error;
+					}
 					if (reasons.length > 0) emit({ kind: 'refused', at: Date.now(), topic: name, reasons }, context);
 					return reasons;
 				},

@@ -26,7 +26,9 @@ load order, read off the loader at each use the way the route table is. The even
 - `request`: an HTTP request answered, with `method`, `path`, `status`, `ms`, and `name`, the
   module whose route or `request` hook answered it, absent when the server answered itself.
   Never the body.
-- `refused`: a commit a share's `accept` refused, with the `topic` and the `reasons`.
+- `refused`: a commit a share's `accept` refused, with the `topic` and the `reasons`. An
+  `accept` that throws is a refusal with the one reason `accept-threw`, and one that answers
+  nothing has accepted, both as sync reads them.
 - `failed`: what reaches `handlers.failed`, with the `name` and the `error`, except an
   observer's own throw.
 
@@ -72,7 +74,8 @@ changes what the module or the caller sees, and nothing here prevents that.
 
 `packages/server/tests/observe.test.ts`: every kind of event in order for one connection that
 asks, is refused, and closes; a route, a fallthrough answer and a 404 as `request` with the
-answering module's name or none; a share's refusal as `refused`; a throwing hook as `failed`; an
+answering module's name or none; a share's refusal as `refused`, an `accept` that answers
+nothing as no event, and one that throws as `accept-threw`; a throwing hook as `failed`; an
 observer that throws is reported under its own name, the event still reaches the observer after
 it, and no `failed` event is emitted for it; an observer whose promise rejects likewise; the
 context reference handed to `observe` for a call is the one the call received; a module loaded
