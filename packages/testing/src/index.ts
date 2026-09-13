@@ -62,3 +62,5 @@ export type { Connected, LoadedServer, OpenOptions } from './server.ts';
 export { settle } from './settle.ts';
 export { securityChecks } from './security.ts';
 export type { Opened, SecurityCheck, SecurityTarget, StartOptions, StartTarget } from './security.ts';
+export { checkSecurityTable, parseSecurityTable } from './security-table.ts';
+export type { SecurityCase, SecurityRow, TestExists } from './security-table.ts';

@@ -8,9 +8,12 @@ The short version:
 
 - The gate is `npm test` at the repo root. It typechecks, checks the dependency rules and the
   tier table, regenerates and compares every package's public surface and refusal vocabulary,
-  checks the theme contract, runs every package's tests with coverage, and runs every recipe.
-  A change is done when the gate is green, and a result is reported with the command and its
-  exit code.
+  checks the theme contract and the security table, runs every package's tests with coverage,
+  and runs every recipe. A change is done when the gate is green, and a result is reported with
+  the command and its exit code.
+- A security claim is a row in `docs/security/asvs.csv` with its check beside it; `docs/security.md`
+  says what the stack owns and what an application built on it still owns. To report a
+  vulnerability, `SECURITY.md`.
 - A change to a key concept (the list is in `docs/architecture.md`) gets a design note in
   `docs/design/` before it is built, in the shape the notes there have: what was decided, why,
   what it costs, the evidence, and what would reverse it.

@@ -345,6 +345,11 @@ CI, the gate is the machine):
   the vocabulary of how the stack was built rather than what it is (who decided a thing,
   when, through which review) and names what to write instead. `npm run words` runs it, and
   the root gate runs it first.
+- **The security table**: `packages/testing/scripts/check-security.ts` reads
+  `docs/security/asvs.csv`, one row per ASVS 5.0 requirement with its owner, and fails when a
+  row the stack owns names a case of `securityChecks()`, a test or a document section that does
+  not exist, or a case cites a requirement the table does not give to the stack (design 270).
+  `npm run security` runs it. A security claim is a row in that table with its check beside it.
 
 #### Optional external dependencies
 

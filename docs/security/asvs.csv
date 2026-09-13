@@ -1,0 +1,254 @@
+id,level,owner,check
+V1.1.1,2,stack,test: packages/static/tests/files.test.ts#a dot segment and a climbing segment get the unknown answer, and never the file
+V1.1.2,2,stack,test: packages/dom/tests/light.test.ts#toHtml escapes, leaves void elements open and script raw, and prints style
+V1.2.1,1,stack,test: packages/dom/tests/light.test.ts#toHtml escapes, leaves void elements open and script raw, and prints style
+V1.2.2,1,application,encodeURIComponent for every value put into a URL, as fromUrl does for the icon name
+V1.2.3,1,application,JSON.stringify for JSON, and never a script built from text
+V1.2.4,1,stack,test: packages/store/tests/postgres.test.ts#a value that reads as SQL is a value, whether it is written, queried for or read back
+V1.2.5,1,application,the stack builds no command from data; a module that spawns one owns this
+V1.2.6,2,none,no LDAP here
+V1.2.7,2,none,no XPath here
+V1.2.8,2,none,no LaTeX here
+V1.2.9,2,application,the stack builds no regular expression from data; a module that does escapes it
+V1.3.1,1,application,no rich text editor ships; sanitize what one hands you before it is stored
+V1.3.2,1,stack,test: packages/sandbox/tests/escape.child.test.ts#child: files, network, spawning, workers, eval and the environment are denied inside the room
+V1.3.3,2,application,what leaves a module for another interpreter is escaped for that interpreter
+V1.3.4,2,stack,test: packages/icons/tests/from-url.test.ts#a drawing that can run or reach out is refused as unsafe-body, naming the icon, and a plain one passes
+V1.3.5,2,none,no template language here
+V1.3.6,2,application,the stack fetches only what your configuration names; a module that fetches a URL taken from data allowlists it
+V1.3.7,2,none,no template engine here
+V1.3.8,2,none,no JNDI here
+V1.3.9,2,none,no memcache here
+V1.3.10,2,none,no format strings in this runtime
+V1.3.11,2,application,nothing here sends mail; the notify battery and a module of yours own what goes into a message
+V1.4.1,2,none,a managed runtime; no pointer arithmetic
+V1.4.2,2,stack,test: packages/codec/tests/wire.test.ts#the integer range is the exact one, and it is the same on both sides
+V1.4.3,2,none,a managed runtime frees what nothing holds
+V1.5.1,1,none,no XML parser here
+V1.5.2,2,stack,test: packages/codec/tests/fuzz.test.ts#decodeCommit answers or refuses safely, and reproduces its bytes
+V2.1.1,1,application,the shape written down: shape, list and table from @aweftjs/schema, as guard on the document or check at the door
+V2.1.2,2,application,a guard or a check that reads the related slots together
+V2.1.3,2,application,the limits your modules count, documented beside them
+V2.2.1,1,application,shape, list and table from @aweftjs/schema, as guard on the document or check at the door
+V2.2.2,1,stack,suite: a commit the module refuses is reported at the client with its undo, and the server's copy is unchanged
+V2.2.3,2,application,a check that reads the related slots together
+V2.3.1,1,application,a module that keeps the step a flow is at in a document the user cannot write
+V2.3.2,2,application,a counter in the module, the shape of the sign-in counts in auth/Enter
+V2.3.3,2,application,atomic groups writes into one commit that lands whole or not at all; an operation over several documents is yours to order
+V2.3.4,2,application,a module that holds the count and refuses over it; the store lands one commit at a time per document
+V2.4.1,2,stack,suite: more requests than the window allows from one address are 429 with Retry-After, and so is the handshake
+V3.2.1,1,stack,test: packages/static/tests/files.test.ts#the content type comes from the table, and an extension it does not name is octet-stream
+V3.2.2,1,stack,test: packages/dom/tests/light.test.ts#toHtml escapes, leaves void elements open and script raw, and prints style
+V3.3.1,1,application,Secure is on over TLS; the prefix is the name you give the cookie: '__Host-session' on auth/Session's config
+V3.3.2,2,stack,suite: the session cookie is HttpOnly, SameSite and Secure over TLS
+V3.3.3,2,application,cookie: '__Host-session' on auth/Session's config where the site is served over TLS
+V3.3.4,2,stack,suite: the session cookie is HttpOnly, SameSite and Secure over TLS
+V3.4.1,1,operator,Strict-Transport-Security at the proxy that terminates TLS
+V3.4.2,1,application,the stack sets no Access-Control-Allow-Origin header; a module that adds one gives it a fixed value
+V3.4.3,2,application,a Content-Security-Policy header on the page your module or host serves
+V3.4.4,2,stack,test: packages/server/tests/origin.test.ts#every answer carries nosniff, the module's own or the server's, a redirect included
+V3.4.5,2,application,a Referrer-Policy header on the page your module or host serves
+V3.4.6,2,application,frame-ancestors in a Content-Security-Policy header on the page your module or host serves
+V3.5.1,1,stack,suite: a foreign Origin is refused on a state-changing request and at the handshake, and passes on a read
+V3.5.2,1,none,nothing here relies on a preflight; the Origin rule refuses a cross-site state change outright
+V3.5.3,1,application,a state change is a POST, PUT, PATCH or DELETE route, as the auth routes are
+V3.5.4,2,operator,one application per hostname
+V3.5.5,2,stack,test: packages/sandbox/tests/escape.iframe.test.ts#the iframe runner: the window suite and the frame's own denials, under a real browser
+V3.7.1,2,application,the page loads what you give it
+V3.7.2,2,application,the stack redirects nowhere; a module that does checks the host first
+V4.1.1,1,stack,test: packages/static/tests/files.test.ts#the content type comes from the table, and an extension it does not name is octet-stream
+V4.1.2,2,operator,the redirect from HTTP to HTTPS at the proxy
+V4.1.3,2,stack,test: packages/server/tests/node.test.ts#forwarded reads the scheme and the proxy's own entry for the peer, x-real-ip reads that header, and off they are ignored
+V4.2.1,2,stack,test: packages/server/tests/node.test.ts#a body and a frame are bounded at 1 MiB with no option, Infinity removes the bound, and a bad size is refused
+V4.3.1,2,none,no GraphQL here
+V4.3.2,2,none,no GraphQL here
+V4.4.1,1,operator,TLS at the proxy, so the socket is wss
+V4.4.2,2,stack,suite: a foreign Origin is refused on a state-changing request and at the handshake, and passes on a read
+V4.4.3,2,none,the session cookie is read at the handshake; there is no dedicated socket token
+V4.4.4,2,none,no dedicated socket token; the cookie was set by the session route over HTTPS
+V5.1.1,2,application,the uploads battery's config: types and maxBytes per family
+V5.2.1,1,stack,test: packages/server/tests/node.test.ts#a body and a frame are bounded at 1 MiB with no option, Infinity removes the bound, and a bad size is refused
+V5.2.2,1,application,types on the uploads battery, checked against the bytes
+V5.2.3,2,application,nothing here unpacks an archive; a module that does bounds the result
+V5.3.1,1,application,the server runs modules from sources only; keep an upload out of sources and out of a module document
+V5.3.2,1,stack,test: packages/static/tests/files.test.ts#a dot segment and a climbing segment get the unknown answer, and never the file
+V5.4.1,2,stack,test: packages/static/tests/files.test.ts#a dot segment and a climbing segment get the unknown answer, and never the file
+V5.4.2,2,application,a name you put in a header is quoted and encoded; the uploads battery serves by id
+V5.4.3,2,application,a scanner over what is stored, when the files are not yours
+V6.1.1,1,stack,doc: packages/auth/README.md#The bounds
+V6.1.2,2,application,the list refusePassword reads
+V6.1.3,2,application,one pathway ships; document a second one beside it
+V6.2.1,1,stack,suite: a password shorter than eight or longer than the ceiling is refused, and any composition of eight is taken
+V6.2.2,1,application,no change or reset route ships; both wait on the notify battery
+V6.2.3,1,application,no change or reset route ships; both wait on the notify battery
+V6.2.4,1,application,refusePassword on auth/Enter, given the list or the lookup
+V6.2.5,1,stack,suite: a password shorter than eight or longer than the ceiling is refused, and any composition of eight is taken
+V6.2.6,1,application,auth/SignIn's password field is masked; a form of your own uses TextField's password
+V6.2.7,1,application,nothing in the stack blocks paste or a password manager; keep it so
+V6.2.8,1,stack,test: packages/auth/tests/enter.test.ts#sign-up creates the user document with a hash and never the password; sign-in verifies it
+V6.2.9,2,stack,suite: a password shorter than eight or longer than the ceiling is refused, and any composition of eight is taken
+V6.2.10,2,none,nothing here expires a password
+V6.2.11,2,application,refusePassword on auth/Enter, given the list or the lookup
+V6.2.12,2,application,refusePassword on auth/Enter, given the list or the lookup
+V6.3.1,1,stack,suite: attempts on one email and from one address are counted, and hashing in flight is bounded
+V6.3.2,1,none,no account ships
+V6.3.3,2,application,no second factor ships; adding one brings this with it
+V6.3.4,2,application,one pathway ships; a second is yours to document
+V6.4.1,1,none,nothing here generates a password
+V6.4.2,1,none,no hints or secret questions here
+V6.4.3,2,application,no change or reset route ships; both wait on the notify battery
+V6.4.4,2,application,no second factor ships; adding one brings this with it
+V6.5.1,2,application,no second factor ships; adding one brings this with it
+V6.5.2,2,application,no second factor ships; adding one brings this with it
+V6.5.3,2,application,no second factor ships; adding one brings this with it
+V6.5.4,2,application,no second factor ships; adding one brings this with it
+V6.5.5,2,application,no second factor ships; adding one brings this with it
+V6.6.1,2,application,no second factor ships; adding one brings this with it
+V6.6.2,2,application,no second factor ships; adding one brings this with it
+V6.6.3,2,application,no second factor ships; adding one brings this with it
+V6.8.1,2,application,no external identity provider ships; adding one brings this with it
+V6.8.2,2,application,no external identity provider ships; adding one brings this with it
+V6.8.3,2,application,no external identity provider ships; adding one brings this with it
+V6.8.4,2,application,no external identity provider ships; adding one brings this with it
+V7.1.1,2,application,sessionMs on auth/Session's config, and the value written down
+V7.1.2,2,application,every sign-in is another session until revoked; write that down, or revoke the rest on sign-in
+V7.1.3,2,none,no federation here
+V7.2.1,1,stack,suite: the context a module sees is the gate's word and never the client's
+V7.2.2,1,stack,suite: every sign-in mints a new token of at least 128 bits, never repeated
+V7.2.3,1,stack,suite: every sign-in mints a new token of at least 128 bits, never repeated
+V7.2.4,1,stack,suite: every sign-in mints a new token of at least 128 bits, never repeated
+V7.3.1,2,application,no inactivity timeout ships; sessionMs is absolute
+V7.3.2,2,application,sessionMs on auth/Session's config
+V7.4.1,1,stack,suite: after sign-out the old token is anonymous at the next handshake and the next request
+V7.4.2,1,application,no disable route ships; a module that disables an account revokes its sessions through auth/Session
+V7.4.3,2,application,no change or reset route ships; both wait on the notify battery
+V7.4.4,2,application,a sign-out control on every signed-in page, calling leave
+V7.4.5,2,application,a module for the administrator over revoke on auth/Session
+V7.5.1,2,application,a module that asks enter again before the change
+V7.5.2,2,application,a module listing session documents by user and revoking
+V7.6.1,2,none,no federation here
+V7.6.2,2,none,no federation here
+V8.1.1,1,stack,doc: docs/security.md#The rules an application follows
+V8.1.2,2,stack,doc: docs/security.md#The rules an application follows
+V8.2.1,1,stack,suite: a module reserved for an administrator refuses a signed-in user whatever they write, and the document the gate reads is out of their reach
+V8.2.2,1,stack,suite: a private module refuses an anonymous call, share and route, and a public one answers
+V8.2.3,2,stack,suite: a module reserved for an administrator refuses a signed-in user whatever they write, and the document the gate reads is out of their reach
+V8.3.1,1,stack,suite: a private module refuses an anonymous call, share and route, and a public one answers
+V8.4.1,2,application,the tenant in the context, read by a composed gate, never from the arguments
+V9.1.1,1,none,sessions are reference tokens in the store, never self-contained
+V9.1.2,1,none,sessions are reference tokens in the store, never self-contained
+V9.1.3,1,none,sessions are reference tokens in the store, never self-contained
+V9.2.1,1,none,sessions are reference tokens in the store, never self-contained
+V9.2.2,2,none,sessions are reference tokens in the store, never self-contained
+V9.2.3,2,none,sessions are reference tokens in the store, never self-contained
+V9.2.4,2,none,sessions are reference tokens in the store, never self-contained
+V10.1.1,2,none,no OAuth or OpenID here
+V10.1.2,2,none,no OAuth or OpenID here
+V10.2.1,2,none,no OAuth or OpenID here
+V10.2.2,2,none,no OAuth or OpenID here
+V10.3.1,2,none,no OAuth or OpenID here
+V10.3.2,2,none,no OAuth or OpenID here
+V10.3.3,2,none,no OAuth or OpenID here
+V10.3.4,2,none,no OAuth or OpenID here
+V10.4.1,1,none,no OAuth or OpenID here
+V10.4.2,1,none,no OAuth or OpenID here
+V10.4.3,1,none,no OAuth or OpenID here
+V10.4.4,1,none,no OAuth or OpenID here
+V10.4.5,1,none,no OAuth or OpenID here
+V10.4.6,2,none,no OAuth or OpenID here
+V10.4.7,2,none,no OAuth or OpenID here
+V10.4.8,2,none,no OAuth or OpenID here
+V10.4.9,2,none,no OAuth or OpenID here
+V10.4.10,2,none,no OAuth or OpenID here
+V10.4.11,2,none,no OAuth or OpenID here
+V10.5.1,2,none,no OAuth or OpenID here
+V10.5.2,2,none,no OAuth or OpenID here
+V10.5.3,2,none,no OAuth or OpenID here
+V10.5.4,2,none,no OAuth or OpenID here
+V10.5.5,2,none,no OAuth or OpenID here
+V10.6.1,2,none,no OAuth or OpenID here
+V10.6.2,2,none,no OAuth or OpenID here
+V10.7.1,2,none,no OAuth or OpenID here
+V10.7.2,2,none,no OAuth or OpenID here
+V10.7.3,2,none,no OAuth or OpenID here
+V11.1.1,2,operator,the TLS key at the proxy; the stack holds no key
+V11.1.2,2,operator,the TLS key at the proxy; the stack holds no key
+V11.2.1,2,stack,test: packages/auth/tests/enter.test.ts#sign-up creates the user document with a hash and never the password; sign-in verifies it
+V11.2.2,2,stack,test: packages/auth/tests/enter.test.ts#sign-up creates the user document with a hash and never the password; sign-in verifies it
+V11.2.3,2,none,no cipher, MAC or signature here; passwords are hashed and tokens are drawn
+V11.3.1,1,none,no encryption here
+V11.3.2,1,none,no encryption here
+V11.3.3,2,none,no encryption here
+V11.4.1,1,none,no general hashing here; passwords are scrypt
+V11.4.2,2,stack,test: packages/auth/tests/enter.test.ts#sign-up creates the user document with a hash and never the password; sign-in verifies it
+V11.4.3,2,none,no signatures here
+V11.4.4,2,stack,test: packages/auth/tests/enter.test.ts#sign-up creates the user document with a hash and never the password; sign-in verifies it
+V11.5.1,2,stack,suite: every sign-in mints a new token of at least 128 bits, never repeated
+V11.6.1,2,none,no public key cryptography here
+V12.1.1,1,operator,TLS versions at the proxy
+V12.1.2,2,operator,cipher suites at the proxy
+V12.1.3,2,none,no mTLS here
+V12.2.1,1,operator,TLS at the proxy
+V12.2.2,1,operator,a public certificate at the proxy
+V12.3.1,2,operator,the hop from the proxy to the process is the host's network
+V12.3.2,2,application,the stack fetches only what you configure; a fetch of yours validates certificates as the runtime does by default
+V12.3.3,2,operator,the hop from the proxy to the process is the host's network
+V12.3.4,2,operator,certificates between your services
+V13.1.1,2,application,a note beside your modules of what each reaches
+V13.2.1,2,application,a gate between your processes, the way auth/Gate stands between the outside and a module
+V13.2.2,2,application,a gate between your processes, the way auth/Gate stands between the outside and a module
+V13.2.3,2,application,a credential your module reads from its configuration, never a default
+V13.2.4,2,application,an allowlist in the module that fetches
+V13.2.5,2,operator,an outbound allowlist at the host
+V13.3.1,2,application,secrets from the environment or a vault into config, never into the store
+V13.3.2,2,application,secrets from the environment or a vault into config, never into the store
+V13.4.1,1,operator,deploy dist and the modules, never the checkout
+V13.4.2,2,application,a release build; assert compiles out of one
+V13.4.3,2,stack,test: packages/static/tests/files.test.ts#a directory is its index.html, and a trailing slash is the same page
+V13.4.4,2,stack,test: packages/server/tests/node.test.ts#TRACE is 405 and echoes nothing, before any handler sees it
+V13.4.5,2,application,/api/health is public by design and says only what its config puts there; a docs route is yours to gate
+V14.1.1,2,application,the classification, beside the shape
+V14.1.2,2,application,the requirements per class, beside the shape
+V14.2.1,1,stack,test: packages/auth/tests/enter.test.ts#POST /api/session signs up with 201 and in with 200, sets the cookie, and refuses the rest by status
+V14.2.2,2,application,Cache-Control: no-store on a route that answers something sensitive
+V14.2.3,2,application,the logs battery records no value; a tracker you add is yours
+V14.2.4,2,application,the requirements per class, beside the shape
+V14.3.1,1,application,leave() reconnects; clear the cells your page holds
+V14.3.2,2,application,Cache-Control: no-store on a route that answers something sensitive
+V14.3.3,2,application,the stack writes nothing to browser storage; keep sensitive data out of what you write
+V15.1.1,1,stack,doc: SECURITY.md#Supported versions
+V15.1.2,2,stack,doc: SECURITY.md#Dependencies
+V15.1.3,2,stack,doc: packages/auth/README.md#The bounds
+V15.2.1,1,stack,doc: SECURITY.md#Dependencies
+V15.2.2,2,stack,suite: attempts on one email and from one address are counted, and hashing in flight is bounded
+V15.2.3,2,application,load only the sources production needs
+V15.3.1,1,application,a module answers what it built for the caller, never a whole document by reflex
+V15.3.2,2,application,fetch with redirect: manual where the URL is not yours
+V15.3.3,2,stack,suite: a commit the module refuses is reported at the client with its undo, and the server's copy is unchanged
+V15.3.4,2,stack,test: packages/server/tests/node.test.ts#forwarded reads the scheme and the proxy's own entry for the peer, x-real-ip reads that header, and off they are ignored
+V15.3.5,2,stack,doc: AGENTS.md#CODING STANDARDS
+V15.3.6,2,stack,test: packages/core/tests/prototype.test.ts#a slot named __proto__ or constructor is an own slot and changes no prototype
+V15.3.7,2,application,read a query parameter once, with URLSearchParams.get
+V16.1.1,2,application,what the logs battery records is in its README; list your own beside it
+V16.2.1,2,application,the logs battery stamps at, kind and the visit's user on every entry
+V16.2.2,2,operator,the clock of the host
+V16.2.3,2,application,the logs battery writes to the store and nowhere else
+V16.2.4,2,application,the readers on @aweftjs/logs, or the Metabase view
+V16.2.5,2,stack,test: packages/logs/tests/client.test.ts#a commit is recorded as its shape, and a private underscore slot is never in it
+V16.3.1,2,application,load @aweftjs/logs: logs/Observe records every request with its status, every call, every refusal and every failure
+V16.3.2,2,application,load @aweftjs/logs: logs/Observe records every request with its status, every call, every refusal and every failure
+V16.3.3,2,application,load @aweftjs/logs: logs/Observe records every request with its status, every call, every refusal and every failure
+V16.3.4,2,application,handlers.failed on createServer, and logs/Observe
+V16.4.1,2,application,the logs battery stores entries as documents, never as text lines
+V16.4.2,2,application,no read route ships; the reader you write is behind the gate
+V16.4.3,2,operator,the store, or a copy of it, on a host of its own
+V16.5.1,2,stack,suite: a route that throws answers a bare 500, and a call that throws answers failed with nothing of the error
+V16.5.2,2,application,a module that reaches out fails closed and says so
+V16.5.3,2,stack,suite: bytes that are not a frame end the link and the server goes on answering
+V17.1.1,2,none,no WebRTC here
+V17.2.1,2,none,no WebRTC here
+V17.2.2,2,none,no WebRTC here
+V17.2.3,2,none,no WebRTC here
+V17.2.4,2,none,no WebRTC here
+V17.3.1,2,none,no WebRTC here
+V17.3.2,2,none,no WebRTC here

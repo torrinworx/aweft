@@ -218,6 +218,13 @@ superseded it.
 | One connection to a server | `client`, on the client plane beside `dom`: an instance, never a singleton; the socket made and the link and the requests attached before it opens; `url` the page's own origin and never sniffed; `open(url)` the one seam a Node program hands in | 183 |
 | Coming back after a drop | The handle keeps one document object for its whole life, every new socket re-shares that object and resyncs it, and the server's state wins over edits made while there was no socket; 500 ms doubling to 10 s, and at once on `online` or the tab becoming visible | 184 |
 | Who a page is | `auth/client` hands identity as a cell: `undefined`, `null`, or the id, asked over the socket the page opens anyway, and `auth/Session` gains the `call` that answers it. `enter` and `leave` reconnect, because identity is fixed per connection, and `state()` refuses an anonymous connection instead of waiting | 185 |
+| The security standard | ASVS 5.0 at level 2, the WCAG analogue: `docs/security/asvs.csv` gives every level 1 and 2 requirement an owner, a `stack` row names the check that proves it, and `npm run security` fails when the check does not exist | 270 |
+| Proof of a server | `securityChecks()` in `testing`, append-only, one named obligation each citing its requirements, run against a server the caller starts; the auth battery and the scaffold run it against themselves | 271 |
+| Before the gate | A count per address over a sliding window and the Origin rule, both in `createServer` with values, checked before `identify`; a call that throws anything but a refusal answers `failed` and is reported | 272 |
+| The listener's bounds | A body and a frame at 1 MiB unless `maxPayload` says otherwise, `Infinity` for none; `forwarded` reads the proxy's own entry, or `x-real-ip` | 273 |
+| A drawing from a URL | Refused when it can run or reach out; the resolver throws `unsafe-body` naming the icon | 274 |
+| Sign-in bounded | Attempts per email and per address, hashes in flight, a password of eight to 256 characters of any composition, `refusePassword` for a list; a session that ended is swept after `keep` days; the gate hands the address on | 275 |
+| Nosniff | Every answer from static and from the server carries `X-Content-Type-Options: nosniff` | 276 |
 
 ---
 
