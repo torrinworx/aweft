@@ -29,6 +29,14 @@ test('an entry that names one file serves a checkout or a consumer but never bot
 	assert.match(violations[0]!, /one file/);
 });
 
+test('a data file is one entry with no conditions, and has to be in files to ship', () => {
+	const shipped = checkPublishing([sound({ exports: { '.': sound().exports!['.']!, './text.json': './text.json' }, files: [...(sound().files ?? []), 'text.json'] })]);
+	assert.deepEqual(shipped, []);
+	const left = checkPublishing([sound({ exports: { '.': sound().exports!['.']!, './text.json': './text.json' } })]);
+	assert.equal(left.length, 1);
+	assert.match(left[0]!, /exports \.\/text\.json as data and does not name it in files/);
+});
+
 test('a default read before the source condition would answer first, so the order is checked', () => {
 	const violations = checkPublishing([sound({
 		exports: {

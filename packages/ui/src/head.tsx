@@ -10,6 +10,7 @@ import { createContext } from './contexts.ts';
 import type { HeadKind, HeadTag } from './head-list.ts';
 import { use } from './render.ts';
 import { isSource } from './source.ts';
+import { isText, textOf } from './text.ts';
 
 /** How many `Head` scopes deep the subtree is. `Head` is this context's provider. */
 const Depth = createContext<number>(0, (_raw, parent) => parent + 1);
@@ -29,13 +30,21 @@ const Depth = createContext<number>(0, (_raw, parent) => parent + 1);
  */
 export const Head = (props: { children?: unknown[] }): unknown => Depth(props);
 
-const textOf = (children: unknown[] | undefined): unknown => {
+const childText = (children: unknown[] | undefined): unknown => {
 	const items = (children ?? []).filter((child) => child !== null && child !== undefined);
 	if (items.length === 0) return undefined;
 	if (items.length === 1) return items[0];
 	// More than one child, so a cell among them cannot be followed and the text is what it reads
-	// as now. One child is the normal case and the one that stays live.
-	return items.map((child) => String(isSource(child) ? child.get() : child)).join('');
+	// as now. One child is the normal case and the one that stays live. The join waits for the
+	// mount, where a token among them has a render to resolve in.
+	return items;
+};
+
+/** The tag's text with a token resolved in this render, and several children joined as now. */
+const resolvedText = (context: unknown, text: unknown): unknown => {
+	if (isText(text)) return textOf(context, text);
+	if (!Array.isArray(text)) return text;
+	return text.map((child) => (isText(child) ? textOf(context, child) : String(isSource(child) ? child.get() : child))).join('');
 };
 
 const nameOf = (value: unknown): string | null => {
@@ -75,15 +84,34 @@ const groupOf = (kind: HeadKind, attrs: Record<string, unknown>, key: unknown): 
 	return src === null ? `script:inline|${type}` : `script:${src}|${type}`;
 };
 
+/** The attributes with any text token among them resolved to its string, in this render. */
+const resolvedAttrs = (context: unknown, attrs: Record<string, unknown>): Record<string, unknown> => {
+	let found = false;
+	for (const name of Object.keys(attrs)) {
+		if (isText(attrs[name])) found = true;
+	}
+	if (!found) return attrs;
+	const out: Record<string, unknown> = {};
+	for (const name of Object.keys(attrs)) {
+		const value = attrs[name];
+		out[name] = isText(value) ? textOf(context, value) : value;
+	}
+	return out;
+};
+
 /** A component that adds one tag and renders nothing. */
 const declare = (kind: HeadKind, attrs: Record<string, unknown>, key: unknown, text?: unknown): Mounter =>
 	(elem, _item, before, context) => {
+		// A token is resolved where the tag is declared, which is the one place with the render in
+		// hand (design 278): the tag the head list writes is text, and a hydration finds the
+		// server's tag byte for byte.
+		const own = resolvedAttrs(context, attrs);
 		const tag: HeadTag = {
 			kind,
-			group: groupOf(kind, attrs, key),
+			group: groupOf(kind, own, key),
 			depth: Depth.read(context),
-			attrs,
-			...(text === undefined ? {} : { text }),
+			attrs: own,
+			...(text === undefined ? {} : { text: resolvedText(context, text) }),
 		};
 		const forget = use(context).head.add(tag);
 		const remove = mount(elem, null, before, context);
@@ -124,7 +152,7 @@ const attributesOf = (props: TagProps, rename: Readonly<Record<string, string>> 
  *   <Head><Title>{post.title}</Title></Head>
  */
 export const Title = (props: TagProps): unknown =>
-	declare('title', attributesOf(props), props.key, textOf(props.children));
+	declare('title', attributesOf(props), props.key, childText(props.children));
 
 /**
  * One `<meta>`.
@@ -180,7 +208,7 @@ export const Link = (props: TagProps): unknown => declare('link', attributesOf(p
  *   <Script src="https://example.com/a.js" async />
  */
 export const Script = (props: TagProps): unknown =>
-	declare('script', attributesOf(props), props.key, textOf(props.children));
+	declare('script', attributesOf(props), props.key, childText(props.children));
 
 /**
  * One `<style>`.
@@ -199,4 +227,4 @@ export const Script = (props: TagProps): unknown =>
  *   <Style media="print">{'@page { margin: 2cm; }'}</Style>
  */
 export const Style = (props: TagProps): unknown =>
-	declare('style', attributesOf(props), props.key, textOf(props.children));
+	declare('style', attributesOf(props), props.key, childText(props.children));

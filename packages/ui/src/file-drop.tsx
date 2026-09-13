@@ -20,7 +20,8 @@ import { type ElementLike, type Mounter, createElement, mount } from '@aweftjs/d
 import { type MutableArray, isMutableArray, mutable, mutableArray } from '@aweftjs/core';
 
 import { Button, type ButtonProps } from './button.tsx';
-import { type FileDropEntry, type Limits, promptFor, readyValue, sortFiles } from './file-checks.ts';
+import { type FileDropEntry, type Limits, type Say, promptFor, readyValue, sortFiles } from './file-checks.ts';
+import { textOf } from './text.ts';
 import { Icon } from './icon.tsx';
 import { LoaderContext } from './suspend.tsx';
 import { LoadingDots } from './loading-dots.tsx';
@@ -78,9 +79,10 @@ const adder = (
 	list: MutableArray<FileDropEntry>,
 	onDrop: ((files: unknown[]) => void) | undefined,
 	blocked: () => boolean,
+	say: Say,
 ): ((given: readonly unknown[]) => void) => (given) => {
 	if (given.length === 0 || blocked()) return;
-	const { rows, taken } = sortFiles(limits, given);
+	const { rows, taken } = sortFiles(limits, given, say);
 	if (limits.many) list.push(...rows);
 	else list.splice(0, list.length, ...rows);
 	if (taken.length === 0) return;
@@ -173,7 +175,7 @@ const picker = (props: FileDropButtonProps): Mounter => (elem, _item, before, co
 	const id = use(context).ids.next('filedrop');
 	const input = createElement('input') as ElementLike;
 	const states = controlStates(props['disabled'], props);
-	const add = adder(limits, list, onDrop, () => states.isDisabled());
+	const add = adder(limits, list, onDrop, () => states.isDisabled(), (token) => textOf(context, token));
 
 	// The button shows the words and the input is what the keyboard lands on, so the input needs a
 	// name of its own. A `<label for>` is how the zone names its input and how `wireField` names a
@@ -264,7 +266,7 @@ const zone = (props: FileDropProps): Mounter => (elem, _item, before, context) =
 		findFrom(target, (element) =>
 			((element as { getAttribute?(name: string): string | null }).getAttribute?.('for') ?? null) === id);
 
-	const add = adder(limits, list, onDrop, () => states.isDisabled());
+	const add = adder(limits, list, onDrop, () => states.isDisabled(), (token) => textOf(context, token));
 
 	// A counter rather than a flag: a `dragleave` fires at the zone every time the pointer crosses
 	// onto one of its own children, and a flag turns the highlight off there.
@@ -301,7 +303,7 @@ const zone = (props: FileDropProps): Mounter => (elem, _item, before, context) =
 
 	const inside = [
 		h(prompt, { for: id, theme: ['filedrop_prompt', replaced ? 'offscreen' : null] },
-			replaced ? null : h(Icon, { name: 'upload' }), promptFor(limits)),
+			replaced ? null : h(Icon, { name: 'upload' }), promptFor(limits, (token) => textOf(context, token))),
 		h(input, {
 			id,
 			type: 'file',

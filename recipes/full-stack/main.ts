@@ -14,7 +14,7 @@
 // serves the built `dist/` itself, the way `recipes/client` does, or a static host does. It does
 // not do password reset, and it does not do anything else a real application adds.
 //
-// Run: AWEFT_DEFAULT_H=@aweftjs/ui node --import @aweftjs/build/loader recipes/full-stack/main.ts
+// Run: AWEFT_DEFAULT_H=@aweftjs/ui AWEFT_TEXT=1 node --import @aweftjs/build/loader recipes/full-stack/main.ts
 
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';

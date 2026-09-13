@@ -44,8 +44,9 @@ saying so is worth more than the workaround.
    `node --import @aweftjs/build/loader main.ts` from the application root. A `.tsx` file
    that imports no `h` of its own is given `dom`'s unless `AWEFT_DEFAULT_H=@aweftjs/ui` is
    set, and that value has to be the `defaultH` the vite config passes, or a page rendered on
-   the server and bundled for the browser will not hydrate. `packages/build/README.md`;
-   `recipes/ssg/`.
+   the server and bundled for the browser will not hydrate. The same holds for `AWEFT_TEXT=1`
+   and the config's `text: true`, which the scaffold sets. `packages/build/README.md`;
+   `recipes/ssg/`, `recipes/translated-site/`.
 5. **A page reaches a backend in development through a same-origin proxy.** The cookie belongs
    to the page's origin, so the dev server proxies the auth routes and a socket path of its own
    (`/ws`, with `ws: true`) to the backend, and the page names that path in

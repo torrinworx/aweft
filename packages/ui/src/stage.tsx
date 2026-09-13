@@ -19,6 +19,7 @@ import { type ContextNode, createContext } from './contexts.ts';
 import { h } from './h.ts';
 import { type ActEntries, type StageAct, type StageEntry } from './stage-entry.ts';
 import { use } from './render.ts';
+import { textOf } from './text.ts';
 import { type Match, checkActKeys, hashOf, matchAct, parseQuery, pathOf, queryOf, writeQuery } from './route.ts';
 import { suspend } from './suspend.tsx';
 
@@ -29,8 +30,8 @@ export type ActComponent = Component<Record<string, unknown>> & { entries?: ActE
 export interface ActInstance {
 	/** The component the stage renders. */
 	readonly component: Component<Record<string, unknown>>;
-	/** What the live region says when this act arrives. The head's title is not touched. */
-	readonly title?: string;
+	/** What the live region says when this act arrives, a string or a text token. The head's title is not touched. */
+	readonly title?: unknown;
 }
 
 /** What an act key maps to: the component itself, or the name of a module that makes one. */
@@ -379,8 +380,9 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 			return null;
 		}
 		loaded = name;
-		const title = instance?.title;
-		announced = typeof title === 'string' && title !== '' ? title : null;
+		// Resolved here, where the render is, so a token is announced in the page's language.
+		const title = textOf(context, instance?.title);
+		announced = title !== '' ? title : null;
 		return h(component as Component, given);
 	};
 

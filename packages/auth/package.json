@@ -16,7 +16,8 @@
 		"src",
 		"README.md",
 		"surface.txt",
-		"errors.txt"
+		"errors.txt",
+		"text.json"
 	],
 	"description": "The first battery: a gate that reads public, sessions as documents, sign-in and sign-up by email and password, and a per-user state document, as server modules, with the page half as client modules.",
 	"exports": {
@@ -29,7 +30,8 @@
 			"aweft-source": "./src/client.ts",
 			"types": "./dist/client.d.ts",
 			"default": "./dist/client.js"
-		}
+		},
+		"./text.json": "./text.json"
 	},
 	"scripts": {
 		"prepack": "node ../build/scripts/build-package.ts",

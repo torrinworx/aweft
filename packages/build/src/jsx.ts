@@ -131,6 +131,7 @@ export const readElement = (node: Node, reader: JsxReader): Element => {
 		properties: reader.properties(tag.code, properties),
 		children: childrenOf((node['children'] ?? []) as Node[], reader),
 		at: node.start,
+		rewritten: false,
 		fallback: () => emitCall(reader.h(), tag.code, element, reader.emit),
 	};
 	return element;
