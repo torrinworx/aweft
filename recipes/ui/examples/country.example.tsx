@@ -36,7 +36,7 @@ export const Example: ExampleComponent = (props) => {
 					onSubmit={(event: unknown) => {
 						(event as { preventDefault(): void }).preventDefault();
 						const form = (event as { target: unknown }).target;
-						posted.set([...new FormData(form)].map(([key, held]) => `${key}=${String(held)}`).join(' '));
+						posted.set([...new FormData(form as never)].map(([key, held]) => `${key}=${String(held)}`).join(' '));
 					}}
 				>
 					<Country
