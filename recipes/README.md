@@ -30,6 +30,7 @@ Start here if you know what you are trying to build.
 | `static/` | A generated site served by the stack's own server: one process is the whole deployment, and the page still comes alive where it stands | modules, server, ui, build, ssg, static |
 | `health/` | A deploy's verification: the health endpoint polled until the shipped build is the one answering, and the two states a poll must not mistake for health | store, modules, server, auth, health |
 | `logs/` | A page recorded end to end in a browser and the visit read back: an error, a rejection, a console line, a failed call on both sides, a commit's shape with a private slot absent, a typed character never stored, sign-in mid-visit | store, modules, server, auth, logs, ui, client |
+| `notify/` | Two pages of one user hear a send live and mark it read for each other, a device registered from the page, email and push against two fakes, a failed mail kept, a forged write refused, a restart, and a server with no store sending a contact form's mail | store, modules, server, auth, notify, ui, client |
 | `documents-on-postgres/` | Documents kept in Postgres: a writer killed mid-edit, eight processes opening one name at once, and a path declared after the data was there | store |
 | `posts-to-pages/` | Pages written while the application runs: a post published over a socket becomes a page, and a scheduled full write refreshes the sitemap | store, modules, server, jobs, ui, ssg |
 | `backend/` | The boot pattern to copy: a twelve-line boot file and a folder of modules, one holding a document, one the rules, one a scheduler, one the gate, and one configuring a battery module | store, modules, server, auth, jobs, client |
@@ -40,7 +41,7 @@ Start here if you know which package you need and want to see it do its hardest 
 each of these has to demonstrate is the table in `docs/architecture.md`.
 
 `codec/`, `core/`, `schema/`, `sync/`, `store/`, `modules/`, `sandbox/`, `server/`, `jobs/`,
-`dom/`, `ui/`, `icons/`, `build/`, `ssg/`, `static/`, `health/`, `logs/`, `debug/`.
+`dom/`, `ui/`, `icons/`, `build/`, `ssg/`, `static/`, `health/`, `logs/`, `notify/`, `debug/`.
 
 ## What a recipe is
 
