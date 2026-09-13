@@ -460,6 +460,13 @@ the bare element, and naming it is yours.
 [`packages/ui/tests/controls.test.ts`](https://github.com/torrinworx/aweft/blob/main/packages/ui/tests/controls.test.ts)
 finds every control by its role and its name.
 
+**A `Button` with no name throws where it mounts, in development** (design 266). Its name is its
+`label`, its text, an `aria-label` or `title` on it, or a `label` on the `Icon` inside it; a button
+that is only an unlabelled icon has none, a screen reader says "button" and nothing else, and the
+mount throws with those three ways to name it. The button is read once it and what is inside it are
+on the page, so a labelled `Icon` counts, and a static `render()` reads it the same way. A release
+build has no check: the statements are gone.
+
 **One document is one render.** The ids come off the render's counter, which starts at zero every
 time (design 109), so two named renders mounted into the same document mint the same ids and their
 labels point at each other's controls. Two `mount` calls into one page share that page's render and
@@ -1482,6 +1489,20 @@ theme does not use are yours to define outright.
 the pair is below 4.5:1, this package says so in the console, with the ratio, the target and the
 role to use. Theme-derived pairs only, and the call is not in a release build.
 
+**Two dev-mode throws, on the page itself** (design 266). The first `mount` or `hydrate` into a
+browser page throws when `<html>` has no `lang`, and then when the document has no title, each with
+its fix: `lang="en"` (or the page's language) on the root, and a `<title>` in the shell or a `Title`
+on the page. The page is read once, in the same tick as the mount, so a shell that carries a
+`<title>` is what a page should have for the first paint; a `Title` the page mounts is attached
+before the check reads it. A light document, a server render and a document inside a frame are not
+read. A release build has neither check.
+
+What these and the contrast warning cannot see, a test can: `audit` and `walk` from
+[`@aweftjs/testing/browser`](https://github.com/torrinworx/aweft/blob/main/packages/testing/README.md)
+run axe and a Tab walk over the page a test drives, and the build refuses the faults the source
+settles ([`@aweftjs/build`](https://github.com/torrinworx/aweft/blob/main/packages/build/README.md),
+The access rules).
+
 ## Routing
 
 ```tsx
@@ -1732,6 +1753,10 @@ interaction and is not in a page's markup at all. `Tooltip` and `Popup` avoid th
 their element back out of the mount that put it in the document (design 153), which `Modal`
 cannot do until `dom` says which node a mount put in the document and lets a component write an
 attribute a hydration reconciles rather than compares.
+
+**A `Button` whose `label` cell starts empty throws in development.** The name check reads the
+button as it first mounts, and a cell that fills in later is a nameless button at that moment.
+Give the button a static `aria-label` for the empty state, which a screen reader wants in any case.
 
 ## The design notes
 

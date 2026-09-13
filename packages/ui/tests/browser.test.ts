@@ -90,7 +90,7 @@ const page = async (name: string, html: string, entry: string, files: Record<str
 };
 
 test('an application\'s own stylesheet beats the library, with no !important anywhere', async () => {
-	const site = await page('layers', `<!doctype html><html><head>
+	const site = await page('layers', `<!doctype html><html lang="en"><head><title>test</title>
 		<style>.mine { background: rgb(1, 2, 3); }</style>
 	</head><body><script type="module" src="./entry.tsx"></script></body></html>`, `
 		import { Theme, h, mount } from '@aweftjs/ui';
@@ -117,7 +117,7 @@ test('an application\'s own stylesheet beats the library, with no !important any
 });
 
 test('two mounts into one page compute the colour each of them asked for', async () => {
-	const site = await page('two-mounts', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('two-mounts', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { Theme, h, mount } from '@aweftjs/ui';
 		Theme.define({ left: { color: 'rgb(255, 0, 0)' }, right: { color: 'rgb(0, 0, 255)' } });
 		mount(document.body, <p id="one" theme="left">one</p>);
@@ -153,7 +153,7 @@ test('two mounts into one page compute the colour each of them asked for', async
 });
 
 test('hydrating server markup in a real browser keeps the server\'s nodes', async () => {
-	const site = await page('hydration', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('hydration', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { Theme, context, h, hydrate, render } from '@aweftjs/ui';
 		// An entry of this page's own. Defining a property the default theme already sets, with a
 		// different value, is a refusal (design 111), so a test theme picks its own name.
@@ -201,7 +201,7 @@ test('hydrating server markup in a real browser keeps the server\'s nodes', asyn
 });
 
 test('an onResize that throws is reported and the placement loop keeps running', async () => {
-	const site = await page('onresize', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('onresize', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { mutable } from '@aweftjs/core';
 		import { Detached, PopupContext, h, mark, mount } from '@aweftjs/ui';
 
@@ -257,7 +257,7 @@ test('an onResize that throws is reported and the placement loop keeps running',
 });
 
 test('a real mousedown outside a popup closes it, and one inside does not', async () => {
-	const site = await page('outside', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('outside', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { mutable } from '@aweftjs/core';
 		import { Popup, PopupContext, h, mount } from '@aweftjs/ui';
 
@@ -308,7 +308,7 @@ test('a real mousedown outside a popup closes it, and one inside does not', asyn
 });
 
 test('light and dark nested on one page each compute their own roles', async () => {
-	const site = await page('modes', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('modes', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { Theme, dark, h, light, mount } from '@aweftjs/ui';
 		mount(document.body, <div>
 			<Theme value={light}><div id="pale" theme="card">light</div></Theme>
@@ -337,7 +337,7 @@ test('light and dark nested on one page each compute their own roles', async () 
 });
 
 test('a hydrated page adopts the server\'s head tags, and a title cell moves document.title', async () => {
-	const site = await page('head', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('head', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { mutable } from '@aweftjs/core';
 		import { Link, Meta, Title, context, h, hydrate, render } from '@aweftjs/ui';
 
@@ -391,7 +391,7 @@ test('a hydrated page adopts the server\'s head tags, and a title cell moves doc
 });
 
 test('an act change scrolls to the element the URL\'s hash names', async () => {
-	const site = await page('stage-hash', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('stage-hash', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { createRouter } from '@aweftjs/dom/router';
 		import { Stage, StageContext, h, mount } from '@aweftjs/ui';
 
@@ -438,7 +438,7 @@ test('an act change scrolls to the element the URL\'s hash names', async () => {
 
 // --- the controls, driven by a real keyboard ----------------------------------------------------
 
-const BLANK = '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>';
+const BLANK = '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>';
 
 /** Build a page, open it, run the checks, and take everything down. */
 /**
@@ -463,6 +463,127 @@ const drive = async (name: string, entry: string, check: (view: Page) => Promise
 		await site.close();
 	}
 };
+
+// --- the page checks (design 266) ------------------------------------------------------------------
+
+/** Open a page built from a shell and an entry, and answer what it threw. */
+const thrownBy = async (name: string, shell: string, entry: string, then?: (view: Page) => Promise<void>): Promise<string[]> => {
+	const site = await page(name, shell, entry);
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		const thrown: string[] = [];
+		view.on('pageerror', (error) => thrown.push(String(error)));
+		await view.goto(site.url);
+		await view.waitForSelector('#done');
+		await then?.(view);
+		return thrown;
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+};
+
+const DONE = "mount(document.body, <p id=\"done\">mounted</p>);";
+
+test('a Button with nothing a screen reader can say throws where it mounts, with the fix', async () => {
+	const thrown = await thrownBy('button-nameless', BLANK, `
+		import { Button, Icon, Icons, h, mount } from '@aweftjs/ui';
+		${ANY_ICON}
+		try {
+			mount(document.body, <Icons value={anyIcon}><Button size="icon" icon={<Icon name="x" />} /></Icons>);
+		} catch (error) {
+			setTimeout(() => { throw error; });
+		}
+		${DONE}
+	`);
+	assert.equal(thrown.length, 1);
+	assert.match(thrown[0]!, /ui: a Button has nothing a screen reader can say/);
+	assert.match(thrown[0]!, /give it a label or an aria-label, or a label on the Icon inside it/);
+});
+
+test('a Button named by its label, by aria-label, by its text, by an image or by the Icon inside it mounts', async () => {
+	const thrown = await thrownBy('button-named', BLANK, `
+		import { Button, Icon, Icons, h, mount } from '@aweftjs/ui';
+		${ANY_ICON}
+		mount(document.body, <Icons value={anyIcon}>
+			<Button label="Save" />
+			<Button size="icon" aria-label="Save" icon={<Icon name="x" />} />
+			<Button>Save</Button>
+			<Button size="icon" icon={<Icon name="x" label="save" />} />
+			<Button title="Save" size="icon" icon={<Icon name="x" />} />
+			<span id="save-heading">Save</span>
+			<Button aria-labelledby="save-heading" size="icon" icon={<Icon name="x" />} />
+			<Button size="icon"><img src="data:," alt="Save" /></Button>
+		</Icons>);
+		${DONE}
+	`);
+	assert.deepEqual(thrown, []);
+});
+
+test('a page with no language throws on the first mount only, with the fix', async () => {
+	const thrown = await thrownBy('page-no-lang', '<!doctype html><html><head><title>t</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { h, mount } from '@aweftjs/ui';
+		for (const text of ['first', 'second', 'third']) {
+			try {
+				mount(document.body, <p>{text}</p>);
+			} catch (error) {
+				setTimeout(() => { throw error; });
+			}
+		}
+		${DONE}
+	`);
+	assert.equal(thrown.length, 1, 'once, however many mounts the page makes while the fault stands');
+	assert.match(thrown[0]!, /ui: the page declares no language: put lang="en"/);
+});
+
+test('a page with no title throws with its fix, and a Title on the page is a title', async () => {
+	const shell = '<!doctype html><html lang="en"><head></head><body><script type="module" src="./entry.tsx"></script></body></html>';
+	const bare = await thrownBy('page-no-title', shell, `
+		import { h, mount } from '@aweftjs/ui';
+		try {
+			mount(document.body, <p>first</p>);
+		} catch (error) {
+			setTimeout(() => { throw error; });
+		}
+		document.title = 'set by hand';
+		${DONE}
+	`);
+	assert.equal(bare.length, 1);
+	assert.match(bare[0]!, /ui: the page has no title: put a <title> in its head, or a <Title> on the page/);
+
+	const titled = await thrownBy('page-titled', shell, `
+		import { Title, h, mount } from '@aweftjs/ui';
+		mount(document.body, [<Title>From the page</Title>, <p>first</p>]);
+		${DONE}
+	`);
+	assert.deepEqual(titled, [], 'the head tags are attached before the check reads them');
+});
+
+test('a document is read once: a title taken away after the first mount is not reported', async () => {
+	const thrown = await thrownBy('page-once', BLANK, `
+		import { h, mount } from '@aweftjs/ui';
+		mount(document.body, <p>first</p>);
+		document.title = '';
+		document.documentElement.lang = '';
+		mount(document.body, <p>second</p>);
+		${DONE}
+	`);
+	assert.deepEqual(thrown, []);
+});
+
+test('the page checks are not in a release build', async () => {
+	const { transform } = await import('@aweftjs/build');
+	const button = readFileSync(new URL('../src/button.tsx', import.meta.url), 'utf8');
+	assert.match(button, /checkNamed\(/, 'the button reads its name in development');
+	const shipped = transform(button, { filename: 'button.tsx', release: true }).code;
+	assert.doesNotMatch(shipped, /checkNamed\(|mountedElement\(|live = /, 'and a release build has no call and no bookkeeping left');
+	assert.doesNotMatch(shipped, /from '\.\/access\.ts'|from '\.\/popup\.tsx'/, 'nor the imports that fed them');
+	const render = readFileSync(new URL('../src/render.ts', import.meta.url), 'utf8');
+	assert.match(render, /pageLanguage\(/);
+	const built = transform(render, { filename: 'render.ts', release: true }).code;
+	assert.doesNotMatch(built, /pageLanguage\(|pageTitle\(/, 'neither page check is in a release build');
+});
 
 test('Space on a checkbox toggles it, because the checkbox is the platform\'s', async () => {
 	await drive('checkbox-keys', `
@@ -1482,7 +1603,7 @@ test('End on the colour picker\'s hue slider writes the cell', async () => {
 });
 
 test('a Typography heading computes the theme\'s weight and the wrap the host reads', async () => {
-	const site = await page('typography', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('typography', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { Typography, h, mount } from '@aweftjs/ui';
 		mount(document.body, <div>
 			<Typography type="h2_bold" id="heading" label="A heading that runs on for a little while" />
@@ -1867,11 +1988,11 @@ test('a square button centres its icon, and the icon takes the button\'s own col
 		const pack = { icons: { plus: { body: '<path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2"/>' } } };
 		mount(document.body, <Icons value={pack}>
 			<div id="light">
-				<Button id="square" size="icon" icon={<Icon name="plus" />} />
+				<Button id="square" size="icon" aria-label="Add" icon={<Icon name="plus" />} />
 			</div>
 			<Theme value={dark}>
 				<div id="dark">
-					<Button id="dark-square" size="icon" icon={<Icon name="plus" />} />
+					<Button id="dark-square" size="icon" aria-label="Add" icon={<Icon name="plus" />} />
 				</div>
 			</Theme>
 		</Icons>);
@@ -2827,7 +2948,7 @@ test('the slider\'s hover is on its thumb and not over its own box', async () =>
 });
 
 test('a country field hydrates: the dialog comes across empty and fills on the first open', async () => {
-	const site = await page('country-hydration', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('country-hydration', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { mutable } from '@aweftjs/core';
 		import { Countries, Country, Icons, context, h, hydrate, render } from '@aweftjs/ui';
 		import { countryData } from '@aweftjs/ui/countries';
@@ -2908,7 +3029,7 @@ test('a country name the server and the browser disagree about refuses the hydra
 	// different name for it (design 251). Nothing here can give a browser an older ICU, so the
 	// disagreement is made by editing the markup: what is being pinned is what hydration does with
 	// a difference, not how the difference arose.
-	const site = await page('country-skew', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('country-skew', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { mutable } from '@aweftjs/core';
 		import { Countries, Country, Icons, context, h, hydrate, render } from '@aweftjs/ui';
 		import { countryData } from '@aweftjs/ui/countries';
@@ -2958,7 +3079,7 @@ test('a country name the server and the browser disagree about refuses the hydra
 });
 
 test('the longest subdivision list opens and searches inside one frame budget', async () => {
-	const site = await page('country-cost', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('country-cost', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { mutable } from '@aweftjs/core';
 		import { Countries, Icons, Region, h, mount } from '@aweftjs/ui';
 		import { countryData } from '@aweftjs/ui/countries';
@@ -3022,7 +3143,7 @@ test('a class compiled after the mount keeps every font face registered', async 
 	// again: for as long as the data takes to come back, the page's text has no webfont. Only a
 	// real browser has an opinion about this; the light tree has no font set at all. Against the
 	// old path this reads a loaded face before the compile and an unloaded one in the same task.
-	const site = await page('font-faces', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('font-faces', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { mutable } from '@aweftjs/core';
 		import { Theme, h, mount } from '@aweftjs/ui';
 		Theme.define({
@@ -3091,7 +3212,7 @@ test('a font face the page declared itself survives the mount and every class af
 	// when any stylesheet the document holds is changed, so this fails if `ui` writes into an
 	// element that is already in the head, even an empty one, and even one that is not the sheet
 	// holding the face (design 257).
-	const site = await page('page-face', `<!doctype html><html><head><style>
+	const site = await page('page-face', `<!doctype html><html lang="en"><head><title>test</title><style>
 		@font-face { font-family: "Probe"; src: url("/probe.woff2") format("woff2"); }
 		#box { font-family: "Probe", monospace; }
 	</style></head><body><script type="module" src="./entry.tsx"></script></body></html>`, `
@@ -3152,7 +3273,7 @@ test('a font face the page declared itself survives the mount and every class af
 });
 
 test('a face, a keyframes and an import compiled at runtime land in an element of their own', async () => {
-	const site = await page('runtime-at-rules', '<!doctype html><html><head></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+	const site = await page('runtime-at-rules', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { mutable } from '@aweftjs/core';
 		import { Theme, h, mount } from '@aweftjs/ui';
 		Theme.define({
