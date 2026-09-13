@@ -245,6 +245,55 @@ neither, and one that asks for a throwaway without them gets `peer-not-installed
 install. `throwaway` takes how the peers are reached, so that refusal can be reached without
 uninstalling anything.
 
+## Reading the page a test drives
+
+`audit` and `walk` on the `/browser` subpath take the page object a browser driver already handed
+the test and answer what a screen reader and a keyboard would find there (design 267). Neither
+throws on a finding; the test says what a finding means for it.
+
+```ts
+import { audit, walk } from '@aweftjs/testing/browser';
+
+const { violations } = await audit(view);
+assert.deepEqual(violations, [], violations.map((v) => `${v.rule}: ${v.help}`).join('\n'));
+
+const { stops, problems } = await walk(view);
+assert.deepEqual(problems, [], problems.map((p) => `${p.reason} at ${p.target}: ${p.fix}`).join('\n'));
+```
+
+**`audit`** puts axe-core into the page and runs it over the document, or over `options.root`,
+with the WCAG 2.x A and AA tags (`options.tags` replaces the list). A violation carries axe's rule
+id, its `wcag*` tags as axe writes them (`wcag2aa`, `wcag143`), its help sentence and link, and the
+nodes as a selector and the markup. Run it once per colour scheme: the page's colours are what it
+measures, and a second run on the same page reuses the script.
+
+**`walk`** presses Tab from the top of the page until the focus comes back round, or `options.limit`
+(300) presses have gone by, and answers every stop (tag, id, role, name, and whether it draws a ring
+while it matches `:focus-visible`) and the problems: `focus-not-visible` for a stop with no
+`outline` and no `box-shadow`, `focus-stuck` when a press left the focus where it was, `focus-loops`
+when a press sent the focus back round the page without letting it leave, `unreachable` for a
+focusable element the walk never landed on, `never-cycles` when the limit ran out. Whatever the
+page had focused loses it first. A ring is the element's own `outline` or `box-shadow`, or one an
+ancestor draws for the control inside it through a rule about focus, and nothing else, so a page
+that shows its focus by changing a border colour is reported as ringless. A radio group is one
+stop, an element with no box (inside a closed `details`, a closed dialog, a hidden parent) is not
+expected, and a frame, a shadow host or a media element's own controls is one stop the focus
+moves inside without the walk reading where. Run it with no modal dialog open: the page behind
+one is inert and the walk reports it unreachable.
+
+The page is structural: `evaluate(source)`, `addScriptTag({ content })` and `keyboard.press(key)`,
+which Playwright's `Page` satisfies (the suite passes one), and this package imports no browser
+driver.
+`axe-core` is an optional peer: a project that never audits installs nothing, and one that asks
+without it gets `axe-not-installed`. `options.locate` says where the script is when the installed
+one is not the one to use, and is how that refusal is reached without uninstalling anything.
+
+What neither reads is the criteria that need a person: meaning carried by colour alone, the order
+of the reading, a heading that describes its section, a time limit, an error message that says
+what to do. The build refuses what the source settles (`@aweftjs/build`, The access rules) and the
+mount throws on a nameless `Button` and a page with no `lang` or title (`@aweftjs/ui`); these two
+read the rendered page for the rest.
+
 ## Letting scheduled work run
 
 `settle()` yields to the timer queue ten times, so work that schedules more work gets to run. A

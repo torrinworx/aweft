@@ -246,6 +246,10 @@ primary author. A convention will not prevent that. A dependency will.
 - the **recording host** (`recordingDocument`), a light document from `dom` that writes down
   every node operation, so a test asserts what a mount did and not only what the tree looks
   like after. It is the DOM mock: nothing pulls in a browser emulation
+- the **page checks** (`audit` and `walk` on the `/browser` subpath), axe-core over the page a
+  test drives and a Tab walk over its controls, so an application's drive fails on what only
+  the rendered page shows (design 267). The page is structural and the package imports no
+  browser driver
 
 It grows these as the packages that need them arrive.
 

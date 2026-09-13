@@ -75,6 +75,17 @@ value themeTokens: (files: readonly ThemeSource[]) => string[]
 value valueFromJson: (v: ValueJson) => Value
 value valueToJson: (v: Value) => ValueJson
 value wordRules: () => readonly { readonly word: string; readonly fix: string; }[]
+./browser type AuditNode: interface AuditNode { readonly target: string; readonly html: string; }
+./browser type AuditOptions: interface AuditOptions { readonly root?: string; readonly tags?: readonly string[]; readonly locate?: () => string; }
+./browser type AuditResult: interface AuditResult { readonly violations: readonly AuditViolation[]; readonly passes: number; }
+./browser type AuditViolation: interface AuditViolation { readonly rule: string; readonly impact: string | null; readonly wcag: readonly string[]; readonly help: string; readonly helpUrl: string; readonly nodes: readonly AuditNode[]; }
+./browser type PageLike: interface PageLike { evaluate(source: string): Promise<unknown>; addScriptTag(options: { readonly content: string; }): Promise<unknown>; readonly keyboard: { press(key: string): Promise<void>; }; }
+./browser type Stop: interface Stop { readonly tag: string; readonly id: string | null; readonly role: string | null; readonly name: string; readonly ring: boolean; }
+./browser type WalkOptions: interface WalkOptions { readonly limit?: number; }
+./browser type WalkProblem: interface WalkProblem { readonly reason: 'focus-not-visible' | 'focus-stuck' | 'focus-loops' | 'unreachable' | 'never-cycles'; readonly fix: string; readonly target: string; }
+./browser type WalkResult: interface WalkResult { readonly stops: readonly Stop[]; readonly problems: readonly WalkProblem[]; }
+./browser value audit: (page: PageLike, options?: AuditOptions) => Promise<AuditResult>
+./browser value walk: (page: PageLike, options?: WalkOptions) => Promise<WalkResult>
 ./postgres type Load: type Load = (name: 'embedded-postgres' | 'pg') => Promise<unknown>;
 ./postgres type PoolLike: interface PoolLike { query(text: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[]; }>; connect(): Promise<{ query(text: string, values?: readonly unknown[]): Promise<{ rows: unknown[]; rowCount: number | null; }>; release(): void; }>; end(): Promise<void>; }
 ./postgres type Throwaway: interface Throwaway { readonly port: number; pool(): Promise<PoolLike>; stop(): Promise<void>; }
