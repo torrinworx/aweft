@@ -931,9 +931,12 @@ try {
 	// Every select on the page has a list of its own in the popup sink, so each is reached by the id
 	// its own control names rather than by the role.
 	await page.click('#select-open-light');
+	// A popup is laid out out of sight for the one frame between opening and being placed, so the
+	// list is measured once it is visible, not once it has a size.
 	await page.waitForFunction(() => {
 		const list = document.querySelector('#select-open-light-list');
 		return list !== null && list.getBoundingClientRect().width > 0
+			&& getComputedStyle(list)['visibility'] === 'visible'
 			&& getComputedStyle(list)['transform'] === 'none';
 	});
 	const drawn = await page.evaluate(() => {
