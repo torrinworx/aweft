@@ -1,18 +1,29 @@
 // auth/Enter: sign in, or sign up when the email is new, and hand the browser its cookie
-// (design 074).
+// (design 074). The route counts attempts, bounds the hashing in flight and the password's
+// length before anything is hashed (design 275).
 
-import { createId, idToText } from '@aweftjs/codec';
+import { codecError, createId, idToText } from '@aweftjs/codec';
 import { atomic } from '@aweftjs/core';
 import type { ModuleProps } from '@aweftjs/modules';
-import type { Refusal } from '@aweftjs/server';
+import { type Refusal, sliding } from '@aweftjs/server';
 
-import type { AuthContext } from '../context.ts';
+import { type AuthContext, addressOf } from '../context.ts';
 import { hashPassword, verifyPassword } from '../password.ts';
 import { bodyOf, json, storeOf } from '../props.ts';
 import { findUser, idOfUserDoc, looksLikeEmail, normalEmail, userDoc } from '../users.ts';
 import type { Session } from './Session.ts';
 
 export const deps = ['auth/Session'];
+
+export const defaults = {
+	attemptsPerEmail: 5,
+	attemptsPerAddress: 20,
+	attemptsWindowMs: 900_000,
+	hashesInFlight: 8,
+	passwordMin: 8,
+	passwordMax: 256,
+	refusePassword: null,
+};
 
 /** What a `user:<id>` document holds. `password` is the hash, never the password. */
 export interface UserDocument extends Record<string, unknown> {
@@ -33,9 +44,29 @@ export interface Enter {
 	readonly routes: Record<string, (request: Request, context: AuthContext) => Promise<Response>>;
 }
 
-export default ({ imports, ...props }: ModuleProps): Enter => {
+const refuse = (detail: string, fix: string): Error => codecError('invalid-config', `auth/Enter was given ${detail}`, fix);
+
+const numberOf = (config: Readonly<Record<string, unknown>>, key: keyof typeof defaults): number => {
+	const held: unknown = config[key];
+	if (typeof held !== 'number' || !(held > 0) || !Number.isFinite(held)) throw refuse(`${key} ${JSON.stringify(held)}`, 'Give that setting a number above zero.');
+	return held;
+};
+
+export default ({ imports, config, ...props }: ModuleProps): Enter => {
 	const store = storeOf(props);
 	const Session = imports.Session as Session;
+	const windowMs = numberOf(config, 'attemptsWindowMs');
+	const perEmail = sliding({ count: numberOf(config, 'attemptsPerEmail'), windowMs });
+	const perAddress = sliding({ count: numberOf(config, 'attemptsPerAddress'), windowMs });
+	const hashesInFlight = numberOf(config, 'hashesInFlight');
+	const passwordMin = numberOf(config, 'passwordMin');
+	const passwordMax = numberOf(config, 'passwordMax');
+	if (passwordMax < passwordMin) throw refuse(`passwordMax ${String(passwordMax)} under passwordMin ${String(passwordMin)}`, 'Give passwordMax at least passwordMin.');
+	if (config.refusePassword !== null && typeof config.refusePassword !== 'function') {
+		throw refuse(`refusePassword ${JSON.stringify(config.refusePassword)}`, 'Give refusePassword a function of the password answering true to refuse it, or null.');
+	}
+	const refusePassword = config.refusePassword as ((password: string) => boolean | Promise<boolean>) | null;
+	let hashing = 0;
 
 	const enter = async (email: string, password: string): Promise<Entered> => {
 		const found = await findUser(store, email);
@@ -60,11 +91,14 @@ export default ({ imports, ...props }: ModuleProps): Enter => {
 		return { user: idOfUserDoc(found), created: false };
 	};
 
+	const tooMany = (retryAfter: number): Response =>
+		json(429, { reasons: [{ code: 'attempts', message: 'too many sign-in attempts; wait and try again' }] }, { 'retry-after': String(retryAfter) });
+
 	return {
 		public: true,
 		enter,
 		routes: {
-			'POST /api/session': async (request) => {
+			'POST /api/session': async (request, context) => {
 				const body = await bodyOf(request);
 				const email = body?.email;
 				const password = body?.password;
@@ -74,8 +108,32 @@ export default ({ imports, ...props }: ModuleProps): Enter => {
 				if (typeof password !== 'string' || password === '') {
 					return json(400, { reasons: [{ code: 'password', message: 'password is text' }] });
 				}
-				const outcome = await enter(email, password);
+				const length = [...password].length;
+				if (length < passwordMin || length > passwordMax) {
+					return json(400, { reasons: [{ code: 'password', message: `password is ${String(passwordMin)} to ${String(passwordMax)} characters` }] });
+				}
+				// Counted before anything is hashed, so a flood buys no hashing. The email's count
+				// is cleared on success below; the address's is not, since it counts requests.
+				const key = normalEmail(email);
+				const byAddress = perAddress.take(addressOf(context) ?? 'unknown');
+				if (!byAddress.ok) return tooMany(byAddress.retryAfter);
+				const byEmail = perEmail.take(key);
+				if (!byEmail.ok) return tooMany(byEmail.retryAfter);
+				if (refusePassword !== null && await refusePassword(password)) {
+					return json(400, { reasons: [{ code: 'password', message: 'that password is not allowed here' }] });
+				}
+				if (hashing >= hashesInFlight) {
+					return json(503, { reasons: [{ code: 'busy', message: 'too many sign-ins are being checked; try again in a moment' }] }, { 'retry-after': '1' });
+				}
+				hashing += 1;
+				let outcome: Entered;
+				try {
+					outcome = await enter(email, password);
+				} finally {
+					hashing -= 1;
+				}
 				if ('refused' in outcome) return json(401, { reasons: outcome.refused });
+				perEmail.clear(key);
 				const token = await Session.issue(outcome.user);
 				return json(outcome.created ? 201 : 200, { user: outcome.user, created: outcome.created }, {
 					'set-cookie': Session.setCookie(token, request),
