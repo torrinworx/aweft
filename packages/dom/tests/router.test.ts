@@ -469,3 +469,86 @@ test('push takes a path, and a whole URL or one that already carries the base is
 	docs.push('/api');
 	assert.equal(docs.url.get(), '/api', 'the path the base is put back onto is the relative one');
 });
+
+// --- with entries handed in (design 279) ------------------------------------------------------
+
+/** An entries object in memory that records what the router does to it. */
+const fakeEntries = (start: string) => {
+	const stack: { href: string; state: unknown }[] = [{ href: start, state: null }];
+	const calls: string[] = [];
+	const listeners: (() => void)[] = [];
+	let at = 0;
+	return {
+		calls,
+		/** Move the entries from outside, the way a page's back reaches a room. */
+		arrive: (href: string) => {
+			stack.length = at + 1;
+			stack.push({ href, state: null });
+			at += 1;
+			for (const fn of [...listeners]) fn();
+		},
+		entries: {
+			current: () => stack[at]!.href,
+			state: () => stack[at]!.state,
+			push: (state: unknown, href: string) => { calls.push(`push ${href}`); stack.length = at + 1; stack.push({ href, state }); at += 1; },
+			replace: (state: unknown, href: string) => { calls.push(`replace ${href}`); stack[at] = { href, state }; },
+			back: () => { calls.push('back'); if (at === 0) return; at -= 1; for (const fn of [...listeners]) fn(); },
+			listen: (fn: () => void) => { listeners.push(fn); return () => { listeners.splice(listeners.indexOf(fn), 1); }; },
+		},
+	};
+};
+
+test('a router over entries in memory reads current, writes push, replace and back, and follows listen', () => {
+	const fake = fakeEntries('/app/3/notes');
+	const router = createRouter({ base: '/app/3', entries: fake.entries });
+	assert.equal(router.url.get(), '/notes', 'url follows current, with the base taken off');
+	assert.deepEqual(fake.calls, ['replace /app/3/notes'], 'the first entry was stamped with a key through the entries object');
+	const first = router.key.get();
+
+	router.push('/notes/7');
+	assert.equal(router.url.get(), '/notes/7');
+	assert.deepEqual(fake.calls.at(-1), 'push /app/3/notes/7', 'push reaches the object with the base on');
+	router.replace('/notes/7?edit=1');
+	assert.deepEqual(fake.calls.at(-1), 'replace /app/3/notes/7?edit=1');
+	assert.equal(router.url.get(), '/notes/7?edit=1');
+
+	fake.arrive('/app/3/settings');
+	assert.equal(router.url.get(), '/settings', 'listen drives url');
+	assert.notEqual(router.key.get(), first, 'an entry the router did not write is stamped with a key of its own');
+
+	router.back();
+	assert.equal(fake.calls.at(-1), 'back', 'back reaches the object');
+	assert.equal(router.url.get(), '/notes/7?edit=1', 'and the object moved the router back');
+	router.stop();
+});
+
+test('with a window present and entries handed in, links are still intercepted while the URL lives in the entries', () => {
+	const fake = fakeEntries('/notes');
+	const win = fakeWindow('/page/of/the/host');
+	// The frame's location: what an opaque srcdoc frame reports, which no path resolves against.
+	const location = (win.window as unknown as { location: object }).location;
+	Object.defineProperty(location, 'href', { get: () => 'about:srcdoc' });
+	Object.defineProperty(location, 'origin', { get: () => 'null' });
+	const router = withWindow(win, () => createRouter({ entries: fake.entries }));
+	assert.equal(router.url.get(), '/notes', 'the URL is the entries\', not the window\'s');
+	assert.equal(win.entries.length, 1, 'the window\'s history was not written');
+	assert.equal(win.window.history.scrollRestoration, 'auto', 'nor told anything');
+
+	const clicks = clickRoot();
+	const stop = router.links(clicks.root);
+	assert.equal(clicks.click({ target: anchor({ href: '/notes/7' }) }), true, 'a root-relative link is taken');
+	assert.equal(router.url.get(), '/notes/7');
+	assert.equal(fake.calls.at(-1), 'push /notes/7', 'and pushed on the entries');
+	assert.equal(clicks.click({ target: anchor({ href: 'edit?x=1' }) }), true, 'a relative link resolves against the entries\' URL');
+	assert.equal(router.url.get(), '/notes/edit?x=1');
+	assert.equal(clicks.click({ target: anchor({ href: 'https://elsewhere.test/x' }) }), false, 'a link with an origin of its own is the browser\'s');
+	assert.equal(clicks.click({ target: anchor({ href: '#top' }) }), false, 'a hash on the page showing now is the browser\'s');
+	assert.equal(clicks.click({ target: anchor({ href: '/other', target: '_blank' }) }), false, 'a link with a target is left alone');
+	assert.equal(win.entries.length, 1, 'the window\'s history was never written');
+
+	win.place(4, 40);
+	router.push('/notes/8');
+	assert.deepEqual(win.storage.size > 0, true, 'scroll positions still go to the window\'s storage');
+	stop();
+	router.stop();
+});
