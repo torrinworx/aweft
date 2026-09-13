@@ -42,8 +42,14 @@ less than the report.
    answer.
 5. **Drive the page before reporting.** Start the backend and the dev server, open the page in
    a real browser, walk every state by keyboard in both modes, and listen for page errors and
-   console messages at error level: there must be none. `recipes/full-stack/main.ts` shows the
-   two listeners and `recipes/ui/main.ts` the walk, both with playwright.
+   console messages at error level: there must be none. Then run `audit` and `walk` from
+   `@aweftjs/testing/browser` over the page, in both modes, and there must be nothing to report.
+   `recipes/full-stack/main.ts` shows the two listeners and both checks, with playwright, and
+   `recipes/accessible-page/` a page that passes and three that do not. The build has already
+   refused an element no one can read, and the mount throws on a nameless `Button` and a page
+   with no `lang` or title; what stays yours to write is what no tool reads: a meaning carried
+   by colour alone, the reading order, a heading that describes its section, a time limit, the
+   same navigation on every page, an error message that says what to do.
 6. **A stack bug is fixed in the stack.** Its regression test goes in the package that has the
    bug, inside the submodule, and the fix is pushed from there. The application never carries a
    patched copy of a stack file.

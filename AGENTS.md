@@ -61,8 +61,14 @@ saying so is worth more than the workaround.
    a package fails at import time by design, and needing one is a finding to report, not a
    thing to work around.
 3. Before saying it is done, drive the page in a real browser: every state reachable by
-   keyboard, both modes, no page error and nothing written to the console at error level.
-   `recipes/full-stack/main.ts` shows the two listeners and `recipes/ui/main.ts` the walk.
+   keyboard, both modes, no page error and nothing written to the console at error level, and
+   `audit` and `walk` from `@aweftjs/testing/browser` over the page with nothing to report.
+   `recipes/full-stack/main.ts` shows the two listeners and both checks, and
+   `recipes/accessible-page/` a page that passes them and three that do not. The build refuses
+   an element no one can read (`packages/build/README.md`, The access rules) and the mount throws
+   on a nameless `Button` and a page with no `lang` or title; what those and the audit cannot
+   read stays yours: meaning carried by colour alone, the reading order, headings that describe
+   their section, time limits, consistent navigation, an error message that says what to do.
    Tests for an application are `node --test` files run under the loader.
 4. A stack bug found while building gets its test in the stack's package, in this repo, and
    the fix goes upstream; the application never carries a patched copy. The rest of this file
