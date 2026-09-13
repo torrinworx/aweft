@@ -369,6 +369,40 @@ checkWords([{ path: 'note.md', text }]);   // [] means the text is clean
 With paths, `node packages/testing/scripts/check-words.ts docs/design` reads those files
 instead of the whole tree.
 
+## What a suite has to name
+
+`npm run exercised` reads each package's `surface.txt` and `errors.txt` beside its tests and
+fails a covered package whose own suite never names one of its value exports, or never quotes
+one of its refusal reasons (design 285). Both files are generated: `surface.txt` by `npm run
+surface`, one export per line as `value name: type` with a subpath's lines prefixed by the
+subpath, and `errors.txt` by `npm run errors`, one `reason: fix` per line. A test counts when it is not the surface list and not a
+white-box `internal.*` file; a name in a comment does not count, and a reason as the whole of a
+regular expression does, since a refusal's message opens with its reason. The covered packages
+are listed in the script and the list only grows; the rest have their counts printed. `testing`
+is exempt, because its surface is the suites of the other packages.
+
+```ts
+import { checkExercised } from '@aweftjs/testing';
+checkExercised('store', surface, errors, tests);   // [] means the suite names everything
+```
+
+## The operator sweep
+
+`npm run sweep -- <package>` copies the repo into a scratch directory, flips one operator at a
+time in that package's sources (a comparison, a logical operator, a boolean a function returns),
+runs the package's own suite against each flip, and prints every flip the suite let through with
+its file, line and operator (design 287). It runs on request and never in the gate: one flip is
+one run of the suite, two test files at a time so the machine stays usable, and
+`--only=<file>[,<file>]` narrows it to the files you are working on. A survivor is either killed
+by a test or written down as equivalent with the reason, wherever the change that ran the sweep
+is written up.
+
+```ts
+import { flipSite, sweepSites } from '@aweftjs/testing';
+const [first] = sweepSites(source);        // where the file can be flipped, in order
+const flipped = flipSite(source, first!);  // the same text with that one operator changed
+```
+
 ## Running the gate
 
 `npm test` at the root is the whole gate: typecheck, the dependency rules, the tier rule over real

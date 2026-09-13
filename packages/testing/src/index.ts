@@ -64,3 +64,7 @@ export { securityChecks } from './security.ts';
 export type { Opened, SecurityCheck, SecurityTarget, StartOptions, StartTarget } from './security.ts';
 export { checkSecurityTable, parseSecurityTable } from './security-table.ts';
 export type { SecurityCase, SecurityRow, TestExists } from './security-table.ts';
+export { checkExercised } from './exercised.ts';
+export type { TestSource } from './exercised.ts';
+export { flipSite, sweepSites } from './sweep.ts';
+export type { Site } from './sweep.ts';
