@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { createClient } from '@aweftjs/client';
 import type { Client } from '@aweftjs/client';
 import { codecError } from '@aweftjs/codec';
+import { mutable } from '@aweftjs/core';
 import { createDocument } from '@aweftjs/dom';
 import { createRouter } from '@aweftjs/dom/router';
 import type { LightElement, NodeLike } from '@aweftjs/dom';
@@ -53,9 +54,9 @@ const fire = (element: LightElement, type: string, extra: Record<string, unknown
 const extra = (map: Readonly<Record<string, Record<string, unknown>>>): Source =>
 	fromBundle(map as never, { prefix: '' });
 
-test('the client source lists the two modules a page puts on a stage', async () => {
+test('the client source lists the four modules a page puts on a stage', async () => {
 	const names = (await authClient.candidates()).map((candidate) => candidate.name).sort();
-	assert.deepEqual(names, ['auth/Session', 'auth/SignIn']);
+	assert.deepEqual(names, ['auth/Reset', 'auth/Session', 'auth/SignIn', 'auth/Verify']);
 });
 
 test('auth/Session is createAuth over the client the loader was given', async () => {
@@ -308,4 +309,136 @@ test('a static render of a gated act finishes, and the sign-in act is what its m
 
 	assert.match(markup, /aria-label="Sign in"/, 'the refused act is what a static render of a gated page holds');
 	assert.doesNotMatch(markup, /id="notes"/, 'and the page behind the gate is not in the markup');
+});
+
+/** A stage value with the parameters and query given, the way an act reads them off its prop. */
+const stageOf = (params: Record<string, string>, query: Record<string, string> = {}): unknown =>
+	({ params: { get: () => params }, query: { get: () => query } });
+
+test('auth/Verify with a token takes it as it mounts and says what happened; without one it offers a signed-in person the mail', async () => {
+	const calls: unknown[][] = [];
+	let answer: unknown = { ok: true };
+	const who = mutable<string | null | undefined>(null);
+	const loader = createLoader({
+		sources: [
+			extra({ 'auth/Session.ts': { default: () => ({ user: who, verify: async (...args: unknown[]) => { calls.push(args); if (answer === 'throw') throw new Error('the server is down'); return answer; } }) } }),
+			authClient,
+		],
+	});
+	const act = (await loader.load(['auth/Verify']))['auth/Verify'] as { title: unknown; component: (props: unknown) => unknown };
+	assert.equal(textOf(context(), act.title), 'Verify your email');
+
+	// The token in the act's own parameter.
+	let document = createDocument();
+	let stop = mount(document.body as never, h(act.component, { stage: stageOf({ token: 'AAAAAAAAAAAAAAAAAAAAAA' }) }));
+	await settle();
+	assert.deepEqual(calls, [['AAAAAAAAAAAAAAAAAAAAAA']], 'taken as it mounted');
+	assert.match(document.body.textContent ?? '', /Your email address is verified/);
+	stop();
+
+	// The token in the query, and a refusal shown.
+	answer = { refused: [{ code: 'token', message: 'this link is not one that can be used' }] };
+	document = createDocument();
+	stop = mount(document.body as never, h(act.component, { stage: stageOf({}, { token: 'BBBBBBBBBBBBBBBBBBBBBB' }) }));
+	await settle();
+	assert.deepEqual(calls[1], ['BBBBBBBBBBBBBBBBBBBBBB']);
+	assert.match(document.body.textContent ?? '', /not one that can be used/);
+	stop();
+
+	// No token: anonymous is told to sign in and the button is off; signed in, the button sends.
+	answer = { ok: true };
+	document = createDocument();
+	stop = mount(document.body as never, h(act.component, { stage: stageOf({}) }));
+	await settle();
+	assert.equal(calls.length, 2, 'nothing is sent by itself');
+	assert.match(document.body.textContent ?? '', /Sign in first/);
+	const button = byTag(document.body.firstChild, 'button');
+	assert.equal(button.getAttribute('disabled') !== null || (button as unknown as { disabled?: boolean }).disabled === true, true, 'off while anonymous');
+	who.set('u_1');
+	await settle();
+	assert.match(document.body.textContent ?? '', /We will send a link/);
+	fire(button, 'click');
+	await settle();
+	assert.deepEqual(calls[2], [], 'the send is verify with no token');
+	assert.match(document.body.textContent ?? '', /on its way/);
+	stop();
+
+	answer = 'throw';
+	document = createDocument();
+	stop = mount(document.body as never, h(act.component, { stage: stageOf({}, { token: 'CCCCCCCCCCCCCCCCCCCCCC' }) }));
+	await settle();
+	assert.match(document.body.textContent ?? '', /the server is down/, 'a throw is shown too');
+	stop();
+	await loader.unload('auth/Verify');
+});
+
+test('auth/Reset without a token asks for the address and calls forgot; with one it asks for the password and calls reset', async () => {
+	const forgot: unknown[][] = [];
+	const reset: unknown[][] = [];
+	let answer: unknown = { ok: true };
+	const loader = createLoader({
+		sources: [
+			extra({ 'auth/Session.ts': { default: () => ({
+				forgot: async (...args: unknown[]) => { forgot.push(args); return answer; },
+				reset: async (...args: unknown[]) => { reset.push(args); return answer; },
+			}) } }),
+			authClient,
+		],
+	});
+	const act = (await loader.load(['auth/Reset']))['auth/Reset'] as { title: unknown; component: (props: unknown) => unknown };
+	assert.equal(textOf(context(), act.title), 'Reset your password');
+
+	let document = createDocument();
+	let stop = mount(document.body as never, h(act.component, { stage: stageOf({}) }));
+	const email = byName(document.body.firstChild, 'email');
+	assert.equal(byName(document.body.firstChild, 'password'), undefined, 'no password field without a token');
+	(email as unknown as Record<string, unknown>)['value'] = 'ada@example.com';
+	fire(email, 'input');
+	fire(byTag(document.body.firstChild, 'button'), 'click');
+	await settle();
+	assert.deepEqual(forgot, [['ada@example.com']]);
+	assert.match(document.body.textContent ?? '', /a link is on its way/);
+	stop();
+
+	answer = { refused: [{ code: 'email', message: 'email is an address' }] };
+	document = createDocument();
+	stop = mount(document.body as never, h(act.component, { stage: stageOf({}) }));
+	fire(byTag(document.body.firstChild, 'form'), 'submit', { preventDefault: () => undefined });
+	await settle();
+	assert.equal(forgot.length, 2, 'the Enter key reaches the form\'s own handler');
+	assert.match(document.body.textContent ?? '', /email is an address/, 'the refusal is under the field');
+	stop();
+
+	answer = { ok: true };
+	document = createDocument();
+	stop = mount(document.body as never, h(act.component, { stage: stageOf({ token: 'AAAAAAAAAAAAAAAAAAAAAA' }) }));
+	const password = byName(document.body.firstChild, 'password');
+	assert.equal(password.getAttribute('type'), 'password');
+	assert.equal(byName(document.body.firstChild, 'email'), undefined, 'no email field with a token');
+	(password as unknown as Record<string, unknown>)['value'] = 'new horse battery';
+	fire(password, 'input');
+	fire(byTag(document.body.firstChild, 'button'), 'click');
+	await settle();
+	assert.deepEqual(reset, [['AAAAAAAAAAAAAAAAAAAAAA', 'new horse battery']]);
+	assert.match(document.body.textContent ?? '', /Your password is set/);
+	stop();
+
+	answer = { refused: [{ code: 'token', message: 'this link is not one that can be used' }] };
+	document = createDocument();
+	stop = mount(document.body as never, h(act.component, { stage: stageOf({}, { token: 'BBBBBBBBBBBBBBBBBBBBBB' }) }));
+	fire(byTag(document.body.firstChild, 'button'), 'click');
+	await settle();
+	assert.deepEqual(reset[1], ['BBBBBBBBBBBBBBBBBBBBBB', '']);
+	assert.match(document.body.textContent ?? '', /not one that can be used/, 'a reason about no field goes on the alert line');
+	stop();
+	await loader.unload('auth/Reset');
+});
+
+test('a static render of the three acts finishes with no connection, and holds their forms', async () => {
+	const loader = createLoader({ sources: [authClient] });
+	for (const [name, expected] of [['auth/Verify', /Sign in first/], ['auth/Reset', /Email/]] as const) {
+		const act = (await loader.load([name]))[name] as { component: (props: unknown) => unknown };
+		const html = await render(h(act.component, { stage: stageOf({}) }));
+		assert.match(html, expected, name);
+	}
 });

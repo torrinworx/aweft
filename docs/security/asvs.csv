@@ -79,8 +79,8 @@ V6.1.1,1,stack,doc: packages/auth/README.md#The bounds
 V6.1.2,2,application,the list refusePassword reads
 V6.1.3,2,application,one pathway ships; document a second one beside it
 V6.2.1,1,stack,suite: a password shorter than eight or longer than the ceiling is refused, and any composition of eight is taken
-V6.2.2,1,application,no change or reset route ships; both wait on the notify battery
-V6.2.3,1,application,no change or reset route ships; both wait on the notify battery
+V6.2.2,1,stack,test: packages/auth/tests/password.test.ts#change needs the current password and a new one the rules take, rehashes, and ends every other session of the person
+V6.2.3,1,stack,test: packages/auth/tests/password.test.ts#change needs the current password and a new one the rules take, rehashes, and ends every other session of the person
 V6.2.4,1,application,refusePassword on auth/Enter, given the list or the lookup
 V6.2.5,1,stack,suite: a password shorter than eight or longer than the ceiling is refused, and any composition of eight is taken
 V6.2.6,1,application,auth/SignIn's password field is masked; a form of your own uses TextField's password
@@ -96,7 +96,7 @@ V6.3.3,2,application,no second factor ships; adding one brings this with it
 V6.3.4,2,application,one pathway ships; a second is yours to document
 V6.4.1,1,none,nothing here generates a password
 V6.4.2,1,none,no hints or secret questions here
-V6.4.3,2,application,no change or reset route ships; both wait on the notify battery
+V6.4.3,2,stack,test: packages/auth/tests/password.test.ts#forgot answers ok for any address, mails a link only to a known one, and reset takes the link once, sets the password and ends every session
 V6.4.4,2,application,no second factor ships; adding one brings this with it
 V6.5.1,2,application,no second factor ships; adding one brings this with it
 V6.5.2,2,application,no second factor ships; adding one brings this with it
@@ -120,8 +120,8 @@ V7.2.4,1,stack,suite: every sign-in mints a new token of at least 128 bits, neve
 V7.3.1,2,application,no inactivity timeout ships; sessionMs is absolute
 V7.3.2,2,application,sessionMs on auth/Session's config
 V7.4.1,1,stack,suite: after sign-out the old token is anonymous at the next handshake and the next request
-V7.4.2,1,application,no disable route ships; a module that disables an account revokes its sessions through auth/Session
-V7.4.3,2,application,no change or reset route ships; both wait on the notify battery
+V7.4.2,1,application,no disable route ships; a module that disables an account calls revokeAll on auth/Session
+V7.4.3,2,stack,test: packages/auth/tests/password.test.ts#forgot answers ok for any address, mails a link only to a known one, and reset takes the link once, sets the password and ends every session
 V7.4.4,2,application,a sign-out control on every signed-in page, calling leave
 V7.4.5,2,application,a module for the administrator over revoke on auth/Session
 V7.5.1,2,application,a module that asks enter again before the change

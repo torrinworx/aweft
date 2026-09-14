@@ -1,12 +1,14 @@
 // This file is the whole boot. Everything this application does is a module in ./modules:
-// the documents it holds, the rules it keeps, the jobs it runs, and who may reach what.
+// the documents it holds, the rules it keeps, the jobs it runs, who may reach what, and where
+// its mail points.
 //
 // Run: node recipes/backend/main.ts
 
 import { fileURLToPath } from 'node:url';
 
-import { auth, paths } from '@aweftjs/auth';
+import { auth, mail, paths } from '@aweftjs/auth';
 import { fromDirectory } from '@aweftjs/modules/node';
+import { notify } from '@aweftjs/notify';
 import { createServer } from '@aweftjs/server';
 import { node } from '@aweftjs/server/node';
 import { createStore, memoryDriver } from '@aweftjs/store';
@@ -14,9 +16,9 @@ import { createStore, memoryDriver } from '@aweftjs/store';
 const store = createStore({ driver: memoryDriver(), declare: { ...paths } });
 const listener = node({ port: 0, host: '127.0.0.1' });
 const server = createServer({
-	sources: [fromDirectory(fileURLToPath(new URL('./modules', import.meta.url))), auth],
+	sources: [fromDirectory(fileURLToPath(new URL('./modules', import.meta.url))), auth, mail, notify],
 	store,
-	gate: 'app/Gate',
+	gate: 'auth/Gate',
 	listener,
 });
 await server.start();

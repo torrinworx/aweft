@@ -48,6 +48,7 @@
 	},
 	"devDependencies": {
 		"@aweftjs/build": "^0.1.0",
+		"@aweftjs/notify": "^0.1.0",
 		"@aweftjs/sync": "^0.1.0",
 		"@aweftjs/testing": "^0.1.0"
 	},

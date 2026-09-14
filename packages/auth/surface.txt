@@ -1,12 +1,17 @@
 type AuthContext: interface AuthContext { readonly user: string | null; readonly session: string | null; readonly address?: string | undefined; }
+type Implies: type Implies = Readonly<Record<string, readonly string[]>>;
+type Roles: interface Roles { may(user: string, name: string): Promise<boolean>; grant(user: string, ...names: string[]): Promise<void>; revoke(user: string, ...names: string[]): Promise<void>; names(user: string): Promise<string[]>; first(user: string): Promise<boolean>; call(args: unknown, context: unknown): { implies: Implies; }; connection(connection: Connection<AuthContext>): Promise<() => Promise<void>>; }
 value auth: Source
+value holds: (granted: readonly string[], implies: Readonly<Record<string, readonly string[]>>, name: string) => boolean
+value mail: Source
 value paths: Readonly<Record<string, readonly string[]>>
-./client type Auth: interface Auth { readonly user: Derived<string | null | undefined>; enter(email: string, password: string): Promise<Entered>; leave(): Promise<void>; state<T extends object>(): Handle<T>; check(email: string): Promise<boolean>; stop(): void; }
+./client type Auth: interface Auth { readonly user: Derived<string | null | undefined>; readonly names: Derived<readonly string[] | undefined>; may(name: string): boolean; enter(email: string, password: string): Promise<Entered>; leave(): Promise<void>; state<T extends object>(): Handle<T>; check(email: string): Promise<boolean>; verify(token?: string): Promise<Outcome>; change(current: string, password: string): Promise<Outcome>; forgot(email: string): Promise<Outcome>; reset(token: string, password: string): Promise<Outcome>; stop(): void; }
 ./client type AuthOptions: interface AuthOptions { readonly origin?: string | undefined; readonly fetch?: Fetcher | undefined; }
 ./client type Entered: type Entered = { readonly user: string; readonly created: boolean; } | { readonly refused: readonly Refusal[]; };
 ./client type FetchInit: interface FetchInit { method: string; headers: Record<string, string>; body?: string; credentials: 'same-origin'; }
 ./client type FetchResponse: interface FetchResponse { status: number; ok: boolean; json(): Promise<unknown>; }
 ./client type Fetcher: type Fetcher = (url: string, init: FetchInit) => Promise<FetchResponse>;
+./client type Outcome: type Outcome = { readonly ok: true; } | { readonly refused: Refusals; };
 ./client value authClient: Source
 ./client value createAuth: (client: Client, options?: AuthOptions) => Auth
 ./text.json data ./text.json

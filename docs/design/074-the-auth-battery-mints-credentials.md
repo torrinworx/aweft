@@ -1,5 +1,8 @@
 # 074: The auth battery mints credentials, keeps them as documents, and fixes identity per connection
 
+Amended by design 275 (the bounds and the sweep), 289 (`auth/Roles`, the `needs` word and the
+`roles:<user>` document) and 290 (the mail flows, `mail`, `revokeAll` and `checkPassword`).
+
 ## Decision
 
 `@aweftjs/auth` is server modules and nothing else: `auth/Gate`, `auth/Session`,

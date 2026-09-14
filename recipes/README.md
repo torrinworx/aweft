@@ -37,7 +37,7 @@ Start here if you know what you are trying to build.
 | `documents-on-postgres/` | Documents kept in Postgres: a writer killed mid-edit, eight processes opening one name at once, and a path declared after the data was there | store |
 | `posts-to-pages/` | Pages written while the application runs: a post published over a socket becomes a page, and a scheduled full write refreshes the sitemap | store, modules, server, jobs, ui, ssg |
 | `accessible-page/` | A page everyone can use, driven by keyboard and audited in both modes, and each guardrail catching one page written wrong: the build refusing an element no one can read, the mount throwing on a nameless button and a page with no language, `audit` and `walk` reading what only the rendered page shows | build, ui, testing |
-| `backend/` | The boot pattern to copy: a twelve-line boot file and a folder of modules, one holding a document, one the rules, one a scheduler, one the gate, and one configuring a battery module | store, modules, server, auth, jobs, client |
+| `backend/` | The boot pattern to copy: a twelve-line boot file and a folder of modules, one holding a document, one the rules, one a scheduler, three gated by a name (`needs`), one granting names, and the files that configure the batteries: who is first, where the mail links go, and the mailer | store, modules, server, auth, notify, jobs, client |
 
 ## By package
 

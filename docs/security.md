@@ -30,8 +30,9 @@ at https://owasp.org/www-project-application-security-verification-standard/ .
 
 - **The gate.** Required, outside every module: `identify` once per connection or request,
   `access` before a module sees a connection, a call or a request. A module is private unless it
-  says `public: true`. The context a module sees is the gate's word and never the client's: no
-  header, body or argument moves it.
+  says `public: true`, and one that says `needs: 'admin'` is for a signed-in person who holds
+  that name, read live off `roles:<user>` at every check. The context a module sees is the
+  gate's word and never the client's: no header, body or argument moves it.
 - **Sessions.** Tokens are sixteen bytes from the platform's secure source, a new one on every
   sign-in, dead at the next handshake and request after sign-out, swept once over for thirty
   days. The cookie is HttpOnly, SameSite=Lax, Secure over TLS. Passwords are eight to 256
@@ -59,14 +60,15 @@ at https://owasp.org/www-project-application-security-verification-standard/ .
 
 ## The rules an application follows
 
-1. **Authority lives in a document the user cannot write, and a composed gate reads it.**
+1. **Authority lives in a document the user cannot write, and the gate reads it.**
    `auth/State` shares the user's own document and accepts every commit, because it is theirs.
-   A `role` kept there is the user's to set. Keep who is what where no client reaches it: a
-   module's own instance, or a document nothing shares, filled from the application's own
-   source; write a gate that `deps` on `auth/Gate` and reads it; give the reserved modules a
-   word (`admin: true`) that gate reads. The server reads no such word: a gate you write gives
-   it meaning. `securityChecks()` proves this shape with its administrator case, over a gate
-   of its own composed on yours and a word of its own, so your gate's word is untouched.
+   A `role` kept there is the user's to set. `auth/Roles` keeps the names a person holds in
+   `roles:<user>`, shared to its own user read-only and written only by `grant` from a module
+   of the application inside the process; `auth/Gate` reads a module's `needs` against it, and a
+   module reads `imports.Roles.may` for anything finer than a module. No route grants. The
+   server reads no such word: the auth gate gives it meaning. `securityChecks()` proves this
+   shape with its administrator case, over a gate of its own composed on yours and a word of
+   its own, so your gate's word is untouched.
 2. **Never share a document holding a secret.** A document shared to a page or into a room
    crosses whole, underscore slots included. The leading underscore keeps a slot from wildcard
    observers, and so from the logs, not from the wire. A secret goes in a document nobody
@@ -111,10 +113,10 @@ at https://owasp.org/www-project-application-security-verification-standard/ .
 
 ## What is not built
 
-Password change and reset and email verification wait on the notify battery. No second
-factor, no inactivity timeout (`sessionMs` is absolute), no roles or administrator beyond the
-pattern above, no breached-password list (`refusePassword` is where one goes), no read
-filtering on a shared document.
+No second factor, no inactivity timeout (`sessionMs` is absolute), no administrator beyond a
+name an application grants, no email change, no breached-password list (`refusePassword` is
+where one goes), no read filtering on a shared document. Password change and reset and email
+verification are the `mail` source of `@aweftjs/auth`, and need the notify battery loaded.
 
 ## Reporting a vulnerability
 

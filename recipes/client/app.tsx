@@ -1,4 +1,4 @@
-// The page: four acts, three of them module names, and one loader for the whole routing tree.
+// The page: six acts, five of them module names, and one loader for the whole routing tree.
 //
 // Nothing shared is built here. The gate, the document and the two pages are modules that say
 // what they need in `deps`, and the battery's sign-in form lands on `/join` by being named there.
@@ -51,6 +51,10 @@ const Layout = (props: { children?: unknown[] }): unknown => (
 			<a id="to-notes" theme="link" href="/notes">Notes</a>
 			{' '}
 			<a id="to-join" theme="link" href="/join">Join</a>
+			{' '}
+			<a id="to-verify" theme="link" href="/verify">Verify</a>
+			{' '}
+			<a id="to-reset" theme="link" href="/reset">Reset</a>
 		</nav>
 		{props.children}
 	</main>
@@ -58,11 +62,13 @@ const Layout = (props: { children?: unknown[] }): unknown => (
 
 const NotFound = (): unknown => <p id="not-found">Nothing here.</p>;
 
-/** Where each act lives. Three names and one component, which is all a route table is. */
+/** Where each act lives. Five names and one component, which is all a route table is. */
 export const acts: Record<string, Act> = {
 	'': 'site/Home',
 	notes: 'notes/Page',
 	join: 'auth/SignIn',
+	verify: 'auth/Verify',
+	reset: 'auth/Reset',
 	missing: NotFound,
 };
 

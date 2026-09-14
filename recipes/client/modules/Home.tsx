@@ -23,6 +23,10 @@ export default ({ imports }: { imports: Readonly<Record<string, unknown>> }): {
 					{session.user.map((who) =>
 						(typeof who === 'string' ? `signed in as ${who}` : who === null ? 'nobody' : 'asking'))}
 				</p>
+				{/* The names follow the roles share, so a grant on the server shows here with no reload. */}
+				<p id="names">
+					{session.names.map((names) => (names === undefined ? 'asking' : names.length === 0 ? 'holds nothing' : `holds ${names.join(', ')}`))}
+				</p>
 			</section>
 		),
 		stop: () => { trace('site/Home stopped'); },

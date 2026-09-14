@@ -27,15 +27,20 @@ export const jsonRequest = (path: string, method: string, body: unknown, cookie?
 		headers: { 'content-type': 'application/json', ...(cookie === undefined ? {} : { cookie }) },
 	});
 
+/** A roles module that grants nothing to a first user, for the suites that are not about it. */
+export const noRoles = { first: async () => false, may: async () => false };
+
 /** One module of the battery, through the harness, with real or stubbed dependencies. */
 export const module = async <T>(
-	name: 'Gate' | 'Session' | 'Enter' | 'Check' | 'State',
+	name: 'Gate' | 'Session' | 'Roles' | 'Enter' | 'Check' | 'State' | 'Verify' | 'Password',
 	store: Store,
 	imports: Record<string, unknown> = {},
 	config: Record<string, unknown> = {},
 ): Promise<{ instance: T; stop(): Promise<void> }> => {
 	const exports = await import(`../src/modules/${name}.ts`);
-	const loaded = await loadModule({ exports, imports, config, props: { store } });
+	// `auth/Enter` names `auth/Roles` for the one grant at sign-up; a suite about sign-in stubs it.
+	const given = name === 'Enter' ? { 'auth/Roles': noRoles, ...imports } : imports;
+	const loaded = await loadModule({ exports, imports: given, config, props: { store } });
 	return { instance: loaded.instance as T, stop: loaded.stop };
 };
 
@@ -111,3 +116,25 @@ export const page = (handlers: () => ListenerHandlers): Page => {
 		},
 	};
 };
+
+// --- the mailer the two mail modules name in deps, standing in for notify/Send ---------------
+
+/** A mailer that records what it was asked to send, and answers what it is told to. */
+export const mailer = () => {
+	const sent: { user: string; title: string; body: string; html: string; channels: readonly string[] }[] = [];
+	let answer: unknown = { ok: true };
+	let fails: string | undefined;
+	return {
+		sent,
+		answer: (next: unknown) => { answer = next; },
+		fail: (why: string | undefined) => { fails = why; },
+		send: async (options: { to: { user: string }; title: string; body: string; html: string; channels: readonly string[] }) => {
+			if (fails !== undefined) throw new Error(fails);
+			sent.push({ user: options.to.user, title: options.title, body: options.body, html: options.html, channels: options.channels });
+			return { delivery: { email: answer } };
+		},
+	};
+};
+
+/** The token the mail carries, read back out of the link the module built from `url`. */
+export const tokenIn = (body: string): string => body.slice(body.indexOf('token=') + 'token='.length);

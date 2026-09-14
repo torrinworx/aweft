@@ -8,11 +8,16 @@
 
 import type { Client, Handle } from '@aweftjs/client';
 import { codecError } from '@aweftjs/codec';
-import { type Derived, immutable, mutable } from '@aweftjs/core';
+import { type Derived, immutable, mutable, observer } from '@aweftjs/core';
 
 import type { Entered } from './modules/Enter.ts';
+import { type Implies, holds, isName } from './names.ts';
+import type { RolesDocument } from './modules/Roles.ts';
 
 export type { Entered } from './modules/Enter.ts';
+
+/** What the mail and password calls answer: done, or the route's reasons. */
+export type Outcome = { readonly ok: true } | { readonly refused: Refusals };
 
 /** What a refusal from the sign-in route carries, taken from the module's own answer shape. */
 type Refusals = Extract<Entered, { readonly refused: unknown }>['refused'];
@@ -43,13 +48,34 @@ export interface AuthOptions {
 	readonly fetch?: Fetcher | undefined;
 }
 
-/** Identity over one connection: who the page is, and how it signs in and out. */
+/** Identity over one connection: who the page is, what they hold, and how it signs in and out. */
 export interface Auth {
 	/**
 	 * Who the connection is, as a read-only cell: `undefined` until the server has answered,
 	 * `null` for an anonymous connection, the user's id otherwise. Writing it throws `read-only`.
 	 */
 	readonly user: Derived<string | null | undefined>;
+	/**
+	 * The names the person was granted, as a read-only cell: `undefined` until the server has
+	 * answered, `[]` for an anonymous connection, the granted list otherwise, following the
+	 * server while the socket is open, so a grant made on the server reaches the page with no
+	 * reconnect (design 289). For showing and hiding: the server's gate is what refuses.
+	 */
+	readonly names: Derived<readonly string[] | undefined>;
+	/**
+	 * Does the person hold a name, by the same rule the server's gate applies: granted, covered
+	 * by a granted name (`products` covers `products.abc123.read`, `*` covers everything), or
+	 * implied by one through the table the server answered.
+	 *
+	 * Params:
+	 *   name: the name asked about
+	 *
+	 * Returns: false until `names` has been answered, then the answer.
+	 *
+	 * Example:
+	 *   const canDelete = auth.names.map(() => auth.may('posts.delete'));
+	 */
+	may(name: string): boolean;
 	/**
 	 * Sign in, or sign up when nobody has the email.
 	 *
@@ -126,6 +152,74 @@ export interface Auth {
 	 */
 	check(email: string): Promise<boolean>;
 	/**
+	 * Ask for a verification mail, or take the link from one.
+	 *
+	 * Params:
+	 *   token: the token from the link; with none, a mail is sent to the signed-in user
+	 *
+	 * Returns: `{ ok: true }`, or `{ refused }` with the route's reasons: `private` when nobody
+	 * is signed in, `verified` when the email already is, `attempts` when too many were asked
+	 * for, `mail` when the mailer did not take it, `token` when the link is not one that can be
+	 * used. Nothing reconnects: the name `verified` reaches `names` through the share.
+	 *
+	 * Rejects with `verify-failed` for any other status, with `stopped` on a stopped auth.
+	 *
+	 * Example:
+	 *   await auth.verify();                          // the mail goes out
+	 *   await auth.verify(stage.query.get().token);   // the link was opened
+	 */
+	verify(token?: string): Promise<Outcome>;
+	/**
+	 * Change the signed-in user's password.
+	 *
+	 * Params:
+	 *   current: the password they have
+	 *   password: the one they want
+	 *
+	 * Returns: `{ ok: true }` once every other session of theirs is ended, this one kept; or
+	 * `{ refused }`: `password` for a wrong current one or a new one the rules refuse,
+	 * `attempts` for too many tries, `private` when nobody is signed in.
+	 *
+	 * Rejects with `change-failed` for any other status, with `stopped` on a stopped auth.
+	 *
+	 * Example:
+	 *   const outcome = await auth.change(current.get(), next.get());
+	 */
+	change(current: string, password: string): Promise<Outcome>;
+	/**
+	 * Ask for a reset mail.
+	 *
+	 * Params:
+	 *   email: the address; an address nobody has gets the same `{ ok: true }` and no mail
+	 *
+	 * Returns: `{ ok: true }`, or `{ refused }`: `email` for text that is not an address,
+	 * `attempts` for too many asks, `mail` when the mailer did not take it.
+	 *
+	 * Rejects with `forgot-failed` for any other status, with `stopped` on a stopped auth.
+	 *
+	 * Example:
+	 *   await auth.forgot('ada@example.com');
+	 */
+	forgot(email: string): Promise<Outcome>;
+	/**
+	 * Set a new password from a reset link.
+	 *
+	 * Params:
+	 *   token: the token from the link
+	 *   password: the new password
+	 *
+	 * Returns: `{ ok: true }` once every session of the person is ended and the client has
+	 * reconnected, so a page that was signed in as them reads `user` as `null`; or `{ refused }`:
+	 * `token` for a link that is not live, `password` for one the rules refuse.
+	 *
+	 * Rejects with `reset-failed` for any other status, with `stopped` on a stopped auth, and
+	 * with `closed` when the route answered but the client was closed.
+	 *
+	 * Example:
+	 *   const outcome = await auth.reset(stage.query.get().token, password.get());
+	 */
+	reset(token: string, password: string): Promise<Outcome>;
+	/**
 	 * Stop following the connection.
 	 *
 	 * Params: none.
@@ -146,6 +240,10 @@ const ENTER_FIX = 'Check the server is running and that auth/Enter is loaded, th
 const LEAVE_FIX = 'Check the server is running and that auth/Session is loaded, then try again.';
 const STOPPED_FIX = 'Make a new auth with createAuth; a stopped one follows no connection.';
 const CLIENT_CLOSED_FIX = 'Make a new client with createClient, and a new auth over it.';
+const VERIFY_FIX = 'Check the server is running and that auth/Verify is loaded from the mail source, then try again.';
+const CHANGE_FIX = 'Check the server is running and that auth/Password is loaded from the mail source, then try again.';
+const FORGOT_FIX = 'Check the server is running and that auth/Password is loaded from the mail source, then try again.';
+const RESET_FIX = 'Check the server is running and that auth/Password is loaded from the mail source, then try again.';
 
 const anonymous = (): Error =>
 	codecError('anonymous', 'there is no signed-in user to share a state document for', ANONYMOUS_FIX);
@@ -190,13 +288,45 @@ export const createAuth = (client: Client, options: AuthOptions = {}): Auth => {
 	const send = options.fetch ?? globalFetch;
 	// Read when a route is called, not when the auth is made: a module that holds one is built by
 	// a static render as well as by a page, and only a page has an origin (design 245).
-	const routeUrl = (): string => `${options.origin ?? pageOrigin()}/api/session`;
+	const routeUrl = (path = '/api/session'): string => `${options.origin ?? pageOrigin()}${path}`;
 	const identity = mutable<string | null | undefined>(undefined);
+	const names = mutable<readonly string[] | undefined>(undefined);
+	let implies: Implies = {};
+	/** The roles share of the socket that is open, and how to stop following it. */
+	let roles: { handle: Handle<RolesDocument>; off?: (() => void) | undefined } | undefined;
 
 	let stopped = false;
 	let held: Handle<object> | undefined;
 	/** Who the held handle was made for, so an identity that changes underneath it is visible. */
 	let heldFor: string | null | undefined;
+
+	const stopRoles = (): void => {
+		roles?.off?.();
+		roles?.handle.stop();
+		roles = undefined;
+	};
+
+	// The names follow the shared document: read once it is here, and again on every commit
+	// the server makes to it, so a grant reaches the page while the socket is open.
+	const followRoles = (who: string | null): void => {
+		stopRoles();
+		if (who === null) {
+			implies = {};
+			names.set([]);
+			return;
+		}
+		const handle = client.share<RolesDocument>('roles');
+		const mine: typeof roles = { handle };
+		roles = mine;
+		void Promise.all([handle.ready, client.ask('auth/Roles')]).then(([doc, answer]) => {
+			if (roles !== mine) return;
+			const table: unknown = (answer as { implies?: unknown } | null)?.implies;
+			implies = table !== null && typeof table === 'object' ? table as Implies : {};
+			const read = (): readonly string[] => [...(doc.names ?? [])];
+			names.set(read());
+			mine.off = observer(doc).skip(Infinity).watch(() => { names.set(read()); });
+		}, () => {});
+	};
 
 	// Identity is fixed at the handshake, so every socket is a new answer and the old one is
 	// worth nothing. An ask that rejects took the socket with it; the next one asks again.
@@ -206,6 +336,7 @@ export const createAuth = (client: Client, options: AuthOptions = {}): Auth => {
 			const who: unknown = (answer as { user?: unknown } | null)?.user;
 			const next = typeof who === 'string' ? who : null;
 			identity.set(next);
+			followRoles(next);
 			// The server forgot the session, or another user's cookie replaced it. The handle the
 			// page holds is the old user's document and every later socket would re-share it, so
 			// it stops here and the next `state()` answers for whoever this is now.
@@ -244,11 +375,32 @@ export const createAuth = (client: Client, options: AuthOptions = {}): Auth => {
 		return handle;
 	};
 
+	// The one shape every route answer takes: the reasons for the statuses that are a refusal,
+	// the body for a success, and a rejection naming the call for anything else.
+	const post = async (reason: string, fix: string, what: string, path: string, body: unknown, refusals: readonly number[], method = 'POST'): Promise<Outcome & { body?: unknown }> => {
+		if (stopped) throw halted(`the auth is stopped and no ${what} was sent`);
+		const route = routeUrl(path);
+		const answer = await send(route, {
+			method,
+			headers: body === undefined ? {} : { 'content-type': 'application/json' },
+			...(body === undefined ? {} : { body: JSON.stringify(body) }),
+			credentials: 'same-origin',
+		});
+		if (refusals.includes(answer.status)) {
+			const refused: unknown = ((await answer.json()) as { reasons?: unknown } | null)?.reasons;
+			return { refused: (Array.isArray(refused) ? refused : []) as Refusals };
+		}
+		if (!answer.ok) throw codecError(reason, `${method} ${route} answered ${String(answer.status)}`, fix);
+		return { ok: true, body: await answer.json() };
+	};
+
 	// Both routes change who the cookie says this browser is, and the socket that is open was
 	// identified before that. Dropping it is the whole reason these two reconnect.
 	const again = async (): Promise<string | null> => {
 		stopState();
+		stopRoles();
 		identity.set(undefined);
+		names.set(undefined);
 		const next = answered();
 		client.reconnect();
 		// A live client goes to `connecting` inside `reconnect()`; a closed one does nothing at
@@ -260,39 +412,45 @@ export const createAuth = (client: Client, options: AuthOptions = {}): Auth => {
 		return await next.known;
 	};
 
+	const outcome = ({ body: _body, ...rest }: Outcome & { body?: unknown }): Outcome => rest;
+
 	return {
 		user: immutable(identity),
+		names: immutable(names),
+		// The same answer the server's `may` gives, text that is not a name included.
+		may: (name) => {
+			const granted = names.get();
+			return granted !== undefined && isName(name) && holds(granted, implies, name);
+		},
 
 		enter: async (email, password) => {
-			if (stopped) throw halted('the auth is stopped and no sign-in was sent');
-			const route = routeUrl();
-			const answer = await send(route, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ email, password }),
-				credentials: 'same-origin',
-			});
-			if (answer.status === 400 || answer.status === 401) {
-				const refused: unknown = ((await answer.json()) as { reasons?: unknown } | null)?.reasons;
-				return { refused: (Array.isArray(refused) ? refused : []) as Refusals };
-			}
-			if (!answer.ok) {
-				throw codecError('enter-failed', `POST ${route} answered ${String(answer.status)}`, ENTER_FIX);
-			}
-			const body = (await answer.json()) as { user: string; created: boolean };
+			const answer = await post('enter-failed', ENTER_FIX, 'sign-in', '/api/session', { email, password }, [400, 401]);
+			if ('refused' in answer) return answer;
+			const body = answer.body as { user: string; created: boolean };
 			await again();
 			return { user: body.user, created: body.created };
 		},
 
 		leave: async () => {
-			if (stopped) throw halted('the auth is stopped and no sign-out was sent');
-			const route = routeUrl();
-			const answer = await send(route, { method: 'DELETE', headers: {}, credentials: 'same-origin' });
-			if (!answer.ok) {
-				throw codecError('leave-failed', `DELETE ${route} answered ${String(answer.status)}`, LEAVE_FIX);
-			}
+			await post('leave-failed', LEAVE_FIX, 'sign-out', '/api/session', undefined, [], 'DELETE');
 			// The connection after a sign-out carries no session, so the value it settles to is null.
 			await again();
+		},
+
+		verify: async (token) => outcome(token === undefined
+			? await post('verify-failed', VERIFY_FIX, 'verification', '/api/verify/send', undefined, [401, 409, 429, 502])
+			: await post('verify-failed', VERIFY_FIX, 'verification', '/api/verify', { token }, [400])),
+
+		change: async (current, password) => outcome(await post('change-failed', CHANGE_FIX, 'password change', '/api/password', { current, password }, [400, 401, 429])),
+
+		forgot: async (email) => outcome(await post('forgot-failed', FORGOT_FIX, 'reset mail', '/api/password/forgot', { email }, [400, 429, 502])),
+
+		reset: async (token, password) => {
+			const answer = outcome(await post('reset-failed', RESET_FIX, 'reset', '/api/password/reset', { token, password }, [400]));
+			if ('refused' in answer) return answer;
+			// Every session of the person is over, this page's included when it was theirs.
+			await again();
+			return answer;
 		},
 
 		state: <T extends object>(): Handle<T> => {
@@ -363,6 +521,7 @@ export const createAuth = (client: Client, options: AuthOptions = {}): Auth => {
 			stopped = true;
 			release();
 			stopState();
+			stopRoles();
 		},
 	};
 };

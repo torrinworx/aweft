@@ -37,5 +37,16 @@
 	"up to {size}": "jusqu'à {size}",
 	"you@example.com": "vous@exemple.fr",
 	"{name} is not one of the accepted types": "{name} n'est pas un des types acceptés",
-	"{name} is over the {size} limit": "{name} dépasse la limite de {size}"
+	"{name} is over the {size} limit": "{name} dépasse la limite de {size}",
+	"If that address has an account, a link is on its way.": "Si cette adresse a un compte, un lien est en route.",
+	"New password": "Nouveau mot de passe",
+	"Reset your password": "Réinitialiser votre mot de passe",
+	"Send the link": "Envoyer le lien",
+	"Set the password": "Définir le mot de passe",
+	"Sign in first, then ask for the link.": "Connectez-vous d'abord, puis demandez le lien.",
+	"The link is on its way. Open it from your mail.": "Le lien est en route. Ouvrez-le depuis votre courriel.",
+	"Verify your email": "Vérifier votre courriel",
+	"We will send a link to your email address.": "Nous enverrons un lien à votre adresse de courriel.",
+	"Your email address is verified.": "Votre adresse de courriel est vérifiée.",
+	"Your password is set. Sign in with it.": "Votre mot de passe est défini. Connectez-vous avec."
 }

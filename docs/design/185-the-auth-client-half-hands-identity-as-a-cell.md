@@ -1,5 +1,7 @@
 # 185: The auth client half hands identity as a cell
 
+Amended by design 289 (`names` and `may`) and 290 (`verify`, `change`, `forgot` and `reset`).
+
 ## Decision
 
 `@aweftjs/auth/client` exports `createAuth(client, { fetch?, origin? })`, which returns `user`,
