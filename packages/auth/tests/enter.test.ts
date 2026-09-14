@@ -226,6 +226,22 @@ test('a setting that is not a positive number, a ceiling under the floor, or a r
 	await store.stop();
 });
 
+test('checkPassword answers the reasons the route would refuse with: not text, outside the length, or refused by refusePassword, in that order', async () => {
+	const store = newStore();
+	const { session } = stubSession();
+	const asked: unknown[] = [];
+	const { instance: enter } = await module<Enter>('Enter', store, { 'auth/Session': session }, { passwordMin: 4, passwordMax: 6, refusePassword: (p: string) => { asked.push(p); return p === 'nope1'; } });
+	assert.deepEqual(await enter.checkPassword(undefined), [{ code: 'password', message: 'password is text' }]);
+	assert.deepEqual(await enter.checkPassword(''), [{ code: 'password', message: 'password is text' }]);
+	assert.deepEqual(await enter.checkPassword('abc'), [{ code: 'password', message: 'password is 4 to 6 characters' }]);
+	assert.deepEqual(await enter.checkPassword('abcdefg'), [{ code: 'password', message: 'password is 4 to 6 characters' }]);
+	assert.deepEqual(asked, [], 'refusePassword is not asked about a password the shape refuses');
+	assert.deepEqual(await enter.checkPassword('nope1'), [{ code: 'password', message: 'that password is not allowed here' }]);
+	assert.deepEqual(await enter.checkPassword('fine1'), []);
+	assert.deepEqual(asked, ['nope1', 'fine1']);
+	await store.stop();
+});
+
 test('sign-up hands the new user to auth/Roles for the first grant, and sign-in does not', async () => {
 	const store = newStore();
 	const { session } = stubSession();

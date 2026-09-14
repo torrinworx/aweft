@@ -7,6 +7,8 @@ invalid-config: Give implies an object from a name to the list of names it impli
 invalid-config: Give passwordMax at least passwordMin.
 invalid-config: Give refusePassword a function of the password answering true to refuse it, or null.
 invalid-config: Give that setting a number above zero.
+invalid-config: Give that setting some text.
+invalid-config: Give url a function of the token answering the address of the page that takes it: (token) => `https://app.example/verify?token=${token}`.
 invalid-config: Set keep to a positive number of days.
 invalid-config: Set sessionMs to a positive number of milliseconds, or leave it out.
 invalid-config: Set sweepMs to a positive number of milliseconds, at most 2147483647.

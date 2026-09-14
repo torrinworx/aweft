@@ -213,3 +213,26 @@ test('a store that does not declare expires is refused as the module is made, na
 	await assert.rejects(module<Session>('Session', store), (e: Error) => String((e.cause as { reason?: string }).reason) === 'undeclared' && /Spread paths from @aweftjs\/auth/.test(e.message));
 	await store.stop();
 });
+
+test('revokeAll ends every active session of one person but the one named, counts what it ended, and leaves everyone else alone', async () => {
+	const store = newStore();
+	const { instance: session, stop } = await module<Session>('Session', store);
+	const [a, b, c] = [await session.issue('u_1'), await session.issue('u_1'), await session.issue('u_1')];
+	const other = await session.issue('u_2');
+	await session.revoke(c);
+	const live = async (token: string): Promise<boolean> => {
+		const who = await session.whoIs(withCookie('/', `session=${token}`));
+		return 'context' in who && who.context.user !== null;
+	};
+
+	assert.equal(await session.revokeAll('u_1', a), 1, 'b was the one active session besides the kept one');
+	assert.equal(await live(a), true, 'the kept one');
+	assert.equal(await live(b), false);
+	assert.equal(await live(other), true, 'another person');
+	assert.equal(await session.revokeAll('u_1'), 1, 'now the kept one goes too');
+	assert.equal(await live(a), false);
+	assert.equal(await session.revokeAll('u_1'), 0, 'nothing left to end');
+	assert.equal(await session.revokeAll('u_nobody'), 0);
+	await stop();
+	await store.stop();
+});

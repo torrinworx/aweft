@@ -3,6 +3,7 @@ type Implies: type Implies = Readonly<Record<string, readonly string[]>>;
 type Roles: interface Roles { may(user: string, name: string): Promise<boolean>; grant(user: string, ...names: string[]): Promise<void>; revoke(user: string, ...names: string[]): Promise<void>; names(user: string): Promise<string[]>; first(user: string): Promise<boolean>; call(args: unknown, context: unknown): { implies: Implies; }; connection(connection: Connection<AuthContext>): Promise<() => Promise<void>>; }
 value auth: Source
 value holds: (granted: readonly string[], implies: Readonly<Record<string, readonly string[]>>, name: string) => boolean
+value mail: Source
 value paths: Readonly<Record<string, readonly string[]>>
 ./client type Auth: interface Auth { readonly user: Derived<string | null | undefined>; enter(email: string, password: string): Promise<Entered>; leave(): Promise<void>; state<T extends object>(): Handle<T>; check(email: string): Promise<boolean>; stop(): void; }
 ./client type AuthOptions: interface AuthOptions { readonly origin?: string | undefined; readonly fetch?: Fetcher | undefined; }

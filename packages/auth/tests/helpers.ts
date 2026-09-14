@@ -117,3 +117,24 @@ export const page = (handlers: () => ListenerHandlers): Page => {
 	};
 };
 
+// --- the mailer the two mail modules name in deps, standing in for notify/Send ---------------
+
+/** A mailer that records what it was asked to send, and answers what it is told to. */
+export const mailer = () => {
+	const sent: { user: string; title: string; body: string; html: string; channels: readonly string[] }[] = [];
+	let answer: unknown = { ok: true };
+	let fails: string | undefined;
+	return {
+		sent,
+		answer: (next: unknown) => { answer = next; },
+		fail: (why: string | undefined) => { fails = why; },
+		send: async (options: { to: { user: string }; title: string; body: string; html: string; channels: readonly string[] }) => {
+			if (fails !== undefined) throw new Error(fails);
+			sent.push({ user: options.to.user, title: options.title, body: options.body, html: options.html, channels: options.channels });
+			return { delivery: { email: answer } };
+		},
+	};
+};
+
+/** The token the mail carries, read back out of the link the module built from `url`. */
+export const tokenIn = (body: string): string => body.slice(body.indexOf('token=') + 'token='.length);

@@ -1,5 +1,5 @@
-// The battery, as a source of server modules: six of them, and the store paths they query
-// (designs 074, 289).
+// The battery, as two sources of server modules: the six every application loads, the two
+// that mail and so need notify, and the store paths they query (designs 074, 289, 290).
 
 import { fromBundle } from '@aweftjs/modules';
 import type { Source } from '@aweftjs/modules';
@@ -23,6 +23,18 @@ export const auth: Source = fromBundle({
 	'./auth/Enter.ts': () => import('./modules/Enter.ts'),
 	'./auth/Check.ts': () => import('./modules/Check.ts'),
 	'./auth/State.ts': () => import('./modules/State.ts'),
+});
+
+/**
+ * The two modules that mail: `auth/Verify` and `auth/Password`. Both name `notify/Send` in
+ * their `deps`, so list `notify` beside this, and give each its `url` in a same-named file.
+ *
+ * Example:
+ *   createServer({ sources: [own, auth, mail, notify], store, gate: 'auth/Gate', listener });
+ */
+export const mail: Source = fromBundle({
+	'./auth/Verify.ts': () => import('./modules/Verify.ts'),
+	'./auth/Password.ts': () => import('./modules/Password.ts'),
 });
 
 /**

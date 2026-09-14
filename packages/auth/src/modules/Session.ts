@@ -1,8 +1,6 @@
 // auth/Session: sessions as documents, the cookie, who a request is (design 074), and the
 // sweep that removes a session once it has been over for `keep` days (design 275).
 
-import { randomBytes } from 'node:crypto';
-
 import { codecError } from '@aweftjs/codec';
 import { atomic } from '@aweftjs/core';
 import type { ModuleProps } from '@aweftjs/modules';
@@ -11,6 +9,7 @@ import type { Identified, Peer } from '@aweftjs/server';
 import { type AuthContext, userOf } from '../context.ts';
 import { cookiesOf, setCookie } from '../cookie.ts';
 import { json, storeOf } from '../props.ts';
+import { isToken, mintToken } from '../token.ts';
 
 export const defaults = { cookie: 'session', keep: 30, sweepMs: 3_600_000 };
 
@@ -29,6 +28,8 @@ export interface Session {
 	issue(user: string): Promise<string>;
 	/** End a session. True when it was active. */
 	revoke(token: string): Promise<boolean>;
+	/** End every active session of a user but the one named. Returns how many it ended. */
+	revokeAll(user: string, except?: string): Promise<number>;
 	/** Who a request is, from its cookies, and where it came from. Always a context: this gate refuses nobody at the door. */
 	whoIs(request: Request, peer?: Peer): Promise<Identified<AuthContext>>;
 	/** The `Set-Cookie` value that sets the cookie to a token, or clears it for null. */
@@ -45,13 +46,6 @@ const refuse = (detail: string, fix: string): Error => codecError('invalid-confi
 
 // Over 2^31 - 1 milliseconds Node fires a timer after one millisecond instead.
 const MAX_TIMER = 2_147_483_647;
-
-// A token is sixteen random bytes of its own, not an id: an id is twelve bytes, the width a
-// document needs, and a credential needs 128 bits (design 275). Sixteen bytes are exactly
-// twenty-two base64url characters with no padding.
-const TOKEN_BYTES = 16;
-const TOKEN = /^[A-Za-z0-9_-]{22}$/;
-const mintToken = (): string => randomBytes(TOKEN_BYTES).toString('base64url');
 
 export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 	const store = storeOf(props);
@@ -122,6 +116,19 @@ export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 		return was;
 	};
 
+	// The `user` path is declared for every document, so the answer is filtered to this
+	// battery's own sessions; `revoke` says which of them were still active.
+	const revokeAll = async (user: string, except?: string): Promise<number> => {
+		let ended = 0;
+		for (const { doc: name } of await store.find({ where: [{ field: 'user', op: 'eq', value: user }] })) {
+			if (!name.startsWith('session:')) continue;
+			const token = name.slice('session:'.length);
+			if (token === except) continue;
+			if (await revoke(token)) ended += 1;
+		}
+		return ended;
+	};
+
 	// Every cookie of the name, in order: the first that is a token naming a live session wins,
 	// and none is anonymous. A value that is not a token is skipped rather than refused, since
 	// a cookie of the same name from another path or another application is not tampering, and
@@ -129,7 +136,7 @@ export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 	const whoIs = async (request: Request, peer?: Peer): Promise<Identified<AuthContext>> => {
 		const address = peer?.address;
 		for (const token of cookiesOf(request, cookie)) {
-			if (!TOKEN.test(token)) continue;
+			if (!isToken(token)) continue;
 			const session = await read(token);
 			if (session === undefined || session.status !== 'active') continue;
 			if (session.expires !== null && session.expires <= Date.now()) continue;
@@ -171,6 +178,7 @@ export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 		public: true,
 		issue,
 		revoke,
+		revokeAll,
 		whoIs,
 		setCookie: (token, request) => setCookie(cookie, token, request, sessionMs),
 		// The only moment a page can learn who it is comes after its socket opens, because
