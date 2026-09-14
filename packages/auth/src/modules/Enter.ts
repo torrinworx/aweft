@@ -1,11 +1,13 @@
 // auth/Enter: sign in, or sign up when the email is new, and hand the browser its cookie
 // (design 074). The route counts attempts, bounds the hashing in flight and the password's
-// length before anything is hashed (design 275).
+// length before anything is hashed (design 275), and asks the application's sign-up rule at
+// the door (design 291).
 
 import { createId, idToText } from '@aweftjs/codec';
 import { atomic } from '@aweftjs/core';
 import type { ModuleProps } from '@aweftjs/modules';
 import { type Refusal, sliding } from '@aweftjs/server';
+import type { Store } from '@aweftjs/store';
 
 import { type AuthContext, addressOf } from '../context.ts';
 import { hashPassword, verifyPassword } from '../password.ts';
@@ -24,7 +26,23 @@ export const defaults = {
 	passwordMin: 8,
 	passwordMax: 256,
 	refusePassword: null,
+	refuseSignUp: null,
 };
+
+/** What `refuseSignUp` is asked about: a sign-up the route is about to make (design 291). */
+export interface SignUp {
+	/** The address as it will be stored, normalised; nobody holds it yet. */
+	readonly email: string;
+	/** Every field of the request body but `email` and `password`: an invite token, a role picked on the form. */
+	readonly extra: Readonly<Record<string, unknown>>;
+	/** What the gate identified for the request: `user` is null, `address` is the peer's. */
+	readonly context: AuthContext;
+	/** The store the battery writes the user into, for a rule that reads a document of yours. */
+	readonly store: Store;
+}
+
+/** The application's sign-up rule: a refusal closes the door to that sign-up, nothing opens it. */
+export type RefuseSignUp = (signUp: SignUp) => Refusal | undefined | Promise<Refusal | undefined>;
 
 /** What a `user:<id>` document holds. `password` is the hash, never the password. */
 export interface UserDocument extends Record<string, unknown> {
@@ -69,6 +87,10 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 		throw refuse(`refusePassword ${JSON.stringify(config.refusePassword)}`, 'Give refusePassword a function of the password answering true to refuse it, or null.');
 	}
 	const refusePassword = config.refusePassword as ((password: string) => boolean | Promise<boolean>) | null;
+	if (config.refuseSignUp !== null && typeof config.refuseSignUp !== 'function') {
+		throw refuse(`refuseSignUp ${JSON.stringify(config.refuseSignUp)}`, 'Give refuseSignUp a function of the sign-up answering a refusal to refuse it and nothing to allow it, or null.');
+	}
+	const refuseSignUp = config.refuseSignUp as RefuseSignUp | null;
 	let hashing = 0;
 
 	// The two checks that cost nothing, before anything is counted or hashed.
@@ -138,6 +160,13 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 				const byEmail = perEmail.take(key);
 				if (!byEmail.ok) return tooMany(byEmail.retryAfter);
 				if (refusePassword !== null && await refusePassword(password as string)) return json(400, { reasons: [notAllowed()] });
+				// The application's rule, asked of a sign-up only: a known email is a sign-in and there
+				// is no door to close. After the password rule, so a refused password spends no invite.
+				if (refuseSignUp !== null && await findUser(store, key) === undefined) {
+					const extra = Object.fromEntries(Object.entries(body ?? {}).filter(([name]) => name !== 'email' && name !== 'password'));
+					const refusal = await refuseSignUp({ email: key, extra, context, store });
+					if (refusal !== undefined) return json(403, { reasons: [refusal] });
+				}
 				if (hashing >= hashesInFlight) {
 					return json(503, { reasons: [{ code: 'busy', message: 'too many sign-ins are being checked; try again in a moment' }] }, { 'retry-after': '1' });
 				}

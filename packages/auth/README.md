@@ -137,6 +137,7 @@ POST /api/session      { "email": "ada@example.com", "password": "..." }
   200 { "user": "<id>", "created": false }    signed in
   401 { "reasons": [{ "code": "password", ... }] }
   400 { "reasons": [{ "code": "email" | "password", ... }] }
+  403 { "reasons": [{ "code": ..., ... }] }        a sign-up your refuseSignUp closed the door to
   Set-Cookie: session=<token>; Path=/; HttpOnly; SameSite=Lax[; Secure][; Max-Age=...]
 
 DELETE /api/session
@@ -190,6 +191,7 @@ export const config = {
 	passwordMin: 8,             // characters; shorter is 400 before anything is hashed
 	passwordMax: 256,           // longer is 400 too, so a hash is never asked of a megabyte
 	refusePassword: null,       // (password) => boolean | Promise<boolean>: true refuses with 400
+	refuseSignUp: null,         // (signUp) => Refusal | undefined, sync or async: a refusal answers 403
 };
 ```
 
@@ -200,6 +202,28 @@ counts are in memory and a restart clears them; each holds at most 65 536 keys, 
 the oldest key under its count goes first, so a flood of fresh emails frees no locked email, and
 a flood that locks that many does. `refusePassword` is where a breached-password list or a
 lookup goes; the battery ships none. Any composition is taken: eight spaces are a password.
+
+**Who may sign up is yours** (design 291). `refuseSignUp` is asked once per sign-up, after the
+counts and the password rule and before anything is hashed, with `email` (normalised), `extra`
+(every field of the body but `email` and `password`: an invite token, a role picked on the
+form), `context` (what the gate identified: `user` null, the peer's `address`) and `store`, so
+a rule that reads a document of yours needs no second way to reach it. A refusal it answers is
+the route's 403 with that one reason, and nothing is made. A sign-in never asks it, and neither
+does `enter()` called from a module of yours: the rule is the door's, not the function's. A rule
+that throws is the route's 500. The battery ships none; an application that keeps invites in
+its store writes the lookup here, and marks the invite used in the same function, since a
+password the rule before it refused never reaches it.
+
+```ts
+// modules/auth/Enter.ts: sign-up by invitation
+export const config = {
+	refuseSignUp: async ({ email, extra, store }) => {
+		const token = typeof extra.invite === 'string' ? extra.invite : '';
+		if (token === '' || !(await redeem(store, token, email))) return { code: 'invite', message: 'sign-up is by invitation' };
+		return undefined;
+	},
+};
+```
 
 Hashing takes memory: scrypt at these parameters holds about 16 MiB per password, so
 `hashesInFlight` is the memory bound and the attempt counts are the rate bound. The count on
@@ -294,6 +318,7 @@ auth.user.effect((who) => header.textContent = who ?? 'signed out');
 
 const outcome = await auth.enter('ada@example.com', 'correct horse battery staple');
 if ('refused' in outcome) show(outcome.refused);
+// A sign-up rule on the server reads a third argument: auth.enter(email, password, { invite })
 
 const state = await auth.state<State>().ready;
 state.theme = 'dark';                                 // applies here, and goes

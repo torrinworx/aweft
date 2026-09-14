@@ -49,4 +49,5 @@ export const paths: Declaration = { email: ['email'], user: ['user'], expires: [
 export { holds } from './names.ts';
 export type { Implies } from './names.ts';
 export type { AuthContext } from './context.ts';
+export type { RefuseSignUp, SignUp } from './modules/Enter.ts';
 export type { Roles } from './modules/Roles.ts';

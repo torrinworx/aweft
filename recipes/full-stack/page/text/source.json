@@ -21,6 +21,12 @@
 	"Hue": [
 		"@aweftjs/ui/text.json"
 	],
+	"If that address has an account, a link is on its way.": [
+		"@aweftjs/auth/text.json"
+	],
+	"New password": [
+		"@aweftjs/auth/text.json"
+	],
 	"Next": [
 		"@aweftjs/ui/text.json"
 	],
@@ -40,18 +46,45 @@
 	"Previous": [
 		"@aweftjs/ui/text.json"
 	],
+	"Reset your password": [
+		"@aweftjs/auth/text.json"
+	],
 	"Saturation and brightness": [
 		"@aweftjs/ui/text.json"
 	],
 	"Search": [
 		"@aweftjs/ui/text.json"
 	],
+	"Send the link": [
+		"@aweftjs/auth/text.json"
+	],
+	"Set the password": [
+		"@aweftjs/auth/text.json"
+	],
 	"Sign in": [
 		"@aweftjs/auth/text.json",
 		"entry.tsx"
 	],
+	"Sign in first, then ask for the link.": [
+		"@aweftjs/auth/text.json"
+	],
 	"The board": [
 		"entry.tsx"
+	],
+	"The link is on its way. Open it from your mail.": [
+		"@aweftjs/auth/text.json"
+	],
+	"Verify your email": [
+		"@aweftjs/auth/text.json"
+	],
+	"We will send a link to your email address.": [
+		"@aweftjs/auth/text.json"
+	],
+	"Your email address is verified.": [
+		"@aweftjs/auth/text.json"
+	],
+	"Your password is set. Sign in with it.": [
+		"@aweftjs/auth/text.json"
 	],
 	"only one file is accepted": [
 		"@aweftjs/ui/text.json"
