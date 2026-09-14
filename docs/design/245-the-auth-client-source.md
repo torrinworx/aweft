@@ -1,5 +1,7 @@
 # 245: `@aweftjs/auth/client` ships a source: `auth/Session` and `auth/SignIn`
 
+Amended by design 290: `auth/Verify` and `auth/Reset` join the source.
+
 ## Decision
 
 `@aweftjs/auth/client` exports `authClient`, a `Source` over two modules, beside `createAuth`.

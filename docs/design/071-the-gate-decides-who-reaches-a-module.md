@@ -1,5 +1,7 @@
 # 071: The gate decides who reaches a module, and a module never decides for itself
 
+Amended by design 289: the auth gate reads a second word, `needs`, beside `public`.
+
 ## Decision
 
 `server` has one seam for who may do what, and it is required: `createServer({ loader, gate,
