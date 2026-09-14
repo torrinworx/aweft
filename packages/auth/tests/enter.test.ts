@@ -64,11 +64,19 @@ test('two hashes of one password differ, and a document whose hash is not a hash
 	assert.notEqual(ha, hb, 'a fresh salt per hash');
 
 	const held = await store.open('user:' + ('user' in a ? a.user : ''));
-	(held.root as UserDocument).password = 'not a hash';
-	await store.settled(held);
+	const [, N, r, p, salt, hash] = ha!.split('$');
+	// Every way the stored text can fail to be a hash of this battery's, and one that is a hash
+	// whose parameters scrypt itself refuses: none of them verifies, and none throws.
+	for (const broken of [
+		'not a hash', 42, null, `bcrypt$${N}$${r}$${p}$${salt}$${hash}`, 'scrypt', `scrypt$${N}$${r}$${p}$${salt}`, `scrypt$${N}$${r}$${p}$${salt}$`,
+		`scrypt$3$${r}$${p}$${salt}$${hash}`,
+	]) {
+		(held.root as Record<string, unknown>).password = broken;
+		await store.settled(held);
+		const outcome = await enter.enter('a@example.com', 'same');
+		assert.ok('refused' in outcome, JSON.stringify(broken));
+	}
 	await store.close(held);
-	const outcome = await enter.enter('a@example.com', 'same');
-	assert.ok('refused' in outcome);
 	await store.stop();
 });
 
@@ -215,5 +223,18 @@ test('a setting that is not a positive number, a ceiling under the floor, or a r
 	]) {
 		await assert.rejects(module<Enter>('Enter', store, { 'auth/Session': session }, config), /invalid-config|invalid-limit/, JSON.stringify(config));
 	}
+	await store.stop();
+});
+
+test('sign-up hands the new user to auth/Roles for the first grant, and sign-in does not', async () => {
+	const store = newStore();
+	const { session } = stubSession();
+	const offered: string[] = [];
+	const { instance: enter } = await module<Enter>('Enter', store, { 'auth/Session': session, 'auth/Roles': { first: async (user: string) => { offered.push(user); return true; } } });
+	const up = await enter.enter('ada@example.com', 'correct horse');
+	assert.ok('user' in up && up.created);
+	assert.deepEqual(offered, [up.user]);
+	await enter.enter('ada@example.com', 'correct horse');
+	assert.deepEqual(offered, [up.user], 'a sign-in offers nobody');
 	await store.stop();
 });

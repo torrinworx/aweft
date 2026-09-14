@@ -11,12 +11,12 @@ test('the client subpath hands out the function and the source, and nothing else
 	assert.deepEqual(Object.keys(client).sort(), ['authClient', 'createAuth']);
 });
 
-test('the entry hands out the source and the paths, and nothing else', () => {
-	assert.deepEqual(Object.keys(auth).sort(), ['auth', 'paths']);
+test('the entry hands out the source, the paths and the check, and nothing else', () => {
+	assert.deepEqual(Object.keys(auth).sort(), ['auth', 'holds', 'paths']);
 	assert.deepEqual(auth.paths, { email: ['email'], user: ['user'], expires: ['expires'] });
 });
 
-test('the source lists the five modules and evaluates none of them until asked', async () => {
+test('the source lists the six modules and evaluates none of them until asked', async () => {
 	const candidates = await auth.auth.candidates();
-	assert.deepEqual(candidates.map((c) => c.name).sort(), ['auth/Check', 'auth/Enter', 'auth/Gate', 'auth/Session', 'auth/State']);
+	assert.deepEqual(candidates.map((c) => c.name).sort(), ['auth/Check', 'auth/Enter', 'auth/Gate', 'auth/Roles', 'auth/Session', 'auth/State']);
 });

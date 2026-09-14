@@ -27,15 +27,20 @@ export const jsonRequest = (path: string, method: string, body: unknown, cookie?
 		headers: { 'content-type': 'application/json', ...(cookie === undefined ? {} : { cookie }) },
 	});
 
+/** A roles module that grants nothing to a first user, for the suites that are not about it. */
+export const noRoles = { first: async () => false, may: async () => false };
+
 /** One module of the battery, through the harness, with real or stubbed dependencies. */
 export const module = async <T>(
-	name: 'Gate' | 'Session' | 'Enter' | 'Check' | 'State',
+	name: 'Gate' | 'Session' | 'Roles' | 'Enter' | 'Check' | 'State' | 'Verify' | 'Password',
 	store: Store,
 	imports: Record<string, unknown> = {},
 	config: Record<string, unknown> = {},
 ): Promise<{ instance: T; stop(): Promise<void> }> => {
 	const exports = await import(`../src/modules/${name}.ts`);
-	const loaded = await loadModule({ exports, imports, config, props: { store } });
+	// `auth/Enter` names `auth/Roles` for the one grant at sign-up; a suite about sign-in stubs it.
+	const given = name === 'Enter' ? { 'auth/Roles': noRoles, ...imports } : imports;
+	const loaded = await loadModule({ exports, imports: given, config, props: { store } });
 	return { instance: loaded.instance as T, stop: loaded.stop };
 };
 
@@ -111,3 +116,4 @@ export const page = (handlers: () => ListenerHandlers): Page => {
 		},
 	};
 };
+

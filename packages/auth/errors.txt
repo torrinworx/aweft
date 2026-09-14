@@ -1,12 +1,17 @@
 anonymous: Wait for user to read a string, or call enter first; an anonymous connection has no state.
 closed: Make a new client with createClient, and a new auth over it.
 enter-failed: Check the server is running and that auth/Enter is loaded, then try again.
+invalid-config: A name is non-empty text with no whitespace: admin, verified, products.abc123.
+invalid-config: Give first, and each entry of implies, a list of names: non-empty text with no whitespace.
+invalid-config: Give implies an object from a name to the list of names it implies.
 invalid-config: Give passwordMax at least passwordMin.
 invalid-config: Give refusePassword a function of the password answering true to refuse it, or null.
 invalid-config: Give that setting a number above zero.
 invalid-config: Set keep to a positive number of days.
 invalid-config: Set sessionMs to a positive number of milliseconds, or leave it out.
 invalid-config: Set sweepMs to a positive number of milliseconds, at most 2147483647.
+invalid-name: A name is non-empty text with no whitespace: admin, verified, products.abc123.
+invalid-user: Hand it the id the gate put on the context, which is text.
 leave-failed: Check the server is running and that auth/Session is loaded, then try again.
 malformed: Call it as { email: "someone@example.com" }.
 no-client: Pass the client createClient answered as the StageContext client, or none at all.

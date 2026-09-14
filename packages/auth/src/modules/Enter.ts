@@ -11,9 +11,10 @@ import { type AuthContext, addressOf } from '../context.ts';
 import { hashPassword, verifyPassword } from '../password.ts';
 import { bodyOf, json, storeOf } from '../props.ts';
 import { findUser, idOfUserDoc, looksLikeEmail, normalEmail, userDoc } from '../users.ts';
+import type { Roles } from './Roles.ts';
 import type { Session } from './Session.ts';
 
-export const deps = ['auth/Session'];
+export const deps = ['auth/Session', 'auth/Roles'];
 
 export const defaults = {
 	attemptsPerEmail: 5,
@@ -55,6 +56,7 @@ const numberOf = (config: Readonly<Record<string, unknown>>, key: keyof typeof d
 export default ({ imports, config, ...props }: ModuleProps): Enter => {
 	const store = storeOf(props);
 	const Session = imports.Session as Session;
+	const Roles = imports.Roles as Roles;
 	const windowMs = numberOf(config, 'attemptsWindowMs');
 	const perEmail = sliding({ count: numberOf(config, 'attemptsPerEmail'), windowMs });
 	const perAddress = sliding({ count: numberOf(config, 'attemptsPerAddress'), windowMs });
@@ -82,6 +84,7 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 			});
 			await store.settled(handle);
 			await store.close(handle);
+			await Roles.first(id);
 			return { user: id, created: true };
 		}
 		const handle = await store.open(found);

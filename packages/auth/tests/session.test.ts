@@ -70,6 +70,8 @@ test('several cookies of the name: the first that names a live session wins, and
 		assert.deepEqual(contextOf(await session.whoIs(withCookie('/', header))), { user: 'u_ada', session: live, address: undefined }, header);
 	}
 	assert.deepEqual(contextOf(await session.whoIs(withCookie('/', `session=${stale}; session=legacy`))), { user: null, session: null, address: undefined });
+	assert.deepEqual(contextOf(await session.whoIs(withCookie('/', `other=${live}; =${live}`))), { user: null, session: null, address: undefined },
+		'a live token under another name, or under no name, is not this battery\'s cookie');
 	await store.stop();
 });
 
