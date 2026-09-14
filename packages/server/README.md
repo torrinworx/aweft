@@ -97,7 +97,9 @@ export default ({ imports }) => ({
 ```
 
 There is no `compose` and no chain of gates: two policies in a row is one function calling
-another, which a module already is.
+another, which a module already is. A rule about a name a person holds needs no composing:
+`@aweftjs/auth`'s gate reads `needs: 'admin'` off a module itself. Composition is for a rule of
+another kind, such as an address list or a tenant.
 
 The server interprets nothing in the context and reads nothing off a module for the gate.
 `@aweftjs/auth`'s gate reads a module's `public: true` and treats absent as private; that is
