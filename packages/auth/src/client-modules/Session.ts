@@ -30,11 +30,18 @@ const noClient = (what: string): Error =>
  */
 const anonymous = (): Auth => {
 	const who: Derived<string | null | undefined> = immutable(mutable<string | null | undefined>(null));
+	const nothing: Derived<readonly string[] | undefined> = immutable(mutable<readonly string[] | undefined>([]));
 	return {
 		user: who,
+		names: nothing,
+		may: () => false,
 		enter: async () => { throw noClient('no sign-in was sent'); },
 		leave: async () => { throw noClient('no sign-out was sent'); },
 		check: async () => { throw noClient('no lookup was sent'); },
+		verify: async () => { throw noClient('no verification was sent'); },
+		change: async () => { throw noClient('no password change was sent'); },
+		forgot: async () => { throw noClient('no reset mail was sent'); },
+		reset: async () => { throw noClient('no reset was sent'); },
 		// The same refusal the real one gives an anonymous connection, so a page that reads it
 		// takes one path rather than two.
 		state: <T extends object>(): Handle<T> => {

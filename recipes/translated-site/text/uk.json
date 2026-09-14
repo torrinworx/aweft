@@ -37,5 +37,16 @@
 	"up to {size}": "до {size}",
 	"you@example.com": "vy@pryklad.ua",
 	"{name} is not one of the accepted types": "{name} не належить до прийнятних типів",
-	"{name} is over the {size} limit": "{name} перевищує обмеження {size}"
+	"{name} is over the {size} limit": "{name} перевищує обмеження {size}",
+	"If that address has an account, a link is on its way.": "Якщо ця адреса має обліковий запис, посилання вже в дорозі.",
+	"New password": "Новий пароль",
+	"Reset your password": "Скинути пароль",
+	"Send the link": "Надіслати посилання",
+	"Set the password": "Встановити пароль",
+	"Sign in first, then ask for the link.": "Спочатку увійдіть, а потім запросіть посилання.",
+	"The link is on its way. Open it from your mail.": "Посилання вже в дорозі. Відкрийте його з пошти.",
+	"Verify your email": "Підтвердити електронну пошту",
+	"We will send a link to your email address.": "Ми надішлемо посилання на вашу електронну пошту.",
+	"Your email address is verified.": "Вашу електронну пошту підтверджено.",
+	"Your password is set. Sign in with it.": "Пароль встановлено. Увійдіть із ним."
 }

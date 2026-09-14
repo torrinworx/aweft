@@ -12,11 +12,14 @@ import type { Client } from '@aweftjs/client';
 import { createServer } from '@aweftjs/server';
 import type { Store } from '@aweftjs/store';
 
-import { auth } from '../src/index.ts';
+import { fromBundle } from '@aweftjs/modules';
+
+import { auth, mail } from '../src/index.ts';
+import type { Roles } from '../src/index.ts';
 import { createAuth } from '../src/client.ts';
 import type { Auth, FetchResponse } from '../src/client.ts';
 
-import { fakeListener, newStore, page, reasonOf, settle } from './helpers.ts';
+import { fakeListener, mailer, newStore, page, reasonOf, settle, tokenIn } from './helpers.ts';
 import type { Page } from './helpers.ts';
 
 const PASSWORD = 'correct horse battery staple';
@@ -28,17 +31,27 @@ type State = Record<string, unknown>;
 interface Running {
 	readonly store: Store;
 	readonly seams: Page;
+	readonly roles: Roles;
+	readonly mail: ReturnType<typeof mailer>;
 	stop(): Promise<void>;
 }
 
-const running = async (): Promise<Running> => {
+const url = (token: string): string => `${ORIGIN}/take?token=${token}`;
+
+/** The battery behind a server, with `mail` and a stand-in for notify/Send when asked. */
+const running = async (mailing = false): Promise<Running> => {
 	const store = newStore();
 	const listening = fakeListener();
-	const server = createServer({ sources: [auth], store, gate: 'auth/Gate', listener: listening.listener });
+	const sender = mailer();
+	const configured = fromBundle({ 'auth/Verify.ts': { config: { url, resendMs: 1 } }, 'auth/Password.ts': { config: { url } } } as never, { prefix: '' });
+	const notify = fromBundle({ 'notify/Send.ts': { default: () => sender } } as never, { prefix: '' });
+	const server = createServer({ sources: mailing ? [configured, auth, mail, notify] : [auth], store, gate: 'auth/Gate', listener: listening.listener });
 	await server.start();
 	return {
 		store,
+		mail: sender,
 		seams: page(listening.handlers),
+		roles: server.loader.get('auth/Roles') as Roles,
 		stop: async () => {
 			await server.stop();
 			await store.stop();
@@ -364,7 +377,13 @@ test('every call on a stopped auth refuses at once, and none of them reaches the
 	await assert.rejects(auth.leave(), refuses);
 	await assert.rejects(auth.check('ada@example.com'), refuses);
 	await assert.rejects(auth.state<State>().ready, refuses);
+	await assert.rejects(auth.verify(), refuses);
+	await assert.rejects(auth.verify('AAAAAAAAAAAAAAAAAAAAAA'), refuses);
+	await assert.rejects(auth.change(PASSWORD, PASSWORD), refuses);
+	await assert.rejects(auth.forgot('ada@example.com'), refuses);
+	await assert.rejects(auth.reset('AAAAAAAAAAAAAAAAAAAAAA', PASSWORD), refuses);
 	assert.equal(posts, 0, 'a stopped half calls no route at all');
+	assert.equal(auth.may('anything'), false, 'and holds nothing');
 
 	client.close();
 	await stop();
@@ -421,4 +440,200 @@ test('a stopped auth asks nothing on the sockets that follow', async () => {
 
 	client.close();
 	await stop();
+});
+
+test('names reads undefined, then [] anonymous, then the granted list, follows a grant with no reconnect, and may agrees with the server', async () => {
+	const { seams, roles, stop } = await running();
+	const { client, auth } = connect(seams);
+
+	assert.equal(auth.names.get(), undefined, 'nothing is known until the server has answered');
+	assert.equal(auth.may('reports'), false);
+	await settle();
+	assert.deepEqual(auth.names.get(), [], 'anonymous holds nothing');
+
+	const ada = await auth.enter('ada@example.com', PASSWORD) as { user: string };
+	await settle();
+	assert.deepEqual(auth.names.get(), [], 'signed in and granted nothing yet');
+	const seen: unknown[] = [];
+	const off = auth.names.watch((now) => { seen.push(now); });
+	await roles.grant(ada.user, 'reports', 'products.abc123');
+	await settle();
+	assert.deepEqual(auth.names.get(), ['reports', 'products.abc123'], 'the grant reached the page over the share');
+	assert.deepEqual(seen, [['reports', 'products.abc123']], 'and the cell fired once for the one commit');
+	assert.equal(auth.may('reports.monthly'), true, 'covered by a granted name');
+	assert.equal(auth.may('products.abc123.read'), true);
+	assert.equal(auth.may('products.def456.read'), false);
+	assert.equal(await roles.may(ada.user, 'products.def456.read'), false, 'the same answer the server gives');
+	await roles.revoke(ada.user, 'reports');
+	await settle();
+	assert.equal(auth.may('reports'), false, 'a revoke too');
+	off();
+
+	await auth.leave();
+	assert.deepEqual(auth.names.get(), [], 'anonymous again');
+	await roles.grant(ada.user, 'admin');
+	await settle();
+	assert.deepEqual(auth.names.get(), [], 'a grant to a person the page is not reaches it not');
+	await auth.enter('ada@example.com', PASSWORD);
+	await settle();
+	assert.deepEqual(auth.names.get(), ['products.abc123', 'admin'], 'the new socket shares the document again');
+	assert.equal(auth.may('anything'), false, 'no table on this server, so admin covers admin');
+	assert.equal(auth.may('admin.console'), true);
+
+	auth.stop();
+	assert.deepEqual(auth.names.get(), ['products.abc123', 'admin'], 'stop leaves the last value alone');
+	await roles.grant(ada.user, 'later');
+	await settle();
+	assert.deepEqual(auth.names.get(), ['products.abc123', 'admin'], 'and follows the server no further');
+	client.close();
+	await stop();
+});
+
+test('may runs the table the server answered, so admin: [*] on the server is everything on the page', async () => {
+	const store = newStore();
+	const listening = fakeListener();
+	const configured = fromBundle({ 'auth/Roles.ts': { config: { implies: { admin: ['*'] }, first: ['admin'] } } } as never, { prefix: '' });
+	const server = createServer({ sources: [configured, auth], store, gate: 'auth/Gate', listener: listening.listener });
+	await server.start();
+	const seams = page(listening.handlers);
+	const { client, auth: page1 } = connect(seams);
+	await settle();
+	await page1.enter('ada@example.com', PASSWORD);
+	await settle();
+	assert.deepEqual(page1.names.get(), ['admin'], 'the first to sign up');
+	assert.equal(page1.may('posts.delete'), true, 'through the table');
+	assert.equal(page1.may(''), false, 'text that is not a name is held by nobody, everything included');
+	assert.equal(page1.may('two words'), false);
+	page1.stop();
+	client.close();
+	await server.stop();
+	await store.stop();
+});
+
+test('verify sends the mail and takes the link, forgot and reset set the password and sign the page out, change keeps it signed in', async () => {
+	const { seams, mail, roles, stop } = await running(true);
+	const { client, auth } = connect(seams);
+	await settle();
+
+	assert.deepEqual(await auth.verify(), { refused: [{ code: 'private', message: 'sign in to verify your email' }] }, 'anonymous cannot ask for the mail');
+	const ada = await auth.enter('ada@example.com', PASSWORD) as { user: string };
+	await settle();
+	assert.deepEqual(await auth.verify(), { ok: true });
+	assert.equal(mail.sent.length, 1);
+	assert.equal(auth.may('verified'), false);
+	assert.deepEqual(await auth.verify('not-a-token'), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] });
+	assert.deepEqual(await auth.verify(tokenIn(mail.sent[0]!.body)), { ok: true });
+	await settle();
+	assert.equal(auth.may('verified'), true, 'the name reached the page with no reconnect');
+	assert.equal(await roles.may(ada.user, 'verified'), true);
+	await new Promise((done) => setTimeout(done, 5));
+	assert.deepEqual(await auth.verify(), { refused: [{ code: 'verified', message: 'this email is already verified' }] });
+
+	assert.deepEqual(await auth.change('wrong', 'battery staple horse'), { refused: [{ code: 'password', message: 'the current password is wrong' }] });
+	assert.deepEqual(await auth.change(PASSWORD, 'short'), { refused: [{ code: 'password', message: 'password is 8 to 256 characters' }] });
+	assert.deepEqual(await auth.change(PASSWORD, 'battery staple horse'), { ok: true });
+	assert.equal(auth.user.get(), ada.user, 'still signed in on the session that asked');
+
+	assert.deepEqual(await auth.forgot('not an address'), { refused: [{ code: 'email', message: 'email is an address' }] });
+	assert.deepEqual(await auth.forgot('nobody@example.com'), { ok: true });
+	assert.equal(mail.sent.length, 1, 'no mail for an address nobody has');
+	assert.deepEqual(await auth.forgot('ada@example.com'), { ok: true });
+	assert.equal(mail.sent.length, 2);
+	assert.deepEqual(await auth.reset('AAAAAAAAAAAAAAAAAAAAAA', 'new horse battery'), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] });
+	assert.equal(auth.user.get(), ada.user, 'a refusal reconnects nothing');
+	assert.deepEqual(await auth.reset(tokenIn(mail.sent[1]!.body), 'new horse battery'), { ok: true });
+	assert.equal(auth.user.get(), null, 'every session of the person is over, this page\'s included');
+	assert.deepEqual(auth.names.get(), []);
+	const back = await auth.enter('ada@example.com', 'new horse battery') as { user: string; created: boolean };
+	assert.equal(back.created, false);
+	await settle();
+	assert.equal(auth.may('verified'), true, 'the name survived the reset');
+
+	mail.answer({ ok: false, error: 'down' });
+	assert.deepEqual(await auth.forgot('ada@example.com'), { refused: [{ code: 'mail', message: 'the mail could not be sent: down' }] });
+	auth.stop();
+	client.close();
+	await stop();
+});
+
+test('the five calls reject <name>-failed with a fix for a status nobody expects, and reset refuses closed once the client is gone', async () => {
+	const { seams, stop } = await running(true);
+	let status = 500;
+	const client = createClient({ url: URL, open: seams.open, reconnect: false });
+	const auth = createAuth(client, { origin: ORIGIN, fetch: async () => answering(status, {}) });
+	await settle();
+	const failing = (reason: string) => (error: Error): boolean => reasonOf(error) === reason && /mail source/.test(error.message);
+	await assert.rejects(auth.verify(), failing('verify-failed'));
+	await assert.rejects(auth.verify('AAAAAAAAAAAAAAAAAAAAAA'), failing('verify-failed'));
+	await assert.rejects(auth.change('a', 'b'), failing('change-failed'));
+	await assert.rejects(auth.forgot('ada@example.com'), failing('forgot-failed'));
+	await assert.rejects(auth.reset('AAAAAAAAAAAAAAAAAAAAAA', 'b'), failing('reset-failed'));
+	status = 200;
+	client.close();
+	await assert.rejects(auth.reset('AAAAAAAAAAAAAAAAAAAAAA', 'b'), (error: Error) => reasonOf(error) === 'closed');
+	auth.stop();
+	await stop();
+});
+
+test('a call with a body says it is JSON and one without sends no content type, on every route', async () => {
+	const { seams, stop } = await running(true);
+	const client = createClient({ url: URL, open: seams.open, reconnect: false });
+	const seen: [string, string, string | undefined][] = [];
+	const auth = createAuth(client, {
+		origin: ORIGIN,
+		fetch: (url, init) => { seen.push([init.method, url.slice(ORIGIN.length), init.headers['content-type']]); return seams.fetch(url, init); },
+	});
+	await settle();
+	await auth.enter('ada@example.com', PASSWORD);
+	await auth.verify();
+	await auth.change(PASSWORD, 'battery staple horse');
+	await auth.forgot('ada@example.com');
+	await auth.reset('AAAAAAAAAAAAAAAAAAAAAA', 'battery staple horse');
+	await auth.verify('AAAAAAAAAAAAAAAAAAAAAA');
+	await auth.leave();
+	assert.deepEqual(seen, [
+		['POST', '/api/session', 'application/json'],
+		['POST', '/api/verify/send', undefined],
+		['POST', '/api/password', 'application/json'],
+		['POST', '/api/password/forgot', 'application/json'],
+		['POST', '/api/password/reset', 'application/json'],
+		['POST', '/api/verify', 'application/json'],
+		['DELETE', '/api/session', undefined],
+	]);
+	auth.stop();
+	client.close();
+	await stop();
+});
+
+test('a roles module answering no table is held as an empty one, so may reads the names alone', async () => {
+	const { createArray, createObject } = await import('@aweftjs/core');
+	const store = newStore();
+	const listening = fakeListener();
+	// An application's own auth/Roles: shares the names, answers no table at all.
+	const own = fromBundle({
+		'auth/Roles.ts': {
+			default: () => ({
+				may: async () => true,
+				first: async () => false,
+				call: () => ({ implies: null }),
+				connection: ({ link }: { link: { share(name: string, doc: object, handlers: object): void } }) => {
+					link.share('roles', createObject({ names: createArray(['reports']) }), { accept: () => [] });
+				},
+			}),
+		},
+	} as never, { prefix: '' });
+	const server = createServer({ sources: [own, auth], store, gate: 'auth/Gate', listener: listening.listener });
+	await server.start();
+	const seams = page(listening.handlers);
+	const { client, auth: page1 } = connect(seams);
+	await settle();
+	await page1.enter('ada@example.com', PASSWORD);
+	await settle();
+	assert.deepEqual(page1.names.get(), ['reports']);
+	assert.equal(page1.may('reports.monthly'), true);
+	assert.equal(page1.may('admin'), false, 'no table, and no throw');
+	page1.stop();
+	client.close();
+	await server.stop();
+	await store.stop();
 });

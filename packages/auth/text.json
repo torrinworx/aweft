@@ -1,14 +1,50 @@
 {
 	"Email": [
+		"src/client-modules/Reset.tsx",
 		"src/client-modules/SignIn.tsx"
+	],
+	"If that address has an account, a link is on its way.": [
+		"src/client-modules/Reset.tsx"
+	],
+	"New password": [
+		"src/client-modules/Reset.tsx"
 	],
 	"Password": [
 		"src/client-modules/SignIn.tsx"
 	],
+	"Reset your password": [
+		"src/client-modules/Reset.tsx"
+	],
+	"Send the link": [
+		"src/client-modules/Reset.tsx",
+		"src/client-modules/Verify.tsx"
+	],
+	"Set the password": [
+		"src/client-modules/Reset.tsx"
+	],
 	"Sign in": [
 		"src/client-modules/SignIn.tsx"
 	],
+	"Sign in first, then ask for the link.": [
+		"src/client-modules/Verify.tsx"
+	],
+	"The link is on its way. Open it from your mail.": [
+		"src/client-modules/Verify.tsx"
+	],
+	"Verify your email": [
+		"src/client-modules/Verify.tsx"
+	],
+	"We will send a link to your email address.": [
+		"src/client-modules/Verify.tsx"
+	],
+	"Your email address is verified.": [
+		"src/client-modules/Verify.tsx"
+	],
+	"Your password is set. Sign in with it.": [
+		"src/client-modules/Reset.tsx"
+	],
 	"you@example.com": [
+		"src/client-modules/Reset.tsx",
 		"src/client-modules/SignIn.tsx"
 	]
 }
