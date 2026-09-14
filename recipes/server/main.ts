@@ -92,7 +92,7 @@ const listener = node({ port: 0, host: '127.0.0.1' });
 const server = createServer({ sources: [app, auth], store, gate: 'auth/Gate', listener });
 await server.start();
 check(
-	server.loader.loaded().length === 7,
+	server.loader.loaded().length === 8,
 	`start loaded all ${String(server.loader.loaded().length)} modules the two sources list, with no load list anywhere`,
 );
 const port = listener.port!;

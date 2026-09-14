@@ -1,8 +1,12 @@
 // What the boot beside this file is worth, checked against a real port: two people sign up
-// over HTTP, one of them is the administrator, the board converges between them under the
-// rules module, the scheduler module ran a job, and every module's `stop` runs on the way out.
+// over HTTP, the first holds `admin` and reaches what needs it, a name the administrator grants
+// reaches the second with no reconnect, one product opens and not the next, a verification link
+// mailed through notify grants `verified`, a reset link sets a password and ends every session,
+// the board converges between them under the rules module, the scheduler module ran a job, and
+// every module's `stop` runs on the way out.
 //
-// A real application would not have this file. Everything it uses is a public export.
+// A real application would not have this file. Everything it uses is a public export, apart
+// from the mails the configuration file keeps for it.
 
 import { createClient } from '@aweftjs/client';
 import type { Client } from '@aweftjs/client';
@@ -11,6 +15,8 @@ import type { Server } from '@aweftjs/server';
 import type { NodeListener } from '@aweftjs/server/node';
 import type { Store } from '@aweftjs/store';
 import type { RequestError, SocketLike } from '@aweftjs/sync';
+
+import { mails } from './modules/notify/Send.ts';
 
 let checks = 0;
 let failed = 0;
@@ -38,15 +44,18 @@ export const run = async (
 	const port = String(listener.port);
 	const http = `http://127.0.0.1:${port}`;
 
-	/** Sign up, and answer the whole Set-Cookie a browser would have kept. */
-	const signUp = async (email: string): Promise<string> => {
-		const answer = await fetch(`${http}/api/session`, {
-			method: 'POST', headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ email, password: 'correct horse battery staple' }),
-		});
-		if (answer.status !== 201) throw new Error(`${email} could not sign up: ${String(answer.status)}`);
+	const post = (path: string, body: unknown, cookie?: string): Promise<Response> => fetch(`${http}${path}`, {
+		method: 'POST', headers: { 'content-type': 'application/json', ...(cookie === undefined ? {} : { cookie }) },
+		body: JSON.stringify(body),
+	});
+
+	/** Sign up or in, and answer the whole Set-Cookie a browser would have kept. */
+	const signUp = async (email: string, password = 'correct horse battery staple'): Promise<string> => {
+		const answer = await post('/api/session', { email, password });
+		if (answer.status !== 201 && answer.status !== 200) throw new Error(`${email} could not sign up: ${String(answer.status)}`);
 		return answer.headers.getSetCookie()[0]!;
 	};
+	const linkIn = (text: string): string => text.slice(text.indexOf('token=') + 'token='.length);
 
 	/** A page, as a browser would be, with the one seam Node needs: a socket carrying the cookie. */
 	const pageFor = (cookie: string): Client => createClient({
@@ -67,12 +76,55 @@ export const run = async (
 	const ada = pageFor(adaSet.split(';')[0]!);
 	const bob = pageFor(bobSet.split(';')[0]!);
 
-	check(await ada.ask('app/Wipe') === 'the board was wiped', 'the first to arrive reaches the administrator\'s module');
+	check(await ada.ask('app/Wipe') === 'the board was wiped', 'the first to sign up holds admin, from a file that configures auth/Roles, and reaches the module that needs it');
 	const refusal = await bob.ask('app/Wipe').then(() => 'answered', (error: RequestError) => JSON.stringify(error.reasons));
-	check(refusal === '[{"code":"not-admin","message":"app/Wipe is for the administrator"}]',
-		'the second is refused, with the gate module\'s own reason rather than the battery\'s');
+	check(refusal === '[{"code":"needs","message":"app/Wipe needs admin"}]',
+		'the second is refused with the name the module declared');
 	check(await bob.ask('app/Digest').then(() => 'answered', reasonOf) === 'answered',
 		'and the rule underneath still lets him reach everything else');
+
+	// --- a name the administrator grants reaches the second person with no reconnect --------------
+
+	check(await ada.ask('app/Reports') === 'the monthly report', 'admin covers reports through the table');
+	check(await bob.ask('app/Reports').then(() => 'answered', reasonOf) === 'refused', 'and bob holds nothing yet');
+	const bobId = (await bob.ask('auth/Session') as { user: string }).user;
+	const bobNames = await bob.share<{ names?: string[] }>('roles').ready;
+	check(await ada.ask('app/Grant', { user: bobId, name: 'reports' }) === 'granted', 'the administrator grants it over this application\'s own module');
+	check(await bob.ask('app/Reports') === 'the monthly report', 'and the same socket reaches the module on the next call');
+	await until(() => (bobNames.names ?? []).includes('reports'), 'the name to reach bob\'s page');
+	check((bobNames.names ?? []).includes('reports'), 'the page holds the name through the roles share, with no reconnect');
+	check(await bob.ask('app/Grant', { user: bobId, name: 'admin' }).then(() => 'answered', reasonOf) === 'refused', 'bob cannot grant himself anything');
+
+	// --- one product opens and not the next ---------------------------------------------------------
+
+	check(await bob.ask('app/Product', { id: 'p1' }).then(() => 'answered', reasonOf) === 'needs', 'a product is closed until a name under it is held');
+	await ada.ask('app/Grant', { user: bobId, name: 'products.p1' });
+	check(await bob.ask('app/Product', { id: 'p1' }) === 'product p1', 'products.p1 opens that product');
+	check(await bob.ask('app/Product', { id: 'p2' }).then(() => 'answered', reasonOf) === 'needs', 'and not the next');
+	check(await ada.ask('app/Product', { id: 'p2' }) === 'product p2', 'while admin covers every product');
+
+	// --- a verification link, mailed through notify, grants verified ---------------------------------
+
+	const bobCookie = bobSet.split(';')[0]!;
+	check((await post('/api/verify/send', {}, bobCookie)).status === 200, 'bob asks for the verification mail');
+	check(mails.length === 1 && mails[0]!.to === 'bob@example.com', 'notify mailed it to the address on his user document');
+	const verifyToken = linkIn(mails[0]!.text);
+	check((await post('/api/verify', { token: verifyToken })).status === 200, 'the link is taken');
+	await until(() => (bobNames.names ?? []).includes('verified'), 'verified to reach bob\'s page');
+	check((bobNames.names ?? []).includes('verified'), 'and bob holds verified');
+	check((await post('/api/verify', { token: verifyToken })).status === 400, 'a link is one use');
+
+	// --- a reset link sets the password and ends every session --------------------------------------
+
+	check((await post('/api/password/forgot', { email: 'nobody@example.com' })).status === 200 && mails.length === 1,
+		'forgot answers ok for an address nobody has, and mails nothing');
+	check((await post('/api/password/forgot', { email: 'bob@example.com' })).status === 200 && mails.length === 2, 'and mails a known one');
+	check((await post('/api/password/reset', { token: linkIn(mails[1]!.text), password: 'a new horse battery' })).status === 200, 'the reset link sets the password');
+	check((await post('/api/verify/send', {}, bobCookie)).status === 401, 'and every session bob had is over');
+	check((await post('/api/session', { email: 'bob@example.com', password: 'correct horse battery staple' })).status === 401, 'the old password is gone');
+	const bobAgain = await signUp('bob@example.com', 'a new horse battery');
+	check((await post('/api/password', { current: 'a new horse battery', password: 'yet another horse' }, bobAgain.split(';')[0]!)).status === 200,
+		'signed in with the new one, he changes it with the current one');
 
 	// --- the document a module holds converges between the two of them ----------------------------
 
@@ -108,11 +160,12 @@ export const run = async (
 	const log = server.loader.get('app/Log') as { call(): readonly string[] };
 	const loaded = server.loader.loaded();
 	const wanted = [
-		'app/Board', 'app/Digest', 'app/Gate', 'app/Log', 'app/Rules', 'app/Wipe',
-		'auth/Check', 'auth/Enter', 'auth/Gate', 'auth/Session', 'auth/State',
+		'app/Board', 'app/Digest', 'app/Grant', 'app/Log', 'app/Product', 'app/Reports', 'app/Rules', 'app/Wipe',
+		'auth/Check', 'auth/Enter', 'auth/Gate', 'auth/Password', 'auth/Roles', 'auth/Session', 'auth/State', 'auth/Verify',
+		'notify/Devices', 'notify/Inbox', 'notify/Send',
 	];
 	check(wanted.every((name) => loaded.includes(name)) && loaded.length === wanted.length,
-		`start loaded all ${String(wanted.length)} modules the directory and the battery list, with no load list anywhere`);
+		`start loaded all ${String(wanted.length)} modules the directory and the batteries list, with no load list anywhere`);
 
 	ada.close();
 	bob.close();
@@ -120,7 +173,7 @@ export const run = async (
 
 	// What every module holding something should have written, in the reverse of the order the
 	// loader built them in, worked out from the load order above rather than from what happened.
-	const holders = ['app/Board', 'app/Digest', 'app/Gate', 'app/Wipe'];
+	const holders = ['app/Board', 'app/Digest', 'app/Wipe'];
 	const expected = loaded.filter((name) => holders.includes(name)).reverse();
 	const stopped = log.call();
 	check(stopped.join(',') === expected.join(','),
@@ -129,10 +182,11 @@ export const run = async (
 	await store.stop();
 
 	console.log('\nwhat this recipe does NOT do for you:');
-	console.log('  it does not decide what a module is for. `admin: true` is this application\'s');
-	console.log('  word, read by this application\'s own gate module; the server has never heard of it.');
-	console.log('  it does not make the first user an administrator. That rule is four lines in');
-	console.log('  modules/app/Gate.ts, and yours may be a role on the user document instead.');
+	console.log('  it does not decide what a name means. `admin` and `reports` are this application\'s');
+	console.log('  words, in modules/auth/Roles.ts; the battery holds them and reads `needs`, nothing more.');
+	console.log('  it does not grant over the wire. app/Grant is this application\'s route for that, and');
+	console.log('  yours may be an invitation, a purchase, or nothing at all.');
+	console.log('  it does not pick where the mail links go. modules/auth/Verify.ts and Password.ts do.');
 	console.log('  it does not keep the board small. Nothing here truncates or sweeps, and a');
 	console.log('  document that grows forever is a job for a module you write.');
 

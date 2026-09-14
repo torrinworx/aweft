@@ -5,7 +5,9 @@
 // keeps working while the server is restarted underneath it. Then in Chromium: the same server
 // serves a real page whose every part is a module. A visit to a gated URL while anonymous shows
 // the battery's sign-in form, a sign-up through that form makes the page somebody, and the gated
-// act renders over the document the page shares.
+// act renders over the document the page shares. The battery's two mail acts land on `/verify`
+// and `/reset`: the reset form mails a link, the link's page sets the password, the verify page
+// mails and takes its link, and the name `verified` reaches the page with no reload.
 //
 // A browser needs no seams for the Node half. Node needs two, and only two: a socket that
 // carries the cookie header, and a fetch that keeps the cookie, because Node's keeps none.
@@ -21,7 +23,7 @@ import { chromium } from 'playwright';
 
 import { createAuth } from '@aweftjs/auth/client';
 import type { FetchInit, FetchResponse } from '@aweftjs/auth/client';
-import { auth, paths } from '@aweftjs/auth';
+import { auth, mail, paths } from '@aweftjs/auth';
 import type { AuthContext } from '@aweftjs/auth';
 import { createClient } from '@aweftjs/client';
 import { createObject, observer } from '@aweftjs/core';
@@ -31,7 +33,7 @@ import type { Connection } from '@aweftjs/server';
 import { node } from '@aweftjs/server/node';
 import { createStore, memoryDriver } from '@aweftjs/store';
 import type { RequestError, SocketLike } from '@aweftjs/sync';
-import { audit } from '@aweftjs/testing/browser';
+import { audit, walk } from '@aweftjs/testing/browser';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 
@@ -78,7 +80,7 @@ const pageRoutes = (): Record<string, () => Promise<Response>> => {
 	}
 	const shell = readFileSync(join(dist, 'index.html'));
 	// The application knows its own URLs, because they are the keys of its acts map.
-	for (const url of ['/', '/notes', '/join', '/nowhere']) routes[`GET ${url}`] = answer(shell, 'text/html');
+	for (const url of ['/', '/notes', '/join', '/verify', '/reset', '/nowhere']) routes[`GET ${url}`] = answer(shell, 'text/html');
 	return routes;
 };
 
@@ -93,13 +95,22 @@ const app = fromBundle({
 	'./notes/Board.ts': { default: () => ({ public: true, connection: ({ link }: Connection<AuthContext>) => { link.share('board', board, open); } }) },
 	// The page itself, so the browser half loads it from the same origin as its socket.
 	'./site/Files.ts': { default: () => ({ public: true, routes: pageRoutes() }) },
+	// The mailer the two mail modules name: a stand-in for notify/Send that keeps every mail.
+	'./notify/Send.ts': { default: () => ({ send: async (options: { to: { user: string }; body: string }) => { mails.push(options); return { delivery: { email: { ok: true } } }; } }) },
+	// Where the mail links point: the two acts' addresses on this page. A battery picks no URL.
+	'./auth/Verify.ts': { config: { url: (token: string) => `/verify?token=${token}`, resendMs: 1 } },
+	'./auth/Password.ts': { config: { url: (token: string) => `/reset?token=${token}` } },
 });
+
+/** Every mail the stand-in was asked to send. */
+const mails: { to: { user: string }; body: string }[] = [];
+const linkIn = (body: string): string => body.slice(body.indexOf('token=') + 'token='.length);
 
 // --- the server, and the store both it and this program read ---------------------------------
 
 const driver = memoryDriver();
 const store = createStore({ driver, declare: { ...paths } });
-const boot = { sources: [app, auth], store, gate: 'auth/Gate' } as const;
+const boot = { sources: [app, auth, mail], store, gate: 'auth/Gate' } as const;
 const first = node({ port: 0, host: '127.0.0.1' });
 let server = createServer({ ...boot, listener: first });
 await server.start();
@@ -237,7 +248,14 @@ const audited = async (what: string): Promise<void> => {
 		console.error(`  axe ${violation.rule}: ${violation.help}`);
 		for (const node of violation.nodes) console.error(`    ${node.html}`);
 	}
-	check(found.violations.length === 0, `axe found nothing to fix on the sign-in form ${what}`);
+	check(found.violations.length === 0, `axe found nothing to fix on ${what}`);
+};
+
+/** Every state of the page reachable by keyboard: the walk comes back round with no problem. */
+const walked = async (what: string): Promise<void> => {
+	const found = await walk(view);
+	for (const problem of found.problems) console.error(`  walk ${problem.reason} at ${problem.target}: ${problem.fix}`);
+	check(found.problems.length === 0, `a keyboard walk over ${what} found nothing to fix`);
 };
 
 try {
@@ -247,7 +265,8 @@ try {
 	await view.waitForSelector('form[aria-label="Sign in"]');
 	check(new URL(view.url()).pathname === '/notes', 'a gated page while anonymous keeps its URL');
 	check(await view.$('#notes') === null, 'and shows the sign-in act instead of the page');
-	await audited('in light mode');
+	await audited('the sign-in form in light mode');
+	await walked('the sign-in form');
 
 	// The whole form is one act, and signing up through it is the same call as signing in. The
 	// form still picks no URL: on success it calls the `retry` the stage handed it, so the act
@@ -300,11 +319,69 @@ try {
 
 	check(problems.length === 0, `the page threw nothing${problems.length === 0 ? '' : `: ${problems.join(', ')}`}`);
 
-	// The same form, with the operating system asking for dark.
+	// --- the two mail acts, on the addresses this page named them at --------------------------
+
+	// Forgot, while anonymous: the form takes an address, and the link the mail carries opens the
+	// same act with a token, which is the new-password form.
+	await view.goto(`${http}/reset`);
+	await view.waitForSelector('form[aria-label="Reset your password"]');
+	await audited('the forgot form');
+	await walked('the forgot form');
+	await view.fill('input[name="email"]', 'grace@example.com');
+	await view.click('form[aria-label="Reset your password"] button');
+	await view.waitForFunction(() => /link is on its way/.test(
+		(globalThis as unknown as { document: { body: { textContent: string } } }).document.body.textContent));
+	check(mails.length === 1, 'the forgot form mailed one link through the mailer the server was given');
+	await view.goto(`${http}/reset?token=${linkIn(mails[0]!.body)}`);
+	await view.waitForSelector('input[name="password"]');
+	await audited('the new-password form');
+	await view.fill('input[name="password"]', 'a new horse battery');
+	await view.click('form[aria-label="Reset your password"] button');
+	await view.waitForFunction(() => /Your password is set/.test(
+		(globalThis as unknown as { document: { body: { textContent: string } } }).document.body.textContent));
+	check(true, 'the link\'s page set the password');
+
+	// Every session is over, so the gated page is behind the form again, and the new password opens it.
+	await view.goto(`${http}/notes`);
+	await view.waitForSelector('form[aria-label="Sign in"]');
+	await view.fill('input[name="email"]', 'grace@example.com');
+	await view.fill('input[name="password"]', 'a new horse battery');
+	await view.click('form[aria-label="Sign in"] button');
+	await view.waitForSelector('#notes');
+	check(await view.textContent('#notes-user') === grace, 'and the new password signs the same person in');
+
+	// Verify, while signed in: the button mails the link, and opening it grants `verified`, which
+	// the page reads off the roles share with no reload.
+	await view.goto(`${http}/verify`);
+	await view.waitForSelector('section[aria-label="Verify your email"] button:not([disabled])');
+	await audited('the verify page');
+	await walked('the verify page');
+	await view.click('section[aria-label="Verify your email"] button');
+	await view.waitForFunction(() => /on its way/.test(
+		(globalThis as unknown as { document: { body: { textContent: string } } }).document.body.textContent));
+	check(mails.length === 2 && mails[1]!.to.user === grace, 'the verify page mailed the signed-in person a link');
+	await view.goto(`${http}/verify?token=${linkIn(mails[1]!.body)}`);
+	await view.waitForFunction(() => /is verified/.test(
+		(globalThis as unknown as { document: { body: { textContent: string } } }).document.body.textContent));
+	await view.click('#to-home');
+	await view.waitForSelector('#home');
+	await view.waitForFunction(() => /holds verified/.test(
+		(globalThis as unknown as { document: { getElementById(id: string): { textContent: string } | null } })
+			.document.getElementById('names')?.textContent ?? ''));
+	check(await view.textContent('#names') === 'holds verified', 'and the page holds the name, read off the roles share');
+
+	// The same forms, with the operating system asking for dark.
 	await view.emulateMedia({ colorScheme: 'dark' });
 	await view.goto(`${http}/join`);
 	await view.waitForSelector('form[aria-label="Sign in"]');
-	await audited('in dark mode');
+	await audited('the sign-in form in dark mode');
+	await view.goto(`${http}/reset`);
+	await view.waitForSelector('form[aria-label="Reset your password"]');
+	await audited('the forgot form in dark mode');
+	await view.goto(`${http}/verify`);
+	await view.waitForSelector('section[aria-label="Verify your email"]');
+	await audited('the verify page in dark mode');
+	check(problems.length === 0, `the page threw nothing on the mail acts${problems.length === 0 ? '' : `: ${problems.join(', ')}`}`);
 } finally {
 	await browser.close();
 }
