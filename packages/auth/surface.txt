@@ -1,11 +1,13 @@
 type AuthContext: interface AuthContext { readonly user: string | null; readonly session: string | null; readonly address?: string | undefined; }
 type Implies: type Implies = Readonly<Record<string, readonly string[]>>;
+type RefuseSignUp: type RefuseSignUp = (signUp: SignUp) => Refusal | undefined | Promise<Refusal | undefined>;
 type Roles: interface Roles { may(user: string, name: string): Promise<boolean>; grant(user: string, ...names: string[]): Promise<void>; revoke(user: string, ...names: string[]): Promise<void>; names(user: string): Promise<string[]>; first(user: string): Promise<boolean>; call(args: unknown, context: unknown): { implies: Implies; }; connection(connection: Connection<AuthContext>): Promise<() => Promise<void>>; }
+type SignUp: interface SignUp { readonly email: string; readonly extra: Readonly<Record<string, unknown>>; readonly context: AuthContext; readonly store: Store; }
 value auth: Source
 value holds: (granted: readonly string[], implies: Readonly<Record<string, readonly string[]>>, name: string) => boolean
 value mail: Source
 value paths: Readonly<Record<string, readonly string[]>>
-./client type Auth: interface Auth { readonly user: Derived<string | null | undefined>; readonly names: Derived<readonly string[] | undefined>; may(name: string): boolean; enter(email: string, password: string): Promise<Entered>; leave(): Promise<void>; state<T extends object>(): Handle<T>; check(email: string): Promise<boolean>; verify(token?: string): Promise<Outcome>; change(current: string, password: string): Promise<Outcome>; forgot(email: string): Promise<Outcome>; reset(token: string, password: string): Promise<Outcome>; stop(): void; }
+./client type Auth: interface Auth { readonly user: Derived<string | null | undefined>; readonly names: Derived<readonly string[] | undefined>; may(name: string): boolean; enter(email: string, password: string, extra?: Readonly<Record<string, unknown>>): Promise<Entered>; leave(): Promise<void>; state<T extends object>(): Handle<T>; check(email: string): Promise<boolean>; verify(token?: string): Promise<Outcome>; change(current: string, password: string): Promise<Outcome>; forgot(email: string): Promise<Outcome>; reset(token: string, password: string): Promise<Outcome>; stop(): void; }
 ./client type AuthOptions: interface AuthOptions { readonly origin?: string | undefined; readonly fetch?: Fetcher | undefined; }
 ./client type Entered: type Entered = { readonly user: string; readonly created: boolean; } | { readonly refused: readonly Refusal[]; };
 ./client type FetchInit: interface FetchInit { method: string; headers: Record<string, string>; body?: string; credentials: 'same-origin'; }

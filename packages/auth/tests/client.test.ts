@@ -106,6 +106,27 @@ test('user reads undefined, then null, then the id after enter, then null after 
 	await stop();
 });
 
+test('enter carries extra fields to the sign-up rule, and a sign-up the rule closed the door to resolves with its reason', async () => {
+	const store = newStore();
+	const listening = fakeListener();
+	const gated = fromBundle({ 'auth/Enter.ts': { config: { refuseSignUp: ({ extra }: { extra: Record<string, unknown> }) => extra['invite'] === 'open-sesame' ? undefined : { code: 'invite', message: 'sign-up is by invitation' } } } } as never, { prefix: '' });
+	const server = createServer({ sources: [gated, auth], store, gate: 'auth/Gate', listener: listening.listener });
+	await server.start();
+	const { client, auth: session } = connect(page(listening.handlers));
+
+	const closed = await session.enter('ada@example.com', PASSWORD) as { refused: readonly { code: string }[] };
+	assert.deepEqual(closed.refused.map((one) => one.code), ['invite'], '403 resolves with the rule\'s reason');
+	assert.equal(session.user.get(), null, 'and reconnects nothing');
+	const opened = await session.enter('ada@example.com', PASSWORD, { invite: 'open-sesame' }) as { user: string; created: boolean };
+	assert.equal(opened.created, true, 'the extra field reached the rule');
+	assert.equal(session.user.get(), opened.user);
+
+	session.stop();
+	client.close();
+	await server.stop();
+	await store.stop();
+});
+
 test('a wrong password, a malformed address, a status nobody expects, and a fetch that throws', async () => {
 	const { seams, stop } = await running();
 	const { client, auth } = connect(seams);

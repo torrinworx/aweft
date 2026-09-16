@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import type { Store } from '@aweftjs/store';
 
 import type { AuthContext } from '../src/index.ts';
-import type { Enter, UserDocument } from '../src/modules/Enter.ts';
+import type { Enter, SignUp, UserDocument } from '../src/modules/Enter.ts';
 import type { Session } from '../src/modules/Session.ts';
 
 import { jsonRequest, module, newStore, request } from './helpers.ts';
@@ -219,10 +219,54 @@ test('a setting that is not a positive number, a ceiling under the floor, or a r
 	const { session } = stubSession();
 	for (const config of [
 		{ attemptsPerEmail: 0 }, { attemptsPerAddress: -1 }, { attemptsWindowMs: 'soon' }, { attemptsWindowMs: 2_147_483_648 },
-		{ hashesInFlight: 0 }, { passwordMin: 0 }, { passwordMax: 4 }, { refusePassword: 'no' },
+		{ hashesInFlight: 0 }, { passwordMin: 0 }, { passwordMax: 4 }, { refusePassword: 'no' }, { refuseSignUp: 'no' },
 	]) {
 		await assert.rejects(module<Enter>('Enter', store, { 'auth/Session': session }, config), /invalid-config|invalid-limit/, JSON.stringify(config));
 	}
+	await store.stop();
+});
+
+test('refuseSignUp is asked of a sign-up only, after the password rule, with the extra fields, the context and the store; a refusal is 403 and nothing is made', async () => {
+	const asked: SignUp[] = [];
+	const rule = (signUp: SignUp): { code: string; message: string } | undefined => {
+		asked.push(signUp);
+		return signUp.extra['invite'] === 'open-sesame' ? undefined : { code: 'invite', message: 'sign-up is by invitation' };
+	};
+	const { store, route } = await routeOf({ refuseSignUp: rule });
+	const signUp = (email: string, password: string, extra: Record<string, unknown>): Request => jsonRequest('/api/session', 'POST', { ...extra, email, password });
+
+	const closed = await route(signUp('  Ada@Example.COM ', 'correct horse', { invite: 'nope', position: 'student' }), from('1.1.1.1'));
+	assert.equal(closed.status, 403);
+	assert.deepEqual(await closed.json(), { reasons: [{ code: 'invite', message: 'sign-up is by invitation' }] });
+	assert.equal(await users(store, 'ada@example.com'), 0, 'nothing was made for a refused sign-up');
+	assert.equal(asked.length, 1);
+	assert.equal(asked[0]!.email, 'ada@example.com', 'the address as it will be stored');
+	assert.deepEqual(asked[0]!.extra, { invite: 'nope', position: 'student' }, 'every field but the two');
+	assert.equal(asked[0]!.context.address, '1.1.1.1');
+	assert.equal(asked[0]!.store, store);
+
+	assert.equal((await route(signUp('ada@example.com', 'correct horse', { invite: 'open-sesame' }), from('1.1.1.1'))).status, 201, 'the rule answered nothing, so the door opened');
+	assert.equal(await users(store, 'ada@example.com'), 1);
+	assert.equal((await route(signUp('ada@example.com', 'correct horse', { invite: 'nope' }), from('1.1.1.1'))).status, 200, 'a known email is a sign-in, whatever it carries');
+	assert.equal((await route(post('ada@example.com', 'correct horse'), from('1.1.1.1'))).status, 200);
+	assert.equal(asked.length, 2, 'a sign-in never asks the rule');
+
+	// The password rule runs first, so a refused password spends nothing at the door.
+	const strict = await routeOf({ refusePassword: () => true, refuseSignUp: () => { throw new Error('asked after a refused password'); } });
+	assert.equal((await strict.route(post('bo@example.com', 'correct horse'), from('1.1.1.1'))).status, 400);
+	await strict.store.stop();
+
+	// Async, and the shape of a refusal is one reason.
+	const slow = await routeOf({ refuseSignUp: async () => ({ code: 'closed', message: 'not today' }) });
+	const late = await slow.route(post('cy@example.com', 'correct horse'), from('1.1.1.1'));
+	assert.equal(late.status, 403);
+	assert.deepEqual(await late.json(), { reasons: [{ code: 'closed', message: 'not today' }] });
+	await slow.store.stop();
+
+	// enter() from a module of yours never asks: the rule is the door's, not the function's.
+	const { instance: enter } = await module<Enter>('Enter', store, { 'auth/Session': stubSession().session }, { refuseSignUp: () => ({ code: 'closed', message: 'no' }) });
+	const made = await enter.enter('dee@example.com', 'correct horse');
+	assert.ok('user' in made && made.created);
 	await store.stop();
 });
 
