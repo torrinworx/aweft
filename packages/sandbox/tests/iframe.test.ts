@@ -75,6 +75,18 @@ test('a hostile inside URL cannot end the policy or the attribute: its origin is
 	await runner.stop();
 });
 
+test('a title given to the runner is the frame\'s, and a runner given none writes none', async () => {
+	const frame = fakeFrame();
+	const runner = iframe({ inside: 'https://rooms.example/inside.js', into: { appendChild: () => {} }, document: { createElement: () => frame }, MessageChannel: fakeChannel(), title: 'The board' });
+	await runner.start();
+	assert.equal(frame.attrs.title, 'The board', 'the name a screen reader reads for the frame');
+	await runner.stop();
+	const { frame: bare, runner: plain } = setup('https://rooms.example/inside.js');
+	await plain.start();
+	assert.equal(bare.attrs.title, undefined);
+	await plain.stop();
+});
+
 test('a bare inside URL with no path still yields a usable script-src origin', async () => {
 	const { frame } = setup('https://rooms.example');
 	// originOf returns the whole string when there is no path after the host.

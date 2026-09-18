@@ -12,7 +12,7 @@ import { all, atomic, createObject, observer } from '@aweftjs/core';
 import { type ElementLike, type Mounter, createElement, mount } from '@aweftjs/dom';
 import { Theme, claimTail, h } from '@aweftjs/ui';
 
-import type { ClientLike, Sandbox, SandboxHandlers, SandboxLimits } from './contract.ts';
+import { type ClientLike, type Sandbox, type SandboxHandlers, type SandboxLimits, sandboxError } from './contract.ts';
 import { createSandbox } from './host.ts';
 import { type DocumentLike, type FrameAllow, type FrameLike, iframe } from './iframe.ts';
 import type { RouteDocument } from './route.ts';
@@ -38,6 +38,12 @@ export interface RoomProps {
 	readonly client?: ClientLike | undefined;
 	/** The act module the room shows, by name. */
 	readonly act: string;
+	/**
+	 * What the frame holds, in a few words: the frame's `title`, which is the name a screen
+	 * reader reads for it. A room with none is refused, as the build refuses an `<iframe>`
+	 * without a title (design 295).
+	 */
+	readonly label: string;
 	/** What the frame may load beyond scripts. Inline styles are always allowed (design 284). */
 	readonly allow?: FrameAllow | undefined;
 	/** The console levels that cross. `['error', 'warn']` unless given (design 283). */
@@ -100,8 +106,8 @@ const reasonOf = (error: unknown): unknown => (error as { reason?: unknown } | n
  * An act that runs a module in a frame on the page.
  *
  * Params:
- *   props: `inside`, `modules`, `grants`, `act`, and the rest named on `RoomProps`; anything
- *          else goes to the element
+ *   props: `inside`, `modules`, `grants`, `act`, `label`, and the rest named on `RoomProps`;
+ *          anything else goes to the element
  *
  * Returns: one element on the `room` entry, with the frame inside it once mounted. The runner
  * and the sandbox are made in `mounted` and stopped in `cleanup`, so leaving the act ends the
@@ -115,12 +121,16 @@ const reasonOf = (error: unknown): unknown => (error as { reason?: unknown } | n
  * room runs on `act` alone: its URL is `/` and its moves change nothing on the page.
  *
  * A `createSandbox` that rejects is raised where the page already looks, from a microtask,
- * unless the act had left first, in which case the `closed` it rejects with is the leaving.
+ * unless the act had left first, in which case the `closed` it rejects with is the leaving. A
+ * room with no `label` is refused as the mounter runs, before anything is claimed or made, so
+ * the throw reaches whoever mounted it (under a stage, the move that opened the act).
+ *
+ * Throws: `malformed` when `label` is missing, blank, or not text.
  *
  * Example:
  *   const AppAct = (props) => (
  *     <Room inside="/room/room.js" modules={modules} grants={grants} documents={{ board }}
- *       client={client} act="app/Main" allow={{ images: [] }}
+ *       client={client} act="app/Main" label="The board" allow={{ images: [] }}
  *       handlers={{ error: (entry) => log.write(entry) }} focus />
  *   );
  */
@@ -135,9 +145,13 @@ export const Room = (
 	mounted(() => { start(); });
 	return (elem, _item, before, context) => {
 		const {
-			inside, modules, grants, documents, client, act, allow, console: levels, handlers, focus,
+			inside, modules, grants, documents, client, act, label, allow, console: levels, handlers, focus,
 			props: given, bundle, follow, limits, importMap, element, theme, class: className, ...rest
 		} = props;
+		// Before the tail is claimed or a watch is registered: a refusal here leaves nothing to give back.
+		if (typeof label !== 'string' || label.trim() === '') {
+			throw sandboxError('malformed', label === undefined || typeof label === 'string' ? 'Room has no label' : 'Room\'s label is not text', 'Give the room a label saying what the frame holds; it is the frame\'s title, the name a screen reader reads.');
+		}
 
 		const node = (element as ElementLike | undefined) ?? createElement('div');
 		const claim = claimTail(context);
@@ -213,6 +227,7 @@ export const Room = (
 		const runner = iframe({
 			inside: resolved(inside),
 			into: node as unknown as { appendChild(node: FrameLike): unknown },
+			title: label,
 			allow: { styles: true, ...allow },
 			...(importMap === undefined ? {} : { importMap }),
 			// The element's own document, so a frame goes where the element is: a light document

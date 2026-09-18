@@ -8,6 +8,7 @@ malformed: Build the route document with createObject from @aweftjs/core, holdin
 malformed: Check that the host and the room run the same version of this package.
 malformed: Check that the host runs the same version of this package as the room.
 malformed: Check that the room runs the same version of this package as the host.
+malformed: Give the room a label saying what the frame holds; it is the frame's title, the name a screen reader reads.
 malformed: Name the act the room shows as a string, the way an acts map names a module.
 malformed: Pass props to createSandbox as a plain object.
 missing: Call a function the exposed instance has.

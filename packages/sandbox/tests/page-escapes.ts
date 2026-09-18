@@ -24,13 +24,13 @@ doc.createElement = (tag: string): LightElement => {
 const modules = createObject<Record<string, unknown>>({});
 // A document under a reserved name: the sandbox is refused before the frame is made.
 const refused = mount(doc.body as never, h(Room, {
-	inside: '/room/room.js', modules, grants: createArray<string>([]), act: 'app/Main',
+	inside: '/room/room.js', modules, grants: createArray<string>([]), act: 'app/Main', label: 'The app',
 	documents: { calls: createObject() },
 }));
 await new Promise((done) => setTimeout(done, 50));
 refused();
 // A sound one, whose frame never loads here: `inside` was resolved against the page.
-const sound = mount(doc.body as never, h(Room, { inside: '/room/room.js', modules, grants: createArray<string>([]), act: 'app/Main' }));
+const sound = mount(doc.body as never, h(Room, { inside: '/room/room.js', modules, grants: createArray<string>([]), act: 'app/Main', label: 'The app' }));
 await new Promise((done) => setTimeout(done, 50));
 const policy = /content="([^"]*)"/.exec(frames[0]?.getAttribute('srcdoc') ?? '')?.[1] ?? '';
 sound();

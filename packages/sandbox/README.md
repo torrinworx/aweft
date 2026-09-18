@@ -160,13 +160,16 @@ const modules = createObject({ 'app/Main': createObject({ source: mainSource }) 
 const App = () => (
 	<Room inside="/room/room.js" importMap={{ '@aweftjs/ui': '/room/ui.js', '@aweftjs/core': '/room/core.js' }}
 		modules={modules} grants={grants} documents={{ board }} client={client} act="app/Main"
-		allow={{ images: [] }} handlers={{ error: (entry) => log.write(entry) }} focus />
+		label="The board" allow={{ images: [] }} handlers={{ error: (entry) => log.write(entry) }} focus />
 );
 mount(document.body, <StageContext router={router} acts={{ '': Home, 'app/:id': App }}><Stage /></StageContext>);
 ```
 
 It renders one element on the `room` entry, the frame fills it, and the room is made when the
-act mounts and stopped when it leaves: one frame per act instance. Key the host act `app/:id`,
+act mounts and stopped when it leaves: one frame per act instance. `label` says in a few words
+what the frame holds and is written as its `title`, the name a screen reader reads for it; a
+room without one is refused at mount, the way the build refuses an `<iframe>` with no title.
+`focus` puts the keyboard in the frame once the room is up. Key the host act `app/:id`,
 not `app/:id/*tail`: a `*name` takes the rest as a parameter and leaves no tail, so a host key
 with one rebuilds the act, the frame and the room on every move inside the room and hands the
 room nothing to route on. What an act does not match is its tail, so `app/:id` is enough, and
@@ -285,10 +288,11 @@ next navigation loads the module again. Nothing reloads unless you ask.
 | runner | the room is | the wall is | what it stops |
 |---|---|---|---|
 | `inProcess()` | this process | none | nothing; the trusted case |
-| `iframe({ inside, into, allow })` | an opaque-origin frame | the browser | the page, its storage, cookies, the network, navigation |
+| `iframe({ inside, into, allow, title })` | an opaque-origin frame | the browser | the page, its storage, cookies, the network, navigation |
 | `child(options)`, on `@aweftjs/sandbox/node` | a Node process | Node's permission model, plus your `wrap` | files, network, spawning, workers, native addons, eval, the environment |
 
-`iframe` takes `allow`, what a page in the frame may load beyond scripts: `styles: true` for
+`iframe` takes `title`, written on the frame as its name when given (`Room` hands it the
+label), and `allow`, what a page in the frame may load beyond scripts: `styles: true` for
 inline styles, and `images`, `fonts` and `media`, each a list of origins beside the inside origin,
 `data:` and `blob:`. Scripts and connections never widen: `connect-src` stays refused whatever
 `allow` says, and the sandbox attribute stays `allow-scripts` alone. `child` takes

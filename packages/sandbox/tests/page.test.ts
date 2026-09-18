@@ -128,7 +128,7 @@ test('the whole loop: a Room under a stage runs an act in a room, with documents
 	const applied: string[] = [];
 
 	const AppAct = (): unknown => h(Room, {
-		inside: 'http://rooms.test/room.js', modules, grants, documents: { state }, client, act: 'app/Main',
+		inside: 'http://rooms.test/room.js', modules, grants, documents: { state }, client, act: 'app/Main', label: 'The reports',
 		bundle, props: { site: 'reports' }, follow: true, focus: true, id: 'box',
 		handlers: {
 			error: (entry: Report) => { errors.push(entry); },
@@ -240,7 +240,7 @@ test('a Room with no stage above runs the act on / and a room move changes nothi
 	const Layout = (props: { children?: unknown[] }): unknown => h('section', { id: 'layout' }, ...(props.children ?? []));
 	const { doc: page, ports } = pageWith((port) => { handle = room(port as never, { document: inside, template: Layout }); });
 	const modules = document({ 'app/Main': ACT, 'app/Helper': HELPER });
-	const stop = mount(page.body as never, h(Room, { inside: 'http://rooms.test/room.js', modules, grants: grantsOf(), act: 'app/Main', bundle }));
+	const stop = mount(page.body as never, h(Room, { inside: 'http://rooms.test/room.js', modules, grants: grantsOf(), act: 'app/Main', label: 'The app', bundle }));
 	leaving(t, ports, stop, async () => { await (await handle)?.stop(); });
 	await until('the act', () => textOf(inside).includes('id="first"'));
 	assert.match(textOf(inside), /<section id="layout">.*id="first"/, 'the template wraps the act');
@@ -252,6 +252,39 @@ test('a Room with no stage above runs the act on / and a room move changes nothi
 	assert.ok(textOf(inside).includes('id="second"'), 'with no page history the room\'s back goes nowhere');
 	stop();
 	await (await handle!).stop();
+});
+
+test('a Room with no label is refused before a frame is made, and the label is the frame\'s title', async () => {
+	const { doc: page } = pageWith(() => {});
+	const modules = document({ 'app/Main': ACT });
+	for (const label of [undefined, '', '  ', 7, { text: 'x' }]) {
+		assert.throws(
+			() => mount(page.body as never, h(Room, { inside: 'http://rooms.test/room.js', modules, grants: grantsOf(), act: 'app/Main', ...(label === undefined ? {} : { label }) })),
+			(error: { reason?: string; fix?: string; message?: string }) => error.reason === 'malformed' && /label/.test(error.fix ?? '') && (typeof label === 'string' || label === undefined ? /no label/ : /not text/).test(error.message ?? ''),
+		);
+		assert.doesNotMatch(toHtml(page.body as never), /<iframe/, 'nothing was made');
+	}
+	// The refusal runs before the tail is claimed: a later Room on the same stage still gets its
+	// tail, which is what its route shows (a room with no claim runs on `/`).
+	{
+		let port: unknown;
+		const { doc: claimed, ports } = pageWith((posted) => { port = posted; });
+		const Later = (): unknown => h(Room, { inside: 'http://rooms.test/room.js', modules: document({}), grants: grantsOf(), act: 'app/Main', label: 'The app' });
+		const Bad = (): unknown => h(Room, { inside: 'http://rooms.test/room.js', modules: document({}), grants: grantsOf(), act: 'app/Main' });
+		const router = createRouter({ url: '/other' });
+		const stop = mount(claimed.body as never, h(StageContext, { router, acts: { 'app/*': Bad, 'later/*': Later, other: () => h('main') } } as never, h(Stage, {})));
+		assert.throws(() => { router.push('/app/first'); }, (error: { reason?: string }) => error.reason === 'malformed');
+		router.push('/later/deep');
+		await until('the port', () => port !== undefined);
+		const entered = await enter(fromMessagePort(port as never));
+		assert.equal(entered.route!.url, '/deep', 'the later room holds the tail the refused one never took');
+		stop();
+		for (const held of ports) held.close();
+	}
+	const stop = mount(page.body as never, h(Room, { inside: 'http://rooms.test/room.js', modules, grants: grantsOf(), act: 'app/Main', label: 'The app' }));
+	await new Promise((done) => setTimeout(done, 20));
+	assert.match(toHtml(page.body as never), /<iframe[^>]*title="The app"/);
+	stop();
 });
 
 test('a sandbox the host refuses is raised as the page\'s own, and inside is resolved against the page', () => {
@@ -294,7 +327,7 @@ const hostRoute = async (t: { after(fn: () => Promise<void> | void): void }, url
 	let port: unknown;
 	const { doc: page, ports } = pageWith((posted) => { port = posted; });
 	const modules = document({});
-	const AppAct = (): unknown => h(Room, { inside: 'http://rooms.test/room.js', modules, grants: grantsOf(), act: 'app/Main' });
+	const AppAct = (): unknown => h(Room, { inside: 'http://rooms.test/room.js', modules, grants: grantsOf(), act: 'app/Main', label: 'The app' });
 	const Other = (): unknown => h('main', { id: 'other' }, 'other');
 	const stop = mount(page.body as never, h(StageContext, { router, acts: { 'app/:id': AppAct, other: Other } } as never, h(Stage, {})));
 	leaving(t, ports, stop);
