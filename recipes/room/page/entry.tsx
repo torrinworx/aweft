@@ -66,6 +66,7 @@ const App = (): unknown => (
 			documents={{ board: board.document! }}
 			client={client}
 			act="app/Main"
+			label="The board"
 			allow={{ images: [] }}
 			theme="app"
 			focus

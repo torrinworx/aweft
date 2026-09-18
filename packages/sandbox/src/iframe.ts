@@ -52,6 +52,8 @@ export interface FrameOptions {
 	readonly allow?: FrameAllow | undefined;
 	/** Where the frame goes. A frame runs only once it is in a document. */
 	readonly into: { appendChild(node: FrameLike): unknown };
+	/** What the frame holds, as its `title`: the name a screen reader gives it. */
+	readonly title?: string | undefined;
 	/** An import map for the frame, when `inside` is served unbundled. */
 	readonly importMap?: Readonly<Record<string, string>> | undefined;
 	/** Defaults to the page's own. */
@@ -148,6 +150,7 @@ export const iframe = (options: FrameOptions): Runner & { readonly element: Fram
 			frame = made;
 			abandon = reject;
 			made.setAttribute('sandbox', 'allow-scripts');
+			if (options.title !== undefined) made.setAttribute('title', options.title);
 			made.addEventListener('load', () => {
 				abandon = undefined;
 				const ports = new Channel();
