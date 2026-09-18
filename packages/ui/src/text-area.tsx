@@ -10,8 +10,9 @@ import { mutable } from '@aweftjs/core';
 
 import { controlStates, elementFor, sizeSegments, starting, valueOf } from './control.ts';
 import { empty, wireField } from './field.ts';
+import { assert } from './assert.ts';
 import { h } from './h.ts';
-import { isWritable, through } from './source.ts';
+import { isSource, isWritable, through } from './source.ts';
 
 /** What `TextArea` takes. Everything not named here goes to the element. */
 export interface TextAreaProps {
@@ -54,7 +55,9 @@ interface Measurable {
  * Params:
  *   props: `value`, `label`, `description`, `error`, `placeholder`, `maxHeight`, `onEnter`,
  *          `onKeyDown`, `disabled`, `type`, `size`, `element`, and anything else, which goes to
- *          the `<textarea>`
+ *          the `<textarea>`; a `style` object keeps its declarations but `height` and `maxHeight`,
+ *          which are this component's. A string or a cell for the whole style is refused: the
+ *          measured height has to be written into the one object.
  *
  * Returns: a `<textarea>` on its own, or the textarea inside a `<div>` with its label,
  * description and error, when it was given any of the three.
@@ -69,8 +72,10 @@ interface Measurable {
 export const TextArea = (props: TextAreaProps): Mounter => (elem, _item, before, context) => {
 	const {
 		value, label, description, error, placeholder, maxHeight,
-		onEnter, onKeyDown, disabled, type, size, element, theme, ...rest
+		onEnter, onKeyDown, disabled, type, size, element, theme, style, ...rest
 	} = props;
+	assert(style === undefined || style === null || (typeof style === 'object' && !isSource(style)),
+		'TextArea takes style as an object; a string or a cell for the whole style cannot carry the height it measures, give it an object with cells inside');
 
 	const cell = isWritable(value) ? value : mutable('');
 	const states = controlStates(disabled, props);
@@ -105,7 +110,8 @@ export const TextArea = (props: TextAreaProps): Mounter => (elem, _item, before,
 		// `textarea` sits after the size segment on purpose: it is the shape rule, and it has to win
 		// over `input_sm`, which sets a fixed height a text area does not have (design 194).
 		theme: ['input', type, sizeSegments(size), 'textarea', through(error, (held) => (empty(held) ? null : 'invalid')), theme, ...states.segments],
-		style: { maxHeight, height },
+		// The caller's declarations first, so the two this component owns win over them.
+		style: { ...(style as Record<string, unknown> | null | undefined), maxHeight, height },
 		placeholder,
 		disabled,
 		$value: cell,

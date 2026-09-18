@@ -83,7 +83,7 @@ const SIZE_PROPERTIES = new Set([
 	'top', 'right', 'bottom', 'left', 'inset',
 	'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
 	'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-	'gap', 'rowGap', 'columnGap', 'fontSize', 'lineHeight', 'letterSpacing',
+	'gap', 'rowGap', 'columnGap', 'fontSize', 'letterSpacing',
 	'borderRadius', 'borderWidth', 'outlineWidth', 'outlineOffset', 'strokeWidth',
 	'flexBasis', 'translate', 'textIndent',
 ]);

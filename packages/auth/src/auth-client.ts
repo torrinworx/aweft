@@ -162,7 +162,8 @@ export interface Auth {
 	 * Returns: `{ ok: true }`, or `{ refused }` with the route's reasons: `private` when nobody
 	 * is signed in, `verified` when the email already is, `attempts` when too many were asked
 	 * for, `mail` when the mailer did not take it, `token` when the link is not one that can be
-	 * used. Nothing reconnects: the name `verified` reaches `names` through the share.
+	 * used, `taken` when it already was. Nothing reconnects: the name `verified` reaches `names`
+	 * through the share.
 	 *
 	 * Rejects with `verify-failed` for any other status, with `stopped` on a stopped auth.
 	 *
@@ -212,7 +213,8 @@ export interface Auth {
 	 *
 	 * Returns: `{ ok: true }` once every session of the person is ended and the client has
 	 * reconnected, so a page that was signed in as them reads `user` as `null`; or `{ refused }`:
-	 * `token` for a link that is not live, `password` for one the rules refuse.
+	 * `token` for a link that is not live, `taken` for one already used, `password` for one the
+	 * rules refuse.
 	 *
 	 * Rejects with `reset-failed` for any other status, with `stopped` on a stopped auth, and
 	 * with `closed` when the route answered but the client was closed.

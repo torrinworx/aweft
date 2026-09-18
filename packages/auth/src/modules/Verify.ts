@@ -5,7 +5,7 @@ import type { ModuleProps } from '@aweftjs/modules';
 import { type Refusal, sliding } from '@aweftjs/server';
 
 import { type AuthContext, userOf } from '../context.ts';
-import { type Links, links } from '../links.ts';
+import { type Links, NOT_LIVE, TAKEN, links } from '../links.ts';
 import { type Mailer, type Outcome, mailLink, textOf, urlOf } from '../mail.ts';
 import { bodyOf, json, numberOf, storeOf } from '../props.ts';
 import { userDoc } from '../users.ts';
@@ -33,13 +33,14 @@ export interface Verify {
 	readonly public: true;
 	/** Mail the person a link. Refuses `verified` for a person already verified, and `mail` when it did not go. */
 	send(user: string): Promise<Outcome>;
-	/** Take a link: `emailVerified` is written and `verified` granted. Refuses `token` for a link that is not live. */
+	/** Take a link: `emailVerified` is written and `verified` granted. Refuses `taken` for a link already used and `token` for one that never was or is past its end. */
 	confirm(token: unknown): Promise<Confirmed>;
 	stop(): void;
 	readonly routes: Record<string, (request: Request, context: AuthContext) => Promise<Response>>;
 }
 
 const MODULE = 'auth/Verify';
+
 
 export default ({ imports, config, ...props }: ModuleProps): Verify => {
 	const store = storeOf(props);
@@ -67,8 +68,10 @@ export default ({ imports, config, ...props }: ModuleProps): Verify => {
 	};
 
 	const confirm = async (token: unknown): Promise<Confirmed> => {
-		const user = await held.take(token);
-		if (user === undefined) return { refused: [{ code: 'token', message: 'this link is not one that can be used' }] };
+		const link = await held.take(token);
+		if (link === undefined) return { refused: [NOT_LIVE] };
+		if ('taken' in link) return { refused: [TAKEN] };
+		const { user } = link;
 		const handle = await store.open(userDoc(user));
 		atomic(() => {
 			const root = handle.root as Partial<UserDocument>;

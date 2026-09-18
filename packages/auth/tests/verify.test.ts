@@ -10,7 +10,7 @@ import type { Enter, UserDocument } from '../src/modules/Enter.ts';
 import type { Session } from '../src/modules/Session.ts';
 import type { Verify } from '../src/modules/Verify.ts';
 
-import { jsonRequest, mailer, module, newStore, noRoles, request, tokenIn } from './helpers.ts';
+import { jsonRequest, mailRefused, mailer, module, newStore, noRoles, request, tokenIn } from './helpers.ts';
 
 const url = (token: string): string => `https://app.example/verify?token=${token}`;
 
@@ -55,9 +55,10 @@ test('send writes a link and mails it through notify with the configured url; co
 	assert.deepEqual(await verify.confirm(token), { user: ada });
 	assert.equal(await verifiedOf(store, ada), true);
 	assert.equal(await roles.may(ada, 'verified'), true, 'the name is granted');
-	assert.equal(await store.head(`verify:${token}`), 0, 'and the link is gone');
-	assert.deepEqual(await verify.confirm(token), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] }, 'a second use');
+	assert.notEqual(await store.head(`verify:${token}`), 0, 'the link stays, marked, until its end (design 294)');
+	assert.deepEqual(await verify.confirm(token), { refused: [{ code: 'taken', message: 'this link has already been used' }] }, 'a second use is told apart from a link that never was');
 	assert.deepEqual(await verify.confirm('not a token'), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] });
+	assert.deepEqual(await verify.confirm('AAAAAAAAAAAAAAAAAAAAAA'), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] }, 'a token nobody issued');
 
 	assert.deepEqual(await verify.confirm(undefined), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] });
 	assert.deepEqual(await verify.send(ada), { refused: [{ code: 'verified', message: 'this email is already verified' }] }, 'nothing more to verify');
@@ -81,19 +82,38 @@ test('a link past its lifetime is refused and swept; a mailer that fails or skip
 
 	mail.answer({ ok: false, error: 'the provider said no' });
 	const failed = await verify.send(ada);
-	assert.deepEqual(failed, { refused: [{ code: 'mail', message: 'the mail could not be sent: the provider said no' }] });
+	assert.deepEqual(failed, { refused: [mailRefused('the provider said no')] });
 	const standing = tokenIn(mail.sent[1]!.body);
 	assert.notEqual(await store.head(`verify:${standing}`), 0, 'the link is kept for the next try');
 	mail.answer({ skipped: 'no address' });
-	assert.deepEqual(await verify.send(ada), { refused: [{ code: 'mail', message: 'the mail could not be sent: no address' }] });
+	assert.deepEqual(await verify.send(ada), { refused: [mailRefused('no address')] });
 	mail.answer(undefined);
-	assert.deepEqual(await verify.send(ada), { refused: [{ code: 'mail', message: 'the mail could not be sent: the mailer tried no email channel' }] });
+	assert.deepEqual(await verify.send(ada), { refused: [mailRefused('the mailer tried no email channel')] });
 	mail.answer('yes');
-	assert.deepEqual(await verify.send(ada), { refused: [{ code: 'mail', message: 'the mail could not be sent: the mailer tried no email channel' }] }, 'a shape notify never answers is the same refusal, not a throw');
+	assert.deepEqual(await verify.send(ada), { refused: [mailRefused('the mailer tried no email channel')] }, 'a shape notify never answers is the same refusal, not a throw');
 	mail.answer({ ok: false });
-	assert.deepEqual(await verify.send(ada), { refused: [{ code: 'mail', message: 'the mail could not be sent: the mailer gave no reason' }] });
+	assert.deepEqual(await verify.send(ada), { refused: [mailRefused('the mailer gave no reason')] });
 	mail.fail('capped');
-	assert.deepEqual(await verify.send(ada), { refused: [{ code: 'mail', message: 'the mail could not be sent: capped' }] }, 'a throw is the same refusal');
+	assert.deepEqual(await verify.send(ada), { refused: [mailRefused('capped')] }, 'a throw is the same refusal');
+	verify.stop();
+	await store.stop();
+});
+
+test('the mail refusal keeps the mailer\'s words out of the sentence a page shows, and puts them where the operator reads', async () => {
+	const store = newStore();
+	const mail = mailer();
+	const { instance: verify } = await module<Verify>('Verify', store, { 'auth/Roles': noRoles, 'notify/Send': mail }, { url });
+	const ada = await signUp(store, 'ada@example.com');
+	// What notify answers when no mailer is configured, which a page once printed to a person.
+	mail.answer({ ok: false, error: 'email is not configured: give notify/Send an email setting' });
+	const outcome = await verify.send(ada);
+	assert.ok('refused' in outcome);
+	const [reason] = outcome.refused as readonly { code: string; message: string; detail?: string; fix?: string }[];
+	assert.equal(reason!.code, 'mail');
+	assert.doesNotMatch(reason!.message, /notify\/Send/, 'the person is not told a module name');
+	assert.doesNotMatch(reason!.message, /not configured/);
+	assert.equal(reason!.detail, 'email is not configured: give notify/Send an email setting', 'the mailer\'s words, whole');
+	assert.match(reason!.fix ?? '', /notify\/Send/, 'the operator is told where to look');
 	verify.stop();
 	await store.stop();
 });
@@ -126,6 +146,9 @@ test('POST /api/verify/send is 401 anonymous, 200 sent, 409 already verified, 42
 	const taken = await takeRoute(jsonRequest('/api/verify', 'POST', { token: tokenIn(mail.sent[1]!.body) }), asUser(null));
 	assert.equal(taken.status, 200, 'anyone with the link takes it');
 	assert.deepEqual(await taken.json(), { user: ada });
+	const again = await takeRoute(jsonRequest('/api/verify', 'POST', { token: tokenIn(mail.sent[1]!.body) }), asUser(null));
+	assert.equal(again.status, 400, 'a second opening');
+	assert.deepEqual(await again.json(), { reasons: [{ code: 'taken', message: 'this link has already been used' }] });
 	assert.equal((await takeRoute(jsonRequest('/api/verify', 'POST', { token: tokenIn(mail.sent[0]!.body) }), asUser(null))).status, 200, 'an earlier link still stands');
 
 	const { instance: fresh } = await module<Verify>('Verify', store, { 'auth/Roles': roles, 'notify/Send': mail }, { url });
@@ -134,7 +157,7 @@ test('POST /api/verify/send is 401 anonymous, 200 sent, 409 already verified, 42
 	mail.answer({ ok: false, error: 'down' });
 	const down = await fresh.routes['POST /api/verify/send']!(request('/api/verify/send', { method: 'POST' }), asUser(bob));
 	assert.equal(down.status, 502);
-	assert.deepEqual(await down.json(), { reasons: [{ code: 'mail', message: 'the mail could not be sent: down' }] });
+	assert.deepEqual(await down.json(), { reasons: [mailRefused('down')] });
 	verify.stop();
 	fresh.stop();
 	await store.stop();

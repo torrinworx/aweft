@@ -432,6 +432,55 @@ test('a text area grows to its content where there is a layout to measure', () =
 	stop();
 });
 
+test('a text area keeps the style it was given, under the height it writes', () => {
+	const value = mutable('');
+	const document = createDocument();
+	const stop = mount(document.body, h(TextArea as never, { value, style: { minHeight: 38, background: 'transparent' } }));
+	const area = elements(document.body.firstChild).find((element) => element.localName === 'textarea')!;
+
+	// Anything else goes to the element, and `style` is anything else: it is not replaced by
+	// the object the component writes its own height into.
+	assert.equal(area.getAttribute('style'), 'min-height: 38px; background: transparent;');
+
+	Object.defineProperty(area, 'scrollHeight', { value: 84, configurable: true });
+	setProp(area, 'value', 'three\nlines\nhere');
+	fire(area, 'input');
+	assert.equal(area.getAttribute('style'), 'min-height: 38px; background: transparent; height: 84px;', 'the caller\'s declarations first, the measured height after them');
+	stop();
+});
+
+test('a text area refuses a string or a cell for the whole style, naming the object it takes', () => {
+	const document = createDocument();
+	for (const style of ['color: red', mutable({ minHeight: 38 })]) {
+		assert.throws(
+			() => mount(document.body, h(TextArea as never, { value: mutable(''), style })),
+			/TextArea takes style as an object/,
+		);
+	}
+	// Cells inside the object are fine: that is how a declaration follows a value.
+	const colour = mutable('red');
+	const stop = mount(document.body, h(TextArea as never, { value: mutable(''), style: { color: colour } }));
+	const area = elements(document.body.firstChild).find((element) => element.localName === 'textarea')!;
+	assert.equal(area.getAttribute('style'), 'color: red;');
+	stop();
+});
+
+test('Enter in a text area calls onEnter with the key\'s own default prevented, and every key reaches onKeyDown', () => {
+	const seen: string[] = [];
+	const { body, stop } = page(h(TextArea as never, {
+		value: mutable(''),
+		onEnter: () => { seen.push('enter'); },
+		onKeyDown: (event: unknown) => { seen.push((event as { key: string }).key); },
+	}));
+	const area = byRole(body.firstChild, 'textbox');
+	let prevented = 0;
+	fire(area, 'keydown', { key: 'a', preventDefault: () => { prevented += 1; } });
+	fire(area, 'keydown', { key: 'Enter', preventDefault: () => { prevented += 1; } });
+	assert.deepEqual(seen, ['a', 'enter', 'Enter'], 'onEnter for Enter only, and before onKeyDown');
+	assert.equal(prevented, 1, 'Enter\'s default is prevented and a letter\'s is not');
+	stop();
+});
+
 // --- what the states put on the element --------------------------------------------------------
 
 test('disabled is one attribute and one theme segment, and it touches one node', () => {

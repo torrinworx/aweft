@@ -11,7 +11,7 @@ import type { Enter } from '../src/modules/Enter.ts';
 import type { Password } from '../src/modules/Password.ts';
 import type { Session } from '../src/modules/Session.ts';
 
-import { jsonRequest, mailer, module, newStore, request, tokenIn, withCookie } from './helpers.ts';
+import { jsonRequest, mailRefused, mailer, module, newStore, request, tokenIn, withCookie } from './helpers.ts';
 
 const url = (token: string): string => `https://app.example/reset?token=${token}`;
 
@@ -83,10 +83,12 @@ test('forgot answers ok for any address, mails a link only to a known one, and r
 	assert.equal(await b.signsIn('ada@example.com', 'correct horse'), false);
 	assert.equal(await b.live(ada.token), false, 'every session is over');
 	assert.equal(await b.live(second), false);
-	assert.deepEqual(await b.password.reset(token, 'battery staple'), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] }, 'a second use');
+	assert.deepEqual(await b.password.reset(token, 'battery staple'), { refused: [{ code: 'taken', message: 'this link has already been used' }] }, 'a second use is told apart from a link that never was (design 294)');
+	assert.deepEqual(await b.password.reset(token, 'short'), { refused: [{ code: 'taken', message: 'this link has already been used' }] }, 'and it is refused before the password is looked at');
+	assert.notEqual(await store.head(`reset:${token}`), 0, 'the link stays, marked, until its end');
 
 	b.mail.answer({ ok: false, error: 'down' });
-	assert.deepEqual(await b.password.forgot('ada@example.com'), { refused: [{ code: 'mail', message: 'the mail could not be sent: down' }] });
+	assert.deepEqual(await b.password.forgot('ada@example.com'), { refused: [mailRefused('down')] });
 	await b.stop();
 	await store.stop();
 });
@@ -151,14 +153,16 @@ test('the forgot route is 400 for text that is not an address, 200 whatever the 
 	const done = await reset(jsonRequest('/api/password/reset', 'POST', { token, password: 'battery staple' }), asUser(null));
 	assert.equal(done.status, 200);
 	assert.deepEqual(await done.json(), { user: ada.user });
-	assert.equal((await reset(jsonRequest('/api/password/reset', 'POST', { token, password: 'battery staple' }), asUser(null))).status, 400, 'used');
+	const used = await reset(jsonRequest('/api/password/reset', 'POST', { token, password: 'battery staple' }), asUser(null));
+	assert.equal(used.status, 400, 'used');
+	assert.deepEqual(await used.json(), { reasons: [{ code: 'taken', message: 'this link has already been used' }] });
 	assert.equal(await b.live(ada.token), false);
 
 	const { instance: fresh } = await module<Password>('Password', store, { 'auth/Session': b.session, 'auth/Enter': b.enter, 'notify/Send': b.mail }, { url });
 	b.mail.answer({ ok: false, error: 'down' });
 	const failed = await fresh.routes['POST /api/password/forgot']!(jsonRequest('/api/password/forgot', 'POST', { email: 'ada@example.com' }), asUser(null, null, '4.4.4.4'));
 	assert.equal(failed.status, 502);
-	assert.deepEqual(await failed.json(), { reasons: [{ code: 'mail', message: 'the mail could not be sent: down' }] });
+	assert.deepEqual(await failed.json(), { reasons: [mailRefused('down')] });
 	fresh.stop();
 	await b.stop();
 	await store.stop();

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { mutable, mutableArray } from '@aweftjs/core';
 import { createDocument, parseHtml, toHtml } from '@aweftjs/dom';
 import type { LightElement } from '@aweftjs/dom';
-import { Theme, context, h, html, hydrate, mount, render, svg } from '@aweftjs/ui';
+import { Theme, context, h, html, hydrate, mount, render, sizeProperties, svg } from '@aweftjs/ui';
 
 Theme.define({
 	box: { padding: 8 },
@@ -54,6 +54,17 @@ test('style takes an object, gives a size property px, and resolves a $var from 
 		toHtml(document.body.childNodes),
 		'<div class="aw0" style="padding: 4px; flex-grow: 1; width: 20px;"></div>',
 	);
+	stop();
+});
+
+test('a bare lineHeight stays a multiplier, and a bare size beside it is still pixels', () => {
+	// The one property where a unitless number is the idiom (design 292): 1.45 is 1.45 times
+	// the font size, and 1.45px would paint the lines over each other.
+	assert.equal(sizeProperties.has('lineHeight'), false);
+	assert.equal(sizeProperties.has('letterSpacing'), true, 'a bare letter spacing is pixels');
+	const document = createDocument();
+	const stop = mount(document.body, h('p', { style: { lineHeight: 1.45, padding: 8 } }));
+	assert.equal(toHtml(document.body.childNodes), '<p style="line-height: 1.45; padding: 8px;"></p>');
 	stop();
 });
 

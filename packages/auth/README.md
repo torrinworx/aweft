@@ -272,29 +272,36 @@ export const config = {
 POST /api/verify/send                          signed in: mails the link
   200 { "ok": true }   401 private   409 verified   429 attempts   502 mail
 POST /api/verify        { "token": "..." }     anyone: takes the link once
-  200 { "user": "<id>" }   400 token
+  200 { "user": "<id>" }   400 token | taken
 
 POST /api/password      { "current": "...", "password": "..." }   signed in
   200 { "ok": true }   401 password (the current one is wrong)   400 password (the new one)   429 attempts
 POST /api/password/forgot { "email": "..." }   anyone: 200 whatever the address
   200 { "ok": true }   400 email   429 attempts   502 mail
 POST /api/password/reset  { "token": "...", "password": "..." }   anyone
-  200 { "user": "<id>" }   400 token | password
+  200 { "user": "<id>" }   400 token | taken | password
 ```
 
 **A link is one use, and lives its lifetime.** A token is what a session token is, sixteen
 random bytes; the document `verify:<token>` or `reset:<token>` names who it is for and when it
-ends, and is removed when taken or once expired. Taking a verification link writes
-`emailVerified` on the user and grants `verified`. Taking a reset link sets the password and
-ends every session of the person. A change needs the current password, sets the new one, and
-ends every other session, keeping the one that asked. The new password goes through
-`auth/Enter`'s `checkPassword`, so `passwordMin`, `passwordMax` and `refusePassword` apply once.
+ends. Taking it marks the document `taken`, and the sweep removes it once it has expired,
+taken or not. So a token names one of three things: a live link, a taken one (400 `taken`,
+which for a verification link means the address is verified, and a page may say so), or
+nothing (400 `token`, for a link nobody issued or one past its end; design 294). Taking a
+verification link writes `emailVerified` on the user and grants `verified`. Taking a reset
+link sets the password and ends every session of the person. A change needs the current
+password, sets the new one, and ends every other session, keeping the one that asked. The new
+password goes through `auth/Enter`'s `checkPassword`, so `passwordMin`, `passwordMax` and
+`refusePassword` apply once.
 
 **The mail says one thing and carries one link.** The body is the sentence and the address as
 text, the HTML the same with the address as a link, under `subject`. For a mail of your own,
 write a module that names `notify/Send` and calls `send` with your `html`; the two here own no
 template. A mailer that answers anything but ok, or throws, is 502 with the reason `mail`, and
-the link still stands, so the person asks again once the mailer is back.
+the link still stands, so the person asks again once the mailer is back. That reason carries
+`detail` and `fix` beside `code` and `message`: `message` is the one sentence a page shows the
+person, `detail` is what the mailer said, word for word, and `fix` tells whoever runs the server
+where to look (design 293).
 
 **`forgot` answers 200 for an address nobody has**, and sends nothing, although `auth/Check`
 enumerates: the mail route is the one that costs a send, and a stranger typing addresses must
@@ -500,8 +507,8 @@ Six kinds of document in your store, named by prefix:
   first sign-up has been seen.
 - `state:<user>`: whatever you keep per user. `auth/State` shares it under `state`, accepting
   every commit, because it is theirs.
-- `verify:<token>` and `reset:<token>`: `user`, `expires`, `createdAt`. Removed when taken,
-  or by the sweep once expired.
+- `verify:<token>` and `reset:<token>`: `user`, `expires`, `createdAt`, and `taken` once it
+  has been. Removed by the sweep once expired.
 
 The state document is an `@aweftjs/core` observable, as every document in the store is: put
 a list in it with `createArray` from `@aweftjs/core`, an object with `createObject`, and group

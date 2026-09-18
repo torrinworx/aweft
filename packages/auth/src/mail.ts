@@ -46,8 +46,22 @@ export const urlOf = (module: string, config: Readonly<Record<string, unknown>>)
 	return held as LinkUrl;
 };
 
-/** Refused as `mail` when the mailer answered anything but ok, or threw: the route answers 502 and the token still stands. */
-export const mailFailed = (detail: string): Refusal => ({ code: 'mail', message: `the mail could not be sent: ${detail}` });
+/**
+ * The `mail` refusal (design 293): `message` is the sentence a page shows the person, `detail`
+ * is what the mailer said, and `fix` is for whoever runs it. The route answers 502 and the
+ * token still stands.
+ */
+export interface MailRefusal extends Refusal {
+	readonly detail: string;
+	readonly fix: string;
+}
+
+export const mailFailed = (detail: string): MailRefusal => ({
+	code: 'mail',
+	message: 'the mail could not be sent; try again later',
+	detail,
+	fix: 'Check the email setting notify/Send was given; what the mailer answered is in detail.',
+});
 
 /**
  * Mail a person one link. Answers the refusal when it did not go, and nothing when it did.
@@ -55,7 +69,7 @@ export const mailFailed = (detail: string): Refusal => ({ code: 'mail', message:
  * The body is the sentence and the address as text; the HTML is the same with the address as a
  * link, so a reader whose mail shows no HTML has the address to copy.
  */
-export const mailLink = async (mailer: Mailer, user: string, subject: string, sentence: string, url: string): Promise<Refusal | undefined> => {
+export const mailLink = async (mailer: Mailer, user: string, subject: string, sentence: string, url: string): Promise<MailRefusal | undefined> => {
 	let delivery: MailDelivery | undefined;
 	try {
 		({ delivery: { email: delivery } } = await mailer.send({

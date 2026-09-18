@@ -136,5 +136,13 @@ export const mailer = () => {
 	};
 };
 
+/** The `mail` refusal as a route answers it: one sentence for the person, the mailer's words in `detail`, the fix for whoever runs it (design 293). */
+export const mailRefused = (detail: string): { code: string; message: string; detail: string; fix: string } => ({
+	code: 'mail',
+	message: 'the mail could not be sent; try again later',
+	detail,
+	fix: 'Check the email setting notify/Send was given; what the mailer answered is in detail.',
+});
+
 /** The token the mail carries, read back out of the link the module built from `url`. */
 export const tokenIn = (body: string): string => body.slice(body.indexOf('token=') + 'token='.length);
