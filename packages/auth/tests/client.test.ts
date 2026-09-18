@@ -19,7 +19,7 @@ import type { Roles } from '../src/index.ts';
 import { createAuth } from '../src/client.ts';
 import type { Auth, FetchResponse } from '../src/client.ts';
 
-import { fakeListener, mailer, newStore, page, reasonOf, settle, tokenIn } from './helpers.ts';
+import { fakeListener, mailRefused, mailer, newStore, page, reasonOf, settle, tokenIn } from './helpers.ts';
 import type { Page } from './helpers.ts';
 
 const PASSWORD = 'correct horse battery staple';
@@ -544,6 +544,7 @@ test('verify sends the mail and takes the link, forgot and reset set the passwor
 	assert.equal(auth.may('verified'), false);
 	assert.deepEqual(await auth.verify('not-a-token'), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] });
 	assert.deepEqual(await auth.verify(tokenIn(mail.sent[0]!.body)), { ok: true });
+	assert.deepEqual(await auth.verify(tokenIn(mail.sent[0]!.body)), { refused: [{ code: 'taken', message: 'this link has already been used' }] }, 'a page can tell a used link from a bad one (design 294)');
 	await settle();
 	assert.equal(auth.may('verified'), true, 'the name reached the page with no reconnect');
 	assert.equal(await roles.may(ada.user, 'verified'), true);
@@ -564,6 +565,7 @@ test('verify sends the mail and takes the link, forgot and reset set the passwor
 	assert.equal(auth.user.get(), ada.user, 'a refusal reconnects nothing');
 	assert.deepEqual(await auth.reset(tokenIn(mail.sent[1]!.body), 'new horse battery'), { ok: true });
 	assert.equal(auth.user.get(), null, 'every session of the person is over, this page\'s included');
+	assert.deepEqual(await auth.reset(tokenIn(mail.sent[1]!.body), 'new horse battery'), { refused: [{ code: 'taken', message: 'this link has already been used' }] });
 	assert.deepEqual(auth.names.get(), []);
 	const back = await auth.enter('ada@example.com', 'new horse battery') as { user: string; created: boolean };
 	assert.equal(back.created, false);
@@ -571,7 +573,7 @@ test('verify sends the mail and takes the link, forgot and reset set the passwor
 	assert.equal(auth.may('verified'), true, 'the name survived the reset');
 
 	mail.answer({ ok: false, error: 'down' });
-	assert.deepEqual(await auth.forgot('ada@example.com'), { refused: [{ code: 'mail', message: 'the mail could not be sent: down' }] });
+	assert.deepEqual(await auth.forgot('ada@example.com'), { refused: [mailRefused('down')] });
 	auth.stop();
 	client.close();
 	await stop();

@@ -5,7 +5,7 @@ import type { ModuleProps } from '@aweftjs/modules';
 import { type Refusal, sliding } from '@aweftjs/server';
 
 import { type AuthContext, addressOf, userOf } from '../context.ts';
-import { type Links, links } from '../links.ts';
+import { type Links, NOT_LIVE, TAKEN, links } from '../links.ts';
 import { type Mailer, type Outcome, mailLink, textOf, urlOf } from '../mail.ts';
 import { hashPassword, verifyPassword } from '../password.ts';
 import { bodyOf, json, numberOf, storeOf } from '../props.ts';
@@ -35,7 +35,7 @@ export interface Password {
 	change(user: string, current: unknown, password: unknown, keep?: string): Promise<Outcome>;
 	/** Mail the person with this address a link, or nothing for an address nobody has; `ok` either way. */
 	forgot(email: string): Promise<Outcome>;
-	/** Take a link and set the password. Every session of the person is ended. */
+	/** Take a link and set the password. Every session of the person is ended. Refuses `taken` for a link already used and `token` for one that never was or is past its end. */
 	reset(token: unknown, password: unknown): Promise<Reset>;
 	stop(): void;
 	readonly routes: Record<string, (request: Request, context: AuthContext) => Promise<Response>>;
@@ -44,7 +44,6 @@ export interface Password {
 const MODULE = 'auth/Password';
 
 const WRONG: Refusal = { code: 'password', message: 'the current password is wrong' };
-const NOT_LIVE: Refusal = { code: 'token', message: 'this link is not one that can be used' };
 
 export default ({ imports, config, ...props }: ModuleProps): Password => {
 	const store = storeOf(props);
@@ -96,11 +95,13 @@ export default ({ imports, config, ...props }: ModuleProps): Password => {
 	// The link is looked at before the password is checked, so a stranger's guess at a token
 	// costs no `refusePassword` lookup, and taken after, so a refused password burns no link.
 	const reset = async (token: unknown, password: unknown): Promise<Reset> => {
-		if (await held.peek(token) === undefined) return { refused: [NOT_LIVE] };
+		const seen = await held.peek(token);
+		if (seen === undefined || 'taken' in seen) return { refused: [seen === undefined ? NOT_LIVE : TAKEN] };
 		const refused = await Enter.checkPassword(password);
 		if (refused.length > 0) return { refused };
-		const user = await held.take(token);
-		if (user === undefined) return { refused: [NOT_LIVE] };
+		const link = await held.take(token);
+		if (link === undefined || 'taken' in link) return { refused: [link === undefined ? NOT_LIVE : TAKEN] };
+		const { user } = link;
 		await rewrite(user, password as string);
 		await Session.revokeAll(user);
 		return { user };
