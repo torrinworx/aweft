@@ -119,6 +119,15 @@ test('zero, a keyword and a percentage are not design values', () => {
 	);
 });
 
+test('a bare lineHeight is a multiplier, not a size; one with a unit on it still is', () => {
+	// The copy of `sizeProperties` here drops the name `ui` dropped (design 292).
+	assert.deepEqual(found('Theme.define({ card: { lineHeight: 1.45 } });'), []);
+	assert.deepEqual(
+		found("Theme.define({ card: { lineHeight: '24px' } });"),
+		['page.tsx:1: card sets lineHeight to 24px; use $textMdLine'],
+	);
+});
+
 test('the nested blocks of an entry are read, and extends is not', () => {
 	assert.deepEqual(
 		found("Theme.define({ card: { extends: 'panel', '_media_(min-width: 40em)': { padding: '12px' } } });"),

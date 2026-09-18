@@ -154,14 +154,16 @@ export const resolve = (parts: readonly Part[], lookup: Lookup): string => {
  *
  * A theme or a `style` prop may say `padding: 8`, and these are the properties where 8 means
  * eight pixels rather than the number eight. Everything else keeps the number as written, so
- * `flexGrow: 1` and `zoom: 2` are not broken by the convenience.
+ * `flexGrow: 1` and `zoom: 2` are not broken by the convenience. `lineHeight` is left out on
+ * purpose: a bare number there is a multiplier of the font size, which is how CSS reads it and
+ * how every stylesheet writes it (design 292).
  */
 export const sizeProperties: ReadonlySet<string> = new Set([
 	'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight',
 	'top', 'right', 'bottom', 'left', 'inset',
 	'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
 	'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-	'gap', 'rowGap', 'columnGap', 'fontSize', 'lineHeight', 'letterSpacing',
+	'gap', 'rowGap', 'columnGap', 'fontSize', 'letterSpacing',
 	'borderRadius', 'borderWidth', 'outlineWidth', 'outlineOffset', 'strokeWidth',
 	'flexBasis', 'translate', 'textIndent',
 ]);

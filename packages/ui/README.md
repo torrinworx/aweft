@@ -123,10 +123,11 @@ element and stays a segment of its own, so `theme={['card', 'tight']}` reaches `
 `card_title_muted`, and an element that wants a part and its component says both tokens.
 
 **Values.** `$name` is a variable, `$fn(a, b)` is a call, `$$` is a literal `$`, and `$size$px`
-is the variable followed by the text `px`. A bare number in one of `sizeProperties` gets `px`.
-What a variable holds is text, and that text is not read again: `$a: '$b'` writes the four
-characters `$b` into the CSS rather than following them. Point a declaration at the variable you
-mean.
+is the variable followed by the text `px`. A bare number in one of `sizeProperties` gets `px`;
+`lineHeight` is not one of them, because a bare number there is a multiple of the font size,
+which is how CSS reads it (design 292). What a variable holds is text, and that text is not
+read again: `$a: '$b'` writes the four characters `$b` into the CSS rather than following them.
+Point a declaration at the variable you mean.
 
 **Variables and functions are the same namespace.** A `$name` whose value is a function is a
 function; anything else is a variable. Both are found by walking the matched chain from the most
@@ -390,7 +391,7 @@ placement and it renders where you put it, anywhere.
 `InputContext` is where an input event goes: `InputContext.fire(context, 'click', payload)` calls
 the generic `on` and then `on<Type>`, with the application's `meta` merged in last. `useAbort(fn)`
 runs `fn` with a fresh `AbortSignal` and hands back the abort. `sizeProperties` is the set of
-property names a bare number is given `px` for.
+property names a bare number is given `px` for; `lineHeight` is not in it.
 
 ## What every component takes
 
