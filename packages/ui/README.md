@@ -434,7 +434,7 @@ const problem = mutable(null);
 |---|---|---|---|---|
 | `Button` | `<button>`, or `<a>` with an `href` | `label`, `type`, `icon`, `iconPosition`, `disabled`, `loading`, `round`, `inline`, `href`, `hrefNewTab`, `onClick`, `track` | `sm`, `lg`, `icon`, `icon-sm`, `icon-lg` | `button` |
 | `TextField` | `<input>`, in a `<div>` on `input_group` when it was given an addon | `value`, `label`, `description`, `error`, `leading`, `trailing`, `placeholder`, `password`, `onEnter`, `onKeyDown`, `disabled`, `type` | `sm`, `lg` | `text-field` |
-| `TextArea` | `<textarea>` | the same, plus `maxHeight` | `sm`, `lg` | `text-area` |
+| `TextArea` | `<textarea>` | the same, plus `maxHeight`; a `style` object keeps its declarations but `height` and `maxHeight`, which are this component's; a string or a cell for the whole style is refused | `sm`, `lg` | `text-area` |
 | `Checkbox` | `<input type="checkbox">` | `value`, `label`, `invert`, `indeterminate`, `disabled`, `onChange` | `sm`, `lg` | `checkbox` |
 | `Radio` | `<input type="radio">` | `value` (the group's), `option` (this one's), `label`, `disabled`, `onChange` | `sm`, `lg` | `radio` |
 | `Toggle` | `<input type="checkbox" role="switch">` | `value`, `label`, `disabled`, `onChange`, `type` | `sm`, `lg` | `toggle` |
