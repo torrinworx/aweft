@@ -294,7 +294,10 @@ ends every other session, keeping the one that asked. The new password goes thro
 text, the HTML the same with the address as a link, under `subject`. For a mail of your own,
 write a module that names `notify/Send` and calls `send` with your `html`; the two here own no
 template. A mailer that answers anything but ok, or throws, is 502 with the reason `mail`, and
-the link still stands, so the person asks again once the mailer is back.
+the link still stands, so the person asks again once the mailer is back. That reason carries
+`detail` and `fix` beside `code` and `message`: `message` is the one sentence a page shows the
+person, `detail` is what the mailer said, word for word, and `fix` tells whoever runs the server
+where to look (design 293).
 
 **`forgot` answers 200 for an address nobody has**, and sends nothing, although `auth/Check`
 enumerates: the mail route is the one that costs a send, and a stranger typing addresses must
