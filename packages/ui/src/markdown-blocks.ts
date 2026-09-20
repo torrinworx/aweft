@@ -91,7 +91,22 @@ const plain = (text: string): string => text
 	.replace(/\*\*([^*]*)\*\*/g, '$1')
 	.replace(/\*([^*]*)\*/g, '$1');
 
-/** GitHub's heading ids, unique for one call of the function returned. */
+/**
+ * GitHub's heading ids, unique over the calls of the function returned.
+ *
+ * Params: none. Each call starts a fresh count, so one slugger serves one document.
+ *
+ * Returns: a function from a heading's text to its id: the marks dropped, lowercased, anything
+ * but letters, numbers, spaces and hyphens dropped, spaces to hyphens; a repeat suffixed `-1`, the
+ * next `-2`. `Markdown` gives a heading the id this function gives its text, in document order,
+ * so a table of contents built from the same headings in the same order carries the same ids.
+ *
+ * Example:
+ *   const id = slugger();
+ *   id('The theme');      // 'the-theme'
+ *   id('The theme');      // 'the-theme-1'
+ *   id('`h`, `svg` and `html`');  // 'h-svg-and-html'
+ */
 export const slugger = (): ((text: string) => string) => {
 	const seen = new Map<string, number>();
 	return (text: string): string => {

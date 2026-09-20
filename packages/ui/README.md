@@ -1158,6 +1158,17 @@ an indented code block and a backslash escape each stay in the paragraph as the 
 written. HTML is never markup: a paragraph is a text node and nothing here sets `innerHTML`, so
 an untrusted string renders as text.
 
+**`slugger`** is the function behind a heading's `id`, exported so a page builds a table of
+contents that points where the headings are. `slugger()` answers a function from heading text to
+id, GitHub's scheme (lowercased, marks and punctuation dropped, spaces to hyphens), unique over
+the calls of that one function: a repeat is suffixed `-1`, the next `-2`. Call it over the same
+headings in the same order the document has them, and the ids match:
+
+```tsx
+const id = slugger();
+const contents = headings.map((text) => ({ text, href: `#${id(text)}` }));
+```
+
 **The `code` hook** is `(text, language) => anything mountable` and is called once per fenced
 block; absent, the block holds a `<code>` with the text. Highlighting is the application's, and
 this package ships none.

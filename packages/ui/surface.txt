@@ -170,6 +170,7 @@ value mark: Mark
 value mount: (target: ParentLike, item: unknown, before?: Remove | undefined, render?: Render | undefined) => Remove
 value render: (item: unknown, options?: { context?: Render | undefined; }) => Promise<string>
 value sizeProperties: ReadonlySet<string>
+value slugger: () => (text: string) => string
 value standardIcons: readonly string[]
 value suspend: <P extends Record<string, unknown>>(fallback: Component | null, loader: Loader<P>, failed?: Component<{ error?: unknown; }> | null | undefined) => (props: P & { children?: unknown[] | undefined; }, cleanup: (...fns: (() => void)[]) => void, _mounted: unknown, pending: (promise: Promise<unknown>) => void) => Mounter
 value svg: (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown

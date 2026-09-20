@@ -1,8 +1,8 @@
 // `Markdown`, in the light tree (design 288): every block and inline form the corpus uses, the
 // corpus itself against a second implementation, a cell source followed, a task toggle written
 // back, the code hook, an application's modifier inside markdown, what stays text, and a page
-// rendered on a server taken over in place; and the figure and the nested list a post needs
-// (design 296).
+// rendered on a server taken over in place; and the figure, the nested list and the exported
+// slugger a post needs (design 296).
 //
 // The expected block stream comes from `marked`, a second implementation this package never
 // ships: the corpus test reads its lexer and compares kind, depth and text, so no expected value
@@ -20,7 +20,7 @@ import type { Token, Tokens } from 'marked';
 import { mutable } from '@aweftjs/core';
 import { createDocument, parseHtml, toHtml } from '@aweftjs/dom';
 import type { ElementLike, LightElement, NodeLike } from '@aweftjs/dom';
-import { Markdown, TextModifiers, context, h, hydrate, mount, render } from '@aweftjs/ui';
+import { Markdown, TextModifiers, context, h, hydrate, mount, render, slugger } from '@aweftjs/ui';
 import type { Render } from '@aweftjs/ui';
 
 // The parser is not on the surface; the corpus test reads it through the file, as an
@@ -325,6 +325,23 @@ test('two trailing spaces are a line break, and a bare newline is a space', () =
 test('a heading gets the id GitHub gives it, and a repeat is numbered', () => {
 	const blocks = parseBlocks('# `@aweftjs/ssg`\n\n## The theme\n\n## The theme\n\n### `h`, `svg` and `html`');
 	assert.deepEqual(blocks.map((block) => (block.kind === 'heading' ? block.id : null)), ['aweftjsssg', 'the-theme', 'the-theme-1', 'h-svg-and-html']);
+});
+
+test('slugger is exported, gives a repeat its next suffix, and gives the ids the headings carry', () => {
+	const id = slugger();
+	assert.deepEqual(['The theme', 'The theme', 'The theme', 'the-theme'].map(id), ['the-theme', 'the-theme-1', 'the-theme-2', 'the-theme-3'],
+		'a repeat counts from one, and a text that spells an earlier id is a repeat of it');
+	assert.equal(slugger()('The theme'), 'the-theme', 'each call starts a fresh count');
+	assert.equal(id('**Bold** and `code` and [a link](/x)'), 'bold-and-code-and-a-link', 'the marks are dropped');
+
+	const own = slugger();
+	const headings = ['Intro', 'Setup', 'Setup', 'Setup: again'];
+	const page = h(Markdown, { source: headings.map((text) => `## ${text}`).join('\n\n') });
+	const document = createDocument();
+	const stop = mount(document.body, page, undefined, context());
+	assert.deepEqual(elements(document.body.firstChild).filter((element) => element.localName === 'h2').map((element) => element.getAttribute('id')), headings.map(own),
+		'a table of contents built from the same headings in the same order has the ids the page has');
+	stop();
 });
 
 // --- what the blocks render as -------------------------------------------------------------------

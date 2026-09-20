@@ -73,6 +73,7 @@ export { TextModifiers, Typography } from './typography.tsx';
 export type { TextModifier, TypographyProps } from './typography.tsx';
 export { Markdown } from './markdown.tsx';
 export type { MarkdownProps } from './markdown.tsx';
+export { slugger } from './markdown-blocks.ts';
 
 export { Alert } from './alert.tsx';
 export type { AlertProps } from './alert.tsx';
