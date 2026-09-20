@@ -260,6 +260,14 @@ test('the constructs the corpus does not use are read the way the second impleme
 		['> a quote\n- item', [{ kind: 'quote', text: 'a quote' }, { kind: 'list', ordered: false, start: 0, items: [{ text: 'item', task: null, children: [] }] }]],
 		['> a quote\n```\nx\n```', [{ kind: 'quote', text: 'a quote' }, { kind: 'code', language: null, text: 'x' }]],
 		['> a quote\ncarried on', [{ kind: 'quote', text: 'a quote carried on' }]],
+		// A heading, a list, a quote and a table each end the paragraph above them.
+		['text\n# head', [{ kind: 'paragraph', text: 'text' }, { kind: 'heading', depth: 1, text: 'head' }]],
+		['text\n- item', [{ kind: 'paragraph', text: 'text' }, { kind: 'list', ordered: false, start: 0, items: [{ text: 'item', task: null, children: [] }] }]],
+		['text\n> quote', [{ kind: 'paragraph', text: 'text' }, { kind: 'quote', text: 'quote' }]],
+		['text\n| a |\n|---|\n| 1 |', [{ kind: 'paragraph', text: 'text' }, { kind: 'table', header: ['a'], rows: [['1']] }]],
+		// A row with no outer pipes keeps its last cell; a fence never closed runs to the end.
+		['a | b\n--|--\n1 | 2', [{ kind: 'table', header: ['a', 'b'], rows: [['1', '2']] }]],
+		['```\nx', [{ kind: 'code', language: null, text: 'x' }]],
 		// A figure (design 296): one image line standing alone; its title read and dropped.
 		['![A caption](a.png)', [{ kind: 'figure', src: 'a.png', alt: 'A caption' }]],
 		['![](/media/a.png "a title")', [{ kind: 'figure', src: '/media/a.png', alt: '' }]],
@@ -316,6 +324,8 @@ test('the constructs the corpus does not use are read the way the second impleme
 	const deep = parseBlocks('- a\n  - b\n    - c\n      - d\n    - e');
 	const third = (deep[0] as Block & { kind: 'list' }).items[0]!.children[0]!.items[0]!.children[0]!;
 	assert.deepEqual(third.items.map((item) => item.text), ['c\n      - d', 'e'], 'the fourth level is the characters written, on their own line');
+	// And an item indented four spaces, which the second implementation reads as indented code.
+	assert.deepEqual(parseBlocks('    - a').map(ours), [{ kind: 'paragraph', text: '- a' }]);
 });
 
 test('two trailing spaces are a line break, and a bare newline is a space', () => {
@@ -404,6 +414,25 @@ test('every block is the element the design names, on its entry', () => {
 	assert.equal(quote!.getAttribute('class'), classes(['markdown_quote']));
 	assert.equal(rule!.localName, 'hr');
 	assert.equal(rule!.getAttribute('class'), classes(['markdown_rule']));
+	own.stop();
+});
+
+test('a numbered list from 1 carries no start, and a delimiter row aligns a column left, centre or right', () => {
+	const own = page(h(Markdown, { source: '1. a\n2. b\n\n| l | c | r | n |\n|:--|:-:|--:|---|\n| 1 | 2 | 3 | 4 |' }));
+	const classes = (segments: string[]): string => own.ui.theme.classes(own.ui.theme.base(), segments);
+	const list = elements(own.root.firstChild).find((element) => element.localName === 'ol')!;
+	assert.equal(list.getAttribute('start'), null, 'the browser counts from 1 on its own');
+	const cells = elements(own.root.firstChild).filter((element) => element.localName === 'td');
+	assert.deepEqual(cells.map((cell) => cell.getAttribute('class')), [
+		classes(['table_cell']), classes(['table_cell', 'center']), classes(['table_cell', 'right']), classes(['table_cell']),
+	], 'left is the default and gets no segment');
+	own.stop();
+});
+
+test('with no source at all the block holds nothing', () => {
+	const own = page(h(Markdown, {}));
+	assert.deepEqual(tags(own.root.firstChild), []);
+	assert.equal(own.root.textContent, '');
 	own.stop();
 });
 
