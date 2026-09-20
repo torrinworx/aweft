@@ -1,5 +1,9 @@
 # 288: `Markdown` is blocks over `Typography`, with the inline syntax as modifiers
 
+Amended by design 296: a paragraph that is one image line is a `figure` block, an indented item is
+a child list three levels deep, and `slugger` is exported. The nested list and the image on a
+line of its own leave the text paragraph below.
+
 ## Decision
 
 `@aweftjs/ui` exports `Markdown`: `<Markdown source modifiers code />` renders a markdown
