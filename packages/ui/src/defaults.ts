@@ -1582,9 +1582,12 @@ defineTheme({
 		flexDirection: 'column',
 		gap: '$space',
 	},
+	// A child list sits under its item's text (design 296). The basis is for a task item, which is
+	// a wrapping row: the whole width puts the list on a line of its own, under the box.
+	markdown_list_nested: { marginTop: '$space', flexBasis: '100%' },
 	markdown_item: { margin: 0 },
 	// A task item hides its bullet, because the box is the mark.
-	markdown_item_task: { display: 'flex', alignItems: 'baseline', gap: '$space2', listStyleType: 'none' },
+	markdown_item_task: { display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '$space2', listStyleType: 'none' },
 	markdown_tabular: { margin: 0 },
 	markdown_quote: {
 		$quoteBar: '3px',
@@ -1597,4 +1600,11 @@ defineTheme({
 	markdown_link: { color: '$link', textDecoration: 'underline' },
 	markdown_bold: { fontWeight: 600 },
 	markdown_italic: { fontStyle: 'italic' },
+	// A figure (design 296): the picture fills the measure and no more, and keeps its shape when a
+	// written size is wider than the page. The caption's entry is on its text, because `text`
+	// names a colour and one on the `<figcaption>` would never reach it.
+	markdown_figure: { margin: 0 },
+	markdown_image: { display: 'block', maxWidth: '100%', height: 'auto' },
+	markdown_video: { display: 'block', maxWidth: '100%', height: 'auto' },
+	markdown_caption: { marginTop: '$space', color: '$mutedForeground' },
 });

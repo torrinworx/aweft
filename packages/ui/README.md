@@ -1117,8 +1117,8 @@ import { Markdown } from '@aweftjs/ui';
 |---|---|---|---|
 | `Markdown` | a `<div>` on `markdown` holding one element per block of a markdown string | `source`, `modifiers`, `code`, `element`, `theme` | `markdown` |
 
-**What it renders** (design 288). A markdown string, or a cell holding one, as themed blocks
-whose text runs are `Typography`, for the subset a README uses:
+**What it renders** (designs 288 and 296). A markdown string, or a cell holding one, as themed
+blocks whose text runs are `Typography`, for the subset a README and a post use:
 
 | written | rendered as |
 |---|---|
@@ -1126,7 +1126,9 @@ whose text runs are `Typography`, for the subset a README uses:
 | a paragraph | `Typography` `p1` on `markdown_paragraph`; lines joined by a space, two trailing spaces a line break |
 | a fenced block | a `<pre>` on `markdown_code` with the language on `data-language`, holding what `code` answers; focusable, because it scrolls sideways |
 | `-`, `*`, `+` or `1.` items | a `<ul>` or `<ol>` on `markdown_list` (`ordered` for the second, with `start` when the first number is not 1), each item an `<li>` on `markdown_item` |
-| `- [ ]` and `- [x]` | an item on `markdown_item_task` with a `Checkbox` that follows the source |
+| an item indented under another | a child list inside that `<li>`, after its text, on `markdown_list_nested`; three levels, and a fourth is text. An item nests when it is indented to where the text above it starts (two spaces under `- a`, three under `1. a`, a tab counts as four) |
+| `- [ ]` and `- [x]` | an item on `markdown_item_task` with a `Checkbox` that follows the source; it nests as a plain item does |
+| a line that is only `![alt](src)`, alone in its paragraph | a `<figure>` on `markdown_figure` holding an `<img>` on `markdown_image` with the alt text on `alt`, or a `<video controls>` on `markdown_video` when the source ends in `.mp4`, `.webm` or `.mov`; with a `<figcaption>` holding `Typography` `p2` on `markdown_caption` over the alt text when it is not empty, so a link or emphasis in a caption renders. `![alt](src =640x480)` puts `width` and `height` on the element. The source passes the check a link's `href` passes below, and a path with no scheme passes, so `/media/a.png` is a figure and `data:` or `javascript:` is text |
 | a table with a delimiter row | a `<table>` on `markdown_tabular` in the `table_scroll` box, with the `table_head`, `table_line`, `table_heading` and `table_cell` parts; `:--:` and `--:` align a column |
 | `>` lines | a `<blockquote>` on `markdown_quote`, one paragraph |
 | `---`, `***`, `___` | an `<hr>` on `markdown_rule` |
@@ -1149,11 +1151,12 @@ so a code span holding an asterisk is a code span and a bold run holding a code 
 and emphasis of mixed length that opens inside another (`***a** b*`) is read outermost first
 rather than the way CommonMark reads it.
 
-**What is text.** A nested list (an indented item joins the item above it, as written), an
-image, a footnote, an HTML tag, an autolink, a reference link, a setext heading, an indented
-code block and a backslash escape each stay in the paragraph as the characters written. HTML is
-never markup: a paragraph is a text node and nothing here sets `innerHTML`, so an untrusted
-string renders as text.
+**What is text.** An image inside a sentence, an image line that shares its paragraph with
+another line (two figures have a blank line between them), a fourth list level (it joins the item
+above it, as written), a footnote, an HTML tag, an autolink, a reference link, a setext heading,
+an indented code block and a backslash escape each stay in the paragraph as the characters
+written. HTML is never markup: a paragraph is a text node and nothing here sets `innerHTML`, so
+an untrusted string renders as text.
 
 **The `code` hook** is `(text, language) => anything mountable` and is called once per fenced
 block; absent, the block holds a `<code>` with the text. Highlighting is the application's, and
@@ -1169,9 +1172,12 @@ modes come from the one set and an application overrides an entry the way it ove
 `text_h2` and `text_p1` reach them as they reach any `Typography`.
 
 **What it never decides.** How code is highlighted. Where a link goes, or whether it opens
-elsewhere. What HTML means. The width of a column or a block. Whether the source is trusted:
-HTML in it is text, and a link whose scheme would run something is text, so an untrusted
-string renders without running anything. CommonMark conformance: the subset above is what is read,
+elsewhere. Where media comes from, whether an image loads lazily, what a video's poster or
+captions track is, or what a URL that is not a media file embeds: a `<video>` here is `controls`
+and a source, and a figure's source is written as it stands. What HTML means. The width of a
+column or a block. Whether the source is trusted: HTML in it is text, and a link or a figure
+whose scheme would run something is text, so an untrusted string renders without running
+anything. CommonMark conformance: the subset above is what is read,
 and the [`Markdown`](https://github.com/torrinworx/aweft/blob/main/recipes/ui/catalogue.html)
 example in the catalogue shows every form of it in both modes.
 

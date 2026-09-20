@@ -1,9 +1,10 @@
-// Markdown as blocks, line by line, for the subset the documentation corpus uses (design 288).
+// Markdown as blocks, line by line, for the subset the documentation corpus uses (design 288),
+// with a figure and a nested list for a post (design 296).
 //
-// A heading, a paragraph, a fenced block, a flat list, a table, a blockquote and a rule. Anything
-// else is the characters written, inside a paragraph: a nested item joins the item above it, an
-// indented block is a paragraph, a setext underline is a rule or a paragraph line. The inline
-// syntax is not read here; it is the modifiers' job (`markdown.tsx`).
+// A heading, a paragraph, a fenced block, a list three levels deep, a table, a blockquote, a rule
+// and a figure. Anything else is the characters written, inside a paragraph: a fourth level joins
+// the item above it, an indented block is a paragraph, a setext underline is a rule or a
+// paragraph line. The inline syntax is not read here; it is the modifiers' job (`markdown.tsx`).
 
 export type Align = 'left' | 'center' | 'right' | null;
 
@@ -22,6 +23,8 @@ export interface ListItem {
 	readonly task: 'open' | 'done' | null;
 	/** The line the item starts on, so a toggle can rewrite it. */
 	readonly line: number;
+	/** The lists nested under this item, in order; a change of kind starts another. */
+	readonly children: readonly ListBlock[];
 }
 export interface ListBlock {
 	readonly kind: 'list';
@@ -29,6 +32,16 @@ export interface ListBlock {
 	/** The first item's number, for an ordered list. */
 	readonly start: number;
 	readonly items: readonly ListItem[];
+}
+export interface FigureBlock {
+	readonly kind: 'figure';
+	readonly media: 'image' | 'video';
+	readonly src: string;
+	/** The alt text as written, with its marks; the caption when it is not empty. */
+	readonly alt: string;
+	/** From the `=WxH` suffix; both or neither. */
+	readonly width: number | null;
+	readonly height: number | null;
 }
 export interface TableBlock {
 	readonly kind: 'table';
@@ -39,15 +52,37 @@ export interface TableBlock {
 export interface QuoteBlock { readonly kind: 'quote'; readonly text: string; }
 export interface RuleBlock { readonly kind: 'rule'; }
 
-export type Block = HeadingBlock | ParagraphBlock | CodeBlock | ListBlock | TableBlock | QuoteBlock | RuleBlock;
+export type Block = HeadingBlock | ParagraphBlock | CodeBlock | ListBlock | TableBlock | QuoteBlock | RuleBlock | FigureBlock;
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)/;
 const HEADING = /^ {0,3}(#{1,6})(?:\s+(.*?))?\s*$/;
 const RULE = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/;
 const QUOTE = /^ {0,3}>\s?(.*)$/;
-const ITEM = /^(\s*)([-+*]|\d{1,9}[.)])\s+(.*)$/;
+const ITEM = /^(\s*)([-+*]|\d{1,9}[.)])(\s+)(.*)$/;
 const TASK = /^\[([ xX])\]\s+(.*)$/;
 const DELIMITER = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+// A whole line that is one image: the alt, which may hold one level of brackets so a link can
+// sit in a caption; a source that may hold one level of parentheses, as a link's may; a title,
+// read and dropped as a link's is; and the size suffix.
+const FIGURE = /^!\[((?:[^[\]\n]|\[[^[\]\n]*\])*)\]\(((?:[^()\s]|\([^()\s]*\))+)(?:\s+"[^"]*")?(?:\s+=(\d+)x(\d+))?\)$/;
+const VIDEO = /\.(?:mp4|webm|mov)(?:[?#]|$)/i;
+// Lists nest three deep; a fourth level is text, as every indented item once was.
+const DEPTH = 3;
+
+// A link goes where it says, and a figure shows what it names, unless the scheme is one that runs
+// something: then the characters written stay text, because a markdown string is not trusted to
+// run script on a click. A path with no scheme, relative or root-relative, is a site's own.
+const SCHEME = /^\s*([a-z][a-z0-9+.-]*):/i;
+const SAFE_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
+
+/** Whether a link's `href` or a figure's `src` is one the page may follow. */
+export const isSafeHref = (href: string): boolean => {
+	const scheme = SCHEME.exec(href)?.[1]?.toLowerCase();
+	return scheme === undefined || SAFE_SCHEMES.has(scheme);
+};
+
+/** The columns a line's leading whitespace covers: a tab is four, as a reader of markdown counts it. */
+const columns = (indent: string): number => indent.replace(/\t/g, '    ').length;
 
 /** The marks a heading's text carries, dropped for its id. */
 const plain = (text: string): string => text
@@ -96,12 +131,64 @@ const opens = (line: string, next: string | undefined): boolean =>
 	|| (line.includes('|') && next !== undefined && DELIMITER.test(next) && next.includes('-'));
 
 /**
+ * One list, from the item on `from`, and the line after it.
+ *
+ * An item indented to the content column of the item above it, or further, starts a child list of
+ * that item; one indented less than `floor` belongs to a list above this one and ends it. A change
+ * of kind at this list's own level ends it too, and the caller starts the next.
+ */
+const parseList = (lines: readonly string[], from: number, floor: number, depth: number): { block: ListBlock; at: number } => {
+	const first = ITEM.exec(lines[from]!)!;
+	const ordered = /\d/.test(first[2]!);
+	const start = ordered ? Number.parseInt(first[2]!, 10) : 1;
+	const items: ListItem[] = [];
+	// The last item's state: where its text begins, so the next line can be read against it, and
+	// the array its `children` is, so a child list lands on it.
+	let content = 0;
+	let children: ListBlock[] = [];
+	let at = from;
+	while (at < lines.length && lines[at]!.trim() !== '') {
+		const own = ITEM.exec(lines[at]!);
+		const last = items[items.length - 1];
+		if (own !== null) {
+			const indent = columns(own[1]!);
+			if (indent < floor) break;
+			if (last !== undefined && indent >= content) {
+				if (depth < DEPTH) {
+					const child = parseList(lines, at, content, depth + 1);
+					children.push(child.block);
+					at = child.at;
+					continue;
+				}
+				// A level too deep: the characters written, on a line of their own.
+				items[items.length - 1] = { ...last, text: `${last.text}\n${lines[at]!}` };
+				at += 1;
+				continue;
+			}
+			if (/\d/.test(own[2]!) !== ordered) break;
+			const task = TASK.exec(own[4]!);
+			children = [];
+			items.push(task === null
+				? { text: own[4]!, task: null, line: at, children }
+				: { text: task[2]!, task: task[1] === ' ' ? 'open' : 'done', line: at, children });
+			content = indent + own[2]!.length + own[3]!.length;
+		} else if (last !== undefined) {
+			// A line carrying the item on: prose, joined by a space.
+			items[items.length - 1] = { ...last, text: `${last.text} ${lines[at]!.trim()}` };
+		}
+		at += 1;
+	}
+	return { block: { kind: 'list', ordered, start, items }, at };
+};
+
+/**
  * The blocks of a markdown string.
  *
  * Params:
  *   source: the text
  *
- * Returns: the blocks in order. A heading carries its id, a list item the line it starts on.
+ * Returns: the blocks in order. A heading carries its id, a list item the line it starts on and
+ * the lists nested under it, a figure its source, alt text and size.
  *
  * Example:
  *   parseBlocks('# Title\n\nA paragraph.');
@@ -163,29 +250,9 @@ export const parseBlocks = (source: string): Block[] => {
 
 		const item = ITEM.exec(line);
 		if (item !== null && item[1]!.length < 4) {
-			const ordered = /\d/.test(item[2]!);
-			const start = ordered ? Number.parseInt(item[2]!, 10) : 1;
-			const indent = item[1]!.length;
-			const items: ListItem[] = [];
-			while (at < lines.length && lines[at]!.trim() !== '') {
-				const own = ITEM.exec(lines[at]!);
-				const sibling = own !== null && own[1]!.length <= indent;
-				if (sibling && /\d/.test(own[2]!) !== ordered) break;
-				if (sibling) {
-					const task = TASK.exec(own[3]!);
-					items.push(task === null
-						? { text: own[3]!, task: null, line: at }
-						: { text: task[2]!, task: task[1] === ' ' ? 'open' : 'done', line: at });
-				} else if (items.length > 0) {
-					// A nested item, or a line carrying on: the characters written, on a line of their own
-					// when they were indented as a list, joined by a space when they were prose.
-					const last = items[items.length - 1]!;
-					const joint = own !== null ? '\n' : ' ';
-					items[items.length - 1] = { ...last, text: `${last.text}${joint}${own !== null ? lines[at]! : lines[at]!.trim()}` };
-				}
-				at += 1;
-			}
-			blocks.push({ kind: 'list', ordered, start, items });
+			const list = parseList(lines, at, 0, 1);
+			blocks.push(list.block);
+			at = list.at;
 			continue;
 		}
 
@@ -208,6 +275,19 @@ export const parseBlocks = (source: string): Block[] => {
 		while (at < lines.length && lines[at]!.trim() !== '' && (held.length === 0 || !opens(lines[at]!, lines[at + 1]))) {
 			held.push(lines[at]!);
 			at += 1;
+		}
+		// One line that is only an image is a figure, unless its source is one that runs something.
+		const figure = held.length === 1 ? FIGURE.exec(held[0]!.trim()) : null;
+		if (figure !== null && isSafeHref(figure[2]!)) {
+			blocks.push({
+				kind: 'figure',
+				media: VIDEO.test(figure[2]!) ? 'video' : 'image',
+				src: figure[2]!,
+				alt: figure[1]!.trim(),
+				width: figure[3] === undefined ? null : Number.parseInt(figure[3], 10),
+				height: figure[4] === undefined ? null : Number.parseInt(figure[4], 10),
+			});
+			continue;
 		}
 		// Two trailing spaces are a line break; a bare newline is a space.
 		let text = '';

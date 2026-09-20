@@ -1,4 +1,5 @@
-// A markdown string as themed blocks, the inline syntax as modifiers (design 288).
+// A markdown string as themed blocks, the inline syntax as modifiers (design 288), a figure and a
+// nested list among the blocks (design 296).
 //
 // The blocks are `markdown-blocks.ts`; this file turns each one into elements and runs the text
 // through `Typography`, under a `TextModifiers` list that is the application's own modifiers
@@ -12,8 +13,8 @@ import { assert } from './assert.ts';
 import { Checkbox } from './checkbox.tsx';
 import { elementFor } from './control.ts';
 import { h } from './h.ts';
-import { parseBlocks, toggled } from './markdown-blocks.ts';
-import type { Align, Block, ListItem } from './markdown-blocks.ts';
+import { isSafeHref, parseBlocks, toggled } from './markdown-blocks.ts';
+import type { Align, Block, FigureBlock, ListBlock, ListItem } from './markdown-blocks.ts';
 import { isSource, isWritable, through } from './source.ts';
 import { TextModifiers, Typography, splitByModifiers } from './typography.tsx';
 import type { TextModifier } from './typography.tsx';
@@ -37,10 +38,6 @@ export interface MarkdownProps {
 const CODE_SPAN = /``(?:[^`\n]|`(?!`))+?``|`[^`\n]+`/g;
 // A URL may hold one level of parentheses, as a wiki link does.
 const LINK = /(?<!!)\[([^\]\n]+)\]\(((?:[^()\s]|\([^()\s]*\))+)(?:\s+"[^"]*")?\)/g;
-// A link goes where it says, unless where it says is a scheme that runs something: then it is
-// the characters written, because a markdown string is not trusted to run script on a click.
-const SCHEME = /^\s*([a-z][a-z0-9+.-]*):/i;
-const SAFE_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
 const BOLD_ITALIC = /(?<!\\)\*\*\*(?!\s)[^*\n]+?(?<![\s\\])\*\*\*|(?<![\w\\])___(?!\s)[^_\n]+?(?<![\s\\])___(?!\w)/g;
 const BOLD = /(?<!\\)\*\*(?!\s)[^\n]+?(?<![\s\\])\*\*|(?<![\w\\])__(?!\s)[^\n]+?(?<![\s\\])__(?!\w)/g;
 const ITALIC = /(?<![\w*\\])\*(?!\s)[^*\n]+?(?<![\s\\])\*(?![\w*])|(?<![\w_\\])_(?!\s)[^_\n]+?(?<![\s\\])_(?![\w_])/g;
@@ -68,8 +65,9 @@ const withMarkdown = (own: readonly TextModifier[]): TextModifier[] => {
 			check: LINK,
 			return: (match) => {
 				const parts = /^\[([^\]\n]+)\]\(((?:[^()\s]|\([^()\s]*\))+)(?:\s+"[^"]*")?\)$/.exec(match)!;
-				const scheme = SCHEME.exec(parts[2]!)?.[1]?.toLowerCase();
-				if (scheme !== undefined && !SAFE_SCHEMES.has(scheme)) return match;
+				// Where it says, unless where it says is a scheme that runs something: then the
+				// characters written, because a markdown string is not trusted to run script on a click.
+				if (!isSafeHref(parts[2]!)) return match;
 				return h('a', { theme: 'markdown_link', href: parts[2]! }, ...inner(parts[1]!));
 			},
 		},
@@ -91,7 +89,7 @@ const withMarkdown = (own: readonly TextModifier[]): TextModifier[] => {
 
 const alignSegment = (align: Align): string | null => (align === 'center' || align === 'right' ? align : null);
 
-/** The words of an item with its marks dropped, for the box's name. */
+/** The words of an item with its marks dropped, for the box's name, and of a figure's alt text. */
 const wordsOf = (text: string): string => text
 	.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
 	.replace(/[`*_]/g, '')
@@ -111,16 +109,22 @@ const defaultCode = (text: string): unknown => h('code', {}, text);
  * is `p1` on `markdown_paragraph`; a fenced block is a `<pre>` on `markdown_code` with the
  * language on `data-language`, holding what `code` answers; a list is a `<ul>` or `<ol>` on
  * `markdown_list` of `<li>` on `markdown_item`, a task item with a `Checkbox` that follows the
- * source and writes it back when the source is a writable cell; a table is a `<table>` on
+ * source and writes it back when the source is a writable cell, an indented item a child list
+ * inside the `<li>` with the `nested` segment, three levels deep; a table is a `<table>` on
  * `markdown_tabular` in the `table_scroll` box with the `table_*` parts; a blockquote is on
- * `markdown_quote`; a rule is an `<hr>` on `markdown_rule`.
+ * `markdown_quote`; a rule is an `<hr>` on `markdown_rule`; a paragraph that is one image line,
+ * `![alt](src)` or `![alt](src =WxH)`, is a `<figure>` on `markdown_figure` holding an `<img>` on
+ * `markdown_image`, or a `<video controls>` on `markdown_video` when the source ends in `.mp4`,
+ * `.webm` or `.mov`, with `width` and `height` when written, and a `<figcaption>` holding `p2`
+ * on `markdown_caption` when the alt text is not empty.
  *
  * Inline, a code span is `<code>` on `markdown_inline`, bold `<strong>` on `markdown_bold`,
  * italic `<em>` on `markdown_italic`, a link `<a>` on `markdown_link` with the `href` as
  * written, unless its scheme is not `http`, `https`, `mailto` or `tel`, in which case the link
  * is text. Each is a modifier in the render's `TextModifiers` shape, listed after `modifiers`,
- * so an application's own patterns run inside markdown. A nested list, an image, a footnote, an
- * HTML tag, an autolink and an escape are text, as written.
+ * so an application's own patterns run inside markdown. A fourth list level, an image inside a
+ * sentence or whose source's scheme would run something, a footnote, an HTML tag, an autolink and
+ * an escape are text, as written.
  *
  * Throws: the assert for a `source` that is neither a string, a number nor a cell holding one.
  *
@@ -137,9 +141,15 @@ export const Markdown = (props: MarkdownProps): Mounter => (elem, _item, before,
 	const list = withMarkdown(own);
 	const renderCode = code ?? defaultCode;
 
+	const listOf = (held: ListBlock, nested: boolean): unknown => h(held.ordered ? 'ol' : 'ul', {
+		theme: ['markdown_list', held.ordered ? 'ordered' : null, nested ? 'nested' : null],
+		start: held.ordered && held.start !== 1 ? held.start : undefined,
+	}, ...held.items.map(item));
+
 	const item = (held: ListItem): unknown => {
+		const children = held.children.map((child) => listOf(child, true));
 		if (held.task === null) {
-			return h('li', { theme: 'markdown_item' }, h(Typography, { type: 'p1', label: held.text }));
+			return h('li', { theme: 'markdown_item' }, h(Typography, { type: 'p1', label: held.text }), ...children);
 		}
 		const done = mutable(held.task === 'done');
 		const writable = isWritable(source);
@@ -152,7 +162,18 @@ export const Markdown = (props: MarkdownProps): Mounter => (elem, _item, before,
 					if (writable) source.set(toggled(String(source.get() ?? ''), held.line, next));
 				},
 			}),
-			h(Typography, { type: 'p1', label: held.text }));
+			h(Typography, { type: 'p1', label: held.text }),
+			...children);
+	};
+
+	const figure = (held: FigureBlock): unknown => {
+		const size = { width: held.width ?? undefined, height: held.height ?? undefined };
+		const media = held.media === 'video'
+			? h('video', { theme: 'markdown_video', controls: true, src: held.src, ...size })
+			: h('img', { theme: 'markdown_image', src: held.src, alt: wordsOf(held.alt), ...size });
+		return h('figure', { theme: 'markdown_figure' },
+			media,
+			held.alt === '' ? null : h('figcaption', {}, h(Typography, { type: 'p2', theme: 'markdown_caption', label: held.alt })));
 	};
 
 	const block = (held: Block): unknown => {
@@ -166,10 +187,9 @@ export const Markdown = (props: MarkdownProps): Mounter => (elem, _item, before,
 				// from a keyboard, as the table's scroll box is.
 				return h('pre', { theme: 'markdown_code', tabindex: '0', 'data-language': held.language ?? undefined }, renderCode(held.text, held.language));
 			case 'list':
-				return h(held.ordered ? 'ol' : 'ul', {
-					theme: ['markdown_list', held.ordered ? 'ordered' : null],
-					start: held.ordered && held.start !== 1 ? held.start : undefined,
-				}, ...held.items.map(item));
+				return listOf(held, false);
+			case 'figure':
+				return figure(held);
 			case 'table':
 				return h('div', { theme: 'table_scroll', tabindex: '0' },
 					h('table', { theme: ['table', 'markdown_tabular'] },

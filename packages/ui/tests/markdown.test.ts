@@ -1,7 +1,8 @@
 // `Markdown`, in the light tree (design 288): every block and inline form the corpus uses, the
 // corpus itself against a second implementation, a cell source followed, a task toggle written
 // back, the code hook, an application's modifier inside markdown, what stays text, and a page
-// rendered on a server taken over in place.
+// rendered on a server taken over in place; and the figure and the nested list a post needs
+// (design 296).
 //
 // The expected block stream comes from `marked`, a second implementation this package never
 // ships: the corpus test reads its lexer and compares kind, depth and text, so no expected value
@@ -64,11 +65,14 @@ interface Plain {
 	readonly language?: string | null;
 	readonly ordered?: boolean;
 	readonly start?: number;
-	readonly items?: readonly { readonly text: string; readonly task: string | null }[];
+	readonly items?: readonly PlainItem[];
 	readonly header?: readonly string[];
 	readonly rows?: readonly (readonly string[])[];
 	readonly text?: string;
+	readonly src?: string;
+	readonly alt?: string;
 }
+interface PlainItem { readonly text: string; readonly task: string | null; readonly children: readonly Plain[] }
 
 const fold = (text: string): string => text.replace(/\s+/g, ' ').trim();
 
@@ -79,13 +83,34 @@ const ours = (block: Block): Plain => {
 		case 'code': return { kind: 'code', language: block.language, text: block.text };
 		case 'list': return {
 			kind: 'list', ordered: block.ordered, start: block.ordered ? block.start : 0,
-			items: block.items.map((item) => ({ text: fold(item.text), task: item.task })),
+			items: block.items.map((item) => ({ text: fold(item.text), task: item.task, children: item.children.map(ours) })),
 		};
 		case 'table': return { kind: 'table', header: block.header.map(fold), rows: block.rows.map((row) => row.map(fold)) };
 		case 'quote': return { kind: 'quote', text: fold(block.text) };
 		case 'rule': return { kind: 'rule' };
+		// The size is not compared: the second implementation reads the suffix as text.
+		case 'figure': return { kind: 'figure', src: block.src, alt: fold(block.alt) };
 	}
 };
+
+/** Whether a link's target is one the design lets the page follow (design 288), for the oracle's images. */
+const safe = (href: string): boolean => {
+	const scheme = /^\s*([a-z][a-z0-9+.-]*):/i.exec(href)?.[1]?.toLowerCase();
+	return scheme === undefined || ['http', 'https', 'mailto', 'tel'].includes(scheme);
+};
+
+/**
+ * The second implementation's list token as the same shape. An item's text is what its own text
+ * tokens say, so a nested list is read as `children` and not as part of the text above it.
+ */
+const theirList = (list: Tokens.List): Plain => ({
+	kind: 'list', ordered: list.ordered, start: list.ordered ? Number(list.start) : 0,
+	items: list.items.map((item) => ({
+		text: fold(item.tokens.filter((held) => held.type === 'text' || held.type === 'paragraph').map((held) => (held as Tokens.Text).text).join(' ')),
+		task: item.task ? (item.checked ? 'done' : 'open') : null,
+		children: item.tokens.filter((held): held is Tokens.List => held.type === 'list').map(theirList),
+	})),
+});
 
 /**
  * `marked`'s token as the same shape. Two of its kinds are folded on purpose and the design says
@@ -96,19 +121,20 @@ const theirs = (token: Token): Plain | null => {
 	switch (token.type) {
 		case 'space': return null;
 		case 'heading': return { kind: 'heading', depth: (token as Tokens.Heading).depth, text: fold((token as Tokens.Heading).text) };
-		case 'paragraph': return { kind: 'paragraph', text: fold((token as Tokens.Paragraph).text) };
+		case 'paragraph': {
+			// A paragraph that is one image, and nothing but whitespace beside it, is a figure
+			// (design 296), unless the design keeps its source as text.
+			const inline = ((token as Tokens.Paragraph).tokens ?? []).filter((held) => !(held.type === 'text' && (held as Tokens.Text).text.trim() === ''));
+			const image = inline.length === 1 && inline[0]!.type === 'image' ? inline[0] as Tokens.Image : null;
+			if (image !== null && safe(image.href)) return { kind: 'figure', src: image.href, alt: fold(image.text) };
+			return { kind: 'paragraph', text: fold((token as Tokens.Paragraph).text) };
+		}
 		case 'html': return { kind: 'paragraph', text: fold((token as Tokens.HTML).text) };
 		case 'code': {
 			const code = token as Tokens.Code;
 			return { kind: 'code', language: code.lang === undefined || code.lang === '' ? null : code.lang, text: code.text };
 		}
-		case 'list': {
-			const list = token as Tokens.List;
-			return {
-				kind: 'list', ordered: list.ordered, start: list.ordered ? Number(list.start) : 0,
-				items: list.items.map((item) => ({ text: fold(item.text), task: item.task ? (item.checked ? 'done' : 'open') : null })),
-			};
-		}
+		case 'list': return theirList(token as Tokens.List);
 		case 'table': {
 			const table = token as Tokens.Table;
 			return { kind: 'table', header: table.header.map((cell) => fold(cell.text)), rows: table.rows.map((row) => row.map((cell) => fold(cell.text))) };
@@ -218,10 +244,10 @@ test('every paragraph, heading and item of the corpus renders the inline forms t
 test('the constructs the corpus does not use are read the way the second implementation reads them, or as text where the design says so', () => {
 	const cases: readonly [string, Plain[]][] = [
 		['1. one\n2. two\n\n3) three', [
-			{ kind: 'list', ordered: true, start: 1, items: [{ text: 'one', task: null }, { text: 'two', task: null }] },
-			{ kind: 'list', ordered: true, start: 3, items: [{ text: 'three', task: null }] },
+			{ kind: 'list', ordered: true, start: 1, items: [{ text: 'one', task: null, children: [] }, { text: 'two', task: null, children: [] }] },
+			{ kind: 'list', ordered: true, start: 3, items: [{ text: 'three', task: null, children: [] }] },
 		]],
-		['- [ ] open\n- [x] done', [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'open', task: 'open' }, { text: 'done', task: 'done' }] }]],
+		['- [ ] open\n- [x] done', [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'open', task: 'open', children: [] }, { text: 'done', task: 'done', children: [] }] }]],
 		['| a | b |\n|:--|--:|\n| 1 \\| 2 | 3 |\n| short |', [{ kind: 'table', header: ['a', 'b'], rows: [['1 | 2', '3'], ['short', '']] }]],
 		['> one\n> two', [{ kind: 'quote', text: 'one two' }]],
 		['a  \nb\nc', [{ kind: 'paragraph', text: 'a b c' }]],
@@ -229,20 +255,67 @@ test('the constructs the corpus does not use are read the way the second impleme
 		['~~~ts\ncode\n~~~\n\n````\n```\n````', [{ kind: 'code', language: 'ts', text: 'code' }, { kind: 'code', language: null, text: '```' }]],
 		['***\n\n- - -', [{ kind: 'rule' }, { kind: 'rule' }]],
 		['<div>html block</div>', [{ kind: 'paragraph', text: '<div>html block</div>' }]],
-		['- a\n- b\ncontinued', [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'a', task: null }, { text: 'b continued', task: null }] }]],
+		['- a\n- b\ncontinued', [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'a', task: null, children: [] }, { text: 'b continued', task: null, children: [] }] }]],
 		['> a quote\n# head', [{ kind: 'quote', text: 'a quote' }, { kind: 'heading', depth: 1, text: 'head' }]],
-		['> a quote\n- item', [{ kind: 'quote', text: 'a quote' }, { kind: 'list', ordered: false, start: 0, items: [{ text: 'item', task: null }] }]],
+		['> a quote\n- item', [{ kind: 'quote', text: 'a quote' }, { kind: 'list', ordered: false, start: 0, items: [{ text: 'item', task: null, children: [] }] }]],
 		['> a quote\n```\nx\n```', [{ kind: 'quote', text: 'a quote' }, { kind: 'code', language: null, text: 'x' }]],
 		['> a quote\ncarried on', [{ kind: 'quote', text: 'a quote carried on' }]],
+		// A figure (design 296): one image line standing alone; its title read and dropped.
+		['![A caption](a.png)', [{ kind: 'figure', src: 'a.png', alt: 'A caption' }]],
+		['![](/media/a.png "a title")', [{ kind: 'figure', src: '/media/a.png', alt: '' }]],
+		['![a](https://example.com/a_(b).png)', [{ kind: 'figure', src: 'https://example.com/a_(b).png', alt: 'a' }]],
+		['![a [link](/x) in it](a.png)', [{ kind: 'figure', src: 'a.png', alt: 'a [link](/x) in it' }]],
+		// And what is not one: a source that runs something, an image beside words, two image lines.
+		['![run](javascript:alert(1))', [{ kind: 'paragraph', text: '![run](javascript:alert(1))' }]],
+		['![data](data:image/png;base64,AA==)', [{ kind: 'paragraph', text: '![data](data:image/png;base64,AA==)' }]],
+		['See ![alt](a.png) here', [{ kind: 'paragraph', text: 'See ![alt](a.png) here' }]],
+		['![a](x.png)\n![b](y.png)', [{ kind: 'paragraph', text: '![a](x.png) ![b](y.png)' }]],
+		// A nested list (design 296): an item at the content column of the one above nests under it.
+		['- a\n  - b\n- c', [{ kind: 'list', ordered: false, start: 0, items: [
+			{ text: 'a', task: null, children: [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'b', task: null, children: [] }] }] },
+			{ text: 'c', task: null, children: [] },
+		] }]],
+		['- a\n - b', [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'a', task: null, children: [] }, { text: 'b', task: null, children: [] }] }]],
+		['1. a\n   - b', [{ kind: 'list', ordered: true, start: 1, items: [
+			{ text: 'a', task: null, children: [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'b', task: null, children: [] }] }] },
+		] }]],
+		['1. a\n  - b', [
+			{ kind: 'list', ordered: true, start: 1, items: [{ text: 'a', task: null, children: [] }] },
+			{ kind: 'list', ordered: false, start: 0, items: [{ text: 'b', task: null, children: [] }] },
+		]],
+		['- a\n    - b\n  - c', [{ kind: 'list', ordered: false, start: 0, items: [
+			{ text: 'a', task: null, children: [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'b', task: null, children: [] }, { text: 'c', task: null, children: [] }] }] },
+		] }]],
+		['- a\n  1. b\n  2. c\n  - d', [{ kind: 'list', ordered: false, start: 0, items: [
+			{ text: 'a', task: null, children: [
+				{ kind: 'list', ordered: true, start: 1, items: [{ text: 'b', task: null, children: [] }, { text: 'c', task: null, children: [] }] },
+				{ kind: 'list', ordered: false, start: 0, items: [{ text: 'd', task: null, children: [] }] },
+			] },
+		] }]],
+		['- a\n\t- b', [{ kind: 'list', ordered: false, start: 0, items: [
+			{ text: 'a', task: null, children: [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'b', task: null, children: [] }] }] },
+		] }]],
+		['- [ ] a\n  - [x] b\n  carried', [{ kind: 'list', ordered: false, start: 0, items: [
+			{ text: 'a', task: 'open', children: [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'b carried', task: 'done', children: [] }] }] },
+		] }]],
+		['- a\n  - b\n    - c', [{ kind: 'list', ordered: false, start: 0, items: [
+			{ text: 'a', task: null, children: [{ kind: 'list', ordered: false, start: 0, items: [
+				{ text: 'b', task: null, children: [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'c', task: null, children: [] }] }] },
+			] }] },
+		] }]],
 	];
 	for (const [source, expected] of cases) {
 		assert.deepEqual(parseBlocks(source).map(ours), expected, source);
 		assert.deepEqual(marked.lexer(source).map(theirs).filter((plain) => plain !== null), expected, `the second implementation agrees on ${source}`);
 	}
-	// A nested item joins the item above it, as written: the one place the two disagree by design.
-	const nested = parseBlocks('- a\n  - b\n- c');
-	assert.deepEqual(nested.map(ours), [{ kind: 'list', ordered: false, start: 0, items: [{ text: 'a - b', task: null }, { text: 'c', task: null }] }]);
-	assert.equal((nested[0] as unknown as { items: { text: string }[] }).items[0]!.text, 'a\n  - b', 'the characters written, on their own line');
+	// The two places the two disagree by design: a size suffix, which the second implementation
+	// reads as text, and a fourth level, which joins the item above it as written.
+	const sized = parseBlocks('![alt](a.png =640x480)');
+	assert.deepEqual(sized, [{ kind: 'figure', media: 'image', src: 'a.png', alt: 'alt', width: 640, height: 480 }]);
+	assert.deepEqual(parseBlocks('![alt](a.mp4 "t" =640x480)')[0], { kind: 'figure', media: 'video', src: 'a.mp4', alt: 'alt', width: 640, height: 480 });
+	const deep = parseBlocks('- a\n  - b\n    - c\n      - d\n    - e');
+	const third = (deep[0] as Block & { kind: 'list' }).items[0]!.children[0]!.items[0]!.children[0]!;
+	assert.deepEqual(third.items.map((item) => item.text), ['c\n      - d', 'e'], 'the fourth level is the characters written, on their own line');
 });
 
 test('two trailing spaces are a line break, and a bare newline is a space', () => {
@@ -350,13 +423,124 @@ test('a source that is not text is refused, and the message says what it was', (
 	numbered.stop();
 });
 
-test('what the design leaves as text is text: an image, a footnote, an HTML tag, an autolink, an escape, an underscore in a word', () => {
+test('what the design leaves as text is text: an image inside a sentence, a footnote, an HTML tag, an autolink, an escape, an underscore in a word', () => {
 	const source = 'See ![alt](a.png) and [^1] and <b>tag</b> and <https://example.com> and \\*not italic\\* and snake_case_name.';
 	const own = page(h(Markdown, { source }));
 	const paragraph = elements(own.root.firstChild).find((element) => element.localName === 'p')!;
 	assert.deepEqual(tags((paragraph as unknown as NodeLike).firstChild), [], 'no element was made for any of them');
 	assert.equal(paragraph.textContent, source);
 	own.stop();
+});
+
+test('a figure is the elements the design names, with and without a caption and a size, and a video by its extension', () => {
+	const own = page(h(Markdown, { source: [
+		'![A **bold** caption with a [link](/x)](/media/a.png)',
+		'',
+		'![](/media/b.png =640x480)',
+		'',
+		'![A clip](/media/c.webm?v=2 =320x240)',
+		'',
+		'![A clip](/media/D.MP4)',
+	].join('\n') }));
+	const classes = (segments: string[]): string => own.ui.theme.classes(own.ui.theme.base(), segments);
+	const figures = elements(own.root.firstChild).filter((element) => element.localName === 'figure');
+	assert.equal(figures.length, 4);
+	assert.deepEqual(figures.map((figure) => figure.getAttribute('class')), Array.from({ length: 4 }, () => classes(['markdown_figure'])));
+
+	assert.deepEqual(tags((figures[0] as unknown as NodeLike).firstChild), ['img', 'figcaption', 'p', 'strong', 'a']);
+	const [image, caption, text] = elements((figures[0] as unknown as NodeLike).firstChild);
+	assert.equal(image!.getAttribute('src'), '/media/a.png');
+	assert.equal(image!.getAttribute('alt'), 'A bold caption with a link', 'the alt is the words, marks dropped');
+	assert.equal(image!.getAttribute('class'), classes(['markdown_image']));
+	assert.equal(image!.getAttribute('width'), null);
+	assert.equal(image!.getAttribute('height'), null);
+	assert.equal(caption!.getAttribute('class'), null, 'the entry is on the caption\'s text, where a colour reaches it');
+	assert.equal(text!.getAttribute('class'), classes(['text', 'p2', 'markdown_caption']));
+	assert.equal(toHtml(text!).replace(/ class="aw\d+"/g, ''), '<p>A <strong>bold</strong> caption with a <a href="/x">link</a></p>', 'the modifiers run over a caption');
+
+	assert.deepEqual(tags((figures[1] as unknown as NodeLike).firstChild), ['img'], 'an empty alt is no caption');
+	const sized = elements((figures[1] as unknown as NodeLike).firstChild)[0]!;
+	assert.equal(sized.getAttribute('alt'), '', 'and the alt attribute is still there');
+	assert.equal(sized.getAttribute('width'), '640');
+	assert.equal(sized.getAttribute('height'), '480');
+
+	assert.deepEqual(tags((figures[2] as unknown as NodeLike).firstChild), ['video', 'figcaption', 'p']);
+	const video = elements((figures[2] as unknown as NodeLike).firstChild)[0]!;
+	assert.equal(video.getAttribute('class'), classes(['markdown_video']));
+	assert.equal(video.getAttribute('controls'), '', 'a video has its controls');
+	assert.equal(video.getAttribute('src'), '/media/c.webm?v=2', 'the query is not part of the extension');
+	assert.equal(video.getAttribute('width'), '320');
+	assert.equal(video.getAttribute('alt'), null);
+	assert.equal(elements((figures[3] as unknown as NodeLike).firstChild)[0]!.localName, 'video', 'whatever the case of the extension');
+	own.stop();
+});
+
+test('an image whose source would run something, or that shares its paragraph, is text', () => {
+	const own = page(h(Markdown, { source: '![run](javascript:alert(1))\n\n![a](x.png)\ntext after' }));
+	assert.deepEqual(tags(own.root.firstChild), ['p', 'p'], 'no figure, no image');
+	const [first, second] = elements(own.root.firstChild);
+	assert.equal(first!.textContent, '![run](javascript:alert(1))');
+	assert.equal(second!.textContent, '![a](x.png) text after');
+	own.stop();
+});
+
+test('an indented item is a child list inside its item, three levels deep, and a task item nests too', () => {
+	const source = mutable([
+		'- one',
+		'  1. one one',
+		'  2. one two',
+		'     - one two one',
+		'- two',
+		'',
+		'- [ ] open',
+		'  - [ ] under it',
+		'  - [x] done under it',
+	].join('\n'));
+	const own = page(h(Markdown, { source }));
+	const classes = (segments: string[]): string => own.ui.theme.classes(own.ui.theme.base(), segments);
+	assert.deepEqual(tags(own.root.firstChild), [
+		'ul', 'li', 'p', 'ol', 'li', 'p', 'li', 'p', 'ul', 'li', 'p', 'li', 'p',
+		'ul', 'li', 'input', 'p', 'ul', 'li', 'input', 'p', 'li', 'input', 'p',
+	]);
+	const lists = elements(own.root.firstChild).filter((element) => element.localName === 'ul' || element.localName === 'ol');
+	assert.equal(lists[0]!.getAttribute('class'), classes(['markdown_list']), 'the outer list is as it was');
+	assert.equal(lists[1]!.getAttribute('class'), classes(['markdown_list', 'ordered', 'nested']), 'a child list carries the nested segment');
+	assert.equal(lists[2]!.getAttribute('class'), classes(['markdown_list', 'nested']));
+	assert.equal(((lists[1] as unknown as NodeLike).parentNode as unknown as LightElement).localName, 'li', 'inside the item');
+	assert.equal(((lists[2] as unknown as NodeLike).parentNode as unknown as LightElement).localName, 'li');
+	assert.equal(lists[4]!.getAttribute('class'), classes(['markdown_list', 'nested']), 'under a task item');
+
+	const boxes = elements(own.root.firstChild).filter((element) => element.getAttribute('type') === 'checkbox');
+	assert.deepEqual(boxes.map((box) => box.getAttribute('aria-label')), ['open', 'under it', 'done under it']);
+	assert.deepEqual(boxes.map((box) => box.getAttribute('checked')), [null, null, '']);
+	setProp(boxes[1]!, 'checked', true);
+	fire(boxes[1]!, 'change');
+	assert.equal(source.get().split('\n')[7], '  - [x] under it', 'the toggle rewrote the nested item\'s own line');
+	own.stop();
+});
+
+test('a page with a figure and a nested list rendered on a server is taken over in place with nothing replaced', async () => {
+	const source = '# Post\n\n![A caption](/media/a.png =640x480)\n\n![A clip](/media/b.mp4)\n\n- one\n  - [ ] one one\n    - one one one\n- two';
+	const make = (): unknown => h(Markdown, { source });
+	const server = context();
+	const markup = await render(h(make as never), { context: server });
+	// The comments between elements are the regions a hydration claims (design 157).
+	const region = '(?:<!--[^>]*-->)*';
+	assert.match(markup, new RegExp(`<figure [^>]*><img [^>]*src="/media/a.png"[^>]*width="640"[^>]*><figcaption>${region}<p `), 'the server wrote the figure');
+	assert.match(markup, /<video [^>]*controls[^>]*src="\/media\/b.mp4"/, 'and the video');
+	assert.match(markup, new RegExp(`<li [^>]*>${region}<p [^>]*>one</p>${region}<ul `), 'and the child list inside the item');
+
+	const document = createDocument();
+	for (const node of parseHtml(markup, document)) document.body.appendChild(node);
+	const before = elements(document.body.firstChild);
+	assert.ok(before.length > 15, `the page has ${String(before.length)} elements`);
+	const stop = hydrate(document.body, make);
+	const after = elements(document.body.firstChild);
+	assert.equal(after.length, before.length, 'the page has the elements it had');
+	assert.deepEqual(before.filter((element, at) => after[at] !== element).map((element) => element.localName), [],
+		'a hydration that swaps a node has replaced something it should have adopted');
+	assert.equal(toHtml(document.body.childNodes), markup, 'and the page is the page the server sent');
+	stop();
 });
 
 test('a cell source re-renders the blocks, and the element count follows', () => {

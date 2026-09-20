@@ -1,8 +1,9 @@
-// Markdown: every block and every inline form the renderer knows, and a task list that writes
-// its source back.
+// Markdown: every block and every inline form the renderer knows, a figure and a nested list
+// among them, and a task list that writes its source back.
 //
 // The first specimen is a plain string, so its boxes are read only. The second is a cell, so a
-// tick rewrites the markdown it came from and the source shown under it follows.
+// tick rewrites the markdown it came from and the source shown under it follows. The picture is
+// a file beside the page, because a figure's source is a path and a `data:` source is text.
 
 import { mutable } from '@aweftjs/core';
 import { Markdown, h } from '@aweftjs/ui';
@@ -17,12 +18,16 @@ const SPECIMEN = [
 	'# A heading',
 	'',
 	'A paragraph with `code`, **bold**, *italic*, ***both***, a [link](https://example.com) and',
-	'**bold with `code` in it**. An image, a footnote and an HTML tag stay as written:',
-	'![alt](a.png), [^1], <b>tag</b>.',
+	'**bold with `code` in it**. An image inside a sentence, a footnote and an HTML tag stay as',
+	'written: ![alt](a.png), [^1], <b>tag</b>.',
 	'',
-	'## A list, a numbered list, a table',
+	'![A figure: the picture on its own line, its alt text as the caption](/figure.svg =320x180)',
+	'',
+	'## A list, a nested list, a numbered list, a table',
 	'',
 	'- one',
+	'  - one, nested',
+	'    1. and a numbered list under that',
 	'- two',
 	'',
 	'3. three',
@@ -44,7 +49,7 @@ const SPECIMEN = [
 	'### The end',
 ].join('\n');
 
-const TASKS = '- [ ] write the page\n- [x] read the README\n- [ ] run the gate';
+const TASKS = '- [ ] write the page\n  - [x] the figure\n  - [ ] the list\n- [x] read the README\n- [ ] run the gate';
 
 export const Example: ExampleComponent = (props) => {
 	const at = ids(props.mode);

@@ -32,6 +32,7 @@ const dist = join(here, 'dist');
 
 const TYPES: Record<string, string> = {
 	'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.map': 'application/json',
+	'.svg': 'image/svg+xml',
 };
 
 /** Serve the built page, and nothing outside it. */
