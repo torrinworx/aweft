@@ -92,6 +92,37 @@ const policyOf = (inside: string, allow: FrameAllow): string => {
 };
 
 /**
+ * The inline scripts the frame runs, in order: the import map when there is one, then the boot
+ * that takes the port and imports `inside`. A page served under a Content-Security-Policy whose
+ * `script-src` names no `'unsafe-inline'` allows exactly these by hash, since an opaque frame
+ * written from `srcdoc` inherits the page's policy.
+ *
+ * Params:
+ *   inside: the URL of the room's inside module, as `iframe` takes it
+ *   importMap: the frame's import map, as `iframe` takes it
+ *
+ * Returns: the script texts, byte for byte what the frame document carries between the tags.
+ *
+ * Example:
+ *   const hashes = frameScripts(inside, importMap).map((text) => `'sha256-${sha256Base64(text)}'`);
+ *   // script-src 'self' data: 'sha256-...' 'sha256-...'
+ */
+export const frameScripts = (inside: string, importMap?: Readonly<Record<string, string>>): string[] => [
+	...(importMap === undefined ? [] : [inScript({ imports: importMap })]),
+	[
+		'',
+		'const take = (event) => {',
+		// An opaque origin has no origin string to check; the source is the identity.
+		'	if (event.source !== parent || event.data !== "aweft:room" || event.ports.length !== 1) return;',
+		'	removeEventListener("message", take);',
+		`	import(${inScript(inside)}).then((m) => m.insidePort(event.ports[0]));`,
+		'};',
+		'addEventListener("message", take);',
+		'',
+	].join('\n'),
+];
+
+/**
  * A runner whose room is a sandboxed iframe.
  *
  * Params:
@@ -126,19 +157,12 @@ export const iframe = (options: FrameOptions): Runner & { readonly element: Fram
 	/** Ends a `start` still waiting on the frame's load, so a room stopped first does not wait forever. */
 	let abandon: ((error: Error) => void) | undefined;
 
+	const scripts = frameScripts(options.inside, options.importMap);
 	const html = [
 		'<!doctype html><html><head>',
 		`<meta http-equiv="Content-Security-Policy" content="${policyOf(options.inside, options.allow ?? {})}">`,
-		options.importMap === undefined ? '' : `<script type="importmap">${inScript({ imports: options.importMap })}</script>`,
-		'</head><body><script type="module">',
-		'const take = (event) => {',
-		// An opaque origin has no origin string to check; the source is the identity.
-		'	if (event.source !== parent || event.data !== "aweft:room" || event.ports.length !== 1) return;',
-		'	removeEventListener("message", take);',
-		`	import(${inScript(options.inside)}).then((m) => m.insidePort(event.ports[0]));`,
-		'};',
-		'addEventListener("message", take);',
-		'</script></body></html>',
+		options.importMap === undefined ? '' : `<script type="importmap">${scripts[0]!}</script>`,
+		`</head><body><script type="module">${scripts[scripts.length - 1]!}</script></body></html>`,
 	].join('\n');
 
 	return {

@@ -208,7 +208,14 @@ export default defineConfig({
 // names/ui.ts:   export * from '@aweftjs/ui';
 ```
 
-`Room` passes `importMap` into the frame and resolves `inside` against the page's URL. Serve
+`Room` passes `importMap` into the frame and resolves `inside` against the page's URL.
+
+**Under a Content-Security-Policy.** The frame is written from `srcdoc`, so it inherits the
+page's policy on top of its own, and its two inline scripts (the import map and the boot) need
+the page's `script-src` to allow them. A page that names no `'unsafe-inline'` allows exactly
+those by hash: `frameScripts(inside, importMap)` from `@aweftjs/sandbox` is the same text, byte
+for byte, so the server that writes the header hashes it. `data:` goes beside the hashes, since
+a module in the room is compiled through a data URL import. Serve
 the bundle with `Access-Control-Allow-Origin: *`: the frame's origin is opaque, so every module
 it imports is a cross-origin request. `recipes/room` builds it this way and serves it from the
 dev server with `cors` on; a production server sends the same header for the room's files.

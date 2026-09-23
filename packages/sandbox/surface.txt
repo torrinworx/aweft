@@ -14,6 +14,7 @@ type SandboxLimits: interface SandboxLimits { readonly callMs?: number | undefin
 type SandboxOptions: interface SandboxOptions { readonly runner: Runner; readonly modules: object; readonly grants: string[]; readonly props?: Readonly<Record<string, unknown>> | undefined; readonly bundle?: string | undefined; readonly follow?: boolean | undefined; readonly handlers?: SandboxHandlers | undefined; readonly limits?: SandboxLimits | undefined; readonly documents?: Readonly<Record<string, object>> | undefined; readonly console?: readonly string[] | undefined; readonly client?: ClientLike | undefined; readonly page?: PageOptions | undefined; }
 type Stub: type Stub = Readonly<Record<string, (...args: unknown[]) => Promise<unknown>>>;
 value createSandbox: (options: SandboxOptions) => Promise<Sandbox>
+value frameScripts: (inside: string, importMap?: Readonly<Record<string, string>> | undefined) => string[]
 value iframe: (options: FrameOptions) => Runner & { readonly element: FrameLike | undefined; }
 value inProcess: () => Runner
 ./inside type Entered: interface Entered { readonly sources: readonly Source[]; readonly props: Readonly<Record<string, unknown>>; readonly page: { readonly act: string; } | null; readonly route: RouteDocument | null; share<T extends object>(name: string): Shared<T>; ask(name: string, args?: unknown): Promise<unknown>; readonly status: Derived<string>; serve(loader: Loader, handlers?: FollowHandlers): Room; }

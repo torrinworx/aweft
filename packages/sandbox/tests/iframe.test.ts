@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { iframe } from '@aweftjs/sandbox';
+import { frameScripts, iframe } from '@aweftjs/sandbox';
 import type { DocumentLike, FrameLike, MessageChannelLike, SandboxError } from '@aweftjs/sandbox';
 
 /** A frame that captures its attributes and fires load once its srcdoc is set. */
@@ -146,4 +146,18 @@ test('allow opens styles, images, fonts and media and nothing else (design 284)'
 	assert.equal(policy['style-src'], undefined, 'no styles were asked for');
 	assert.ok(!hostile.attrs.srcdoc!.includes('"><script>'), 'nor end the attribute');
 	await r2.stop();
+});
+
+test('frameScripts is byte for byte what the frame document carries between its script tags', async () => {
+	const importMap = { '@aweftjs/core': 'https://rooms.example:8443/core.js' };
+	const inside = 'https://rooms.example:8443/room/inside.js';
+	const { frame, runner } = setup(inside, importMap);
+	await runner.start();
+	const inline = [...frame.attrs.srcdoc!.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+	assert.deepEqual(inline, frameScripts(inside, importMap), 'the import map, then the boot');
+	const { frame: bare, runner: bareRunner } = setup(inside);
+	await bareRunner.start();
+	const only = [...bare.attrs.srcdoc!.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+	assert.deepEqual(only, frameScripts(inside), 'with no import map, the boot alone');
+	assert.equal(frameScripts(inside).length, 1);
 });
