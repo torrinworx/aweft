@@ -138,10 +138,12 @@ await view.addInitScript(() => {
 	const removed: string[] = [];
 	const added: string[] = [];
 
-	new MutationObserver((records) => {
-		// While the parser is writing the page every node it puts in is a mutation. The hydration
-		// runs after that, when the document is interactive, and that is the only part this watches.
-		if (document.readyState === 'loading') return;
+	// The parser's own insertions are mutations too, and a busy machine can hand them to the
+	// callback after the document turned interactive, so they are dropped at that turn rather than
+	// by whatever readiness the callback sees. The hydration runs after it, and only that is watched.
+	let parsed = false;
+	const watcher = new MutationObserver((records) => {
+		if (!parsed) return;
 		const body = document.body;
 		if (body === null) return;
 		for (const record of records) {
@@ -149,7 +151,13 @@ await view.addInitScript(() => {
 			for (const gone of record.removedNodes) if (gone.nodeType === 1) removed.push(gone.nodeName.toLowerCase());
 			for (const put of record.addedNodes) if (put.nodeType === 1) added.push(put.nodeName.toLowerCase());
 		}
-	}).observe(document, { childList: true, subtree: true });
+	});
+	watcher.observe(document, { childList: true, subtree: true });
+	document.addEventListener('readystatechange', () => {
+		if (document.readyState !== 'interactive') return;
+		watcher.takeRecords();
+		parsed = true;
+	});
 
 	(globalThis as never as { probe: unknown }).probe = { removed, added };
 });

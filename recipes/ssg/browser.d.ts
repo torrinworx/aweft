@@ -12,6 +12,7 @@ interface RecipeNode {
 
 declare const document: {
 	readonly readyState: string;
+	addEventListener(type: 'readystatechange', listener: () => void): void;
 	readonly body: RecipeNode | null;
 	createElement(tag: string): RecipeNode;
 };
@@ -26,5 +27,6 @@ declare const MutationObserver: {
 	new(callback: (records: readonly RecipeMutation[]) => void): {
 		// The document itself, because an init script runs before the parser has made <html>.
 		observe(target: unknown, options: { childList?: boolean; subtree?: boolean }): void;
+		takeRecords(): unknown[];
 	};
 };

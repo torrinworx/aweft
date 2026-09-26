@@ -12,6 +12,7 @@ interface WatchedNode {
 
 declare const document: {
 	readonly readyState: string;
+	addEventListener(type: 'readystatechange', listener: () => void): void;
 	readonly body: WatchedNode | null;
 };
 
@@ -25,5 +26,6 @@ declare const MutationObserver: {
 	new(callback: (records: readonly WatchedMutation[]) => void): {
 		// The document itself, because an init script runs before the parser has made <html>.
 		observe(target: unknown, options: { childList?: boolean; subtree?: boolean }): void;
+		takeRecords(): unknown[];
 	};
 };
