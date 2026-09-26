@@ -9,7 +9,7 @@ import * as inside from '../src/inside.ts';
 import * as node from '../src/node.ts';
 
 test('the main entry hands out exactly what the calls decided', () => {
-	assert.deepEqual(Object.keys(sandbox).sort(), ['createSandbox', 'iframe', 'inProcess']);
+	assert.deepEqual(Object.keys(sandbox).sort(), ['createSandbox', 'frameScripts', 'iframe', 'inProcess']);
 });
 
 test('the inside subpath is the far end, over a channel or a port, and the two halves a page builds it from', () => {
