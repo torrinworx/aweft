@@ -80,7 +80,7 @@ const api = `http://127.0.0.1:${String(backend.listener.port)}`;
 process.env.AWEFT_BACKEND_PORT = String(backend.listener.port);
 
 const dev = await createViteServer({
-	configFile: join(here, 'page', 'vite.config.ts'),
+	configLoader: 'native', configFile: join(here, 'page', 'vite.config.ts'),
 	logLevel: 'warn',
 	server: { port: 0 },
 });

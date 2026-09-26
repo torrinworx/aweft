@@ -2,7 +2,7 @@
 // and then driven in a real one.
 //
 // Run: node --import @aweftjs/build/loader recipes/routed-site/main.ts
-// Serve it instead, to click around: npx vite recipes/routed-site
+// Serve it instead, to click around: npx vite --configLoader native recipes/routed-site
 
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -177,7 +177,7 @@ const serve = async (): Promise<{ url: string; close(): Promise<void> }> => {
 };
 
 console.log('building the site through aweft()');
-await build({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
+await build({ configLoader: 'native', configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
 
 const site = await serve();
 const browser = await chromium.launch();

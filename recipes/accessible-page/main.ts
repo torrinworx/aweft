@@ -12,7 +12,7 @@
 // What none of them reads is written at the end: the criteria that need a person.
 //
 // Run: node --import @aweftjs/build/loader recipes/accessible-page/main.ts
-// Serve it instead, to click around: npx vite recipes/accessible-page
+// Serve it instead, to click around: npx vite --configLoader native recipes/accessible-page
 
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -94,7 +94,7 @@ assert.doesNotThrow(() => transform("import { h } from '@aweftjs/ui';\nexport co
 console.log('  a spread passes the build and is left to the audit');
 
 console.log('\nbuilding the page and the three fault pages through aweft()');
-await build({ configFile: join(here, 'vite.config.ts'), logLevel: 'error' });
+await build({ configLoader: 'native', configFile: join(here, 'vite.config.ts'), logLevel: 'error' });
 
 // --- the page, driven ------------------------------------------------------------------------------
 

@@ -11,7 +11,7 @@ catching one page written wrong.
 ## See it
 
 ```
-npx vite recipes/accessible-page
+npx vite --configLoader native recipes/accessible-page
 ```
 
 ## What the gate does with it

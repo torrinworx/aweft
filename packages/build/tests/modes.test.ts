@@ -65,6 +65,24 @@ test('the plugin names itself and runs before the rest of the pipeline', () => {
 	assert.equal(plugin.enforce, 'pre');
 });
 
+test('loaded from source, the plugin has each bundler environment resolve the stack from source', () => {
+	// This suite imports `plugin.ts`, so it is the source mode. The default lists are vite's own,
+	// from its configuration reference for `resolve.conditions` and `ssr.resolve.conditions`.
+	const plugin = aweft();
+	assert.deepEqual(plugin.configEnvironment('client', {}),
+		{ resolve: { conditions: ['aweft-source', 'module', 'browser', 'development|production'] } });
+	assert.deepEqual(plugin.configEnvironment('ssr', {}),
+		{ resolve: { conditions: ['aweft-source', 'module', 'node', 'development|production'] } });
+	assert.deepEqual(plugin.configEnvironment('ssr', {}, { isSsrTargetWebworker: true }),
+		{ resolve: { conditions: ['aweft-source', 'module', 'browser', 'development|production'] } },
+		'a server render aimed at a worker resolves the way a page does');
+	assert.deepEqual(plugin.configEnvironment('edge', { consumer: 'client' }),
+		{ resolve: { conditions: ['aweft-source', 'module', 'browser', 'development|production'] } });
+	// vite joins a plugin's list onto a configured one, so only the condition itself is added.
+	assert.deepEqual(plugin.configEnvironment('client', { resolve: { conditions: ['worker'] } }),
+		{ resolve: { conditions: ['aweft-source'] } });
+});
+
 test('the plugin claims an icon import and generates its module', async () => {
 	// One plugin is the whole registration: the same object that compiles a page answers the
 	// imports that compiling it wrote (design 141).

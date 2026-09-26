@@ -23,7 +23,7 @@ Two terminals, and the backend goes first.
 
 ```
 PORT=8080 node recipes/full-stack/backend/main.ts
-AWEFT_BACKEND_PORT=8080 npx vite --config recipes/full-stack/page/vite.config.ts
+AWEFT_BACKEND_PORT=8080 npx vite --configLoader native --config recipes/full-stack/page/vite.config.ts
 ```
 
 `PORT` is what the backend listens on. `AWEFT_BACKEND_PORT` is what the page's proxy forwards to,
@@ -96,8 +96,8 @@ node-options=--conditions=aweft-source
 	"type": "module",
 	"scripts": {
 		"backend": "PORT=8080 node backend/main.ts",
-		"dev": "vite --config page/vite.config.ts",
-		"build": "vite build --config page/vite.config.ts",
+		"dev": "vite --configLoader native --config page/vite.config.ts",
+		"build": "vite build --configLoader native --config page/vite.config.ts",
 		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts",
 		"typecheck": "tsc -p tsconfig.json && tsc -p page/tsconfig.json"
 	},
@@ -149,6 +149,12 @@ what let Node run the `.ts` files with no build step, and `jsx: "preserve"` leav
 	}
 }
 ```
+
+`--configLoader native` in the two vite scripts is the bundler's half. vite's default loader
+bundles the config file and resolves `@aweftjs/build` itself, without the condition, so the
+plugin that runs is the compiled one in `dist/`. Loaded natively, the config is imported by Node,
+the condition reaches it, and the plugin then has vite serve the page each package's source
+(design 297). Without it the page runs whatever `dist/` the last `npm run build` left.
 
 `customConditions` is the compiler's half of the `.npmrc` line: without it the compiler reads the
 declarations a published package ships while Node runs the submodule's source, and the two

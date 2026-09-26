@@ -10,7 +10,7 @@
 // want its readers talking to somebody else's service.
 //
 // Run: node --import @aweftjs/build/loader recipes/icons/main.ts
-// Serve it instead, to click around: npx vite recipes/icons
+// Serve it instead, to click around: npx vite --configLoader native recipes/icons
 
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -133,7 +133,7 @@ const pageElements = (from: NodeLike | null): NodeLike[] => {
 };
 
 console.log('building the page through aweft()');
-await build({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
+await build({ configLoader: 'native', configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
 
 const site = await serve();
 

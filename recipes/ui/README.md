@@ -15,7 +15,7 @@ Three pages.
 ## See them
 
 ```
-npx vite recipes/ui
+npx vite --configLoader native recipes/ui
 ```
 
 Open what it prints, and `/preview.html` and `/catalogue.html` beside it. They are the same files

@@ -2,7 +2,7 @@
 //
 // One file, written the way an application writes one: JSX, a theme defined at import, cells for
 // every piece of state, and no imperative handle anywhere. It is the page `main.ts` builds and
-// drives, and the page `npx vite recipes/ui` serves.
+// drives, and the page `npx vite --configLoader native recipes/ui` serves.
 
 import { mutable, mutableArray } from '@aweftjs/core';
 import {

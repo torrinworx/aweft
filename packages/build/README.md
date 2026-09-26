@@ -24,6 +24,18 @@ The plugin also sets the bundler's own JSX handling to `preserve`, so vite's dep
 its own transform leave a `.tsx` page to this plugin rather than reading its JSX as another
 library's.
 
+**Loaded from source, it has the bundler serve source.** In the repo, and in an application that
+carries it as a submodule, `.npmrc` asks Node for each `@aweftjs/*` package's `src/` with the
+`aweft-source` condition (design 256). The plugin reads which file it was loaded from, and when that
+is `plugin.ts` it adds the same condition to every environment the bundler builds, so the page gets
+the files the process runs and not a `dist/` of whatever age (design 297). Loaded from an npm
+install, it adds nothing.
+
+That needs the config file loaded by Node, not bundled. vite's default loader bundles the config
+and resolves its imports itself, without the condition, so the plugin it hands back is the one in
+`dist/`. Start vite with `--configLoader native`, or pass `configLoader: 'native'` beside
+`configFile` to `createServer` and `build`, as every recipe here does.
+
 ```ts
 // Anywhere, a browser included, for source that did not exist at build time.
 import { transform } from '@aweftjs/build';

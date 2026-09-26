@@ -12,7 +12,7 @@ One page, three ways of naming an icon, and the bundle weighed after.
 ## See it
 
 ```
-npx vite recipes/icons
+npx vite --configLoader native recipes/icons
 ```
 
 The icon route is only in `main.ts`, so the third icon does not draw under `vite` on its own. The

@@ -5,7 +5,7 @@
 // reader lands on is live the moment its bundle runs, without being rebuilt underneath them.
 //
 // Run: AWEFT_DEFAULT_H=@aweftjs/ui node --import @aweftjs/build/loader recipes/ssg/main.ts
-// Serve it instead, to click around: npx vite recipes/ssg
+// Serve it instead, to click around: npx vite --configLoader native recipes/ssg
 
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -28,7 +28,7 @@ const dist = join(here, 'dist');
 // --- the client bundle, and the shell it leaves behind -------------------------------------------
 
 console.log('building the client bundle through aweft({ defaultH })');
-await build({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
+await build({ configLoader: 'native', configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
 
 const shell = readFileSync(join(dist, 'index.html'), 'utf8');
 const site = createSite({

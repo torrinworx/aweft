@@ -1,4 +1,5 @@
-// The one plugin a page needs. `npx vite recipes/routed-site` reads this, and so does `main.ts`.
+// The one plugin a page needs. `npx vite --configLoader native recipes/routed-site` reads this, and so
+// does `main.ts`.
 
 import { defineConfig } from 'vite';
 

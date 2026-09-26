@@ -11,7 +11,7 @@
 // before it has a second language (design 277). A process that renders these pages says the same
 // thing with AWEFT_TEXT=1.
 //
-// Serve it by hand: AWEFT_BACKEND_PORT=8080 npx vite --config recipes/full-stack/page/vite.config.ts
+// Serve it by hand: AWEFT_BACKEND_PORT=8080 npx vite --configLoader native --config recipes/full-stack/page/vite.config.ts
 
 import { defineConfig } from 'vite';
 

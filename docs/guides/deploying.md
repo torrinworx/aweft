@@ -40,7 +40,7 @@ means the same thing on the droplet. A build is stamped with the commit it came 
 in a file beside the server, and the health answer carries the stamp.
 
 ```sh
-NODE_ENV=production npx vite build
+NODE_ENV=production npx vite build --configLoader native
 node --import @aweftjs/build/loader pages.ts
 printf '{ "build": "%s" }\n' "$BUILD_ID" > build/build.json
 ```

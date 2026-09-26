@@ -31,7 +31,7 @@ process.env.AWEFT_BACKEND_PORT = String(backend.listener.port);
 // --- the dev server, with the backend behind it ----------------------------------------------
 
 const dev = await createViteServer({
-	configFile: join(here, 'page', 'vite.config.ts'),
+	configLoader: 'native', configFile: join(here, 'page', 'vite.config.ts'),
 	logLevel: 'warn',
 	server: { port: 0 },
 });

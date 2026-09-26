@@ -27,7 +27,7 @@ mount(document.body, <Counter />);
 ```
 
 [`recipes/ui/`](https://github.com/torrinworx/aweft/tree/main/recipes/ui) is the whole of this
-README as a running page. `npx vite recipes/ui` serves it.
+README as a running page. `npx vite --configLoader native recipes/ui` serves it.
 
 ## Five rules
 

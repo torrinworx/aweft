@@ -51,13 +51,19 @@ process.env.AWEFT_BACKEND_PORT = String(backendPort);
 
 console.log('the dev server, with the backend behind it');
 const dev = await createServer({
-	configFile: join(here, 'page', 'vite.config.ts'),
+	configLoader: 'native', configFile: join(here, 'page', 'vite.config.ts'),
 	logLevel: 'warn',
 	// A free port, so a run collides with nothing. `resolvedUrls` says which one it got.
 	server: { port: 0 },
 });
 await dev.listen();
 const origin = dev.resolvedUrls!.local[0]!;
+
+// This process runs the stack's source, so the page has to get the same files and not a compiled
+// `dist/` of whatever age (design 297).
+const resolved = await dev.environments.client.pluginContainer.resolveId('@aweftjs/ui', join(here, 'page', 'entry.tsx'));
+check(resolved?.id.replace(/\\/g, '/').endsWith('/packages/ui/src/index.ts') === true,
+	`the page is served the stack's source, as this process runs it (got ${resolved?.id ?? 'nothing'})`);
 
 // --- the page ------------------------------------------------------------------------------------
 

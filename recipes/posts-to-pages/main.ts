@@ -40,7 +40,7 @@ const dist = join(here, 'dist');
 // --- the bundle and the shell ---------------------------------------------------------------------
 
 console.log('building the client bundle');
-await build({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
+await build({ configLoader: 'native', configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
 const shell = readFileSync(join(dist, 'index.html'), 'utf8');
 
 // --- the store: the posts, as a document -----------------------------------------------------------

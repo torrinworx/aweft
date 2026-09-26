@@ -3,7 +3,7 @@
 // names the two, and the room entry reaches the same chunks by relative import, so an act and the
 // stage it mounts under hold one `StageContext` and one theme registry.
 //
-// Build it by hand: npx vite build --config recipes/room/page/room.config.ts
+// Build it by hand: npx vite build --configLoader native --config recipes/room/page/room.config.ts
 
 import { defineConfig } from 'vite';
 

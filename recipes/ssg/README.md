@@ -6,7 +6,7 @@ in place when the reader's browser gets to it.
 ## See it
 
 ```
-npx vite recipes/ssg
+npx vite --configLoader native recipes/ssg
 ```
 
 That is the development server: the shell with an empty body, the page mounted live. Click around;

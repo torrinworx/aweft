@@ -65,7 +65,7 @@ const board = createObject<Board>({ title: 'the notice board' });
 // The page is served from the server it talks to, because a cookie belongs to an origin: a
 // sign-up on one origin sets nothing for a socket on another.
 console.log('building the page through aweft()');
-await build({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
+await build({ configLoader: 'native', configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
 
 const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 

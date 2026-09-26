@@ -37,7 +37,7 @@ const warned: string[] = [];
 const warn = console.warn;
 console.warn = (line: unknown): void => { warned.push(String(line)); };
 try {
-	await build({ configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
+	await build({ configLoader: 'native', configFile: join(here, 'vite.config.ts'), logLevel: 'warn' });
 } finally {
 	console.warn = warn;
 }

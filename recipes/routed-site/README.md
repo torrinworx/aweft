@@ -6,7 +6,7 @@ dialog the back button dismisses, and a title per page.
 ## See it
 
 ```
-npx vite recipes/routed-site
+npx vite --configLoader native recipes/routed-site
 ```
 
 Open what it prints and click around. Every link goes through the router, so the address bar moves

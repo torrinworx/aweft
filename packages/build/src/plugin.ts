@@ -26,6 +26,14 @@ const SOURCE_CATALOG = 'source.json';
 const VIRTUAL = '\0aweft-icons:';
 const FROM = '?from=';
 
+// Loaded from `plugin.ts`, this process runs the stack's source, and the page it bundles should get
+// the same files rather than a `dist/` of whatever age (design 297). The two lists are vite's
+// documented defaults, repeated because a plugin's list is joined onto the configured one and an
+// environment that configured none would otherwise be left with only this condition.
+const SOURCE = import.meta.url.endsWith('.ts') ? 'aweft-source' : null;
+const PAGE_CONDITIONS = ['module', 'browser', 'development|production'];
+const SERVER_CONDITIONS = ['module', 'node', 'development|production'];
+
 /** What a bundler asks of a plugin, and all this one answers. */
 export interface Plugin {
 	readonly name: string;
@@ -36,6 +44,16 @@ export interface Plugin {
 	 * looking for a runtime that is not installed.
 	 */
 	config(): { oxc: { jsx: 'preserve' } };
+	/**
+	 * Adds `aweft-source` to an environment's resolve conditions when this plugin was loaded from
+	 * source, so the page is served the files the process runs (design 297), and answers null when
+	 * it was loaded from the compiled package.
+	 */
+	configEnvironment(
+		name: string,
+		config: { consumer?: 'client' | 'server'; resolve?: { conditions?: readonly string[] } },
+		env?: { isSsrTargetWebworker?: boolean },
+	): { resolve: { conditions: string[] } } | null;
 	/** Learns the root the text catalogs are written under. A bundler that has no such hook writes them under the working directory. */
 	configResolved(config: { root?: string }): void;
 	transform(code: string, id: string): { code: string; map: string } | null;
@@ -146,7 +164,8 @@ const writeCatalogs = async (root: string, own: ReadonlyMap<string, Set<string>>
  * Returns: the plugin. It handles `.js`, `.jsx`, `.ts` and `.tsx` and answers null for anything
  * else, which leaves the file to the rest of the pipeline. It also answers the icon imports the
  * transform writes, and tells the bundler to leave JSX to it, so one plugin is still the whole
- * registration. With `text` on it finds the text in the application's own files and never in one
+ * registration. Loaded from source, it has the bundler resolve each `@aweftjs/*` package from
+ * source too (design 297). With `text` on it finds the text in the application's own files and never in one
  * under `node_modules`, folds the keys every installed `@aweftjs` package ships in its `text.json`
  * into the source catalog, and warns, when the bundle closes, about the keys each `text/<tag>.json`
  * beside it lacks and the entries it holds that no file uses; it never fails a build for either.
@@ -166,6 +185,12 @@ export const aweft = (options: Omit<TransformOptions, 'filename'> = {}): Plugin 
 		name: 'aweft',
 		enforce: 'pre',
 		config: () => ({ oxc: { jsx: 'preserve' } }),
+		configEnvironment(name, config, env) {
+			if (SOURCE === null) return null;
+			if (config.resolve?.conditions !== undefined) return { resolve: { conditions: [SOURCE] } };
+			const page = (config.consumer ?? (name === 'client' ? 'client' : 'server')) === 'client' || env?.isSsrTargetWebworker === true;
+			return { resolve: { conditions: [SOURCE, ...(page ? PAGE_CONDITIONS : SERVER_CONDITIONS)] } };
+		},
 		configResolved(config) {
 			if (typeof config.root === 'string' && config.root !== '') root = config.root;
 		},

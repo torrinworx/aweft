@@ -1,4 +1,5 @@
-// The one plugin a page needs. `npx vite recipes/ui` reads this, and so does `main.ts`.
+// The one plugin a page needs. `npx vite --configLoader native recipes/ui` reads this, and so
+// does `main.ts`.
 //
 // Three pages: the gallery, which exercises every system the package ships; the preview, which is
 // the look itself in both modes and where the look is judged; and the catalogue, which is

@@ -34,7 +34,7 @@ const dist = join(here, 'dist');
 // recipe writes nothing into the directory that one owns.
 console.log('building the client bundle and writing the pages');
 await build({
-	configFile: join(ssg, 'vite.config.ts'),
+	configLoader: 'native', configFile: join(ssg, 'vite.config.ts'),
 	logLevel: 'warn',
 	build: { outDir: dist, emptyOutDir: true },
 });

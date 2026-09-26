@@ -39,7 +39,7 @@ process.env.AWEFT_BACKEND_PORT = String(backend.listener.port);
 
 // --- the room bundle, then the dev server with the backend behind it ---------------------------
 
-await build({ configFile: join(here, 'page', 'room.config.ts'), logLevel: 'warn' });
+await build({ configLoader: 'native', configFile: join(here, 'page', 'room.config.ts'), logLevel: 'warn' });
 const bundle = join(here, 'page', 'public', 'room');
 const files = readdirSync(bundle).filter((name) => name.endsWith('.js'));
 const bytes = files.reduce((sum, name) => sum + statSync(join(bundle, name)).size, 0);
@@ -47,7 +47,7 @@ const zipped = files.reduce((sum, name) => sum + gzipSync(readFileSync(join(bund
 console.log(`  --   the room bundle: ${String(files.length)} files, ${String(bytes)} bytes, ${String(zipped)} bytes gzipped`);
 
 const dev = await createViteServer({
-	configFile: join(here, 'page', 'vite.config.ts'),
+	configLoader: 'native', configFile: join(here, 'page', 'vite.config.ts'),
 	logLevel: 'warn',
 	server: { port: 0 },
 });
