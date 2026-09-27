@@ -441,7 +441,10 @@ defineTheme({
 		gap: '$space',
 		width: '100%',
 	},
+	// A column field is 100% wide so its input stretches; a control beside its words has nothing to
+	// stretch, and at 100% it takes a whole line in a wrapping row. `auto` still fills a block line.
 	field_inline: {
+		width: 'auto',
 		flexDirection: 'row',
 		alignItems: 'center',
 		flexWrap: 'wrap',

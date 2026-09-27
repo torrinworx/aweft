@@ -2198,6 +2198,29 @@ test('an inline field puts the control beside its words on one line', async () =
 	});
 });
 
+test('an inline field in a wrapping row takes its own width, not the row', async () => {
+	// A toggle beside the links of a nav: `field` is 100% wide so a column field's input stretches,
+	// and an inline field that kept it took a line of its own and wrapped under the links.
+	await drive('field-inline-row', `
+		import { mutable } from '@aweftjs/core';
+		import { Toggle, h, mount } from '@aweftjs/ui';
+		mount(document.body, <nav id="nav" style="display: flex; flex-wrap: wrap; gap: 16px; width: 600px">
+			<a id="link" href="#a">Events</a>
+			<Toggle label="Dark mode" value={mutable(false)} />
+		</nav>);
+	`, async (view) => {
+		await view.waitForSelector('#link');
+		const seen = await view.evaluate(() => {
+			const link = document.querySelector('#link')!.getBoundingClientRect();
+			const field = document.querySelector('#nav > :last-child')!.getBoundingClientRect();
+			return { sameLine: field.top < link.bottom && link.top < field.bottom, width: Math.round(field.width) };
+		});
+
+		assert.equal(seen.sameLine, true, 'the toggle sits on the links\' line');
+		assert.ok(seen.width < 300, `and is as wide as its switch and words, not the row (${seen.width}px)`);
+	});
+});
+
 test('a responsive field is a column in a narrow group and a row in a wide one', async () => {
 	// The same field, with nothing about it changed but the width of the group around it. The
 	// query is `28rem` of the container, and `field_group` is what declares itself one (design 209).
