@@ -661,6 +661,8 @@ failure lands somewhere recoverable.
 
 - **`aweft`**: the unscoped meta-package, batteries included. What someone installs to get
   the whole stack. Not built: it bundles batteries that do not exist yet.
+  Until then the name holds a stub at `0.0.1`, published once from outside the workspace,
+  whose README points to `@aweftjs/*`.
 - **`@aweftjs/*`**: the individual packages. Published.
 - Site: `aweft.dev`.
 
