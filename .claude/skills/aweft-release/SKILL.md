@@ -5,9 +5,10 @@ description: Publish the aweft packages to npm. Use when asked to release, publi
 
 # Releasing aweft
 
-Nineteen packages go out together at one version (design 256). A publish is the only action in
-this repo that cannot be undone: npm keeps the version number whatever happens next, and an
-unpublish is a 72-hour window with conditions. So every check runs before it, not after.
+Every package under `packages/` goes out together at one version (design 256). A publish
+is the only action in this repo that cannot be undone: npm keeps the version number whatever
+happens next, and an unpublish is a 72-hour window with conditions. So every check runs
+before it, not after.
 
 ## Read first
 
@@ -35,8 +36,9 @@ enforcing, and `AGENTS.md` under KEEPING ONE SOURCE OF TRUTH for the lockstep ru
 
    Then, in a scratch directory outside the repo, with no `.npmrc` and no submodule:
    install the tarballs, import every package's main entry and every subpath its `exports`
-   names, and run something small that touches more than one package. What you are looking for
-   is `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, a missing `dist/`, or a subpath that
+   names (a `.json` subpath with `with { type: 'json' }`, which Node requires), and run
+   something small that touches more than one package. What you are looking for is
+   `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, a missing `dist/`, or a subpath that
    resolves in the repo and not from a tarball.
 6. **Log in as the right account.** `npm whoami`. The scope is `@aweftjs`.
 7. **Ask, then publish.** Name the version, the package count and the account, and wait for
