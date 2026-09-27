@@ -1,7 +1,7 @@
 // The packages as npm would ship them: pack every workspace, install the tarballs in an empty
 // directory outside the repo, import every entry each `exports` map names, and run two recipes
-// against what was installed. Every other check reads the source; this is the one that reads
-// the tarball, so it is the release's last check before `npm publish` (design 256).
+// against what was installed. Every other check reads the source. This one reads the
+// tarball, so it is the release's last check before `npm publish` (design 256).
 //
 //   node packages/testing/scripts/check-tarballs.ts
 
@@ -47,7 +47,7 @@ const tarballs = readdirSync(packed).filter((name) => name.endsWith('.tgz'));
 writeFileSync(join(app, 'package.json'), JSON.stringify({ name: 'app', private: true, type: 'module' }));
 run('npm install', 'npm', ['install', '--no-audit', '--no-fund', ...tarballs.map((name) => join(packed, name))], app);
 
-// A `.json` subpath needs the import attribute; Node refuses it without one. Importing reads
+// A `.json` subpath needs the import attribute, and Node refuses it without one. Importing reads
 // only the `default` condition, so the declarations `types` names are looked for by hand.
 writeFileSync(join(app, 'entries.mjs'), `import { existsSync, readdirSync, readFileSync } from 'node:fs';
 const scope = new URL('./node_modules/@aweftjs/', import.meta.url);
@@ -74,8 +74,9 @@ console.log(count);
 `);
 const entries = run('importing every entry', process.execPath, ['entries.mjs'], app).trim();
 
-// Two recipes: core and sync together, and the sandbox, whose room is granted the directories
-// around the installed package rather than the repo's (design 256).
+// Two recipes: two-clients uses core and sync together. The sandbox recipe matters because a
+// sandboxed process may read only the directories next to the installed package, and those
+// are not where they are in the repo (design 256).
 for (const recipe of ['two-clients', 'sandbox']) {
 	copyFileSync(join(root, 'recipes', recipe, 'main.ts'), join(app, `${recipe}.ts`));
 	run(`recipes/${recipe}`, process.execPath, [`${recipe}.ts`], app);
