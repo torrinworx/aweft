@@ -40,6 +40,7 @@
 		"sweep": "node packages/testing/scripts/sweep.ts",
 		"security": "node packages/testing/scripts/check-security.ts",
 		"hooks": "node packages/testing/scripts/check-hooks.ts",
+		"tarballs": "node packages/testing/scripts/check-tarballs.ts",
 		"audit": "npm audit --audit-level=high",
 		"prepare": "git config core.hooksPath .githooks"
 	},

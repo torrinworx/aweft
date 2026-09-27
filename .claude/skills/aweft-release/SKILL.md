@@ -31,13 +31,13 @@ enforcing, and `AGENTS.md` under KEEPING ONE SOURCE OF TRUTH for the lockstep ru
    check in it runs against the source:
 
    ```
-   npm pack --workspaces --pack-destination <scratch>
+   npm run tarballs
    ```
 
-   Then, in a scratch directory outside the repo, with no `.npmrc` and no submodule:
-   install the tarballs, import every package's main entry and every subpath its `exports`
-   names (a `.json` subpath with `with { type: 'json' }`, which Node requires), and run
-   something small that touches more than one package. What you are looking for is
+   It packs every workspace, installs the tarballs in an empty directory outside the repo
+   with no `.npmrc` in reach, imports every entry each `exports` map names, looks for the
+   declarations each names, and runs the `two-clients` and `sandbox` recipes against what was
+   installed. What it catches is
    `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, a missing `dist/`, or a subpath that
    resolves in the repo and not from a tarball.
 6. **Log in as the right account.** `npm whoami`. The scope is `@aweftjs`.
