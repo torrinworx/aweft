@@ -11,6 +11,8 @@ export interface Mail {
 	readonly text: string;
 	readonly html: string;
 	readonly replyTo?: string | undefined;
+	/** The sender for this one mail, in place of the configured one. */
+	readonly from?: string | undefined;
 }
 
 /** A sender: the built-in Resend one, or the application's own function in the configuration. */
@@ -49,7 +51,7 @@ export const resend = (settings: ResendSettings, timeoutMs: number): Sender => a
 			method: 'POST',
 			headers: { authorization: `Bearer ${settings.key}`, 'content-type': 'application/json' },
 			body: JSON.stringify({
-				from: settings.from,
+				from: mail.from ?? settings.from,
 				to: mail.to,
 				subject: mail.subject,
 				text: mail.text,

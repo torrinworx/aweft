@@ -54,6 +54,8 @@ export interface SendOptions {
 	/** The mail's HTML; the escaped title and body in two paragraphs by default. */
 	readonly html?: string | undefined;
 	readonly replyTo?: string | undefined;
+	/** The mail's sender, in place of the configured one: a second address on the same domain, such as a newsletter's. */
+	readonly from?: string | undefined;
 	/** Whether a push carries only that something happened; the configuration's `private` by default. */
 	readonly private?: boolean | undefined;
 }
@@ -199,7 +201,7 @@ export default (props: ModuleProps): Send => {
 		return { ok: true };
 	});
 
-	const viaEmail = (to: Recipient, item: Item, html: string | undefined, replyTo: string | undefined): Promise<Delivery> => attempt(async () => {
+	const viaEmail = (to: Recipient, item: Item, html: string | undefined, replyTo: string | undefined, from: string | undefined): Promise<Delivery> => attempt(async () => {
 		const address = await addressOf(to);
 		if (address === null) return { ok: false, error: 'the user has no email address' };
 		if (sender === null) return { ok: false, error: 'email is not configured: give notify/Send an email setting' };
@@ -209,6 +211,7 @@ export default (props: ModuleProps): Send => {
 			text: item.body,
 			html: html ?? `<p><strong>${escape(item.title)}</strong></p><p>${escape(item.body)}</p>`,
 			replyTo,
+			...(from === undefined ? {} : { from }),
 		};
 		if (!outward) return { ok: false, error: 'outward delivery is off (outward: false)' };
 		return await bounded('sender', timeoutMs, () => sender!(mail));
@@ -265,7 +268,7 @@ export default (props: ModuleProps): Send => {
 			if (!Array.isArray(options.channels) || !options.channels.every((c) => oneOf(c, CHANNELS))) throw invalid(`channels of ${JSON.stringify(options.channels)}`);
 			channels = [...new Set(options.channels)];
 		}
-		for (const key of ['body', 'html', 'replyTo'] as const) {
+		for (const key of ['body', 'html', 'replyTo', 'from'] as const) {
 			if (options[key] !== undefined && typeof options[key] !== 'string') throw invalid(`${key} that is not a string`);
 		}
 		for (const key of ['url', 'tag'] as const) {
@@ -292,7 +295,7 @@ export default (props: ModuleProps): Send => {
 		// the page can find; the record goes onto it once the other channels have answered.
 		const delivery: Partial<Record<Channel, Delivery>> = {};
 		if (channels.includes('inbox')) delivery.inbox = await viaInbox(recipient, item);
-		if (channels.includes('email')) delivery.email = await viaEmail(recipient, item, options.html, options.replyTo);
+		if (channels.includes('email')) delivery.email = await viaEmail(recipient, item, options.html, options.replyTo, options.from);
 		if (channels.includes('push')) delivery.push = await viaPush(recipient, item, isPrivate);
 		if (delivery.inbox !== undefined && 'ok' in delivery.inbox && delivery.inbox.ok && 'user' in recipient) {
 			await attempt(async () => { await inbox.delivered(recipient.user, item.id, delivery); return { ok: true }; });

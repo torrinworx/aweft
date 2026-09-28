@@ -72,6 +72,31 @@ test('an address recipient skips the inbox and push, and the mail goes to that a
 	await resend.stop();
 });
 
+test('a send\'s own from goes out on that mail only, and the configured one on the next', async () => {
+	const resend = await fake();
+	resend.answer(200, { id: 'msg-1' });
+	const running = await started({
+		gate: asUser(user),
+		config: sendConfig({ email: { resend: { key: 'k', from: 'Site <site@example.com>', endpoint: resend.url } } }),
+	});
+	await running.send.send({ to: { email: 'owner@example.com' }, title: 'the issue', channels: ['email'], from: 'Weekly <weekly@example.com>' });
+	await running.send.send({ to: { email: 'owner@example.com' }, title: 'a reset link', channels: ['email'] });
+	assert.equal((resend.calls[0]!.body as { from: string }).from, 'Weekly <weekly@example.com>');
+	assert.equal((resend.calls[1]!.body as { from: string }).from, 'Site <site@example.com>');
+	await running.stop();
+	await resend.stop();
+});
+
+test('an application\'s own email function sees from only on a send that named one', async () => {
+	const mails: Record<string, unknown>[] = [];
+	const running = await started({ gate: asUser(user), config: sendConfig({ email: async (mail: Record<string, unknown>) => { mails.push(mail); return { ok: true, id: null }; } }) });
+	await running.send.send({ to: { email: 'owner@example.com' }, title: 'the issue', channels: ['email'], from: 'Weekly <weekly@example.com>' });
+	await running.send.send({ to: { email: 'owner@example.com' }, title: 'a reset link', channels: ['email'] });
+	assert.equal(mails[0]!['from'], 'Weekly <weekly@example.com>');
+	assert.equal('from' in mails[1]!, false);
+	await running.stop();
+});
+
 test('a server with no store skips the inbox and push and refuses nothing, which is a contact form\'s shape', async () => {
 	const resend = await fake();
 	const running = await started({
@@ -265,6 +290,7 @@ test('a send out of shape is invalid-notification with the fix on it', async () 
 		{ to: { user }, title: 'x', channels: 'inbox' },
 		{ to: { user }, title: 'x', html: 3 },
 		{ to: { user }, title: 'x', replyTo: 3 },
+		{ to: { user }, title: 'x', from: 3 },
 		{ to: { user }, title: 'x', body: 42 },
 		{ to: { user }, title: 'x', url: 42 },
 		{ to: { user }, title: 'x', tag: 42 },
