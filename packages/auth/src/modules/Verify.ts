@@ -1,4 +1,5 @@
-// auth/Verify: a one-time link by mail, and the name `verified` once it is clicked (design 290).
+// auth/Verify: a one-time link by mail, and the name `verified` once it is clicked (design 290),
+// mailed to every new account when `atSignUp` is set (design 300).
 
 import { atomic } from '@aweftjs/core';
 import type { ModuleProps } from '@aweftjs/modules';
@@ -7,12 +8,12 @@ import { type Refusal, sliding } from '@aweftjs/server';
 import { type AuthContext, userOf } from '../context.ts';
 import { type Links, NOT_LIVE, TAKEN, links } from '../links.ts';
 import { type Mailer, type Outcome, mailLink, textOf, urlOf } from '../mail.ts';
-import { bodyOf, json, numberOf, storeOf } from '../props.ts';
+import { bodyOf, invalidConfig, json, numberOf, storeOf } from '../props.ts';
 import { userDoc } from '../users.ts';
-import type { UserDocument } from './Enter.ts';
+import type { Enter, UserDocument } from './Enter.ts';
 import type { Roles } from './Roles.ts';
 
-export const deps = ['auth/Roles', 'notify/Send'];
+export const deps = ['auth/Roles', 'auth/Enter', 'notify/Send'];
 
 export const defaults = {
 	subject: 'Verify your email address',
@@ -22,6 +23,7 @@ export const defaults = {
 	sendsWindowMs: 86_400_000,
 	resendMs: 60_000,
 	sweepMs: 3_600_000,
+	atSignUp: false,
 };
 
 /** The name a verified person holds. */
@@ -48,6 +50,7 @@ export default ({ imports, config, ...props }: ModuleProps): Verify => {
 	const mailer = imports.Send as Mailer;
 	const subject = textOf(MODULE, config, 'subject');
 	const url = urlOf(MODULE, config);
+	if (typeof config.atSignUp !== 'boolean') throw invalidConfig(MODULE, `atSignUp ${JSON.stringify(config.atSignUp)}`, 'Give atSignUp true to mail every new account its link, or false.');
 	const perUser = sliding({ count: numberOf(MODULE, config, 'sendsPerUser'), windowMs: numberOf(MODULE, config, 'sendsWindowMs') });
 	const resend = sliding({ count: 1, windowMs: numberOf(MODULE, config, 'resendMs') });
 	const held: Links = links(store, 'verify', numberOf(MODULE, config, 'verifyMs'), numberOf(MODULE, config, 'sweepMs'));
@@ -84,6 +87,13 @@ export default ({ imports, config, ...props }: ModuleProps): Verify => {
 		return { user };
 	};
 
+	// Counted as the route counts, so the page's own resend inside resendMs is refused, not a second mail.
+	const unhear = config.atSignUp ? (imports.Enter as Enter).afterSignUp(async (user) => {
+		perUser.take(user);
+		resend.take(user);
+		await send(user);
+	}) : () => {};
+
 	const tooMany = (retryAfter: number): Response =>
 		json(429, { reasons: [{ code: 'attempts', message: 'too many verification mails; wait and try again' }] }, { 'retry-after': String(retryAfter) });
 
@@ -91,7 +101,7 @@ export default ({ imports, config, ...props }: ModuleProps): Verify => {
 		public: true,
 		send,
 		confirm,
-		stop: () => { held.stop(); },
+		stop: () => { held.stop(); unhear(); },
 		routes: {
 			'POST /api/verify/send': async (_request, context) => {
 				const user = userOf(context);

@@ -298,3 +298,62 @@ test('sign-up hands the new user to auth/Roles for the first grant, and sign-in 
 	assert.deepEqual(offered, [up.user], 'a sign-in offers nobody');
 	await store.stop();
 });
+
+test('afterSignUp hears each new account once enter has made it, never a sign-in; enter waits for it, a rejection rejects enter, and the answer removes it', async () => {
+	const store = newStore();
+	const { session } = stubSession();
+	const { instance: enter } = await module<Enter>('Enter', store, { 'auth/Session': session });
+	const heard: string[] = [];
+	const listener = async (user: string): Promise<void> => {
+		assert.notEqual(await store.head(`user:${user}`), 0, 'the document is there when the listener hears');
+		await new Promise((done) => setTimeout(done, 5));
+		heard.push(user);
+	};
+	const off = enter.afterSignUp(listener);
+	const offAgain = enter.afterSignUp(listener);
+	const up = await enter.enter('ada@example.com', 'correct horse');
+	assert.ok('user' in up);
+	assert.deepEqual(heard, [up.user, up.user], 'heard before enter answered, once per time it was added');
+	await enter.enter('ada@example.com', 'correct horse');
+	assert.equal(heard.length, 2, 'a sign-in is not heard');
+	offAgain();
+	const bob = await enter.enter('bob@example.com', 'correct horse');
+	assert.ok('user' in bob);
+	assert.equal(heard.length, 3, 'removing one leaves the other');
+	off();
+	const offThrow = enter.afterSignUp(async () => { throw new Error('listener broke'); });
+	await assert.rejects(enter.enter('cy@example.com', 'correct horse'), /listener broke/);
+	offThrow();
+	const cy = await enter.enter('cy@example.com', 'correct horse');
+	assert.ok('user' in cy && !cy.created, 'the account was made before the listener threw');
+	assert.equal(heard.length, 3);
+	await store.stop();
+});
+
+test('every listener hears a sign-up after the first grant, one that rejects keeps none of the others from running, and the route waits for them outside the hashing count', async () => {
+	const store = newStore();
+	const { session } = stubSession();
+	const offered: string[] = [];
+	const { instance: enter } = await module<Enter>('Enter', store, { 'auth/Session': session, 'auth/Roles': { first: async (user: string) => { offered.push(user); return true; } } }, { hashesInFlight: 1 });
+	const heard: string[] = [];
+	enter.afterSignUp(async () => { throw new Error('an earlier listener broke'); });
+	let release = (): void => {};
+	const held = new Promise<void>((done) => { release = done; });
+	enter.afterSignUp(async (user) => {
+		assert.ok(offered.includes(user), 'auth/Roles was offered the account first');
+		await held;
+		heard.push(user);
+	});
+	const route = enter.routes['POST /api/session']!;
+	const existing = await module<Enter>('Enter', store, { 'auth/Session': session });
+	await existing.instance.enter('bob@example.com', 'correct horse');
+
+	const signingUp = route(post('ada@example.com', 'correct horse'), from('1.1.1.1'));
+	while (offered.length === 0) await new Promise((done) => setTimeout(done, 1));
+	const meanwhile = await route(post('bob@example.com', 'correct horse'), from('2.2.2.2'));
+	assert.equal(meanwhile.status, 200, 'a sign-in while a listener waits is not turned away as busy');
+	release();
+	await assert.rejects(signingUp, /an earlier listener broke/, 'the rejection reaches the route, which the server answers 500');
+	assert.equal(heard.length, 1, 'and the listener after the one that rejected still ran');
+	await store.stop();
+});

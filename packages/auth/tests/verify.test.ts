@@ -181,11 +181,68 @@ test('url is required, subject is text, and every number is above zero, or the m
 	const store = newStore();
 	const mail = mailer();
 	await assert.rejects(module<Verify>('Verify', store, { 'auth/Roles': noRoles, 'notify/Send': mail }), /invalid-config/, 'no url');
-	for (const config of [{ url: 'https://app.example/verify' }, { url, subject: '' }, { url, verifyMs: 0 }, { url, sendsPerUser: -1 }, { url, resendMs: 'soon' }, { url, sweepMs: Infinity }]) {
+	for (const config of [{ url: 'https://app.example/verify' }, { url, subject: '' }, { url, verifyMs: 0 }, { url, sendsPerUser: -1 }, { url, resendMs: 'soon' }, { url, sweepMs: Infinity }, { url, atSignUp: 'yes' }]) {
 		await assert.rejects(module<Verify>('Verify', store, { 'auth/Roles': noRoles, 'notify/Send': mail }, config), /invalid-config|invalid-limit/, JSON.stringify(config));
 	}
 	const { instance: made } = await module<Verify>('Verify', store, { 'auth/Roles': noRoles, 'notify/Send': mail }, { url });
 	assert.equal(made.public, true);
 	made.stop();
+	await store.stop();
+});
+
+test('atSignUp mails every new account its link before enter answers, counted as the route counts; a sign-in, a failed mail and a stopped module send nothing more', async () => {
+	const store = newStore();
+	const mail = mailer();
+	const { instance: roles } = await module<Roles>('Roles', store);
+	const { instance: enter } = await module<Enter>('Enter', store, { 'auth/Session': {}, 'auth/Roles': roles });
+	const { instance: verify } = await module<Verify>('Verify', store, { 'auth/Roles': roles, 'auth/Enter': enter, 'notify/Send': mail }, { url, atSignUp: true, resendMs: 60_000 });
+
+	const up = await enter.enter('ada@example.com', 'correct horse');
+	assert.ok('user' in up && up.created);
+	assert.equal(mail.sent.length, 1, 'the mail went before enter answered');
+	assert.equal(mail.sent[0]!.user, up.user);
+	assert.notEqual(await store.head(`verify:${tokenIn(mail.sent[0]!.body)}`), 0, 'and its link stands');
+	const soon = await verify.routes['POST /api/verify/send']!(request('/api/verify/send', { method: 'POST' }), asUser(up.user));
+	assert.equal(soon.status, 429, 'the page asking again at once is inside the resend gap');
+
+	await enter.enter('ada@example.com', 'correct horse');
+	assert.equal(mail.sent.length, 1, 'a sign-in mails nothing');
+
+	mail.answer({ ok: false, error: 'down' });
+	const down = await enter.enter('bob@example.com', 'correct horse');
+	assert.ok('user' in down && down.created, 'a mail that did not go does not fail the sign-up');
+	mail.answer({ ok: true });
+
+	verify.stop();
+	await enter.enter('cy@example.com', 'correct horse');
+	assert.equal(mail.sent.length, 2, 'a stopped module hears no more sign-ups');
+	await store.stop();
+});
+
+test('without atSignUp a new account is mailed nothing', async () => {
+	const store = newStore();
+	const mail = mailer();
+	const { instance: roles } = await module<Roles>('Roles', store);
+	const { instance: enter } = await module<Enter>('Enter', store, { 'auth/Session': {}, 'auth/Roles': roles });
+	const { instance: verify } = await module<Verify>('Verify', store, { 'auth/Roles': roles, 'auth/Enter': enter, 'notify/Send': mail }, { url });
+	await enter.enter('ada@example.com', 'correct horse');
+	assert.equal(mail.sent.length, 0);
+	verify.stop();
+	await store.stop();
+});
+
+test('the link mailed at sign-up counts against the sends a person may ask for', async () => {
+	const store = newStore();
+	const mail = mailer();
+	const { instance: roles } = await module<Roles>('Roles', store);
+	const { instance: enter } = await module<Enter>('Enter', store, { 'auth/Session': {}, 'auth/Roles': roles });
+	const { instance: verify } = await module<Verify>('Verify', store, { 'auth/Roles': roles, 'auth/Enter': enter, 'notify/Send': mail }, { url, atSignUp: true, sendsPerUser: 1, resendMs: 1 });
+	const up = await enter.enter('ada@example.com', 'correct horse');
+	assert.ok('user' in up);
+	await new Promise((done) => setTimeout(done, 5));
+	const asked = await verify.routes['POST /api/verify/send']!(request('/api/verify/send', { method: 'POST' }), asUser(up.user));
+	assert.equal(asked.status, 429, 'past the resend gap, the daily count is already spent');
+	assert.equal(mail.sent.length, 1);
+	verify.stop();
 	await store.stop();
 });

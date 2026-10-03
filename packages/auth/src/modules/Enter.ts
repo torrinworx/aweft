@@ -66,6 +66,21 @@ export interface Enter {
 	 * sets a password elsewhere (design 290).
 	 */
 	checkPassword(password: unknown): Promise<readonly Refusal[]>;
+	/**
+	 * Hear of every account this module makes, by the route or by `enter()`, once its document is
+	 * settled and `auth/Roles` has made its first grant (design 300). `enter()` waits for every
+	 * listener before it answers. Every listener runs whatever another does, and one that rejects
+	 * rejects `enter()`, the account already made.
+	 *
+	 * Params:
+	 *   listener: called with the new account's id
+	 *
+	 * Returns: a function that removes the listener.
+	 *
+	 * Example:
+	 *   const off = Enter.afterSignUp(async (user) => { await welcome(user); });
+	 */
+	afterSignUp(listener: (user: string) => unknown): () => void;
 	readonly routes: Record<string, (request: Request, context: AuthContext) => Promise<Response>>;
 }
 
@@ -92,6 +107,7 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 	}
 	const refuseSignUp = config.refuseSignUp as RefuseSignUp | null;
 	let hashing = 0;
+	const listeners = new Set<(user: string) => unknown>();
 
 	// The two checks that cost nothing, before anything is counted or hashed.
 	const shapeOf = (password: unknown): Refusal | undefined => {
@@ -111,7 +127,7 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 		return refusePassword !== null && await refusePassword(password as string) ? [notAllowed()] : [];
 	};
 
-	const enter = async (email: string, password: string): Promise<Entered> => {
+	const admit = async (email: string, password: string): Promise<Entered> => {
 		const found = await findUser(store, email);
 		if (found === undefined) {
 			const id = idToText(createId());
@@ -135,6 +151,19 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 		return { user: idOfUserDoc(found), created: false };
 	};
 
+	// Every listener runs whatever another does, so one that rejects cannot keep the mail from going.
+	const hear = async (user: string): Promise<void> => {
+		const settled = await Promise.allSettled([...listeners].map(async (listener) => listener(user)));
+		const failed = settled.find((one) => one.status === 'rejected');
+		if (failed !== undefined) throw failed.reason;
+	};
+
+	const enter = async (email: string, password: string): Promise<Entered> => {
+		const outcome = await admit(email, password);
+		if ('created' in outcome && outcome.created) await hear(outcome.user);
+		return outcome;
+	};
+
 	const tooMany = (retryAfter: number): Response =>
 		json(429, { reasons: [{ code: 'attempts', message: 'too many sign-in attempts; wait and try again' }] }, { 'retry-after': String(retryAfter) });
 
@@ -142,6 +171,12 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 		public: true,
 		enter,
 		checkPassword,
+		afterSignUp: (listener) => {
+			// Wrapped, so one function added twice is heard twice and each removal takes its own.
+			const own = (user: string): unknown => listener(user);
+			listeners.add(own);
+			return () => { listeners.delete(own); };
+		},
 		routes: {
 			'POST /api/session': async (request, context) => {
 				const body = await bodyOf(request);
@@ -173,10 +208,12 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 				hashing += 1;
 				let outcome: Entered;
 				try {
-					outcome = await enter(email, password as string);
+					outcome = await admit(email, password as string);
 				} finally {
 					hashing -= 1;
 				}
+				// Outside the hashing count, so a slow mailer never turns someone else's sign-in away as busy.
+				if ('created' in outcome && outcome.created) await hear(outcome.user);
 				if ('refused' in outcome) return json(401, { reasons: outcome.refused });
 				perEmail.clear(key);
 				const token = await Session.issue(outcome.user);

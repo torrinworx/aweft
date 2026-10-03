@@ -47,7 +47,7 @@ naming `notify/Send`.
 | `auth/Gate` | | `identify` reads the session cookie; `access` allows a module that declares `public: true` to anyone, one that declares `needs` to a signed-in user holding the name, and any other module only to a signed-in user |
 | `auth/Session` | yes | `issue(user)`, `revoke(token)`, `revokeAll(user, except?)`, `whoIs(request)`, `setCookie(token, request)`, a `call` answering `{ user }` for the asking connection, and `DELETE /api/session` |
 | `auth/Roles` | | `may(user, name)`, `grant(user, ...names)`, `revoke(user, ...names)`, `names(user)`; shares `roles:<user>` read-only under the topic `roles`, and a `call` answering the `implies` table |
-| `auth/Enter` | yes | `enter(email, password)` signs in, or signs up when nobody has the email; `checkPassword(password)` answers the reasons the rules refuse one; `POST /api/session` does the first and sets the cookie |
+| `auth/Enter` | yes | `enter(email, password)` signs in, or signs up when nobody has the email; `checkPassword(password)` answers the reasons the rules refuse one; `afterSignUp(listener)` hears each account it makes; `POST /api/session` does the first and sets the cookie |
 | `auth/Check` | yes | `exists(email)`, and a `call` answering `{ exists }` for `{ email }` |
 | `auth/State` | | shares `state:<user>` from the store on the connection, under the topic `state` |
 
@@ -252,6 +252,7 @@ export const config = {
 	sendsWindowMs: 86_400_000,
 	resendMs: 60_000,           // and a minute between two
 	sweepMs: 3_600_000,         // how often expired links are removed
+	atSignUp: false,            // true mails every new account its link
 };
 
 // modules/auth/Password.ts
@@ -309,8 +310,17 @@ not steer it. While the mailer is down a known address answers 502 and an unknow
 which tells them apart; `auth/Check` already does. The counts are in memory and a restart
 clears them, as sign-in's are.
 
-**A verification mail goes only when asked.** Nothing is sent at sign-up. A page asks for it
-with `verify()`, or a module of yours calls `Verify.send(user)` after `enter`.
+**A verification mail goes when asked, or at sign-up when `atSignUp` is set** (design 300).
+Without it nothing is sent at sign-up: a page asks with `verify()`, or a module of yours calls
+`Verify.send(user)` after `enter`. With it, every account `auth/Enter` makes is mailed its link
+before the sign-up answers, whichever form or module made it, and the send is counted as the
+route counts, so a page that asks again inside `resendMs` is 429, not a second mail. A mail that
+does not go does not fail the sign-up; the link stands and the person asks again once `resendMs`
+has passed. Code of yours that should run once per new account listens the same way:
+`Enter.afterSignUp(listener)` is waited for before `enter` answers, every listener runs whatever
+another does, one that rejects rejects `enter` with the account already made, and the function it
+answers removes the listener. The sign-in route waits for listeners outside its `hashesInFlight`
+count, so a slow listener slows only its own sign-up.
 
 ## The client half
 

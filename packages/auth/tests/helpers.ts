@@ -39,7 +39,9 @@ export const module = async <T>(
 ): Promise<{ instance: T; stop(): Promise<void> }> => {
 	const exports = await import(`../src/modules/${name}.ts`);
 	// `auth/Enter` names `auth/Roles` for the one grant at sign-up; a suite about sign-in stubs it.
-	const given = name === 'Enter' ? { 'auth/Roles': noRoles, ...imports } : imports;
+	// `auth/Verify` names `auth/Enter` to hear sign-ups (design 300); a suite about the link stubs it.
+	const given = name === 'Enter' ? { 'auth/Roles': noRoles, ...imports }
+		: name === 'Verify' ? { 'auth/Enter': { afterSignUp: () => () => {} }, ...imports } : imports;
 	const loaded = await loadModule({ exports, imports: given, config, props: { store } });
 	return { instance: loaded.instance as T, stop: loaded.stop };
 };
