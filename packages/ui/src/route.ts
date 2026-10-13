@@ -98,7 +98,7 @@ interface Candidate extends Match {
 	readonly classes: readonly number[];
 }
 
-const attempt = (key: string, segments: readonly string[]): Candidate | null => {
+const attempt = (key: string, segments: readonly string[], exact: boolean): Candidate | null => {
 	const pattern = split(key);
 	// The index key takes the empty path and nothing else. Without this it would take every path
 	// as a tail, and a site with an index would have no way to reach its 404. A page that wraps
@@ -132,6 +132,9 @@ const attempt = (key: string, segments: readonly string[]): Candidate | null => 
 		classes.push(0);
 		at += 1;
 	}
+	// An exact stage takes a path whole, and only a key that ends in a bare `*` leaves segments
+	// over, for the stage below (design 305).
+	if (exact && at < segments.length && pattern[pattern.length - 1] !== '*') return null;
 
 	return {
 		name: key,
@@ -157,6 +160,7 @@ const beats = (a: Candidate, b: Candidate): boolean => {
  * Params:
  *   keys: the declared act keys, in any order
  *   path: the path to match, with or without its slashes, without a query or hash
+ *   exact: take only a key that takes every segment, or one that ends in a bare `*` (design 305)
  *
  * Returns: the match, or null when no key took the path. A key whose whole text is the path wins
  * outright; otherwise a literal segment beats `:name`, `:name` beats `*name` and a bare `*`, and
@@ -166,8 +170,9 @@ const beats = (a: Candidate, b: Candidate): boolean => {
  *   matchAct(['posts/:id', 'posts/new'], 'posts/new');  // name 'posts/new'
  *   matchAct(['posts/:id'], 'posts/3/edit');            // params { id: '3' }, tail 'edit'
  *   matchAct(['*'], 'a/b');                             // params {}, taken '', tail 'a/b'
+ *   matchAct(['posts/:id'], 'posts/3/edit', true);      // null
  */
-export const matchAct = (keys: readonly string[], path: string): Match | null => {
+export const matchAct = (keys: readonly string[], path: string, exact = false): Match | null => {
 	const clean = pathOf(path);
 	// A key written out in full is an author saying exactly which URL they mean, so it is read
 	// before the path is split at all.
@@ -178,7 +183,7 @@ export const matchAct = (keys: readonly string[], path: string): Match | null =>
 	const segments = split(clean);
 	let best: Candidate | null = null;
 	for (const key of keys) {
-		const found = attempt(key, segments);
+		const found = attempt(key, segments, exact);
 		if (found === null) continue;
 		if (best === null || beats(found, best)) best = found;
 	}

@@ -100,6 +100,63 @@ test('a stage that showed nothing shows its index act when the URL comes back to
 	stop();
 });
 
+test('an exact stage takes a path only whole, so a path a key only starts shows the fallback (design 305)', async () => {
+	const router = createRouter({ url: '/about/x' });
+	const document = createDocument();
+	const acts = { '': page('home'), about: page('about'), missing: page('404') };
+	const stop = mount(document.body as never, h(StageContext, { router, acts, fallback: 'missing', exact: true } as never, h(Stage, {})));
+	assert.equal(textOf(document), '<main id="404">404</main>', '/about/x is no page of the about act');
+
+	router.push('/about');
+	await settle();
+	assert.equal(textOf(document), '<main id="about">about</main>', 'the whole path still is');
+	stop();
+
+	// The same acts without the flag: the key that starts the path wins, as it always has.
+	const loose = createDocument();
+	const was = mount(loose.body as never, h(StageContext, { router: createRouter({ url: '/about/x' }), acts, fallback: 'missing' } as never, h(Stage, {})));
+	assert.equal(textOf(loose), '<main id="about">about</main>');
+	was();
+});
+
+test('an exact stage nests under a * key, the stage below inherits it, and initial is no 404 (design 305)', async () => {
+	const router = createRouter({ url: '/docs/install' });
+	const document = createDocument();
+	const own: Render = context();
+	// The nested stage names `initial` and no fallback: a loose stage shows `initial` for a tail it
+	// does not match, and an exact one shows nothing.
+	const Docs = (): unknown => h('section', { id: 'docs' },
+		h(StageContext, { acts: { '': page('index'), install: page('install') }, initial: '' } as never, h(Stage, {})));
+	const stop = mount(document.body as never, h(StageContext, {
+		router, acts: { '': page('home'), 'docs/*': Docs, missing: page('404') }, fallback: 'missing', exact: true,
+	} as never, h(Stage, {})), undefined, own);
+	assert.equal(textOf(document), '<section id="docs"><main id="install">install</main></section>');
+
+	router.push('/docs/install/extra');
+	await settle();
+	assert.equal(textOf(document), '<section id="docs"></section>', 'the child inherited exact, so install does not take install/extra');
+	assert.equal(own.stage.items[1]!.current, null, 'and the registry says the child shows nothing');
+
+	router.push('/docs/nope');
+	await settle();
+	assert.equal(own.stage.items[1]!.current, null, 'a tail no key takes does not fall back to initial');
+
+	router.push('/docs');
+	await settle();
+	assert.equal(textOf(document), '<section id="docs"><main id="index">index</main></section>', 'an empty tail is still the index');
+	stop();
+});
+
+test('a stage below an exact one may turn it off for itself', async () => {
+	const document = createDocument();
+	const Docs = (): unknown => h(StageContext, { acts: { '': page('index'), install: page('install') }, exact: false } as never, h(Stage, {}));
+	const stop = mount(document.body as never, h(StageContext, {
+		router: createRouter({ url: '/docs/install/extra' }), acts: { 'docs/*': Docs }, exact: true,
+	} as never, h(Stage, {})));
+	assert.equal(textOf(document), '<main id="install">install</main>', 'the child matched by prefix again');
+	stop();
+});
+
 test('with no router the stage shows initial and is driven by open and close', async () => {
 	const document = createDocument();
 	let stage: StageValue | null = null;
