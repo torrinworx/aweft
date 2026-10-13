@@ -87,3 +87,20 @@ test('requirement: a wrong password is refused the same way whether the account 
 	assert.ok('refused' in a);
 	await store.stop();
 });
+
+test('requirement: two sign-ups for one email at once make one account, and both answer with it', async () => {
+	const store = newStore();
+	const { instance: session } = await module<Session>('Session', store);
+	const { instance: enter } = await module<Enter>('Enter', store, { 'auth/Session': session });
+	// A double-click on a sign-up form: both requests look the email up before either has written.
+	const [a, b] = await Promise.all([
+		enter.enter('ada@example.com', 'correct horse battery staple'),
+		enter.enter('Ada@Example.com', 'correct horse battery staple'),
+	]);
+	assert.ok('user' in a && 'user' in b);
+	assert.equal(a.user, b.user, 'one user id');
+	assert.deepEqual([a.created, b.created].sort(), [false, true], 'one of them created it');
+	const users = (await store.scan(100)).filter(({ doc }) => doc.startsWith('user:'));
+	assert.equal(users.length, 1, 'one user document');
+	await store.stop();
+});

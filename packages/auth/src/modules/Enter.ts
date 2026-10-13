@@ -127,7 +127,7 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 		return refusePassword !== null && await refusePassword(password as string) ? [notAllowed()] : [];
 	};
 
-	const admit = async (email: string, password: string): Promise<Entered> => {
+	const admitAlone = async (email: string, password: string): Promise<Entered> => {
 		const found = await findUser(store, email);
 		if (found === undefined) {
 			const id = idToText(createId());
@@ -156,6 +156,18 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 		const settled = await Promise.allSettled([...listeners].map(async (listener) => listener(user)));
 		const failed = settled.find((one) => one.status === 'rejected');
 		if (failed !== undefined) throw failed.reason;
+	};
+
+	// One admission per email at a time. `admitAlone` looks the email up, hashes, then creates, so two
+	// sign-ups for one address in flight together would both miss and make two accounts.
+	const admitting = new Map<string, Promise<void>>();
+	const admit = (email: string, password: string): Promise<Entered> => {
+		const key = normalEmail(email);
+		const turn = (admitting.get(key) ?? Promise.resolve()).then(() => admitAlone(email, password));
+		const done = turn.then(() => undefined, () => undefined);
+		admitting.set(key, done);
+		void done.then(() => { if (admitting.get(key) === done) admitting.delete(key); });
+		return turn;
 	};
 
 	const enter = async (email: string, password: string): Promise<Entered> => {
