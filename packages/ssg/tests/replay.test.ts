@@ -168,3 +168,19 @@ test('attach drops what the hydration did not use, so a later ask is live', asyn
 	assert.equal(await client.ask('posts/List'), 'live');
 	stop();
 });
+
+test('attach drops the answers of the document it hydrated, and another document keeps its own', async () => {
+	const Quiet = (): unknown => h('p', {}, 'quiet');
+	const document = createDocument();
+	document.body.setAttribute(STAMP, '');
+	for (const node of parseHtml(await render(h(Quiet, {})), document)) document.body.appendChild(node);
+	const hydrated = replay(recording(), Object.assign(document, carrying({ 'posts/List null': [{ result: ['here'] }] })));
+	const elsewhere = replay(recording(), carrying({ 'posts/List null': [{ result: ['there'] }] }));
+
+	const stop = attach(document.body as never, h(Quiet, {}));
+	await (stop as unknown as { ready: Promise<void> }).ready;
+	await Promise.resolve();
+	assert.equal(await hydrated.ask('posts/List'), 'live');
+	assert.deepEqual(await elsewhere.ask('posts/List'), ['there'], 'no hydration of its document has settled');
+	stop();
+});
