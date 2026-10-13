@@ -95,8 +95,9 @@ export interface Log {
  */
 const recordable = (key: unknown): key is string => typeof key === 'string' && /^[A-Za-z0-9]{2,}$/.test(key);
 
-// A URL as its path and its query's names. A value never leaves the page: a mail link carries its
-// token in the query, and an implicit OAuth answer in the fragment (design 301).
+// Cut a URL down to its path and the names of its query parameters, dropping every value and the
+// fragment. A mail link puts its token in the query, and an implicit OAuth answer puts one in the
+// fragment (design 301).
 const shapeOfUrl = (url: string): string => {
 	const rest = url.split('#', 1)[0] ?? '';
 	const at = rest.indexOf('?');

@@ -10,16 +10,16 @@ recorded as `/reset?token&next`. A URL with no query is recorded as its path.
 
 ## Why
 
-A query carries values, and a value is what the battery says it never stores (design 261, What it
-never does). The auth battery's mail links carry their token in the query (`?token=`), so a person
-who opened a reset or verify link wrote a live token into a visit document that every reader of
-the store can see, for a reset link's hour and a verify link's day. The fragment carries values the
-same way: an OAuth implicit flow answers with `#access_token=`.
+A query holds values, and design 261 says the battery never stores a value (What it never does).
+The auth battery puts its token in a mail link's query (`?token=`). So a person who opened a reset
+or verify link wrote a live token into a visit document, where every reader of the store could see
+it: for an hour for a reset link, and a day for a verify link. The fragment holds values too: an
+OAuth implicit flow puts `#access_token=` there.
 
 The server half already records a request's `pathname` and nothing after it (`logs/Observe`, the
-`request` event), so the two halves now agree on what a URL is. The names stay because they are
-shape, the way a commit is recorded as its paths and never its values: `/search?q` says a search
-ran without saying what for.
+`request` event), so the two halves now agree on what a URL is. The parameter names stay, because
+they say what kind of page it was without holding a value: `/search?q` says a search ran without
+saying what for. A commit is recorded the same way, as the paths it touched and never their values.
 
 A list of sensitive parameter names was the other shape. Design 261 holds no list of sensitive
 names on purpose, and a list misses the parameter an application names `t` or `code`.
@@ -32,5 +32,5 @@ about that one value.
 
 ## What would reverse it
 
-Replay of a visit (design 261, Why) needing the full URL. Then the values would be recorded under
-the same rule design 259 gives slot values: only where the application marked them safe.
+If replaying a visit (design 261, Why) needs the full URL, the values would be recorded under the
+rule design 259 gives slot values: only where the application marked them safe.

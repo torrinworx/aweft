@@ -160,7 +160,7 @@ test('enter resolves with the reasons when the route says too many or busy, rath
 	const { seams, stop } = await running();
 	const { client, auth } = connect(seams);
 	await auth.enter('ada@example.com', PASSWORD);
-	// Enter takes five attempts per email in its window, counted from the last success; the sixth
+	// Enter takes five attempts per email in its window, counted from the last success. The sixth
 	// is a 429 with `attempts`.
 	for (let i = 0; i < 5; i++) await auth.enter('ada@example.com', 'wrong horse battery staple');
 	const limited = await auth.enter('ada@example.com', 'wrong horse battery staple') as { refused: readonly { code: string }[] };

@@ -87,7 +87,7 @@ export interface Auth {
 	 *
 	 * Returns: `{ user, created }` once `user` reads the new id. The client reconnects first,
 	 * because a cookie cannot be set on an open socket and identity is fixed per connection.
-	 * A wrong password, a malformed address, a sign-up the server's rule closed the door to,
+	 * A wrong password, a malformed address, a sign-up the server's rule refused,
 	 * too many attempts (`attempts`, 429) or too many sign-ins being checked at once (`busy`,
 	 * 503) resolves with `{ refused }` and reconnects nothing.
 	 *
