@@ -422,6 +422,10 @@ sitemap from a scheduled full write.
 [`recipes/translated-site`](https://github.com/torrinworx/aweft/tree/main/recipes/translated-site)
 writes a site in three languages, reads the report, and hydrates the Ukrainian page in Chromium
 with nothing the server wrote removed.
+[`recipes/pages-on-request`](https://github.com/torrinworx/aweft/tree/main/recipes/pages-on-request)
+renders a publication per request, answers 404 where a page asked for it and where nothing takes
+the path, and takes a post over in Chromium with no read reaching the server again, no element
+replaced and no box moved.
 `tests/pages.test.ts` drives `createPages` through a real server for every row of the table above,
 and `tests/replay.test.ts` takes a page it rendered over with no read reaching the client.
 
