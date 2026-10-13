@@ -35,12 +35,12 @@ then reads the list over the socket, once: the answers were for the hydration an
 
 ## How the browser gets the data
 
-`entry.tsx` is three lines. `replay(createClient())` is a client that answers each ask from the
-answers the server wrote into the page before it asks the server, and `attach` hydrates. Each act
-reads through `suspend`, and each loader answers a component call with what it read as props:
-`<Article post={await client.ask(...)} />`. That is what lets the hydration keep the server's
-markup and adopt it. An element built inside the loader is built outside the mount, and it replaces
-the server's element rather than adopting it.
+`entry.tsx` is three lines. `replay(createClient())` makes a client that answers each ask with the
+answer the server wrote into the page, and asks the server only for the rest. `attach` hydrates.
+Each act reads its data through `suspend`, and each loader returns a component call with what it
+read as props: `<Article post={await client.ask(...)} />`. The component's elements then take over
+the elements the server wrote. An element the loader builds itself is made outside the mount, and
+it replaces the server's element instead.
 
 ## What it does not do for you
 

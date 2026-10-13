@@ -4,10 +4,10 @@
 // The same component runs in three places. In the server's render, the client is the one the
 // render made, and every read goes straight to a module. In the browser's hydration, the client
 // answers from what the render recorded. On every navigation after it, the client asks the server
-// over the socket. Each read goes through `suspend`, which keeps the server's markup on
-// screen until the answer arrives, and each loader answers a component call with what it read as
-// props, because that is what a hydration adopts: an element built inside the loader is built
-// outside the mount and replaces the server's.
+// over the socket. Each read goes through `suspend`, which keeps the server's markup on screen
+// until the answer arrives. Each loader returns a component call with what it read as props,
+// because a hydration reuses the elements such a component renders. An element the loader builds
+// itself is made outside the mount, and it replaces the server's element.
 
 import type { Client } from '@aweftjs/client';
 import type { Router } from '@aweftjs/dom/router';

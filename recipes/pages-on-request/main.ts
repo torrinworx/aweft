@@ -126,7 +126,7 @@ await view.addInitScript(() => {
 	const before: Box[] = [];
 	const probe = { removed, added, before, shift: 0 };
 
-	// Every element in the body by its place in the tree, with its box.
+	// Every element in the body, named by its position in the tree, with its bounding box.
 	const boxes = (): Box[] => {
 		const out: Box[] = [];
 		const walk = (node: Element, path: string): void => {
@@ -182,8 +182,8 @@ try {
 	assert.deepEqual(after, probe.before, 'every box is where the server\'s markup put it');
 	assert.equal(probe.shift, 0, 'and Chromium saw no layout shift');
 
-	// The client is live: a navigation reads over the socket, because the answers were for the
-	// hydration and are gone.
+	// The client still works: a navigation reads over the socket, because the recorded answers were
+	// thrown away after the hydration.
 	await view.click('#home');
 	await view.waitForSelector('#index');
 	assert.equal(await view.title(), 'The publication');

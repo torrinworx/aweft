@@ -1,5 +1,5 @@
-// The bundle the pages load, served by the static battery. It is asked only for what the pages
-// module declined: a path that names a file in this directory.
+// The bundle the pages load, served by the static battery. The server asks it only for requests
+// the pages module did not answer: paths that name a file in this directory.
 
 import { fileURLToPath } from 'node:url';
 

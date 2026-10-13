@@ -13,5 +13,5 @@ const client = replay(createClient());
 const page = attach(document.body as never, <Site router={router} client={client} />);
 router.links(document.body as never);
 
-// The recipe's browser run waits on this. An entry that measures nothing leaves it out.
+// The recipe's browser run waits for this promise. A real entry does not need this line.
 (globalThis as { hydrated?: Promise<void> | undefined }).hydrated = (page as { ready?: Promise<void> }).ready;
