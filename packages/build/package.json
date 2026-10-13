@@ -1,6 +1,6 @@
 {
 	"name": "@aweftjs/build",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"type": "module",
 	"license": "MIT",
 	"engines": {
@@ -36,16 +36,16 @@
 		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
 	},
 	"dependencies": {
-		"@aweftjs/codec": "^0.1.0",
-		"@aweftjs/icons": "^0.1.0",
+		"@aweftjs/codec": "^0.1.1",
+		"@aweftjs/icons": "^0.1.1",
 		"@babel/parser": "^7.28.4",
 		"magic-string": "^0.30.19"
 	},
 	"devDependencies": {
-		"@aweftjs/dom": "^0.1.0",
-		"@aweftjs/core": "^0.1.0",
-		"@aweftjs/ui": "^0.1.0",
-		"@aweftjs/testing": "^0.1.0"
+		"@aweftjs/dom": "^0.1.1",
+		"@aweftjs/core": "^0.1.1",
+		"@aweftjs/ui": "^0.1.1",
+		"@aweftjs/testing": "^0.1.1"
 	},
 	"aweft": {
 		"tier": "integrator",

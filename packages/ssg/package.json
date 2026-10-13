@@ -1,6 +1,6 @@
 {
 	"name": "@aweftjs/ssg",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"type": "module",
 	"license": "MIT",
 	"engines": {
@@ -36,14 +36,14 @@
 		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
 	},
 	"dependencies": {
-		"@aweftjs/codec": "^0.1.0",
-		"@aweftjs/dom": "^0.1.0",
-		"@aweftjs/ui": "^0.1.0"
+		"@aweftjs/codec": "^0.1.1",
+		"@aweftjs/dom": "^0.1.1",
+		"@aweftjs/ui": "^0.1.1"
 	},
 	"devDependencies": {
-		"@aweftjs/build": "^0.1.0",
-		"@aweftjs/core": "^0.1.0",
-		"@aweftjs/testing": "^0.1.0"
+		"@aweftjs/build": "^0.1.1",
+		"@aweftjs/core": "^0.1.1",
+		"@aweftjs/testing": "^0.1.1"
 	},
 	"aweft": {
 		"tier": "integrator",

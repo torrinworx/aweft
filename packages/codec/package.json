@@ -1,6 +1,6 @@
 {
 	"name": "@aweftjs/codec",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"type": "module",
 	"license": "MIT",
 	"engines": {
@@ -35,7 +35,7 @@
 		"branchCoverage": 90
 	},
 	"devDependencies": {
-		"@aweftjs/testing": "^0.1.0"
+		"@aweftjs/testing": "^0.1.1"
 	},
 	"publishConfig": {
 		"access": "public"
