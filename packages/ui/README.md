@@ -1729,12 +1729,12 @@ longer pattern breaks a tie. There are no optional segments and no patterns.
 and parks the rest for a stage inside the act, so `about` shows the About page at `/about/x` too.
 On an exact stage, `about` matches `/about` and nothing deeper, a path no key takes whole shows the
 `fallback` (or nothing, never `initial`), and a stage nests only under a key that ends in a bare
-`*`: `docs/*` is the act whose own stage answers `/docs/install`. Every stage below an exact one
+`*`: `guide/*` is the act whose own stage answers `/guide/install`. Every stage below an exact one
 is exact unless it sets `exact={false}`. Turning it on means rewriting each key that has a stage, or
 a child that claims the tail, under it. A key you miss stops matching its deeper paths.
 
 ```tsx
-<StageContext router={router} acts={{ '': Home, about: About, 'docs/*': Docs, missing: NotFound }} fallback="missing" exact>
+<StageContext router={router} acts={{ '': Home, about: About, 'guide/*': Guide, missing: NotFound }} fallback="missing" exact>
 ```
 
 **An act** is the component, or the name of a module. A component act may carry `entries()`, an

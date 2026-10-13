@@ -407,7 +407,7 @@ renders the same markup in the browser, so it hydrates.
 
 **A key that ends in a bare `*` is not walked.** `walk()` reports it as an act it cannot
 enumerate, as it reports `:name` with no `entries()`, so on an `exact` site (`ui`'s README, Routing)
-the pages under a `docs/*` stage are not written at build time. `write(urls)` with the URLs listed
+the pages under a `guide/*` stage are not written at build time. `write(urls)` with the URLs listed
 writes them.
 
 **`createPages` renders one language.** `createSite`'s `locale` and `locales` are not options here.
