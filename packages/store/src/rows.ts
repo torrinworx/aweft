@@ -197,6 +197,19 @@ export const reachable = (rows: Rows, root: string): Set<string> => {
 	return held;
 };
 
+const utf8 = new TextEncoder();
+
+// The order a Postgres jsonb value gives an object's keys: length in UTF-8 bytes, then the bytes.
+// The spec gives an object no order, so a document is rebuilt in this one order whatever the
+// driver kept, and a test on the memory driver sees what production does (design 302).
+const jsonbOrder = (a: string, b: string): number => {
+	const x = utf8.encode(a);
+	const y = utf8.encode(b);
+	if (x.length !== y.length) return x.length - y.length;
+	for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i]! - y[i]!;
+	return 0;
+};
+
 /**
  * Read the reachable part of a document's rows out as a snapshot.
  *
@@ -227,7 +240,7 @@ export const snapshotOf = (rows: Rows, root: string): { snapshot: Snapshot; drop
 	// name something the walk reaches later.
 	for (const id of reachable(rows, root)) {
 		const row = rows.get(id)!;
-		observables[id] = { kind: row.kind, slots: { ...row.slots } };
+		observables[id] = { kind: row.kind, slots: Object.fromEntries(Object.entries(row.slots).sort(([a], [b]) => jsonbOrder(a, b))) };
 	}
 
 	const dropped: string[] = [];

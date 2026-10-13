@@ -49,6 +49,12 @@ document. Measured against writing the document whole, in an embedded Postgres o
 document, against 34.98 ms and 571 KB. The rows are the source of truth, and a document opens by
 reading them.
 
+**A reopened object's keys come back in one order, not the order you wrote them.** An object has
+no order (`spec/format.md`, section 1), and the store rebuilds every document with its keys by
+length in UTF-8 bytes and then by those bytes, the order a Postgres jsonb value keeps, whatever the
+driver stored (design 302). So a test on the memory driver sees what production does. Keep an
+order you need in an array.
+
 **A commit tail.** Every commit, in order, with a per-document sequence: the document's
 history, which an application reads through `since`. It is derived, so losing it costs a
 resynchronization rather than a document, and `truncate` bounds it.

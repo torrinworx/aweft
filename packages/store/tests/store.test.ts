@@ -91,6 +91,23 @@ test('stop waits for the declaration it started before it closes the driver', as
 	assert.deepEqual(order, ['declared', 'closed']);
 });
 
+test('a reopened object\'s keys come back by byte length and then bytes, whatever order they were written in', async () => {
+	// The spec gives an object no order, and Postgres keeps slots as jsonb, which orders keys this
+	// way. The store rebuilds every document in that one order, so a test on the memory driver sees
+	// what production does (design 302). Worked by hand: b is 1 byte, then ab, ac and é (c3 a9) at
+	// 2 bytes each in byte order, then zeta at 4 and alpha at 5.
+	const store = createStore({ driver: memoryDriver() });
+	const held = await store.open('ordered');
+	const root = held.root as Doc;
+	root.alpha = 1; await store.settled(held);
+	atomic(() => { root.b = 2; root.zeta = 3; }); await store.settled(held);
+	atomic(() => { root['é'] = 4; root.ac = 5; root.ab = 6; }); await store.settled(held);
+	await store.close(held);
+	const back = await store.open('ordered');
+	assert.deepEqual(Object.keys(back.root as Doc), ['b', 'ab', 'ac', 'é', 'zeta', 'alpha']);
+	await store.stop();
+});
+
 test('opening twice hands back the same document, and the last close tears it down', async () => {
 	const store = createStore({ driver: memoryDriver() });
 	const one = await store.open('shared');
