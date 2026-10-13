@@ -269,6 +269,21 @@ test('a router\'s url is recorded, and a window with no navigator records no bro
 	log.stop();
 });
 
+test('a router\'s url is recorded as its path and query names, never a value (design 301)', async () => {
+	const { win } = fakeWindow();
+	const { client } = fakeClient();
+	const url = mutable('/reset?token=s3cret&next=/home#top');
+	const posted: Batch[] = [];
+	const log = createLog(client, { window: win, router: { url }, fetch: async (_u, init) => { posted.push(JSON.parse(init.body) as Batch); return new Response(); } });
+	url.set('/auth#access_token=s3cret');
+	url.set('/search?q=&page=2&q=again');
+	await log.flush();
+	const urls = posted.flatMap((b) => b.entries.filter((e) => e.kind === 'url').map((e) => e.url));
+	assert.deepEqual(urls, ['/reset?token&next', '/auth', '/search?q&page&q']);
+	assert.ok(!JSON.stringify(posted).includes('s3cret'), 'no value reaches a batch');
+	log.stop();
+});
+
 test('with no sendBeacon, pagehide falls back to fetch', async () => {
 	const { win, fire } = fakeWindow();
 	const noBeacon: WindowLike = { ...win, navigator: { userAgent: 'X' } };

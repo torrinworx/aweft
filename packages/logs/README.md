@@ -62,7 +62,7 @@ them in the same visit.
 | `refused`, `fault` | a share the server refused a write to, or a topic that faulted |
 | `ask` | a call the page made: `name`, `ms`, `ok`, and the reason when it failed; never the args or the result |
 | `status` | the connection went connecting, open or closed |
-| `url` | the router's URL changed (when a router is handed in) |
+| `url` | the router's URL changed (when a router is handed in): its path and the names of its query, never a value or the fragment, so `/reset?token=…` is `/reset?token` (design 301) |
 | `input` | a `click`, `keydown` or `submit`: a target descriptor, and for a key, the key when it is a named one (`Enter`, `ArrowLeft`), never what a layout produces for a character |
 
 **On the server**, by `logs/Observe` through the `observe` hook (design 260): a `call`

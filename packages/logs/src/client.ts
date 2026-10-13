@@ -95,6 +95,16 @@ export interface Log {
  */
 const recordable = (key: unknown): key is string => typeof key === 'string' && /^[A-Za-z0-9]{2,}$/.test(key);
 
+// A URL as its path and its query's names. A value never leaves the page: a mail link carries its
+// token in the query, and an implicit OAuth answer in the fragment (design 301).
+const shapeOfUrl = (url: string): string => {
+	const rest = url.split('#', 1)[0] ?? '';
+	const at = rest.indexOf('?');
+	if (at === -1) return rest;
+	const names = rest.slice(at + 1).split('&').map((part) => part.split('=', 1)[0] ?? '').filter((name) => name !== '');
+	return names.length === 0 ? rest.slice(0, at) : `${rest.slice(0, at)}?${names.join('&')}`;
+};
+
 const trimmed = (text: unknown, max = 40): string | undefined => {
 	if (typeof text !== 'string') return undefined;
 	const clean = text.replace(/\s+/g, ' ').trim();
@@ -305,7 +315,7 @@ export const createLog = (client: Client, options: LogOptions = {}): Log => {
 		// client, so the telling is not itself an entry.
 		if (status === 'open') void client.ask('logs/Visits', { visit }).catch(() => undefined);
 	}));
-	if (options.router !== undefined) offs.push(options.router.url.effect((now) => { record({ kind: 'url', url: now }); }));
+	if (options.router !== undefined) offs.push(options.router.url.effect((now) => { record({ kind: 'url', url: shapeOfUrl(now) }); }));
 
 	/** A commit's shape: the topic, the paths it touched, how many deltas, how many bytes. */
 	const shapeOf = (topic: string, document: object, change: { readonly deltas: readonly { id: unknown; ref: unknown }[] }): Record<string, unknown> => {
