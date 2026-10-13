@@ -156,6 +156,26 @@ test('a wrong password, a malformed address, a status nobody expects, and a fetc
 	await stop();
 });
 
+test('enter resolves with the reasons when the route says too many or busy, rather than calling the server down', async () => {
+	const { seams, stop } = await running();
+	const { client, auth } = connect(seams);
+	await auth.enter('ada@example.com', PASSWORD);
+	// Enter takes five attempts per email in its window, counted from the last success; the sixth
+	// is a 429 with `attempts`.
+	for (let i = 0; i < 5; i++) await auth.enter('ada@example.com', 'wrong horse battery staple');
+	const limited = await auth.enter('ada@example.com', 'wrong horse battery staple') as { refused: readonly { code: string }[] };
+	assert.deepEqual(limited.refused.map((one) => one.code), ['attempts']);
+
+	const busy = createAuth(client, { origin: ORIGIN, fetch: async () => answering(503, { reasons: [{ code: 'busy', message: 'too many sign-ins are being checked; try again in a moment' }] }) });
+	const answer = await busy.enter('ada@example.com', PASSWORD) as { refused: readonly { code: string }[] };
+	assert.deepEqual(answer.refused.map((one) => one.code), ['busy']);
+	busy.stop();
+
+	auth.stop();
+	client.close();
+	await stop();
+});
+
 test('leave refuses when the route does, and changes nothing', async () => {
 	const { seams, stop } = await running();
 	const { client, auth } = connect(seams);

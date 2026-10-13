@@ -87,8 +87,9 @@ export interface Auth {
 	 *
 	 * Returns: `{ user, created }` once `user` reads the new id. The client reconnects first,
 	 * because a cookie cannot be set on an open socket and identity is fixed per connection.
-	 * A wrong password, a malformed address, or a sign-up the server's rule closed the door
-	 * to resolves with `{ refused }` and reconnects nothing.
+	 * A wrong password, a malformed address, a sign-up the server's rule closed the door to,
+	 * too many attempts (`attempts`, 429) or too many sign-ins being checked at once (`busy`,
+	 * 503) resolves with `{ refused }` and reconnects nothing.
 	 *
 	 * Rejects with `enter-failed` for any other status, and with whatever `fetch` threw. On a
 	 * stopped auth it rejects `stopped` before the route is called at all, and with `closed` when
@@ -428,7 +429,7 @@ export const createAuth = (client: Client, options: AuthOptions = {}): Auth => {
 		},
 
 		enter: async (email, password, extra) => {
-			const answer = await post('enter-failed', ENTER_FIX, 'sign-in', '/api/session', { ...extra, email, password }, [400, 401, 403]);
+			const answer = await post('enter-failed', ENTER_FIX, 'sign-in', '/api/session', { ...extra, email, password }, [400, 401, 403, 429, 503]);
 			if ('refused' in answer) return answer;
 			const body = answer.body as { user: string; created: boolean };
 			await again();

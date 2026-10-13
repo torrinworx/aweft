@@ -359,8 +359,9 @@ life. A drop leaves the last value alone; the socket after it refreshes.
 
 **`enter` and `leave` reconnect.** A browser cannot set a cookie on an open socket, so after
 either route the client drops that socket and opens a new one, and the call resolves once `user`
-is known again. `enter` answers `{ user, created }` on 200 or 201 and `{ refused }` on 400 or
-401, in the same shape `auth/Enter` uses on the server. `leave` resolves once the page is
+is known again. `enter` answers `{ user, created }` on 200 or 201 and `{ refused }` on 400, 401,
+403, 429 or 503, in the same shape `auth/Enter` uses on the server, so a page shows `attempts` or
+`busy` as a reason rather than an error saying the server is down. `leave` resolves once the page is
 anonymous again.
 
 **`names` and `may` are for showing and hiding.** `names` is a read-only cell: `undefined`
