@@ -72,6 +72,14 @@ test('each recorded answer is handed out once, in order, and then the client is 
 	assert.deepEqual(under.asked, ['posts/List undefined']);
 });
 
+test('a replayed answer reports no progress, because the render recorded none', async () => {
+	// The README's known limit: a page must not build its final markup from progress.
+	const heard: unknown[] = [];
+	const client = replay(recording(), carrying({ 'posts/Progress null': [{ result: 'done' }] }));
+	assert.equal(await client.ask('posts/Progress', null, { progress: (value) => { heard.push(value); } }), 'done');
+	assert.deepEqual(heard, [], 'the answer came back with no progress before it');
+});
+
 test('the key reads the arguments the way the render wrote them: through JSON, keys sorted', async () => {
 	const under = recording();
 	const client = replay(under, carrying({ 'notes/Mine {"all":"of them","every":true}': [{ result: 'kept' }] }));

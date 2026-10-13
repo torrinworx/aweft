@@ -394,6 +394,13 @@ until it ends. A page that waits on something that never settles therefore takes
 request, and after `renders` of them every page on the site is the shell, 503, until the process
 restarts. The cap is what keeps those renders from filling memory instead.
 
+**A page must not render a read's progress into its final markup.** A render passes each progress
+value a module reports to the page, but it records only the answer, and `replay` gives back only
+the answer. In the browser the page hears no progress during the hydration, so markup built from
+progress differs from the server's and the page does not hydrate. Show progress while a read is
+running, never in what the page shows once it has the answer. A page that needs it would reverse
+this: progress would then be recorded and replayed before the answer.
+
 **A page that waits on a shared document is answered with the shell.** A render has no link, so
 `ready` rejects with `not-shared`. A page that shows a waiting state while `document` is undefined
 renders the same markup in the browser, so it hydrates.
