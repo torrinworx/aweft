@@ -132,7 +132,7 @@ interface StageInner {
 	readonly sources: readonly Source[] | null;
 	/** The one query cell of a routing tree: every stage under one router shares it. */
 	readonly query: Derived<Record<string, string>>;
-	/** Whether this stage takes a path only whole, which the stages below it inherit. */
+	/** Whether this stage matches only keys that take the whole path. Stages below start from it. */
 	readonly exact: boolean;
 	/** The tail this stage did not take, for the one child stage that claims it. */
 	claimTail(): { tail: Derived<string>; release(): void } | null;

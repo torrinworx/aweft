@@ -1724,8 +1724,8 @@ longer pattern breaks a tie. There are no optional segments and no patterns.
 **`exact`** takes a path only whole (design 305). Without it, a key that starts a path matches it
 and parks the rest for a stage inside the act, so `about` shows the About page at `/about/x` too.
 On an exact stage, `about` matches `/about` and nothing deeper, a path no key takes whole shows the
-`fallback` (or nothing, never `initial`), and nesting is said out loud with a key that ends in a
-bare `*`: `docs/*` is the act whose own stage answers `/docs/install`. Every stage below an exact one
+`fallback` (or nothing, never `initial`), and a stage nests only under a key that ends in a bare
+`*`: `docs/*` is the act whose own stage answers `/docs/install`. Every stage below an exact one
 is exact unless it sets `exact={false}`. Turning it on means rewriting each key that has a stage, or
 a child that claims the tail, under it. A key you miss stops matching its deeper paths.
 
