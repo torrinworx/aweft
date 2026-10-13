@@ -89,3 +89,7 @@ parameter. It was withdrawn: the room's stage keyed its act on `*rest`, the rest
 parameter, and a parameter change rebuilds the act (design 123), so every navigation inside
 the room built the act again and its component state went with it. A `*name` takes every
 segment left and leaves an empty tail, exactly as written above. Only a bare `*` parks.
+
+An exact stage (design 305) matches a key only when it takes the whole path, unless the key ends
+in a bare `*`, and never shows `initial` for a path it did not match. A stage that does not set
+`exact` matches by the rules above, unchanged.

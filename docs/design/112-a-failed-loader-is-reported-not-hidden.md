@@ -41,3 +41,9 @@ a bug because it is one. That is the intent.
 
 `dom`'s `pending` growing a rejection path of its own, at which point `suspend` would report
 through it and the third level above would move down a package.
+
+## Amended
+
+In a static render, the third answer hands the rejection to `render`'s caller instead: `render`
+rejects with it once the page has settled (design 306). A mount and a hydration rethrow it on a
+fresh task as above.

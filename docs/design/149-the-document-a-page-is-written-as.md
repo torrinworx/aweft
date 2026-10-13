@@ -52,3 +52,9 @@ none, which is what a shell title is for.
 A page shell that has to keep body content the page renders around rather than replaces, which
 would need the mount target to be an element inside the body rather than the body itself, and a
 stamp on that element instead.
+
+## Amended
+
+A page rendered on request (design 304) also carries the answers its reads were given, as
+`<script type="application/json" id="aweft-answers">` at the end of the head, with `<` escaped.
+A page written at build time carries none.
