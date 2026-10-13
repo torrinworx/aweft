@@ -117,7 +117,9 @@ export const Button = (props: ButtonProps, _cleanup: Cleanup, mounted: Mounted):
 		};
 
 		const linked = href !== undefined && href !== null;
-		const mark = through(busy, (pending) => (pending ? h(spinner, {}) : (icon ?? null)));
+		// `all` rather than a map of `busy`, because `icon` may be a cell, and a map handing back a
+		// cell is a cell in a cell, which nothing can mount.
+		const mark = all([busy, icon ?? null]).map(([pending, shown]) => (pending ? h(spinner, {}) : shown));
 		// The icon slot is first in the array whichever side it is drawn on, so the reading order for
 		// a screen reader stays icon then label and only the flex order moves.
 		const body = iconPosition === 'right'

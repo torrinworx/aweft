@@ -583,6 +583,27 @@ test('a disabled button fires nothing', () => {
 	stop();
 });
 
+test('a button\'s icon can be a cell, as every display prop can, and the loader still takes its place', async () => {
+	const icon = mutable<unknown>(h('svg', { 'data-icon': 'sun' }));
+	let land = (): void => undefined;
+	const waiting = new Promise<void>((resolve) => { land = resolve; });
+	const { body, stop } = page(h(Button as never, { label: 'Mode', icon, onClick: () => waiting }));
+	const button = byRole(body.firstChild, 'button');
+	assert.match(toHtml(button as unknown as NodeLike), /data-icon="sun"/);
+
+	icon.set(h('svg', { 'data-icon': 'moon' }));
+	assert.match(toHtml(button as unknown as NodeLike), /data-icon="moon"/);
+	assert.doesNotMatch(toHtml(button as unknown as NodeLike), /sun/);
+
+	fire(button, 'click');
+	assert.doesNotMatch(toHtml(button as unknown as NodeLike), /data-icon/, 'the loader, not the icon, while busy');
+	land();
+	await waiting;
+	await Promise.resolve();
+	assert.match(toHtml(button as unknown as NodeLike), /data-icon="moon"/, 'and the icon the cell holds now, after');
+	stop();
+});
+
 test('a promise the click handler returns disables the button until it settles', async () => {
 	let land = (): void => undefined;
 	const waiting = new Promise<void>((resolve) => { land = resolve; });
