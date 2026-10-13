@@ -320,9 +320,10 @@ const Article = suspend(Spinner, async ({ id }) => <Body article={await fetchArt
 ```
 
 The fallback shows, the loader runs, and what it resolves to replaces the fallback. The promise is
-declared `pending`, so a static render waits for it. Resolve to a component call with what you
-loaded as its props, as above: under a hydration the component's elements adopt the server's,
-while an element the loader built itself was built outside the mount and replaces the server's.
+declared `pending`, so a static render waits for it. Make the loader return a component call,
+with what it loaded as props, as the example does. During a hydration, that component's elements
+take over the elements the server wrote. An element the loader builds itself is made outside the
+mount, and it replaces the server's element instead.
 
 **A rejection never leaves the fallback on screen.** The call's own `failed` component shows it,
 or the `LoaderContext`'s, and with neither the slot goes empty and the rejection is rethrown so
