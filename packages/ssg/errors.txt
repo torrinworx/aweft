@@ -2,7 +2,7 @@
 bad-entries: Answer an array of objects from entries(), one per page, an empty array for none, or null to say you cannot list them.
 bad-entry-value: Answer a value with no empty, . or .. segment in it; those name a place rather than a page.
 bad-status: Write 200, or a whole number from 400 to 599 such as 404 or 410, as the status meta's content.
-invalid-config: Hand each module as its factory answered it, from imports. One that reads undefined is spelled differently from its name in deps.
+invalid-config: Pass each module from imports, as its factory returned it. One that is undefined is spelled differently from its name in deps.
 invalid-config: Pass modules, an object holding each module a page may ask under the name it asks by.
 invalid-config: Pass page, the function that builds the page from a router and a client.
 invalid-config: Pass the gate the server runs: open, or the auth/Gate instance named in deps.

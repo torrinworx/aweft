@@ -164,7 +164,7 @@ export const createPages = (options: PagesOptions): Pages => {
 		const call = callOf(instance);
 		if (call === undefined) {
 			throw refuse(`modules[${JSON.stringify(name)}] with no call`,
-				'Hand each module as its factory answered it, from imports. One that reads undefined is spelled differently from its name in deps.');
+				'Pass each module from imports, as its factory returned it. One that is undefined is spelled differently from its name in deps.');
 		}
 		handed.set(name, { instance: instance as object, call });
 	}
