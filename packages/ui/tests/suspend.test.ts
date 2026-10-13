@@ -77,6 +77,17 @@ test('in a static render, a failure nothing shows rejects the render rather than
 	assert.match(await render(h(Shown as never, {}), { context: context() }), /failed: Error: the loader said no/);
 });
 
+test('a static render with two failures nothing shows rejects with the first', async () => {
+	const first = new Error('the first loader said no');
+	const First = suspend(null, async () => { throw first; });
+	const Second = suspend(null, async () => {
+		await new Promise((done) => setTimeout(done, 5));
+		throw new Error('the second loader said no');
+	});
+	await assert.rejects(render(h('main', {}, h(First as never, {}), h(Second as never, {})), { context: context() }),
+		(error) => error === first);
+});
+
 test('a suspend removed before its loader settles mounts nothing', async () => {
 	let resolve: (value: unknown) => void = () => undefined;
 	const Page = suspend(Waiting, () => new Promise((r) => { resolve = r; }));
