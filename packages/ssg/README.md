@@ -1,12 +1,14 @@
 # @aweftjs/ssg
 
-Pages from a routed site, at build time and at run time. It renders every page a site declares,
+Pages from a routed site, at build time and on request. It renders every page a site declares,
 writes each one as a file a static host can serve with no configuration, once per language when
 the site has more than one, and hands the browser one function that takes the page over in place.
+Or it renders each page when it is asked for, with the answers the page's reads were given written
+into it, so the browser takes it over without asking for that data again.
 
 It decides nothing else: not where page data comes from, not which host serves the files, not what
-that host does with a URL it has no file for, and not whether a page it could not enumerate should
-fail your build.
+that host does with a URL it has no file for, not whether a page it could not enumerate should
+fail your build, and not how long a rendered page may be kept.
 
 ## Quickstart
 
@@ -187,6 +189,142 @@ await site.write([`/posts/${id}`]);   // inside a request
 await site.write();                    // nightly, or at build time
 ```
 
+## Pages on request
+
+`createPages` makes a server module that renders the page for every page request (design 304).
+Your own module calls it and returns what it answers, naming the reads a page may make in its
+`deps`:
+
+```ts
+// modules/site/Pages.ts
+import { fileURLToPath } from 'node:url';
+import { createPages } from '@aweftjs/ssg';
+import { h } from '@aweftjs/ui';
+
+import { Site } from '../../page/site.tsx';
+
+export const deps = ['auth/Gate', 'posts/List', 'posts/Read'];
+
+export default ({ imports }) => createPages({
+	page: (router, client) => h(Site, { router, client }),
+	gate: imports.Gate,
+	modules: { 'posts/List': imports.List, 'posts/Read': imports.Read },
+	dir: fileURLToPath(new URL('../../dist', import.meta.url)),
+});
+```
+
+**`page`** builds the page from a router and a client, the same function your browser entry mounts
+with its own. **`gate`** is the gate your server runs: `open`, or the `auth/Gate` instance from
+`deps`. **`modules`** is every module a page may ask while it renders, under the name the page asks
+it by. It is read once, and an entry with no `call` (an import spelled differently from `deps`
+reads as undefined) is refused when the module is made. **`dir`** is the directory the bundler
+wrote, `dist` when left off, resolved from the working directory, so build it from
+`import.meta.url`: its `index.html` is the shell, read once when the
+module is made, and a missing one is refused then (`no-shell`). **`renders`** (16) and
+**`timeoutMs`** (10 000) are the two limits.
+
+**A render asks as a visitor nobody knows.** The page gets a client made for that render. Its `ask`
+takes the module from `modules`, asks the gate who a request for the page's path with no query and
+no headers is, and asks the gate's `access` for that module, as the server does for a browser's ask.
+A module the gate keeps from an anonymous visitor is refused in the render too, whoever sent the
+request, as long as the gate finds identity only in the query, the headers or the address: a gate
+that reads a credential out of the path itself sees it in a render too. The arguments and the
+result go through JSON, as they would over the socket. `share` answers a handle whose document never
+arrives and whose `ready` rejects with `not-shared`.
+
+**What it answers.**
+
+| what happened | status | body |
+|---|---|---|
+| a read failed: the module threw something with no `reason`, or it is not in `modules` | 503 | the shell |
+| the page waited on a document it shared, and did not catch `not-shared` | 503 | the shell |
+| more renders running than `renders` | 503 | the shell |
+| the render took longer than `timeoutMs` | 503 | the shell |
+| the page wrote `<Meta httpEquiv="status" content="410" />` | that status | the page |
+| a stage shows its fallback, or nothing | 404 | the page |
+| otherwise | 200 | the page |
+
+A refusal, a throw that carries a `reason`, is an answer: the page shows it and the render goes on.
+A failed read is not. A crawler that indexes a page with part of it missing keeps it that way, so
+the shell answers instead, and it mounts in a browser and asks again. The status meta is read by
+the rule `noindex` is, the deepest and then the latest, so the page that found no row overrides its
+layout. It takes 200 or a number from 400 to 599. Anything else is refused with `bad-status`.
+
+A loader that rejects with nothing to show it, after a failed read, is answered with the shell.
+With no failed read, it is the page's defect, like a component that throws, and the render throws
+it (design 306). The server reports a throw and answers 500. When it was given no
+`handlers.failed`, it ends the process instead, as it does for every module's defect, so pass one.
+
+A render past its time keeps its place among the `renders` until it ends. `HEAD` gets the status
+and headers alone. It declines a method other than GET and HEAD, and a path that names a file in
+`dir`.
+
+**The browser half.** `replay` on `@aweftjs/ssg/client` is a client that answers each ask from the
+answers the server wrote into the page, each answer once and in the order the render asked, before
+it asks the server. `attach` drops whatever is left once its hydration has settled, so the next ask
+with the same arguments reaches the server.
+
+```tsx
+import { createClient } from '@aweftjs/client';
+import { createRouter } from '@aweftjs/dom/router';
+import { attach, replay } from '@aweftjs/ssg/client';
+
+const router = createRouter();
+attach(document.body, <Site router={router} client={replay(createClient())} />);
+router.links(document.body);
+```
+
+**A page that reads goes through `suspend`, and its loader answers a component call.**
+
+```tsx
+'posts/:id': suspend(null, async ({ stage }) =>
+	<Article post={await client.ask('posts/Read', { id: stage.params.get().id })} />),
+```
+
+On the server the render waits for it. In the browser the server's markup stays on screen until the
+answer arrives, from `replay` with no request, and the component's elements adopt the server's.
+**Whatever the loader builds itself is built outside the mount**, whether the markup stands right
+after the arrow, `async () => <article>...</article>`, or after an `await` in a longer body: that
+element replaces the server's rather than adopting it, the page flashes, and nothing reports it.
+Build the markup in a component and hand it what you read.
+
+A refusal rejects the ask, as it does over the socket, so the loader catches it and reads `reason`:
+
+```tsx
+try {
+	return <Article post={await client.ask('posts/Read', { id })} />;
+} catch (error) {
+	if (error.reason === 'no-such-post') return <NoPost />;   // NoPost writes the status meta
+	throw error;
+}
+```
+
+**In a test, with no browser.** Parse the page's body into `dom`'s light document, set
+`data-aweft-ssg` on its body as the served page carries it, and give that document a
+`getElementById` that finds the script, because the light document looks nothing up by id
+(`replay` refuses one that cannot, `no-lookup`). Hand `replay` the document itself: `attach` drops
+the answers left over once it has hydrated the document `replay` read them from, and only that one.
+
+```ts
+const document = createDocument();
+document.body.setAttribute('data-aweft-ssg', '');
+const body = html.slice(html.indexOf('>', html.indexOf('<body')) + 1, html.lastIndexOf('</body>'));
+for (const node of parseHtml(body, document)) document.body.appendChild(node);
+const script = /id="aweft-answers">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '';
+const source = Object.assign(document, { getElementById: (id) => (id === 'aweft-answers' ? { textContent: script } : null) });
+const client = replay(underlying, source);
+await attach(document.body, h(Site, { router: createRouter({ url }), client })).ready;
+```
+
+**A path matches whole only on an `exact` stage.** Without it `about` matches `/about/x`, and that
+URL is a 200 About page here as it is in the browser. Set `exact` on the `StageContext` and nest
+under keys that end in `*` (`ui`'s README, Routing), and a path a key only starts shows the
+fallback: 404 here, and the same not-found page in the browser.
+
+**Where it goes in `sources`.** It answers every path that is not a file, so a module that also
+answers `request`, such as `uploads`, has to load before it, and `static/Files`, which serves the
+bundle, after it: your source first, then the batteries, with `files` last.
+
 ## The document
 
 The shell is read as text, not parsed, and four things happen to it:
@@ -209,11 +347,12 @@ A shell with no `<head>` or no `<body>` is refused too.
 **Where page data comes from.** `entries()` and your components read whatever they read. This
 package never opens a store.
 
-**How the data reaches the client.** A component that waited on the server waits again on the
-client unless you hand it the value. Write it out beside the pages and read it in your entry
-before you call `attach`;
+**How the data reaches the client of a page written at build time.** A component that waited on
+the server waits again on the client unless you hand it the value. Write it out beside the pages
+and read it in your entry before you call `attach`.
 [`recipes/posts-to-pages`](https://github.com/torrinworx/aweft/tree/main/recipes/posts-to-pages)
-shows the whole pattern, and `dom`'s README has the reason.
+shows the whole pattern, and `dom`'s README has the reason. A page rendered on request carries its
+answers, and `replay` hands them over.
 
 **Which host serves the files, or what it does with a URL it has no file for.** The layout is chosen
 so that "the exact file, then `<path>/index.html`" is enough for any static host. Answering an
@@ -222,14 +361,41 @@ package's.
 
 **Whether a missing `entries()` fails a build.** It is in the report. You decide.
 
-**Rendering at request time.** This is a Node API. Your build script, your job or your module calls
+**When a page is written.** This is a Node API. Your build script, your job or your module calls
 `write()`. There is no bundler plugin hook.
+
+**Whether a page rendered on request is kept.** Every request renders. A cache in front of the
+process is yours.
+
+**Who a page is rendered for.** Nobody: a signed-in visitor gets the page anyone gets, and whatever
+is theirs loads after the page is live.
 
 **Which language a visitor gets.** A header, a cookie, a setting: the application's, and the
 pages are one file per language for it to send a reader to. **Whether a translation is right, or
 whether a missing one fails a build.** It is in the report.
 
 ## Known limits
+
+**A render runs no `connection` hook and is heard by no `observe`.** A read whose `call` relies on
+state a connection set up fails, and the request is 503. The logs battery records no ask a render
+made. A render ignores an ask's `timeout` option, and `timeoutMs` applies instead.
+
+**A render that never ends takes a place for good.** A render past `timeoutMs` is answered with the
+shell and keeps running, because nothing can stop it, and its place among the `renders` is held
+until it ends. A page that waits on something that never settles therefore takes one place per
+request, and after `renders` of them every page on the site is the shell, 503, until the process
+restarts. The cap is what keeps those renders from filling memory instead.
+
+**A page that waits on a shared document is answered with the shell.** A render has no link, so
+`ready` rejects with `not-shared`. A page that renders its waiting state from `document` hydrates
+against the same state.
+
+**A key that ends in a bare `*` is not walked.** `walk()` reports it as an act it cannot
+enumerate, as it reports `:name` with no `entries()`, so on an `exact` site (`ui`'s README, Routing)
+the pages under a `docs/*` stage are not written at build time. `write(urls)` with the URLs listed
+writes them.
+
+**`createPages` renders one language.** `createSite`'s `locale` and `locales` are not options here.
 
 **A language tag that is also a top-level segment of the site is the language's.** `placeOf`
 reads the prefix first, so a site with an act at `/de` and German under `de` writes the German
@@ -252,6 +418,8 @@ sitemap from a scheduled full write.
 [`recipes/translated-site`](https://github.com/torrinworx/aweft/tree/main/recipes/translated-site)
 writes a site in three languages, reads the report, and hydrates the Ukrainian page in Chromium
 with nothing the server wrote removed.
+`tests/pages.test.ts` drives `createPages` through a real server for every row of the table above,
+and `tests/replay.test.ts` takes a page it rendered over with no read reaching the client.
 
 The suite in `tests/` is the same guarantees stated one at a time, over the light tree
 `@aweftjs/dom` ships, plus a Chromium run for `attach`.

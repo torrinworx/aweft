@@ -124,6 +124,21 @@ interface Made extends PageResult {
 }
 
 /**
+ * The stage that answered nothing for this URL, or null when every one of them showed an act.
+ *
+ * A stage showing its fallback, or showing nothing at all, is the site saying it has no such
+ * page. A caller asking for one has a typo in a slug, and writing the fallback out at that path
+ * publishes a "not found" page on a URL the site claims to have. A render on request answers
+ * the same URL with 404 (design 304).
+ */
+export const emptyStage = (own: Render): StageEntry | null => {
+	for (const entry of own.stage.items) {
+		if (entry.current === null || entry.current === entry.fallback) return entry;
+	}
+	return null;
+};
+
+/**
  * Make a site.
  *
  * Params:
@@ -208,20 +223,6 @@ export const createSite = (options: SiteOptions): Site => {
 			...languages.map((language) => ({ hreflang: language.tag, href: absolute(language, path) })),
 			{ hreflang: 'x-default', href: absolute(languages[0]!, path) },
 		];
-	};
-
-	/**
-	 * The stage that answered nothing for this URL, or null when every one of them showed an act.
-	 *
-	 * A stage showing its fallback, or showing nothing at all, is the site saying it has no such
-	 * page. A caller asking for one has a typo in a slug, and writing the fallback out at that path
-	 * publishes a "not found" page on a URL the site claims to have.
-	 */
-	const emptyStage = (own: Render): StageEntry | null => {
-		for (const entry of own.stage.items) {
-			if (entry.current === null || entry.current === entry.fallback) return entry;
-		}
-		return null;
 	};
 
 	/** The document's language parts, or none for a site with no language. The fallback page has no alternates: it is no URL of the site's. */

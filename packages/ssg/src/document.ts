@@ -8,6 +8,7 @@
 import { codecError } from '@aweftjs/codec';
 import type { HeadList, HeadTag } from '@aweftjs/ui';
 
+import { ANSWERS } from './answers.ts';
 import { STAMP } from './stamp.ts';
 
 /** The attribute `ui` finds its stylesheet by, so a hydration adopts the one written here. */
@@ -37,6 +38,11 @@ export interface DocumentParts {
 	readonly rtl?: boolean;
 	/** Every language the page is in, written as `<link rel="alternate" hreflang>` in the head. */
 	readonly alternates?: readonly Alternate[];
+	/**
+	 * The answers a render on request was given, as JSON, written as a script at the end of the
+	 * head for the browser to replay (design 304). Left off for a page written at build time.
+	 */
+	readonly answers?: string;
 }
 
 interface Tag {
@@ -118,7 +124,8 @@ const alternatesOf = (alternates: readonly Alternate[] | undefined): string =>
  * child (design 127), and the alternates after them. The shell's own `<title>` is dropped when
  * the page declares one. The markup goes inside `<body>`, and the body tag gains `data-aweft-ssg`.
  * With a `lang`, the `<html>` tag carries it, and `dir="rtl"` beside it for a right-to-left
- * script (design 279).
+ * script (design 279). With `answers`, they go at the end of the head as a JSON script, with
+ * every `<` escaped (design 304).
  *
  * Throws: `shell-head` and `shell-body` when the shell has no such element, and
  * `shell-body-content` when the shell's body already holds markup, because the page's markup is
@@ -166,8 +173,12 @@ export const buildDocument = (given: string, parts: DocumentParts): string => {
 	// whitespace, and the markup goes in with none around it.
 	const tail = shell.slice(bodyClose.at).replace(/>\s+</g, '><').replace(/\s+$/, '');
 
+	// `<` only stands inside a JSON string, where `\u003c` reads the same and cannot end the script.
+	const answers = parts.answers === undefined ? ''
+		: `<script type="application/json" id="${ANSWERS}">${parts.answers.replace(/</g, '\\u003c')}</script>`;
+
 	return shell.slice(0, headOpen.end)
-		+ lead + run + kept
+		+ lead + run + kept + answers
 		+ shell.slice(headClose.at, bodyOpen.at)
 		+ stamp(bodyOpen.text)
 		+ parts.body
@@ -182,6 +193,18 @@ const read = (value: unknown): unknown => {
 
 const isRobots = (tag: HeadTag): boolean =>
 	tag.kind === 'meta' && String(read(tag.attrs['name']) ?? '').toLowerCase() === 'robots';
+
+const isStatus = (tag: HeadTag): boolean =>
+	tag.kind === 'meta' && String(read(tag.attrs['http-equiv']) ?? '').toLowerCase() === 'status';
+
+/** The tag that wins among those `wanted` picks: the deepest, then the latest (design 127). */
+const winnerOf = (head: HeadList, wanted: (tag: HeadTag) => boolean): HeadTag | null => {
+	let winner: HeadTag | null = null;
+	for (const tag of head.items) {
+		if (wanted(tag) && (winner === null || tag.depth >= winner.depth)) winner = tag;
+	}
+	return winner;
+};
 
 /**
  * Whether a page asked search engines to leave it out.
@@ -200,10 +223,35 @@ const isRobots = (tag: HeadTag): boolean =>
  *   if (!noindexOf(own.head)) sitemap.push(url);
  */
 export const noindexOf = (head: HeadList): boolean => {
-	let winner: HeadTag | null = null;
-	for (const tag of head.items) {
-		if (isRobots(tag) && (winner === null || tag.depth >= winner.depth)) winner = tag;
-	}
+	const winner = winnerOf(head, isRobots);
 	if (winner === null) return false;
 	return String(read(winner.attrs['content']) ?? '').toLowerCase().includes('noindex');
+};
+
+/**
+ * The status a page asked to be answered with, by `<Meta httpEquiv="status" content="404" />`.
+ *
+ * Params:
+ *   head: the render's head list, after the page has rendered
+ *
+ * Returns: the winning tag's status, by the rule `noindexOf` reads `robots` with, or null when
+ * the page asked for none.
+ *
+ * Throws: `bad-status` for a status that is neither 200 nor a whole number from 400 to 599. A
+ * page that found what it was asked for is 200, and every other status a page can mean is an
+ * error. A redirect needs a header a page cannot write.
+ *
+ * Example:
+ *   const status = statusOf(own.head) ?? 200;
+ */
+export const statusOf = (head: HeadList): number | null => {
+	const winner = winnerOf(head, isStatus);
+	if (winner === null) return null;
+	const written = String(read(winner.attrs['content']) ?? '').trim();
+	const status = /^\d{3}$/.test(written) ? Number(written) : NaN;
+	if (status !== 200 && !(status >= 400 && status <= 599)) {
+		throw codecError('bad-status', `the page asked to be answered with status ${JSON.stringify(written)}`,
+			'Write 200, or a whole number from 400 to 599 such as 404 or 410, as the status meta\'s content.');
+	}
+	return status;
 };

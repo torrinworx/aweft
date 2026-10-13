@@ -36,13 +36,16 @@
 		"test": "node --import @aweftjs/build/loader --test tests/*.test.ts"
 	},
 	"dependencies": {
+		"@aweftjs/client": "^0.1.1",
 		"@aweftjs/codec": "^0.1.1",
+		"@aweftjs/core": "^0.1.1",
 		"@aweftjs/dom": "^0.1.1",
+		"@aweftjs/server": "^0.1.1",
 		"@aweftjs/ui": "^0.1.1"
 	},
 	"devDependencies": {
 		"@aweftjs/build": "^0.1.1",
-		"@aweftjs/core": "^0.1.1",
+		"@aweftjs/modules": "^0.1.1",
 		"@aweftjs/testing": "^0.1.1"
 	},
 	"aweft": {
