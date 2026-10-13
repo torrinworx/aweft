@@ -73,6 +73,24 @@ test('a commit writes only the rows its deltas name', async () => {
 	assert.deepEqual(written.at(-1)!.rows.map((r) => r.id), [textIdOf(tasks[7])]);
 });
 
+test('stop waits for the declaration it started before it closes the driver', async () => {
+	const order: string[] = [];
+	let release!: () => void;
+	const inner = memoryDriver();
+	const driver: Driver = {
+		...inner,
+		// A Postgres driver's declare is a few queries on the pool that close ends.
+		declare: async (declaration) => { await new Promise<void>((resolve) => { release = resolve; }); order.push('declared'); return inner.declare(declaration); },
+		close: async () => { order.push('closed'); return inner.close(); },
+	};
+	const store = createStore({ driver, declare: { title: ['title'] } });
+	const stopped = store.stop();
+	await new Promise((resolve) => setImmediate(resolve));
+	release();
+	await stopped;
+	assert.deepEqual(order, ['declared', 'closed']);
+});
+
 test('opening twice hands back the same document, and the last close tears it down', async () => {
 	const store = createStore({ driver: memoryDriver() });
 	const one = await store.open('shared');

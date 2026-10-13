@@ -645,6 +645,9 @@ export const createStore = (
 			failed ??= state.failure;
 		}
 		open_.clear();
+		// The declaration started at create runs on the driver this closes: a Postgres pool that
+		// ends under it fails its queries. Its failure is every open's and find's to answer.
+		await declared.catch(() => undefined);
 		await driver.close();
 		// The last moment a caller can hear that a write failed. `close` raises it; going quiet
 		// here means the news arrives when nothing can be done about it, which is never.
