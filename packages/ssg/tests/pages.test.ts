@@ -95,7 +95,7 @@ const modulesOf = (over: Partial<PagesOptions> = {}) => fromBundle({
 	'./z/Files.ts': { default: () => ({ public: true, request: () => new Response('from the files module') }) },
 });
 
-/** A server over the modules. `handled: false` gives it no `handlers.failed`, as the recipe's has none. */
+/** Start a server with these modules. With `handled` false it has no `handlers.failed`, like the recipe's. */
 const boot = async (over: Partial<PagesOptions> = {}, handled = true): Promise<{ url: string; failed: unknown[]; stop(): Promise<void> }> => {
 	const failed: unknown[] = [];
 	const listener = node({ port: 0, host: '127.0.0.1' });

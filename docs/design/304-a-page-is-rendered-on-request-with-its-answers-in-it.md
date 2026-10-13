@@ -76,11 +76,12 @@ Every other status either needs a header a page cannot write, as a redirect need
 must be sent with no body.
 
 A loader that rejected with nothing to show it makes the render reject (design 306). After a
-failed read or an unshared document, the answer is the shell, 503. Otherwise the rejection is the
-page's defect, as a component that throws and a `bad-status` are. A defect is answered with the
-shell, 500, and the request hook never throws. The defect and every failed read go to the `failed`
-option, which takes a name and an error as `handlers.failed` does, and to the console when there
-is none. The name is the page's path, without its query.
+failed read or an unshared document, the answer is the shell, 503. Otherwise the rejection is a
+defect in the page. A component that throws and a `bad-status` are defects too. A defect is
+answered with the shell, 500, and the request hook never throws. Each defect and each failed read
+is reported to the `failed` option, which takes a name and an error, as `handlers.failed` does.
+With no `failed` option it is written to the console. The name is the page's path, without its
+query.
 
 A render past its time keeps its place among the `renders` until it ends, because it is still
 running. `HEAD` gets the status and headers with no body. No `Cache-Control` is written.
@@ -203,8 +204,8 @@ checks:
 - the status meta winning, and a status out of range answered 500 with the shell
 - a page that throws, lets a refusal escape, or writes a bad status answered 500 with the shell on
   a server with no `handlers.failed`, which keeps answering, and each reported once
-- the `failed` option hearing a defect and a failed read, with the page's path, and the console
-  hearing nothing
+- the `failed` option called for a defect and for a failed read, with the page's path, and
+  nothing written to the console
 - a path nothing takes, and one a key only starts, answered 404 with the fallback page
 - a failed read and a name not handed over, answered 503 with the shell whether the page caught
   them or not, with the server still answering afterwards
