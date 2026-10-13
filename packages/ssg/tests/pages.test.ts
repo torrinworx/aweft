@@ -95,10 +95,14 @@ const modulesOf = (over: Partial<PagesOptions> = {}) => fromBundle({
 	'./z/Files.ts': { default: () => ({ public: true, request: () => new Response('from the files module') }) },
 });
 
-const boot = async (over: Partial<PagesOptions> = {}): Promise<{ url: string; failed: unknown[]; stop(): Promise<void> }> => {
+/** A server over the modules. `handled: false` gives it no `handlers.failed`, as the recipe's has none. */
+const boot = async (over: Partial<PagesOptions> = {}, handled = true): Promise<{ url: string; failed: unknown[]; stop(): Promise<void> }> => {
 	const failed: unknown[] = [];
 	const listener = node({ port: 0, host: '127.0.0.1' });
-	const server = createServer({ sources: [modulesOf(over)], gate, listener, handlers: { failed: (_name, error) => failed.push(error) } });
+	const server = createServer({
+		sources: [modulesOf(over)], gate, listener,
+		...(handled ? { handlers: { failed: (_name: string, error: unknown) => { failed.push(error); } } } : {}),
+	});
 	await server.start();
 	return { url: `http://127.0.0.1:${String(listener.port)}`, failed, stop: () => server.stop() };
 };
@@ -188,12 +192,49 @@ test('a refusal the module throws is recorded, and the page that read it says it
 	await gone.text();
 });
 
-test('a status that is not 200 or from 400 to 599 is a defect: 500, reported', async () => {
-	host.failed.length = 0;
-	const answer = await fetch(`${host.url}/moved`);
+test('a status that is not 200 or from 400 to 599 is a defect: the shell with 500, and the operator told', async () => {
+	const { answer, said } = await told(async () => {
+		const got = await fetch(`${host.url}/moved`);
+		return { status: got.status, html: await got.text() };
+	});
 	assert.equal(answer.status, 500);
-	await answer.text();
-	assert.equal((host.failed[0] as { reason?: string }).reason, 'bad-status');
+	assert.equal(answer.html, SHELL);
+	assert.equal((said[0]![1] as { reason?: string }).reason, 'bad-status');
+});
+
+test('a page defect is the shell with 500 and the process goes on, on a server with no handlers.failed', async () => {
+	// One anonymous request to a page that breaks must not be a way to end the process.
+	const bare = await boot({}, false);
+	try {
+		for (const path of ['/exposed', '/throws', '/moved']) {
+			const { answer, said } = await told(async () => {
+				const got = await fetch(`${bare.url}${path}`);
+				return { status: got.status, html: await got.text() };
+			});
+			assert.equal(answer.status, 500, path);
+			assert.equal(answer.html, SHELL, `${path} gets the shell, which mounts live in a browser`);
+			assert.equal(said.length, 1, `${path} is written to the console once`);
+		}
+		const about = await fetch(`${bare.url}/about`);
+		assert.equal(about.status, 200, 'and the process is still answering');
+		await about.text();
+	} finally {
+		await bare.stop();
+	}
+});
+
+test('a page defect and a failed read go to the failed option when one is given, and not to the console', async () => {
+	const reported: [string, unknown][] = [];
+	const failed = (name: string, error: unknown): void => { reported.push([name, error]); };
+	const { answer, said } = await told(async () => [
+		await renderWith('/exposed', { modules: { 'notes/Mine': { call: () => 'notes' } }, failed }),
+		await renderWith('/broken', { modules: { 'posts/Broken': { public: true, call: () => { throw new Error('the table is gone'); } } }, failed }),
+	]);
+	assert.deepEqual(answer.map((one) => one.status), [500, 503]);
+	assert.deepEqual(said, [], 'nothing went to the console');
+	assert.deepEqual(reported.map(([name]) => name), ['/exposed', '/broken'], 'each named by the page it broke');
+	assert.equal((reported[0]![1] as { reason?: string }).reason, 'refused');
+	assert.equal((reported[1]![1] as Error).message, 'the table is gone');
 });
 
 test('a path nothing takes is 404 with the fallback page, and a path a key only starts is too', async () => {
@@ -220,7 +261,7 @@ test('a failed read, and a module the render was not handed, answer the shell wi
 	const { said } = await told(async () => { await (await fetch(`${host.url}/broken`)).text(); });
 	assert.ok(said.some((line) => (line[1] as Error | undefined)?.message === 'the table is gone'));
 	const { said: hidden } = await told(async () => { await (await fetch(`${host.url}/hidden`)).text(); });
-	assert.equal((hidden[0]![0] as { reason?: string }).reason, 'not-handed');
+	assert.equal((hidden[0]![1] as { reason?: string }).reason, 'not-handed');
 });
 
 test('arguments JSON cannot carry are refused where the ask is made, and a result it cannot carry by the far end', async () => {
@@ -415,16 +456,20 @@ test('a refusal reads the same in a render as over a socket to the same server',
 	}
 });
 
-test('a page that does not catch a failed read is the shell; one that does not catch a refusal is a defect the server reports', async () => {
+test('a page that does not catch a failed read is the shell with 503; one that does not catch a refusal is the shell with 500', async () => {
 	const { answer } = await told(() => fetch(`${host.url}/unguarded`));
 	assert.equal(answer.status, 503, 'the read failed, so the render could not write the page');
 	assert.equal(await answer.text(), SHELL);
 
 	host.failed.length = 0;
-	const exposed = await fetch(`${host.url}/exposed`);
+	const { answer: exposed, said } = await told(async () => {
+		const got = await fetch(`${host.url}/exposed`);
+		return { status: got.status, html: await got.text() };
+	});
 	assert.equal(exposed.status, 500, 'the page let a refusal escape, which is its own defect');
-	await exposed.text();
-	assert.equal((host.failed[0] as { reason?: string }).reason, 'refused', 'reported to the server with what escaped');
+	assert.equal(exposed.html, SHELL);
+	assert.equal((said[0]![1] as { reason?: string }).reason, 'refused', 'the operator is told what escaped');
+	assert.deepEqual(host.failed, [], 'and the server was not asked to raise it');
 
 	const after = await fetch(`${host.url}/about`);
 	assert.equal(after.status, 200, 'and the process is still answering');
@@ -502,12 +547,16 @@ test('a status meta takes 200 and 400 to 599, and refuses the numbers either sid
 		assert.equal((await renderWith('/said', { page: plainSite({ said: saying(content) }) })).status, Number(content), content);
 	}
 	for (const content of ['399', '600', '201', '4040', 'gone']) {
-		const pages = createPages({ page: plainSite({ said: saying(content) }), gate, modules: {}, dir: dist });
-		await assert.rejects(pages.request(new Request('http://site.test/said')), { reason: 'bad-status' }, content);
+		const reported: unknown[] = [];
+		const pages = createPages({ page: plainSite({ said: saying(content) }), gate, modules: {}, dir: dist, failed: (_name, error) => { reported.push(error); } });
+		const answer = (await pages.request(new Request('http://site.test/said')))!;
+		assert.equal(answer.status, 500, content);
+		await answer.text();
+		assert.equal((reported[0] as { reason?: string }).reason, 'bad-status', content);
 	}
 });
 
-test('renders is a whole number, and timeoutMs a positive time a Node timer can hold', () => {
+test('renders is a whole number, timeoutMs a positive time a Node timer can hold, and failed a function', () => {
 	const base: PagesOptions = { page: () => null, gate, modules: {}, dir: dist };
 	for (const renders of [1.5, Number.NaN, '4' as never]) {
 		assert.throws(() => createPages({ ...base, renders }), { reason: 'invalid-config' }, String(renders));
@@ -516,6 +565,7 @@ test('renders is a whole number, and timeoutMs a positive time a Node timer can 
 		assert.throws(() => createPages({ ...base, timeoutMs }), { reason: 'invalid-config' }, String(timeoutMs));
 	}
 	assert.equal(createPages({ ...base, renders: 1, timeoutMs: 2_147_483_647 }).public, true, 'the longest a timer holds');
+	assert.throws(() => createPages({ ...base, failed: 'console' as never }), { reason: 'invalid-config' }, 'failed is a function');
 });
 
 test('a render identifies its visitor once, from the path alone, and a page that reads nothing not at all', async () => {

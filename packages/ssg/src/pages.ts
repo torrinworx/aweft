@@ -49,6 +49,12 @@ export interface PagesOptions {
 	readonly renders?: number;
 	/** How long a render may take, in milliseconds. Past it, the shell answers with 503. 10 000 when left off. */
 	readonly timeoutMs?: number;
+	/**
+	 * Where a page's defect and a failed read are reported, with the page's path and the error. The
+	 * shape `createServer`'s `handlers.failed` takes, so the same function serves both. Left off,
+	 * each is written to the console. A module has no way to reach the server's own handler.
+	 */
+	readonly failed?: (name: string, error: unknown) => void;
 }
 
 /** The server module `createPages` makes: what a gate reads, and the hook the server walks to. */
@@ -71,6 +77,7 @@ interface Made {
 
 const FAILED = Symbol('failed');
 const LATE = Symbol('late');
+const BROKEN = Symbol('broken');
 
 // Over 2^31 - 1 milliseconds Node fires a timer after one millisecond instead.
 const MAX_TIMER = 2_147_483_647;
@@ -121,6 +128,7 @@ const gated = (name: string, reasons: readonly unknown[]): Refused => frameOf(Ob
  *   dir: the directory the bundler wrote, `dist` by default. Its `index.html` is the shell
  *   renders: renders at once, 16 by default
  *   timeoutMs: milliseconds per render, 10 000 by default
+ *   failed: where a page's defect and a failed read are reported, the console by default
  *
  * Returns: the module, `{ public: true, request }`. Return it from a module's factory. Its hook
  * declines a method other than GET and HEAD and a path naming a file in `dir`, and answers
@@ -128,13 +136,13 @@ const gated = (name: string, reasons: readonly unknown[]): Refused => frameOf(Ob
  * for with `<Meta httpEquiv="status" content="404" />`, else 404 when a stage shows its fallback
  * or nothing, else 200. A read that failed, a page that waited on a document it shared, a render
  * past `timeoutMs` and a request past `renders` are answered with the shell, 503, which mounts
- * live in a browser.
+ * live in a browser. A page that throws, lets a refusal escape, or writes a status meta that is
+ * not 200 or from 400 to 599 (`bad-status`) is answered with the shell, 500, and reported to
+ * `failed`. The hook never throws, so no page can end the process.
  *
  * Throws: `no-shell` when `dir` holds no `index.html`, `shell-head` and `shell-body` for a shell
  * that cannot hold a page, and `invalid-config` for an option of the wrong kind or a module with
- * no `call`, all when the module is made rather than on the first request. A render throws what
- * the page threw, and `bad-status` for a status meta that is not 200 or from 400 to 599. The
- * server reports both and answers 500.
+ * no `call`, all when the module is made rather than on the first request.
  *
  * Example:
  *   // modules/site/Pages.ts
@@ -176,6 +184,16 @@ export const createPages = (options: PagesOptions): Pages => {
 	if (typeof timeoutMs !== 'number' || !(timeoutMs > 0) || timeoutMs > MAX_TIMER) {
 		throw refuse(`timeoutMs ${JSON.stringify(timeoutMs)}`, 'Set timeoutMs to a positive number of milliseconds, at most 2147483647.');
 	}
+
+	if (options.failed !== undefined && typeof options.failed !== 'function') {
+		throw refuse(`failed ${typeof options.failed}`, 'Pass failed as a function of a name and an error, or leave it off.');
+	}
+	// Any client reaches a page with any path, so a page's defect is told to the operator and never
+	// thrown, the way a public call that throws is (design 272).
+	const report = (name: string, error: unknown, what: string): void => {
+		if (options.failed !== undefined) options.failed(name, error);
+		else console.error(`${name}: ${what}`, error);
+	};
 
 	// Resolved once, from the working directory, as `static/Files` resolves the same directory.
 	const dir = resolve(options.dir ?? 'dist');
@@ -221,7 +239,7 @@ export const createPages = (options: PagesOptions): Pages => {
 		/** A read that failed: the operator hears why, and the page hears what a browser would. */
 		const fail = (name: string, error: unknown): Error => {
 			failed = true;
-			console.error(`${name}: a read failed while ${path} was rendered, so the shell answered it`, error);
+			report(url.pathname, error, `${name} failed while the page rendered, so the shell answered it`);
 			return crossed('failed', 'the call failed');
 		};
 
@@ -235,7 +253,7 @@ export const createPages = (options: PagesOptions): Pages => {
 				failed = true;
 				const error = codecError('not-handed', `${path} asked ${name} while it rendered, and createPages was not handed it`,
 					'Hand the module to createPages in modules, under the name the page asks it by.');
-				console.error(error);
+				report(url.pathname, error, `the page asked ${name}, which createPages was not handed`);
 				throw error;
 			}
 			const { instance, call } = held;
@@ -268,7 +286,7 @@ export const createPages = (options: PagesOptions): Pages => {
 						try {
 							progress(value === undefined ? null : value);
 						} catch (error) {
-							console.error(`${name}: a progress handler threw while ${path} was rendered`, error);
+							report(url.pathname, error, `a progress handler for ${name} threw while the page rendered`);
 						}
 					},
 				});
@@ -330,7 +348,7 @@ export const createPages = (options: PagesOptions): Pages => {
 		} catch (error) {
 			// A loader rejected with nothing to show it (design 306). After a failed read, or a
 			// share the render cannot make, that is a page the render could not write, and the
-			// shell answers it. Anything else is the page's own defect, which the server reports.
+			// shell answers it with 503. Anything else is the page's own defect: 500, below.
 			if (failed || (error as { reason?: unknown } | null)?.reason === 'not-shared') return FAILED;
 			throw error;
 		}
@@ -374,12 +392,16 @@ export const createPages = (options: PagesOptions): Pages => {
 			making.then(release, release);
 			let timer: ReturnType<typeof setTimeout> | undefined;
 			const late = new Promise<typeof LATE>((done) => { timer = setTimeout(() => { done(LATE); }, timeoutMs); });
-			let made: Made | typeof FAILED | typeof LATE;
+			let made: Made | typeof FAILED | typeof LATE | typeof BROKEN;
 			try {
 				made = await Promise.race([making, late]);
+			} catch (error) {
+				report(url.pathname, error, 'the page broke while it rendered, so the shell answered it with 500');
+				made = BROKEN;
 			} finally {
 				clearTimeout(timer);
 			}
+			if (made === BROKEN) return answered(request, 500, shell);
 			if (made === LATE || made === FAILED) return answered(request, 503, shell);
 			return answered(request, made.status, made.html);
 		},

@@ -221,7 +221,10 @@ reads as undefined) is refused when the module is made. **`dir`** is the directo
 wrote, `dist` when left off, resolved from the working directory, so build it from
 `import.meta.url`: its `index.html` is the shell, read once when the
 module is made, and a missing one is refused then (`no-shell`). **`renders`** (16) and
-**`timeoutMs`** (10 000) are the two limits.
+**`timeoutMs`** (10 000) are the two limits. **`failed`** is where a page's defect and a failed read
+are reported, with the page's path and the error. It takes the arguments `createServer`'s
+`handlers.failed` takes, so pass the same function to send both to one place. Left off, each is
+written to the console.
 
 **A render asks as a visitor nobody knows.** The page gets a client made for that render. When the
 page asks a module, the client takes it from `modules`. It asks the gate who a request for the
@@ -241,6 +244,7 @@ they would over the socket. `share` answers a handle whose document never arrive
 | the page waited on a document it shared, and did not catch `not-shared` | 503 | the shell |
 | more renders running than `renders` | 503 | the shell |
 | the render took longer than `timeoutMs` | 503 | the shell |
+| the page threw, let a refusal escape, or wrote a bad status | 500 | the shell |
 | the page wrote `<Meta httpEquiv="status" content="410" />` | that status | the page |
 | a stage shows its fallback, or nothing | 404 | the page |
 | otherwise | 200 | the page |
@@ -253,10 +257,10 @@ overrides its layout. The status is 200 or a number from 400 to 599. Anything el
 `bad-status`.
 
 If a loader rejects and nothing shows the rejection, the render rejects (design 306). After a
-failed read, the answer is the shell. Otherwise it is a defect in the page, like a component that
-throws: the render throws it, and the server reports it and answers 500. A server with no
-`handlers.failed` ends its process on such a defect, as it does for any module's defect, so give
-it one.
+failed read, the answer is the shell with 503. Otherwise it is a defect in the page, like a
+component that throws or a `bad-status`. A defect is answered with the shell and 500, and reported
+to `failed`. The request hook never throws, so a page that breaks cannot end the process, whether
+or not the server has a `handlers.failed`.
 
 A render past its time keeps its place among the `renders` until it ends. `HEAD` gets the status
 and headers alone. It declines a method other than GET and HEAD, and a path that names a file in

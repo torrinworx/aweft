@@ -81,6 +81,8 @@ const actsFor = (client: Client): Record<string, unknown> => ({
 	// Pages that do not catch what their read rejects with.
 	unguarded: suspend(null, async () => h(Shown, { id: 'unguarded', shown: String(await client.ask('posts/Broken')), code: '200' })),
 	exposed: suspend(null, async () => h(Shown, { id: 'exposed', shown: String(await client.ask('notes/Mine', { every: true, all: 'of them' })), code: '200' })),
+	// A page whose own code throws while it renders.
+	throws: (): unknown => { throw new Error('the page broke'); },
 	// A page that waits on a shared document, and one that renders its waiting state from it.
 	board: suspend(null, async () => h(Shown, { id: 'board', shown: String(await client.share('board').ready), code: '200' })),
 	caught: suspend(null, async () => {

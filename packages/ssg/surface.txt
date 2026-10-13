@@ -1,6 +1,6 @@
 type PageResult: interface PageResult { readonly html: string; readonly title: string | null; readonly noindex: boolean; }
 type Pages: interface Pages { readonly public: true; request(request: Request): Promise<Response | undefined>; }
-type PagesOptions: interface PagesOptions { page(router: Router, client: Client): unknown; readonly gate: Gate; readonly modules: Readonly<Record<string, unknown>>; readonly dir?: string; readonly renders?: number; readonly timeoutMs?: number; }
+type PagesOptions: interface PagesOptions { page(router: Router, client: Client): unknown; readonly gate: Gate; readonly modules: Readonly<Record<string, unknown>>; readonly dir?: string; readonly renders?: number; readonly timeoutMs?: number; readonly failed?: (name: string, error: unknown) => void; }
 type Site: interface Site { walk(): Promise<WalkResult>; page(url: string): Promise<PageResult>; write(urls?: readonly string[]): Promise<WriteResult>; }
 type SiteOptions: interface SiteOptions { page(router: Router): unknown; readonly shell: string; readonly out: string; readonly base?: string; readonly locale?: string; readonly locales?: Readonly<Record<string, Catalog>>; }
 type TextReport: interface TextReport { readonly missing: readonly string[]; readonly unused: readonly string[]; }

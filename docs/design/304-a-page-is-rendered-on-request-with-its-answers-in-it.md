@@ -61,6 +61,7 @@ arguments' object keys sorted, in the order the asks were made. A failed read re
 | the page waited on a shared document and did not catch `not-shared` | 503 | the shell |
 | more renders in flight than `renders` (16) | 503 | the shell |
 | the render ran past `timeoutMs` (10 000) | 503 | the shell |
+| the page threw, let a refusal escape, or wrote a bad status | 500 | the shell |
 | the page wrote `<Meta httpEquiv="status" content="410" />` | that status | the page |
 | a stage shows its fallback or nothing | 404 | the page |
 | otherwise | 200 | the page |
@@ -76,8 +77,10 @@ must be sent with no body.
 
 A loader that rejected with nothing to show it makes the render reject (design 306). After a
 failed read or an unshared document, the answer is the shell, 503. Otherwise the rejection is the
-page's defect: the render throws it, and the server reports it and answers 500, as it does for
-`bad-status`.
+page's defect, as a component that throws and a `bad-status` are. A defect is answered with the
+shell, 500, and the request hook never throws. The defect and every failed read go to the `failed`
+option, which takes a name and an error as `handlers.failed` does, and to the console when there
+is none. The name is the page's path, without its query.
 
 A render past its time keeps its place among the `renders` until it ends, because it is still
 running. `HEAD` gets the status and headers with no body. No `Cache-Control` is written.
@@ -139,6 +142,21 @@ never ends, and it keeps its place among the `renders` for as long as the proces
 token in a link, as easily as from a cookie. The request the render identifies carries the path
 and nothing else.
 
+**A page's defect is the shell with 500, never a throw.** Any anonymous client reaches a page with
+any path, so a page that breaks on one id is something anyone can trigger. A request hook that
+throws is raised where nothing catches it when the server has no `handlers.failed` (design 072),
+and that ends the process. Design 272 already treats a public call that throws this way: the
+caller gets a failure, the operator is told, and the process goes on. A page gets the same
+treatment. Routes and other hooks stay as loud as design 072 makes them. The shell rather than an
+empty body, because it mounts in a browser, and the browser then shows what the page shows there.
+
+**The `failed` option, because a module cannot report softly through the server.** The server
+hands a module no way to report a defect without throwing: its reporter is internal, and only a
+call's failure is reported softly. A throw would reach `handlers.failed`, and with no handler it
+would end the process, which is what this rule prevents. So `createPages` reports through a
+function the application hands it. Passing the same function as `handlers.failed` sends both to one
+place.
+
 **The defaults.** 16 renders in flight, because each one holds a whole page and its answers in
 memory until it is written, and with no queue the cap is also how many visitors arrive at once
 before one gets the shell. Ten seconds is far past what a render that reads a store needs. Both are
@@ -161,6 +179,10 @@ from filling memory, and that is the price.
 A gate that reads a credential from the path itself still finds it in the path a render sends, so
 that render runs as the person the credential names.
 
+A page's defect does not reach `handlers.failed`, or an `observe` hook's `failed` event, unless the
+application passes the same function as `failed`. An `observe` hook still hears the request, with
+status 500 and the pages module's name.
+
 It renders one language. `createSite`'s `locale` and `locales` are not options here.
 
 It answers every path that is not a file, so another module that answers `request` (uploads) has to
@@ -178,7 +200,11 @@ checks:
   the refusal recorded and the page still 200
 - the refusal's message equal to the one a client reads over a socket from the same server
 - a refusal the module threw, recorded whole
-- the status meta winning, and a status out of range answered 500
+- the status meta winning, and a status out of range answered 500 with the shell
+- a page that throws, lets a refusal escape, or writes a bad status answered 500 with the shell on
+  a server with no `handlers.failed`, which keeps answering, and each reported once
+- the `failed` option hearing a defect and a failed read, with the page's path, and the console
+  hearing nothing
 - a path nothing takes, and one a key only starts, answered 404 with the fallback page
 - a failed read and a name not handed over, answered 503 with the shell whether the page caught
   them or not, with the server still answering afterwards
