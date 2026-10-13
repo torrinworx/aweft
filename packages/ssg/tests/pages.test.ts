@@ -457,9 +457,9 @@ test('a page that waits on a shared document is the shell, and one that renders 
 	}
 });
 
-// --- the status a page asks for, the visitor a render asks as, and renders side by side ---------
+// --- status metas, the visitor a render asks as, and two renders at once ------------------------
 
-/** A site of acts that read nothing, exact as `Site` is. */
+/** A site whose acts read no data. Its stage is exact, like the one `Site` makes. */
 const plainSite = (acts: Record<string, unknown>, extra: Record<string, unknown> = {}): PagesOptions['page'] =>
 	(router) => h(StageContext, { router, acts, exact: true, ...extra } as never, h(Stage, {}));
 
@@ -488,7 +488,7 @@ test('the deepest status meta wins, then the latest, so a page overrides its lay
 		h('div', {}, h(Head, {}, h(Meta, { httpEquiv: 'status', content: '200' })), ...(props.children ?? []));
 	assert.equal((await renderWith('/said', { page: plainSite({ said: saying('404') }, { template: Layout }) })).status, 404);
 
-	// Two heads deep, against one head deep that a loader writes after it.
+	// A status meta inside two `Head`s, against one inside a single `Head` that a loader writes later.
 	const Later = suspend(null, async () => {
 		await new Promise((done) => setTimeout(done, 5));
 		return h(Head, {}, h(Meta, { httpEquiv: 'status', content: '200' }));
