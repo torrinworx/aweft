@@ -247,9 +247,9 @@ they would over the socket. `share` answers a handle whose document never arrive
 
 A refusal, a throw that carries a `reason`, is an answer: the page shows it and the render goes on.
 A failed read is not an answer. The page would be missing a part, and a crawler would index it
-that way. So the shell answers instead, and in a browser it mounts and asks again. The status meta
-is read by the rule `noindex` is, the deepest and then the latest, so the page that found no row
-overrides its layout. It takes 200 or a number from 400 to 599. Anything else is refused with
+that way. So the shell answers instead, and in a browser it mounts and asks again. When several
+status metas are written, the deepest wins, then the latest, as for the `robots` meta, so a page
+overrides its layout. The status is 200 or a number from 400 to 599. Anything else is refused with
 `bad-status`.
 
 If a loader rejects and nothing shows the rejection, the render rejects (design 306). After a
