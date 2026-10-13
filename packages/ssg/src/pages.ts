@@ -164,7 +164,7 @@ export const createPages = (options: PagesOptions): Pages => {
 		const call = callOf(instance);
 		if (call === undefined) {
 			throw refuse(`modules[${JSON.stringify(name)}] with no call`,
-				'Hand each module as its factory answered it, from imports; one that reads undefined is spelled differently from its name in deps.');
+				'Hand each module as its factory answered it, from imports. One that reads undefined is spelled differently from its name in deps.');
 		}
 		handed.set(name, { instance: instance as object, call });
 	}
@@ -315,7 +315,7 @@ export const createPages = (options: PagesOptions): Pages => {
 			// unhandled rejection behind.
 			share: <T extends object>(name: string): Handle<T> => {
 				const ready = Promise.reject(codecError('not-shared', `${path} shared ${name} while it rendered, and a render has no link`,
-					'Render the waiting state from handle.document, as a browser shows it until the document arrives; a page that waits on ready is answered with the shell.')) as Promise<T>;
+					'Render the waiting state from handle.document, as a browser shows it until the document arrives. A page that waits on ready is answered with the shell.')) as Promise<T>;
 				ready.catch(() => {});
 				return { document: undefined, ready, stop: () => {} };
 			},

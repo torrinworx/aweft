@@ -71,7 +71,8 @@ JSON escape `\u003c`, so no string in an answer can close the script.
 
 A status meta is read off the head list by the rule `noindex` is read by: the deepest, then the
 latest. A status other than 200 or a whole number from 400 to 599 is refused with `bad-status`.
-Every other status needs a header a page cannot write, or forbids the body a page is.
+Every other status either needs a header a page cannot write, as a redirect needs `Location`, or
+must be sent with no body.
 
 A loader that rejected with nothing to show it makes the render reject (design 306). After a
 failed read or an unshared document, the answer is the shell, 503. Otherwise the rejection is the

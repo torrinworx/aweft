@@ -3,7 +3,7 @@
 // Its own subpath, and the only values it imports are `ui`'s `mount` and `hydrate` and the two
 // `dom` needs to read an item, so a page bundle that reaches for it carries the walk, the
 // document builder and `node:fs` nowhere. `languageOf` reads the language the site wrote on the
-// page back, by the one prefix rule the site wrote it with (design 279). `replay` hands a client
+// page back, by the one prefix rule the site wrote it with (design 279). `replay` gives a client
 // the answers a render on request wrote into the page (design 304).
 
 import type { Client, ShareHandlers } from '@aweftjs/client';

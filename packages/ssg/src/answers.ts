@@ -1,15 +1,16 @@
 // What a render on request records for the browser, and how both halves read it (design 304).
 //
-// A file of its own, like `stamp.ts`, because both halves need it and the browser half must not
-// reach the render: the key two ends compute for one ask, the shape of a recorded answer, the id
-// of the script it travels in, and the error a recorded refusal is raised as.
+// A file of its own, like `stamp.ts`, because both halves import it and the browser half must not
+// import the render. It holds the key both halves compute for one ask, the type of a recorded
+// answer, the id of the script the answers are written in, and the error made from a recorded
+// refusal.
 
 import { codecError } from '@aweftjs/codec';
 
 /** The id of the script a page's recorded answers travel in. */
 export const ANSWERS = 'aweft-answers';
 
-/** A refusal as the socket carries it: its reason, its words, and the gate's reasons when it has them. */
+/** A refusal in the form an ask over the socket gets it: reason, message, and the gate's reasons if any. */
 export interface Refused {
 	readonly reason: string;
 	readonly message: string;
@@ -46,8 +47,8 @@ export const throughJson = (value: unknown): unknown => {
 };
 
 /**
- * A recorded refusal, raised where the ask was made, in the shape an ask over the socket rejects
- * with: the reason to branch on, the far end's own message, and its reasons.
+ * The error an ask rejects with for a recorded refusal. It carries what an ask over the socket
+ * rejects with: the reason to check, the message the module wrote, and the gate's reasons.
  */
 export const crossed = (reason: string, message: string, reasons?: Refused['reasons']): Error => {
 	const error = Object.assign(codecError(reason, message,

@@ -551,10 +551,10 @@ The goal is server and build-time rendering inside a single-page model: a page r
 server at request time, or is baked at build time, or runs purely in the browser, from one
 source.
 
-`@aweftjs/ssg` does the first two. `createSite` bakes a site at build time, and `createPages` renders
-each page on request, asking the page's reads as a visitor nobody knows and writing their answers
-into the page, which `replay` hands the browser's client so the hydration asks for nothing again
-(design 304).
+`@aweftjs/ssg` does the first two. `createSite` writes a site's pages at build time. `createPages`
+renders each page when it is requested: it asks the page's reads as a visitor nobody knows and
+writes their answers into the page. In the browser, `replay` gives those answers to the page's
+client, so the hydration asks the server for nothing (design 304).
 
 Constraints on `dom`, holding from the phase it is built in:
 

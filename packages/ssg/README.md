@@ -223,14 +223,15 @@ wrote, `dist` when left off, resolved from the working directory, so build it fr
 module is made, and a missing one is refused then (`no-shell`). **`renders`** (16) and
 **`timeoutMs`** (10 000) are the two limits.
 
-**A render asks as a visitor nobody knows.** The page gets a client made for that render. Its `ask`
-takes the module from `modules`, asks the gate who a request for the page's path with no query and
-no headers is, and asks the gate's `access` for that module, as the server does for a browser's ask.
-A module the gate keeps from an anonymous visitor is refused in the render too, whoever sent the
-request, as long as the gate finds identity only in the query, the headers or the address: a gate
-that reads a credential out of the path itself sees it in a render too. The arguments and the
-result go through JSON, as they would over the socket. `share` answers a handle whose document never
-arrives and whose `ready` rejects with `not-shared`.
+**A render asks as a visitor nobody knows.** The page gets a client made for that render. When the
+page asks a module, the client takes it from `modules`. It asks the gate who a request for the
+page's path, with no query and no headers, is. Then it asks the gate's `access` whether that
+visitor may call the module, as the server does for an ask from a browser. A module the gate keeps
+from an anonymous visitor is refused in the render too, whoever sent the request. The one
+exception is a gate that reads a credential from the path itself: the render's request carries the
+path, so the gate finds the credential there too. The arguments and the result go through JSON, as
+they would over the socket. `share` answers a handle whose document never arrives and whose
+`ready` rejects with `not-shared`.
 
 **What it answers.**
 
@@ -245,24 +246,25 @@ arrives and whose `ready` rejects with `not-shared`.
 | otherwise | 200 | the page |
 
 A refusal, a throw that carries a `reason`, is an answer: the page shows it and the render goes on.
-A failed read is not. A crawler that indexes a page with part of it missing keeps it that way, so
-the shell answers instead, and it mounts in a browser and asks again. The status meta is read by
+A failed read is not an answer. The page would be missing a part, and a crawler would index it
+that way. So the shell answers instead, and in a browser it mounts and asks again. The status meta is read by
 the rule `noindex` is, the deepest and then the latest, so the page that found no row overrides its
 layout. It takes 200 or a number from 400 to 599. Anything else is refused with `bad-status`.
 
-A loader that rejects with nothing to show it, after a failed read, is answered with the shell.
-With no failed read, it is the page's defect, like a component that throws, and the render throws
-it (design 306). The server reports a throw and answers 500. When it was given no
-`handlers.failed`, it ends the process instead, as it does for every module's defect, so pass one.
+If a loader rejects and nothing shows the rejection, the render rejects (design 306). After a
+failed read, the answer is the shell. Otherwise it is a defect in the page, like a component that
+throws: the render throws it, and the server reports it and answers 500. A server with no
+`handlers.failed` ends its process on such a defect, as it does for any module's defect, so give
+it one.
 
 A render past its time keeps its place among the `renders` until it ends. `HEAD` gets the status
 and headers alone. It declines a method other than GET and HEAD, and a path that names a file in
 `dir`.
 
-**The browser half.** `replay` on `@aweftjs/ssg/client` is a client that answers each ask from the
-answers the server wrote into the page, each answer once and in the order the render asked, before
-it asks the server. `attach` drops whatever is left once its hydration has settled, so the next ask
-with the same arguments reaches the server.
+**The browser half.** `replay` on `@aweftjs/ssg/client` wraps the page's client. For each ask the
+render made, it answers with the recorded answer, each one once and in the order the render asked.
+Every other ask goes to the server. Once `attach` has finished hydrating, it throws away the answers
+nobody used, so the next ask with the same arguments goes to the server.
 
 ```tsx
 import { createClient } from '@aweftjs/client';
@@ -274,19 +276,20 @@ attach(document.body, <Site router={router} client={replay(createClient())} />);
 router.links(document.body);
 ```
 
-**A page that reads goes through `suspend`, and its loader answers a component call.**
+**A page that reads data goes through `suspend`, and the loader returns a component call.**
 
 ```tsx
 'posts/:id': suspend(null, async ({ stage }) =>
 	<Article post={await client.ask('posts/Read', { id: stage.params.get().id })} />),
 ```
 
-On the server the render waits for it. In the browser the server's markup stays on screen until the
-answer arrives, from `replay` with no request, and the component's elements adopt the server's.
-**Whatever the loader builds itself is built outside the mount**, whether the markup stands right
-after the arrow, `async () => <article>...</article>`, or after an `await` in a longer body: that
-element replaces the server's rather than adopting it, the page flashes, and nothing reports it.
-Build the markup in a component and hand it what you read.
+On the server, the render waits for the loader. In the browser, the server's markup stays on screen
+until the answer arrives from `replay`, with no request, and then the component's elements take
+over the server's elements. **An element the loader builds itself is made outside the mount.** That
+holds whether the markup comes right after the arrow, `async () => <article>...</article>`, or
+after an `await` in a longer body. Such an element replaces the server's element instead of taking
+it over, the page flashes, and nothing reports it. Build the markup in a component and pass it what
+you read.
 
 A refusal rejects the ask, as it does over the socket, so the loader catches it and reads `reason`:
 
@@ -299,11 +302,11 @@ try {
 }
 ```
 
-**In a test, with no browser.** Parse the page's body into `dom`'s light document, set
-`data-aweft-ssg` on its body as the served page carries it, and give that document a
-`getElementById` that finds the script, because the light document looks nothing up by id
-(`replay` refuses one that cannot, `no-lookup`). Hand `replay` the document itself: `attach` drops
-the answers left over once it has hydrated the document `replay` read them from, and only that one.
+**In a test, with no browser.** Parse the page's body into `dom`'s light document, and set
+`data-aweft-ssg` on its body, as the served page has. The light document cannot find an element by
+id, so give it a `getElementById` that returns the answers script (`replay` refuses a document
+without one, `no-lookup`). Pass that same document to `replay`. `attach` throws away the unused
+answers only for the document `replay` read them from.
 
 ```ts
 const document = createDocument();
@@ -376,7 +379,7 @@ whether a missing one fails a build.** It is in the report.
 
 ## Known limits
 
-**A render runs no `connection` hook and is heard by no `observe`.** A read whose `call` relies on
+**A render runs no `connection` hook and sends no `observe` event.** A read whose `call` relies on
 state a connection set up fails, and the request is 503. The logs battery records no ask a render
 made. A render ignores an ask's `timeout` option, and `timeoutMs` applies instead.
 
@@ -387,8 +390,8 @@ request, and after `renders` of them every page on the site is the shell, 503, u
 restarts. The cap is what keeps those renders from filling memory instead.
 
 **A page that waits on a shared document is answered with the shell.** A render has no link, so
-`ready` rejects with `not-shared`. A page that renders its waiting state from `document` hydrates
-against the same state.
+`ready` rejects with `not-shared`. A page that shows a waiting state while `document` is undefined
+renders the same markup in the browser, so it hydrates.
 
 **A key that ends in a bare `*` is not walked.** `walk()` reports it as an act it cannot
 enumerate, as it reports `:name` with no `entries()`, so on an `exact` site (`ui`'s README, Routing)
