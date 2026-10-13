@@ -320,12 +320,16 @@ const Article = suspend(Spinner, async ({ id }) => <Body article={await fetchArt
 ```
 
 The fallback shows, the loader runs, and what it resolves to replaces the fallback. The promise is
-declared `pending`, so a static render waits for it.
+declared `pending`, so a static render waits for it. Make the loader return a component call,
+with what it loaded as props, as the example does. During a hydration, that component's elements
+take over the elements the server wrote. An element the loader builds itself is made outside the
+mount, and it replaces the server's element instead.
 
 **A rejection never leaves the fallback on screen.** The call's own `failed` component shows it,
 or the `LoaderContext`'s, and with neither the slot goes empty and the rejection is rethrown so
-the host reports it. `LoaderContext` carries `{ loading, failed }` and inherits them one field at
-a time.
+the host reports it. In a static render, `render` rejects with it instead, after the page has
+settled (design 306). On a server that renders a page per request, the host's report would end the
+process. `LoaderContext` carries `{ loading, failed }` and inherits them one field at a time.
 
 **Every wait in this package shows the same loader** (design 219). `suspend` while its loader runs,
 a `Button` while a promise its `onClick` returned is pending, and a `FileDrop` entry an application
@@ -1720,6 +1724,18 @@ and no parameter: it matches any path and parks everything from it as the tail f
 the act, which is not rebuilt when that tail moves. A key whose whole text is the path wins
 outright, and otherwise a literal segment beats `:name`, `:name` beats `*name` and `*`, and the
 longer pattern breaks a tie. There are no optional segments and no patterns.
+
+**`exact`** takes a path only whole (design 305). Without it, a key that starts a path matches it
+and parks the rest for a stage inside the act, so `about` shows the About page at `/about/x` too.
+On an exact stage, `about` matches `/about` and nothing deeper, a path no key takes whole shows the
+`fallback` (or nothing, never `initial`), and a stage nests only under a key that ends in a bare
+`*`: `guide/*` is the act whose own stage answers `/guide/install`. Every stage below an exact one
+is exact unless it sets `exact={false}`. Turning it on means rewriting each key that has a stage, or
+a child that claims the tail, under it. A key you miss stops matching its deeper paths.
+
+```tsx
+<StageContext router={router} acts={{ '': Home, about: About, 'guide/*': Guide, missing: NotFound }} fallback="missing" exact>
+```
 
 **An act** is the component, or the name of a module. A component act may carry `entries()`, an
 async function returning the parameter sets a static walk should render it at; nothing in this

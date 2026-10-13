@@ -109,7 +109,7 @@ type StageAct: interface StageAct { readonly name: string; readonly loader: bool
 value StageContext: StageContextComponent
 type StageContextComponent: interface StageContextComponent { (props: StageProps): unknown; read(context: unknown): StageValue | null; node(context: unknown): ContextNode<StageValue | null> | null; use<P extends Record<string, unknown>>(build: (stage: StageValue | null) => Component<P>): Component<P>; }
 type StageEntry: interface StageEntry { readonly acts: readonly StageAct[]; readonly prefix: string; readonly parent: StageEntry | null; readonly fallback: string | null; readonly current: string | null; }
-type StageProps: interface StageProps { readonly acts: Readonly<Record<string, Act>>; readonly template?: Component; readonly fallback?: string; readonly initial?: string; readonly router?: Router; readonly sources?: readonly Source[]; readonly loader?: Loader; readonly client?: unknown; readonly refused?: string; readonly children?: unknown[]; }
+type StageProps: interface StageProps { readonly acts: Readonly<Record<string, Act>>; readonly template?: Component; readonly fallback?: string; readonly initial?: string; readonly exact?: boolean; readonly router?: Router; readonly sources?: readonly Source[]; readonly loader?: Loader; readonly client?: unknown; readonly refused?: string; readonly children?: unknown[]; }
 type StageValue: interface StageValue { readonly current: Derived<string | null>; readonly params: Derived<Readonly<Record<string, string>>>; readonly query: Derived<Record<string, string>>; open(options: OpenOptions): void; close(): void; }
 value Style: (props: TagProps) => unknown
 type Subdivision: interface Subdivision { readonly code: string; readonly name: string; }

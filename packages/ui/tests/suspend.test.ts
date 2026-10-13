@@ -66,6 +66,28 @@ test('with nothing to show a failure, the slot empties and the rejection reaches
 	assert.match(run.stdout, /^SLOT:$/m, 'the fallback did not stay on screen');
 });
 
+test('in a static render, a failure nothing shows rejects the render rather than reaching the host (design 306)', async () => {
+	const said = new Error('the loader said no');
+	const Page = suspend(null, async () => { throw said; });
+	await assert.rejects(render(h('main', {}, h(Page as never, {})), { context: context() }), (error) => error === said,
+		'the render rejects with the loader\'s own error, so its caller can read it');
+
+	// A failure component shown is a failure handled: the render answers its markup.
+	const Shown = suspend(null, async () => { throw said; }, Broken);
+	assert.match(await render(h(Shown as never, {}), { context: context() }), /failed: Error: the loader said no/);
+});
+
+test('a static render with two failures nothing shows rejects with the first', async () => {
+	const first = new Error('the first loader said no');
+	const First = suspend(null, async () => { throw first; });
+	const Second = suspend(null, async () => {
+		await new Promise((done) => setTimeout(done, 5));
+		throw new Error('the second loader said no');
+	});
+	await assert.rejects(render(h('main', {}, h(First as never, {}), h(Second as never, {})), { context: context() }),
+		(error) => error === first);
+});
+
 test('a suspend removed before its loader settles mounts nothing', async () => {
 	let resolve: (value: unknown) => void = () => undefined;
 	const Page = suspend(Waiting, () => new Promise((r) => { resolve = r; }));

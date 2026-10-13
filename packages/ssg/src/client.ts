@@ -1,16 +1,41 @@
-// The browser half: two functions, and nothing that reads a disk (design 151).
+// The browser half: three functions, and nothing that reads a disk (design 151).
 //
 // Its own subpath, and the only values it imports are `ui`'s `mount` and `hydrate` and the two
 // `dom` needs to read an item, so a page bundle that reaches for it carries the walk, the
 // document builder and `node:fs` nowhere. `languageOf` reads the language the site wrote on the
-// page back, by the one prefix rule the site wrote it with (design 279).
+// page back, by the one prefix rule the site wrote it with (design 279). `replay` gives a client
+// the answers a render on request wrote into the page (design 304).
 
+import type { Client, ShareHandlers } from '@aweftjs/client';
+import { codecError } from '@aweftjs/codec';
 import { type ParentLike, type Remove, h, isComponentCall } from '@aweftjs/dom';
 import { type Render, hydrate, mount } from '@aweftjs/ui';
 
-// The only file this half imports besides `ui`, and it holds one string. Nothing in it reads a
-// disk, so a page bundle still carries no Node module through this door.
+// The only files this half imports besides `ui`: one string, and the key and error both halves
+// share. Nothing in either reads a disk, so a page bundle carries no Node module through here.
+import { ANSWERS, type Recorded, askKey, crossed, throughJson } from './answers.ts';
 import { STAMP } from './stamp.ts';
+
+/**
+ * What `replay` reads the answers off: the page's document, or anything that finds a script by id.
+ * `dom`'s light document finds nothing by id, so a test in Node hands in an object of its own.
+ */
+export interface AnswerSource {
+	getElementById(id: string): { readonly textContent?: string | null } | null;
+}
+
+// The answers each document's clients still hold, so the hydration that settles can drop them.
+// Keyed by the document, never one list for the process, so two documents keep their own.
+const holding = new WeakMap<object, Set<Map<string, Recorded[]>>>();
+
+const pageDocument = (): AnswerSource | undefined => (globalThis as { document?: AnswerSource }).document;
+
+const isRecorded = (value: unknown): value is Recorded => {
+	if (value === null || typeof value !== 'object') return false;
+	if ('result' in value) return true;
+	const error = (value as { error?: { reason?: unknown; message?: unknown } }).error;
+	return error !== null && typeof error === 'object' && typeof error.reason === 'string' && typeof error.message === 'string';
+};
 
 /**
  * Take over a generated page, or mount a live one, whichever this document is.
@@ -43,7 +68,87 @@ export const attach = (target: ParentLike, item: unknown, render?: Render): Remo
 	// left to `hydrate`, which does its own wrapping, and to `mount`, which would read it as a
 	// mounter and render nothing. `mount`'s own contract is untouched.
 	const mounted = typeof item === 'function' && !isComponentCall(item) ? h(item) : item;
-	return generated ? hydrate(target, mounted, render) : mount(target, mounted, undefined, render);
+	if (!generated) return mount(target, mounted, undefined, render);
+	const removal = hydrate(target, mounted, render);
+	// The answers are for the hydration alone: once it has settled, a later ask with the same
+	// arguments wants what the server holds now (design 304).
+	const page = (target as { ownerDocument?: object | null }).ownerDocument ?? pageDocument();
+	void (removal as { ready?: Promise<void> }).ready?.then(() => {
+		const held = page === undefined || page === null ? undefined : holding.get(page);
+		for (const answers of held ?? []) answers.clear();
+		held?.clear();
+	});
+	return removal;
+};
+
+/**
+ * A client that answers each ask from the answers the server rendered this page with, before it
+ * asks the server (design 304).
+ *
+ * Params:
+ *   client: the page's connection, what `createClient` answered
+ *   document: where the answers are read from, the page's own `document` when left off
+ *
+ * Returns: a client that answers an ask the server's render made with the answer it was given:
+ * each answer once, in the order the render made the asks, a result resolved and a refusal
+ * rejected with its reason, message and reasons. Every other ask, and everything but `ask`, goes
+ * to `client`. A page with no answers in it gets `client` itself. Once `attach`'s hydration of
+ * the same document has settled, the answers it did not hand out are dropped.
+ *
+ * Throws: `no-lookup` for a `document` with no `getElementById`, which could never find the
+ * answers and would ask the server for everything without a word. And what `JSON.parse` throws for
+ * an answers script that is not JSON, which a page `createPages` rendered never carries.
+ *
+ * Example:
+ *   const client = replay(createClient({ url: '/ws' }));
+ *   attach(document.body, h(Site, { router: createRouter(), client }));
+ */
+export const replay = (client: Client, document?: AnswerSource): Client => {
+	const page = document ?? pageDocument();
+	// No document at all is a process with no page. A document that cannot look anything up is a
+	// mistake that would otherwise cost every read a request, silently.
+	if (page === undefined) return client;
+	if (typeof page.getElementById !== 'function') {
+		throw codecError('no-lookup', 'replay was handed a document with no getElementById',
+			'Pass the page\'s document, or an object whose getElementById finds the answers script by its id.');
+	}
+	const text = page.getElementById(ANSWERS)?.textContent;
+	if (typeof text !== 'string' || text === '') return client;
+	// Only a list of answers, each a result or a refusal, is kept: a record edited by hand is asked
+	// for live rather than thrown out of an ask.
+	const answers = new Map<string, Recorded[]>();
+	for (const [key, list] of Object.entries(JSON.parse(text) as Record<string, unknown>)) {
+		if (Array.isArray(list)) answers.set(key, list.filter(isRecorded));
+	}
+	let held = holding.get(page);
+	if (held === undefined) holding.set(page, held = new Set());
+	held.add(answers);
+
+	return {
+		status: client.status,
+		ask: (name, args, options) => {
+			if (answers.size > 0) {
+				let key: string | undefined;
+				try {
+					key = askKey(name, throughJson(args));
+				} catch {
+					key = undefined;
+				}
+				const queue = key === undefined ? undefined : answers.get(key);
+				const next = queue?.shift();
+				if (queue !== undefined && queue.length === 0) answers.delete(key!);
+				if (next !== undefined) {
+					return 'result' in next
+						? Promise.resolve(next.result)
+						: Promise.reject(crossed(next.error.reason, next.error.message, next.error.reasons));
+				}
+			}
+			return client.ask(name, args, options);
+		},
+		share: <T extends object>(name: string, given?: T, handlers?: ShareHandlers) => client.share<T>(name, given, handlers),
+		reconnect: () => { client.reconnect(); },
+		close: () => { client.close(); },
+	};
 };
 
 /** Where a page stands: its language, and the router base its URLs carry. */

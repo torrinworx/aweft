@@ -37,3 +37,8 @@ sees until the page is live.
 
 `dom` learning to tell a hydrating target from an empty one on its own, which would put the choice
 in `mount` and leave `attach` with nothing to do.
+
+## Amended
+
+Once a hydration has settled, `attach` throws away the recorded answers `replay` did not use
+(design 304), so a later ask with the same arguments goes to the server.

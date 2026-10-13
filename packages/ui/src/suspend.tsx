@@ -10,6 +10,7 @@ import { mutable } from '@aweftjs/core';
 import type { Component } from './component.ts';
 import { createContext } from './contexts.ts';
 import { h } from './h.ts';
+import { escapeTo, use } from './render.ts';
 
 /** The loading and failure components an application sets once, for everything below. */
 export interface Loaders {
@@ -43,7 +44,8 @@ export type Loader<P> = (props: P, cleanup: (...fns: (() => void)[]) => void) =>
  *           mounted in place of the fallback
  *   failed: what to show when the loader rejects, given `{ error }`. Omitted, the
  *           `LoaderContext`'s `failed` is used; with neither, the slot goes empty and the
- *           rejection is rethrown on a fresh task so the host reports it
+ *           rejection is rethrown on a fresh task so the host reports it, or, in a static
+ *           render, `render` rejects with it (design 306)
  *
  * Returns: a component. It declares its promise `pending`, so a static render waits for it and a
  * hydration keeps its pairing walk open for it, and a suspend removed before its loader settles
@@ -90,8 +92,10 @@ export const suspend = <P extends Record<string, unknown>>(
 				return;
 			}
 			shown.set(null);
-			// Nobody named a failure component, so nobody is going to show this. Rethrowing puts
-			// it where the host already looks rather than nowhere.
+			// Nobody named a failure component, so nothing will show this error. Rethrowing it
+			// sends it to the host's error report. A static render gives it to `render` instead,
+			// because on a server the host's error report ends the process.
+			if (escapeTo(use(context), error)) return;
 			queueMicrotask(() => { throw error; });
 		},
 	);

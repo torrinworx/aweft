@@ -1,11 +1,16 @@
 type PageResult: interface PageResult { readonly html: string; readonly title: string | null; readonly noindex: boolean; }
+type Pages: interface Pages { readonly public: true; request(request: Request): Promise<Response | undefined>; }
+type PagesOptions: interface PagesOptions { page(router: Router, client: Client): unknown; readonly gate: Gate; readonly modules: Readonly<Record<string, unknown>>; readonly dir?: string; readonly renders?: number; readonly timeoutMs?: number; readonly failed?: (name: string, error: unknown) => void; }
 type Site: interface Site { walk(): Promise<WalkResult>; page(url: string): Promise<PageResult>; write(urls?: readonly string[]): Promise<WriteResult>; }
 type SiteOptions: interface SiteOptions { page(router: Router): unknown; readonly shell: string; readonly out: string; readonly base?: string; readonly locale?: string; readonly locales?: Readonly<Record<string, Catalog>>; }
 type TextReport: interface TextReport { readonly missing: readonly string[]; readonly unused: readonly string[]; }
 type Unenumerated: interface Unenumerated { readonly prefix: string; readonly name: string; }
 type WalkResult: interface WalkResult { readonly urls: readonly string[]; readonly unenumerated: readonly Unenumerated[]; }
 type WriteResult: interface WriteResult { readonly files: readonly string[]; readonly urls: readonly string[]; readonly unenumerated: readonly Unenumerated[]; readonly sitemap: string | null; readonly text: Readonly<Record<string, TextReport>>; }
+value createPages: (options: PagesOptions) => Pages
 value createSite: (options: SiteOptions) => Site
+./client type AnswerSource: interface AnswerSource { getElementById(id: string): { readonly textContent?: string | null; } | null; }
 ./client type PageLanguage: interface PageLanguage { readonly locale: string; readonly base: string; }
 ./client value attach: (target: ParentLike, item: unknown, render?: Render | undefined) => Remove
 ./client value languageOf: (document: { readonly documentElement?: { getAttribute?(name: string): string | null; } | null | undefined; readonly location?: { readonly pathname?: string | undefined; } | null | undefined; }) => PageLanguage
+./client value replay: (client: Client, document?: AnswerSource | undefined) => Client

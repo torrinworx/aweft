@@ -97,7 +97,7 @@ aweft/
     uploads/               the uploads battery: a file kept in a directory or a bucket, and served at /files/<id>
     notify/                the notify battery: one send to a person over inbox, email and push, the inbox shared live
     jobs/                  a scheduler over an array the application hands in
-    ssg/                   static generation
+    ssg/                   pages from a routed site: written at build time, or rendered on request
     build/                 transforms, in two modes
     testing/               conformance runners and harnesses
     debug/                 a document or commit read back as text; the stack never imports it
@@ -550,6 +550,11 @@ Later phases, but they constrain `dom` from the start, so they are recorded now.
 The goal is server and build-time rendering inside a single-page model: a page renders on a
 server at request time, or is baked at build time, or runs purely in the browser, from one
 source.
+
+`@aweftjs/ssg` does the first two. `createSite` writes a site's pages at build time. `createPages`
+renders each page when it is requested: it asks the page's reads as a visitor nobody knows and
+writes their answers into the page. In the browser, `replay` gives those answers to the page's
+client, so the hydration asks the server for nothing (design 304).
 
 Constraints on `dom`, holding from the phase it is built in:
 

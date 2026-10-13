@@ -145,6 +145,22 @@ const STATIC: unique symbol = Symbol('aweft.ui.static');
 export const isStatic = (render: Render): boolean =>
 	(render as unknown as Record<symbol, boolean | undefined>)[STATIC] === true;
 
+const ESCAPED: unique symbol = Symbol('aweft.ui.escaped');
+
+/**
+ * Give a static render a loader rejection that no failure component showed. `render` rejects with
+ * it after the page has settled, instead of the rejection being thrown on a fresh task (design 306).
+ *
+ * Returns: true when the render is static and took it. False for a mount or a hydration, whose
+ * host is the right place to report it.
+ */
+export const escapeTo = (render: Render, error: unknown): boolean => {
+	if (!isStatic(render)) return false;
+	const slots = render as unknown as Record<symbol, unknown[] | undefined>;
+	(slots[ESCAPED] ??= []).push(error);
+	return true;
+};
+
 /**
  * The render a mount belongs to.
  *
@@ -394,6 +410,11 @@ export const mount = (target: ParentLike, item: unknown, before?: Remove, render
  * stage its page mounted; use one per page, as design 109 says. `use(context).stage` after the
  * call is what a static walk reads to learn which URLs the page declares (designs 126, 145).
  *
+ * Throws: rejects with the first `suspend` loader rejection that no failure component showed,
+ * after the page has settled (design 306). A mount or a hydration throws that rejection on a fresh
+ * task for the host to report. A static render gives it to the code that called `render` instead,
+ * because on a server the host's report ends the process.
+ *
  * Example:
  *   const ui = context();
  *   const body = await render(h(App, {}), { context: ui });
@@ -410,7 +431,10 @@ export const render = async (item: unknown, options: { context?: Render } = {}):
 	assert(!again,
 		'this render object has already rendered a page, so its head tags and stages are still in it; make one context() per page');
 	(own as unknown as Record<symbol, boolean>)[STATIC] = true;
-	return domRender(item, { context: rooted(own) });
+	const markup = await domRender(item, { context: rooted(own) });
+	const escaped = (own as unknown as Record<symbol, unknown[] | undefined>)[ESCAPED];
+	if (escaped !== undefined && escaped.length > 0) throw escaped[0];
+	return markup;
 };
 
 /**

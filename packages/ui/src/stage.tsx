@@ -77,6 +77,12 @@ export interface StageProps {
 	/** The act shown when no URL decides. A name in `acts`. */
 	readonly initial?: string;
 	/**
+	 * Take a path only whole (design 305): `about` matches `/about` and not `/about/x`, a key that
+	 * ends in a bare `*` parks the rest for the stage below, and a path nothing takes shows the
+	 * fallback, never `initial`. A stage below inherits it unless it sets its own.
+	 */
+	readonly exact?: boolean;
+	/**
 	 * The router this stage takes its URL from. A nested stage under a routed act takes none and
 	 * follows its parent's; a stage with no router above it either is a content swapper.
 	 */
@@ -126,6 +132,8 @@ interface StageInner {
 	readonly sources: readonly Source[] | null;
 	/** The one query cell of a routing tree: every stage under one router shares it. */
 	readonly query: Derived<Record<string, string>>;
+	/** Whether this stage matches only keys that take the whole path. Stages below start from it. */
+	readonly exact: boolean;
 	/** The tail this stage did not take, for the one child stage that claims it. */
 	claimTail(): { tail: Derived<string>; release(): void } | null;
 	/** The path a child stage's acts sit under: this stage's prefix plus what it matched. */
@@ -247,7 +255,8 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 		? props.router!.url.map((url) => pathOf(String(url)))
 		: claim === null ? mutable<string | null>(null) : claim.tail.map((tail) => String(tail));
 
-	const found: Derived<Match | null> = path.map((held) => (held === null ? null : matchAct(keys, held)));
+	const exact = props.exact ?? above?.exact ?? false;
+	const found: Derived<Match | null> = path.map((held) => (held === null ? null : matchAct(keys, held, exact)));
 	const params = found.map((match) => match?.params ?? {});
 	const tail = found.map((match) => match?.tail ?? '');
 
@@ -257,7 +266,8 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 			const match = found.get();
 			if (match !== null) return match.name;
 			// An empty path is a stage whose parent took the whole URL, not a URL nothing answered.
-			if (pathOf(held) !== '') return props.fallback ?? props.initial ?? null;
+			// An exact stage shows nothing it did not match, so `initial` is not a 404 there.
+			if (pathOf(held) !== '') return props.fallback ?? (exact ? null : props.initial ?? null);
 		}
 		return props.initial ?? props.fallback ?? null;
 	};
@@ -275,8 +285,9 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 	// which open it is, and how many times something asked for it again. Not the tail, which
 	// belongs to the child stage: a move from `/posts/3/edit` to `/posts/3/comments` changes the
 	// child's act and leaves this one alone.
+	// The name as JSON, so showing nothing (`null`) and showing the index act (`""`) differ.
 	const signature = source.map(() =>
-		`${nameNow() ?? ''}|${writeQuery(params.get())}|${opened.get()?.id ?? 0}|${rebuilds.get()}`);
+		`${JSON.stringify(nameNow())}|${writeQuery(params.get())}|${opened.get()?.id ?? 0}|${rebuilds.get()}`);
 	/** Build the act the URL chose again, in place. What a refused act is handed as `retry`. */
 	const retry = (): void => { rebuilds.set(rebuilds.get() + 1); };
 
@@ -569,6 +580,7 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 		loader,
 		sources,
 		query,
+		exact,
 		claimTail: () => {
 			if (taken) return null;
 			taken = true;
@@ -631,6 +643,8 @@ export interface StageContextComponent {
  *   template: what wraps the act. A pass-through when it is left off
  *   fallback: the act shown when nothing matched. This is the 404, and it is matched last
  *   initial: the act shown when no URL decides: no router, or a parent that took the whole path
+ *   exact: take a path only whole, so `about` does not match `/about/x`. Nest under a key that
+ *          ends in a bare `*`. Inherited by the stages below (design 305)
  *   router: the router this stage reads. Without one the stage is a content swapper driven by
  *           `open` and `close`, and a stage inside an act takes what its parent did not match
  *   sources: where a named act comes from. The stage builds one loader over these for the whole

@@ -76,6 +76,23 @@ test('a bare * takes no segment and no parameter, and parks the whole path as th
 	checkActKeys(['', '*']);
 });
 
+test('exact takes a key only when it takes the whole path, or ends in a bare *', () => {
+	// Design 305, worked out by hand: the same keys and paths with the flag off and on.
+	const keys = ['', 'about', 'posts/:id', 'files/*path', 'docs/*'];
+	assert.deepEqual(matchAct(keys, '/about/x'), { name: 'about', params: {}, taken: 'about', tail: 'x' },
+		'without it, a key that starts the path matches and parks the rest');
+	assert.equal(matchAct(keys, '/about/x', true), null, 'with it, the leftover segment is no match');
+	assert.equal(matchAct(keys, '/posts/3/edit', true), null);
+	assert.deepEqual(matchAct(keys, '/posts/3', true)?.params, { id: '3' }, 'a key that takes everything still matches');
+	assert.deepEqual(matchAct(keys, '/files/a/b', true)?.params, { path: 'a/b' }, 'a *name takes the rest, so nothing is left');
+	assert.deepEqual(matchAct(keys, '/docs/guide/install', true), { name: 'docs/*', params: {}, taken: 'docs', tail: 'guide/install' },
+		'a bare * still parks the rest for the stage below');
+	assert.equal(matchAct(keys, '/docs', true)?.name, 'docs/*', 'and matches with nothing to park');
+	assert.equal(matchAct(keys, '/about', true)?.name, 'about');
+	assert.equal(matchAct(keys, '/', true)?.name, '');
+	assert.equal(matchAct(['about'], '/about/x/y', true), null);
+});
+
 test('the index key takes the empty path and nothing else', () => {
 	assert.equal(matchAct([''], '/')?.name, '');
 	assert.equal(matchAct([''], '/')?.tail, '');
