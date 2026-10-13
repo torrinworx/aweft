@@ -324,10 +324,9 @@ declared `pending`, so a static render waits for it.
 
 **A rejection never leaves the fallback on screen.** The call's own `failed` component shows it,
 or the `LoaderContext`'s, and with neither the slot goes empty and the rejection is rethrown so
-the host reports it. In a static render it goes to `render`'s caller instead: `render` rejects with
-it once the page has settled (design 306), because on a server rendering a page per request the
-host's report is the end of the process. `LoaderContext` carries `{ loading, failed }` and
-inherits them one field at a time.
+the host reports it. In a static render, `render` rejects with it instead, after the page has
+settled (design 306). On a server that renders a page per request, the host's report would end the
+process. `LoaderContext` carries `{ loading, failed }` and inherits them one field at a time.
 
 **Every wait in this package shows the same loader** (design 219). `suspend` while its loader runs,
 a `Button` while a promise its `onClick` returned is pending, and a `FileDrop` entry an application

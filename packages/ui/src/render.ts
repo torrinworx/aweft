@@ -148,8 +148,8 @@ export const isStatic = (render: Render): boolean =>
 const ESCAPED: unique symbol = Symbol('aweft.ui.escaped');
 
 /**
- * Hand a static render a loader rejection no failure component showed, so `render` rejects with
- * it once the page has settled rather than the process hearing it on a fresh task (design 306).
+ * Give a static render a loader rejection that no failure component showed. `render` rejects with
+ * it after the page has settled, instead of the rejection being thrown on a fresh task (design 306).
  *
  * Returns: true when the render is static and took it. False for a mount or a hydration, whose
  * host is the right place to report it.
@@ -410,10 +410,10 @@ export const mount = (target: ParentLike, item: unknown, before?: Remove, render
  * stage its page mounted; use one per page, as design 109 says. `use(context).stage` after the
  * call is what a static walk reads to learn which URLs the page declares (designs 126, 145).
  *
- * Throws: rejects with the first rejection a `suspend` loader answered with that no failure
- * component showed, once the page has settled (design 306). A mount or a hydration rethrows the
- * same rejection on a fresh task for the host to report. A static render hands it to its caller,
- * because on a server the host's report is the end of the process.
+ * Throws: rejects with the first `suspend` loader rejection that no failure component showed,
+ * after the page has settled (design 306). A mount or a hydration throws that rejection on a fresh
+ * task for the host to report. A static render gives it to the code that called `render` instead,
+ * because on a server the host's report ends the process.
  *
  * Example:
  *   const ui = context();

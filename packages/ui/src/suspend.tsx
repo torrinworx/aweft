@@ -92,9 +92,9 @@ export const suspend = <P extends Record<string, unknown>>(
 				return;
 			}
 			shown.set(null);
-			// Nobody named a failure component, so nobody is going to show this. Rethrowing puts
-			// it where the host already looks rather than nowhere, except in a static render,
-			// whose caller hears it instead: on a server the host's report ends the process.
+			// Nobody named a failure component, so nothing will show this error. Rethrowing it
+			// sends it to the host's error report. A static render gives it to `render` instead,
+			// because on a server the host's error report ends the process.
 			if (escapeTo(use(context), error)) return;
 			queueMicrotask(() => { throw error; });
 		},
