@@ -18,7 +18,7 @@ import type { Gate } from '@aweftjs/server';
 import { node } from '@aweftjs/server/node';
 import { createPages } from '@aweftjs/ssg';
 import type { PagesOptions } from '@aweftjs/ssg';
-import { h } from '@aweftjs/ui';
+import { Head, Meta, Stage, StageContext, h, suspend } from '@aweftjs/ui';
 
 import { SHELL, Site, heard } from './answered.ts';
 import { scratch } from './fixtures.ts';
@@ -455,4 +455,98 @@ test('a page that waits on a shared document is the shell, and one that renders 
 	} finally {
 		await tight.stop();
 	}
+});
+
+// --- the status a page asks for, the visitor a render asks as, and renders side by side ---------
+
+/** A site of acts that read nothing, exact as `Site` is. */
+const plainSite = (acts: Record<string, unknown>, extra: Record<string, unknown> = {}): PagesOptions['page'] =>
+	(router) => h(StageContext, { router, acts, exact: true, ...extra } as never, h(Stage, {}));
+
+/** An act that asks for a status of its own. */
+const saying = (content: string) => (): unknown =>
+	h('main', { id: 'said' }, h(Head, {}, h(Meta, { httpEquiv: 'status', content })));
+
+test('a status meta is read before the stage: a not-found page that says 410 is answered 410', async () => {
+	const { status, html } = await renderWith('/nowhere', { page: plainSite({ '': saying('200'), missing: saying('410') }, { fallback: 'missing' }) });
+	assert.equal(status, 410, 'the page asked for a status, so the fallback showing does not make it 404');
+	assert.match(html, /<main id="said">/);
+});
+
+test('a stage with no fallback that shows nothing is 404, with the page rather than the shell', async () => {
+	const page = plainSite({ '': () => h('main', { id: 'home' }) });
+	const { status, html } = await renderWith('/nowhere', { page });
+	assert.equal(status, 404);
+	assert.notEqual(html, SHELL);
+	assert.match(html, /<body data-aweft-ssg="">/, 'the page, which shows nothing in the browser at that path too');
+	assert.equal((await renderWith('/', { page })).status, 200);
+});
+
+test('the deepest status meta wins, then the latest, so a page overrides its layout', async () => {
+	// The layout's head comes first and the act's after it, at the same depth.
+	const Layout = (props: { children?: unknown[] }): unknown =>
+		h('div', {}, h(Head, {}, h(Meta, { httpEquiv: 'status', content: '200' })), ...(props.children ?? []));
+	assert.equal((await renderWith('/said', { page: plainSite({ said: saying('404') }, { template: Layout }) })).status, 404);
+
+	// Two heads deep, against one head deep that a loader writes after it.
+	const Later = suspend(null, async () => {
+		await new Promise((done) => setTimeout(done, 5));
+		return h(Head, {}, h(Meta, { httpEquiv: 'status', content: '200' }));
+	});
+	const Deep = (): unknown => h('main', {}, h(Head, {}, h(Head, {}, h(Meta, { httpEquiv: 'status', content: '410' }))), h(Later as never, {}));
+	assert.equal((await renderWith('/deep', { page: plainSite({ deep: Deep }) })).status, 410, 'the deeper one, though it came first');
+});
+
+test('a status meta takes 200 and 400 to 599, and refuses the numbers either side of them', async () => {
+	for (const content of ['400', '599']) {
+		assert.equal((await renderWith('/said', { page: plainSite({ said: saying(content) }) })).status, Number(content), content);
+	}
+	for (const content of ['399', '600', '201', '4040', 'gone']) {
+		const pages = createPages({ page: plainSite({ said: saying(content) }), gate, modules: {}, dir: dist });
+		await assert.rejects(pages.request(new Request('http://site.test/said')), { reason: 'bad-status' }, content);
+	}
+});
+
+test('renders is a whole number, and timeoutMs a positive time a Node timer can hold', () => {
+	const base: PagesOptions = { page: () => null, gate, modules: {}, dir: dist };
+	for (const renders of [1.5, Number.NaN, '4' as never]) {
+		assert.throws(() => createPages({ ...base, renders }), { reason: 'invalid-config' }, String(renders));
+	}
+	for (const timeoutMs of [0, Number.NaN, 2_147_483_648, Number.POSITIVE_INFINITY, '100' as never]) {
+		assert.throws(() => createPages({ ...base, timeoutMs }), { reason: 'invalid-config' }, String(timeoutMs));
+	}
+	assert.equal(createPages({ ...base, renders: 1, timeoutMs: 2_147_483_647 }).public, true, 'the longest a timer holds');
+});
+
+test('a render identifies its visitor once, from the path alone, and a page that reads nothing not at all', async () => {
+	const seen: { url: string; headers: number; peer: unknown }[] = [];
+	const watching: Gate = {
+		identify: (request, peer) => {
+			seen.push({ url: request.url, headers: [...request.headers].length, peer });
+			return { context: { user: null } };
+		},
+		access: () => [],
+	};
+	const pages = createPages({ page: (router, client) => h(Site, { router, client }), gate: watching, modules: { 'posts/Tick': { call: () => 1 } }, dir: dist });
+	await (await pages.request(new Request('http://site.test/twice?token=ada', { headers: { cookie: 'who=ada' } })))!.text();
+	assert.deepEqual(seen, [{ url: 'http://site.test/twice', headers: 0, peer: { address: undefined } }],
+		'two reads, one visitor, and nothing of the request but its path');
+
+	seen.length = 0;
+	await (await pages.request(new Request('http://site.test/about')))!.text();
+	assert.deepEqual(seen, []);
+});
+
+test('two renders at once keep their answers apart', async () => {
+	// The first read answers last, so the two renders are in flight together.
+	const read = { public: true, call: async (args: { id: string }) => {
+		await new Promise((done) => setTimeout(done, args.id === 'one' ? 30 : 0));
+		return { id: args.id, title: `post ${args.id}` };
+	} };
+	const pages = createPages({ page: (router, client) => h(Site, { router, client }), gate, modules: { 'posts/Read': read }, dir: dist });
+	const [one, two] = await Promise.all(['one', 'two'].map(async (id) => (await pages.request(new Request(`http://site.test/posts/${id}`)))!.text()));
+	assert.deepEqual(answersIn(one!), { 'posts/Read {"id":"one"}': [{ result: { id: 'one', title: 'post one' } }] });
+	assert.deepEqual(answersIn(two!), { 'posts/Read {"id":"two"}': [{ result: { id: 'two', title: 'post two' } }] });
+	assert.match(plain(one!), /<p id="post-shown">post one<\/p>/);
+	assert.match(plain(two!), /<p id="post-shown">post two<\/p>/);
 });
