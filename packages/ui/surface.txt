@@ -31,7 +31,7 @@ type CountryData: interface CountryData { readonly codes: readonly string[]; reg
 type CountryProps: interface CountryProps { readonly value?: unknown; readonly locale?: unknown; readonly priority?: readonly string[]; readonly flags?: unknown; readonly suggest?: unknown; readonly [prop: string]: unknown; }
 value Default: (props: { children?: unknown[] | undefined; }) => unknown
 type Definitions: type Definitions = Readonly<Record<string, Entry>>;
-value Detached: (props: { enabled?: unknown; locations?: readonly Placement[] | undefined; onResize?: ((rect: Rect) => void) | undefined; style?: Record<string, unknown> | undefined; children?: unknown[] | undefined; }, cleanup: (...fns: (() => void)[]) => void) => unknown
+value Detached: (props: { enabled?: unknown; dismiss?: boolean | undefined; locations?: readonly Placement[] | undefined; onResize?: ((rect: Rect) => void) | undefined; style?: Record<string, unknown> | undefined; children?: unknown[] | undefined; }, cleanup: (...fns: (() => void)[]) => void) => unknown
 value DropDown: (props: DropDownProps) => Mounter
 type DropDownProps: interface DropDownProps { readonly open?: unknown; readonly label?: unknown; readonly icon?: unknown; readonly iconOpen?: unknown; readonly iconClose?: unknown; readonly arrow?: unknown; readonly name?: unknown; readonly type?: unknown; readonly disabled?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Empty: (props: EmptyProps) => unknown

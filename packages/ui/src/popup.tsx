@@ -333,6 +333,10 @@ export const Popup = (props: {
 
 // --- the anchored popup ----------------------------------------------------------------------
 
+interface Focusable {
+	focus?(): void;
+}
+
 interface Measurable {
 	getBoundingClientRect?(): Rect;
 }
@@ -359,6 +363,9 @@ const sameRect = (a: Rect | null, b: Rect | null): boolean =>
  *
  * Params:
  *   enabled: the open state, a cell. Setting it false closes the popup, and so does scrolling
+ *   dismiss: close on Escape and on a press outside the anchor and the popup, by setting
+ *            `enabled` false. Escape also gives focus back to what had it when the popup
+ *            opened. A `canClose` on `<mark.popup>` vetoes either. Off, neither closes it
  *   locations: the placements to consider, in order of preference. Omitted, the eight corner
  *              modes
  *   onResize: called when the anchor changes size and the popup is re-placed
@@ -371,13 +378,14 @@ const sameRect = (a: Rect | null, b: Rect | null): boolean =>
  * Throws: the assert `categories` makes for a slot it does not know.
  *
  * Example:
- *   <Detached enabled={open}>
+ *   <Detached enabled={open} dismiss>
  *     <button onClick={() => open.set(!open.get())}>menu</button>
  *     <mark.popup><Card>what floats</Card></mark.popup>
  *   </Detached>
  */
 export const Detached = (props: {
 	enabled?: unknown;
+	dismiss?: boolean;
 	locations?: readonly Placement[];
 	onResize?: (rect: Rect) => void;
 	style?: Record<string, unknown>;
@@ -393,6 +401,8 @@ export const Detached = (props: {
 	let nodes: () => readonly NodeLike[] = () => [];
 
 	let floating: Measurable | null = null;
+	// What had focus when it opened, which Escape gives it back to, as a modal does (dialog.ts).
+	let opener: Focusable | null = null;
 	let frame: number | null = null;
 	let last: Rect | null = null;
 	// Hidden rather than gone, for the one frame between opening and knowing where to put it: a
@@ -456,6 +466,7 @@ export const Detached = (props: {
 			return;
 		}
 		last = null;
+		opener = (globalThis as { document?: { activeElement?: unknown } }).document?.activeElement as Focusable | null ?? null;
 		// One frame laid out and out of sight, so the next one has a size to work with.
 		hidden.set('hidden');
 		const room = view();
@@ -470,6 +481,25 @@ export const Detached = (props: {
 	else track(open);
 	cleanup(stop);
 
+	// The popup inside would close itself on a press outside by writing `placement`, which the
+	// frame loop writes straight back, so it hid for a frame and came back. Placement is this
+	// component's, so the popup's own dismissal is off below, and `dismiss` closes `enabled`
+	// instead, with the popup's `canClose` as its veto. Opt-in, because `Menu`, `Select` and
+	// `Tooltip` close themselves and give focus back their own way.
+	if (props.dismiss === true && isSource(open)) {
+		cleanup(dismiss({
+			inside: () => [...nodes(), ...(floating === null ? [] : [floating])],
+			active: () => Boolean(open.get()),
+			canClose: popup?.props['canClose'] as ((event: unknown) => boolean) | undefined,
+			escape: true,
+			onDismiss: (event) => {
+				const back = opener;
+				open.set?.(false);
+				if ((event as { key?: unknown }).key === 'Escape') back?.focus?.();
+			},
+		}));
+	}
+
 	const mounter: Mounter = (elem, _item, before, context) => {
 		let tail: Remove | null = null;
 		// The anchor goes in against the node below rather than against this component's own anchor,
@@ -482,6 +512,7 @@ export const Detached = (props: {
 			style: { visibility: hidden, ...props.style },
 			ref: (element: unknown) => { floating = element as Measurable; },
 			...popup!.props,
+			canClose: () => false,
 		}, ...popup!.items), before, context);
 		// What ends the anchor's run. Stopping at this component's own anchor would be wrong: the
 		// popup sink mounts into the same element as the page, so a `Detached` written last has the

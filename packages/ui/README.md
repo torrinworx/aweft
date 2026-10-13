@@ -346,7 +346,7 @@ spinner, `@aweftjs/icons` says which set to install and shows the one line that 
 	<App />
 </PopupContext>
 
-<Detached enabled={open}>
+<Detached enabled={open} dismiss>
 	<button onClick={() => open.set(!open.get())}>details</button>
 	<mark.popup><Card>what floats</Card></mark.popup>
 </Detached>
@@ -365,7 +365,10 @@ second one, nested or beside it, makes its own, so a nested `PopupContext` rende
 end of its own subtree rather than at the end of the page. `Popup` renders nothing where it is
 written and puts its element in whichever sink it found. `Detached` measures its own children,
 scores twelve placements and picks one, re-measures every animation frame, and closes when the
-anchor moves, on the reading that the page scrolled.
+anchor moves, on the reading that the page scrolled. With `dismiss` it also closes on Escape and on
+a press outside the anchor and the popup, and Escape gives focus back to what had it when it opened
+(design 303). Without it nothing but the open cell and a scroll closes it, which is what `Menu`,
+`Select` and `Tooltip` want, since each closes itself.
 
 **There is no `z-index` in this package.** A popup asks for the top layer with the `popover`
 attribute where the host has one, and falls back to DOM order where it does not. Below the top
@@ -755,8 +758,8 @@ design 153.
 **A drop down is a disclosure, not a floating menu.** The content is the children, in the page's
 flow. The `open` cell goes both ways: writing it opens and closes the element, and a person opening
 it writes the cell. Space, Enter, the `button` role and the expanded state are the platform's,
-because the element is a `<details>`. A floating menu under a button is `Detached` with a `Button`
-anchor, which is one call and no new component.
+because the element is a `<details>`. A floating menu under a button is `Detached` with `dismiss` and a
+`Button` anchor, which is one call and no new component.
 
 **The country fields are a button and a dialog, and they ship no country data.**
 

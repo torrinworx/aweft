@@ -323,6 +323,74 @@ test('an anchor that is swapped for another element is measured again on the nex
 	}
 });
 
+/** The light document as the page, with the listeners `dismiss` puts on it and the element focus is on. */
+const listeningPage = (document: ReturnType<typeof createDocument>): { send(type: string, event: Record<string, unknown>): void; focused: { focus(): void; count: number }; uninstall(): void } => {
+	const listeners = new Map<string, Set<(event: unknown) => void>>();
+	const focused = { count: 0, focus() { this.count += 1; } };
+	Object.assign(document, {
+		activeElement: focused,
+		addEventListener: (type: string, listener: (event: unknown) => void) => {
+			listeners.set(type, (listeners.get(type) ?? new Set()).add(listener));
+		},
+		removeEventListener: (type: string, listener: (event: unknown) => void) => { listeners.get(type)?.delete(listener); },
+	});
+	const slot = globalThis as { document?: unknown };
+	const before = slot.document;
+	slot.document = document;
+	return {
+		send: (type, event) => { for (const listener of [...listeners.get(type) ?? []]) listener(event); },
+		focused,
+		uninstall: () => { if (before === undefined) delete slot.document; else slot.document = before; },
+	};
+};
+
+test('a Detached with dismiss closes on Escape and an outside mousedown, and gives focus back on Escape', () => {
+	const document = createDocument();
+	const page = listeningPage(document);
+	try {
+		const open = mutable(true);
+		const stop = mount(document.body, h(PopupContext, {},
+			h(Detached as never, { enabled: open, dismiss: true },
+				h('button', {}, 'menu'),
+				h(mark.popup, {}, h('nav', {}, h('a', { href: '/x' }, 'a row'))))));
+		const button = elements(document.body.firstChild).find((e) => e.localName === 'button')!;
+		const row = elements(document.body.firstChild).find((e) => e.localName === 'a')!;
+
+		page.send('mousedown', { target: button });
+		page.send('mousedown', { target: row });
+		assert.equal(open.get(), true, 'a press on the anchor or inside the popup is not outside it');
+		page.send('mousedown', { target: document.body });
+		assert.equal(open.get(), false, 'a press anywhere else closes it');
+		assert.equal(page.focused.count, 0, 'and leaves focus where the press put it');
+
+		open.set(true);
+		page.send('keydown', { key: 'Escape' });
+		assert.equal(open.get(), false);
+		assert.equal(page.focused.count, 1, 'Escape gives focus back to what had it when it opened');
+		stop();
+	} finally { page.uninstall(); }
+});
+
+test('a Detached without dismiss stays open and placed through Escape and an outside mousedown', () => {
+	const document = createDocument();
+	const page = listeningPage(document);
+	try {
+		const open = mutable(true);
+		const stop = mount(document.body, h(PopupContext, {},
+			h(Detached as never, { enabled: open },
+				h('button', {}, 'menu'),
+				h(mark.popup, {}, h('nav', {}, 'the menu')))));
+		assert.doesNotMatch(toHtml(document.body.childNodes), /display: none/, 'open, so placed');
+		page.send('keydown', { key: 'Escape' });
+		page.send('mousedown', { target: document.body });
+		assert.equal(open.get(), true);
+		// The popup inside wrote its placement to null on a press outside, and the frame loop put it
+		// back on the next frame: a popup that hid and came back. Placement is Detached's alone.
+		assert.doesNotMatch(toHtml(document.body.childNodes), /display: none/);
+		stop();
+	} finally { page.uninstall(); }
+});
+
 test('a Detached with nothing written after it measures its anchor and not its own popup', () => {
 	const open = mutable(false);
 	const document = createDocument();
