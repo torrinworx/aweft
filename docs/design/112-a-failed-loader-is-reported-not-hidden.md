@@ -44,6 +44,6 @@ through it and the third level above would move down a package.
 
 ## Amended
 
-In a static render, the third answer hands the rejection to `render`'s caller instead: `render`
-rejects with it once the page has settled (design 306). A mount and a hydration rethrow it on a
-fresh task as above.
+Case 3 is different in a static render: `render` rejects with the rejection once the page has
+settled, so the code that called `render` gets it (design 306). A mount and a hydration still
+rethrow it on a fresh task, as above.

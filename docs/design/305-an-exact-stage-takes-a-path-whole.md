@@ -16,7 +16,7 @@ In an exact stage:
   the stage below (design 282). That is how an exact stage nests: `docs/*` is the act whose own
   stage answers `/docs/install`.
 - A path no key takes whole shows the `fallback`, or nothing when there is none. `initial` is never
-  shown for a path that was not matched; it is for a stage no URL decides.
+  shown for a path that was not matched. It is only for a stage no URL decides.
 
 Without `exact`, matching is exactly what it was: `about` still matches `/about/x` and parks `x`.
 

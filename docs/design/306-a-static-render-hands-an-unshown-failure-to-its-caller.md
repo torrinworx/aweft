@@ -33,17 +33,17 @@ The render is the right place because it is the one call that owns the page's wh
 
 A build that caught nothing behaves as before. A build that wraps `write()` in a `try` now catches
 an unshown loader failure it could not catch before, which is the point. A static render with
-several unshown failures rejects with the first; the rest go nowhere, because the first is enough
+several unshown failures rejects with the first. The rest are dropped, because the first is enough
 to say the page did not render.
 
 ## Evidence
 
-`packages/ui/tests/suspend.test.ts`: in a static render, a loader that rejects with nothing to show
-it makes `render` reject with that same error, and one with a failure component renders the
-component's markup; the existing test that a mount reports the rejection to the host, in a process
-of its own, still passes. `packages/ssg/tests/pages.test.ts`: a page that does not catch a failed
-read is answered with the shell, 503, and the server keeps answering; one that does not catch a
-refusal is a 500 the server reports.
+`packages/ui/tests/suspend.test.ts` checks that in a static render a loader that rejects with
+nothing to show it makes `render` reject with that same error, and that one with a failure component
+renders the component's markup. The existing test that a mount reports the rejection to the host,
+in a process of its own, still passes. `packages/ssg/tests/pages.test.ts` checks that a page that
+does not catch a failed read is answered with the shell, 503, while the server keeps answering, and
+that a page that does not catch a refusal is a 500 the server reports.
 
 ## What would reverse this
 

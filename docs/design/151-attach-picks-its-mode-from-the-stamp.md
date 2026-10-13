@@ -40,5 +40,5 @@ in `mount` and leave `attach` with nothing to do.
 
 ## Amended
 
-After a hydration settles, `attach` drops the answers `replay` has not handed out (design 304), so
-a later ask with the same arguments reaches the server.
+Once a hydration has settled, `attach` throws away the recorded answers `replay` did not use
+(design 304), so a later ask with the same arguments goes to the server.
