@@ -13,7 +13,7 @@ The spec gives an object no order (`spec/format.md`, section 1), and the Postgre
 row's slots as jsonb, which reorders keys whatever order they were written in. The memory driver
 kept them in the order they were written, so an application whose tests ran on it could depend on
 key order without knowing, and see the order change the first time production reloaded the
-document. Keys added in one commit already came back sorted; keys added across commits did not.
+document. Keys added in one commit already came back sorted, and keys added across commits did not.
 
 One function, `snapshotOf`, rebuilds every document, whatever driver stored it. Sorting there gives
 every driver the same order, including one written outside this repo, and adds no rule to the

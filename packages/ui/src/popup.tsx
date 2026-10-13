@@ -401,7 +401,8 @@ export const Detached = (props: {
 	let nodes: () => readonly NodeLike[] = () => [];
 
 	let floating: Measurable | null = null;
-	// What had focus when it opened, which Escape gives it back to, as a modal does (dialog.ts).
+	// The element that had focus when the popup opened. Escape gives focus back to it, as a modal
+	// does (dialog.ts).
 	let opener: Focusable | null = null;
 	let frame: number | null = null;
 	let last: Rect | null = null;
@@ -481,10 +482,10 @@ export const Detached = (props: {
 	else track(open);
 	cleanup(stop);
 
-	// The popup inside would close itself on a press outside by writing `placement`, which the
-	// frame loop writes straight back, so it hid for a frame and came back. Placement is this
-	// component's, so the popup's own dismissal is off below, and `dismiss` closes `enabled`
-	// instead, with the popup's `canClose` as its veto. Opt-in, because `Menu`, `Select` and
+	// The popup inside would close itself on a press outside by setting `placement` to null. The
+	// frame loop sets it again on the next frame, so the popup hid for one frame and came back. So
+	// the popup's own dismissal is off below. With `dismiss`, this component sets `enabled` false
+	// instead, and the popup's `canClose` can veto it. It is opt-in because `Menu`, `Select` and
 	// `Tooltip` close themselves and give focus back their own way.
 	if (props.dismiss === true && isSource(open)) {
 		cleanup(dismiss({
