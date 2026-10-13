@@ -79,6 +79,27 @@ test('a routed stage follows the router, and the fallback is what an unmatched p
 	stop();
 });
 
+test('a stage that showed nothing shows its index act when the URL comes back to it', async () => {
+	// No fallback, so `/nope` shows nothing. Nothing and the index act `''` are two different
+	// things to show, and the move between them has to build the act.
+	const router = createRouter({ url: '/nope' });
+	const document = createDocument();
+	const stop = mount(document.body as never, h(StageContext, {
+		router, acts: { '': page('home'), about: page('about') },
+	} as never, h(Stage, {})));
+	assert.equal(textOf(document), '');
+
+	router.push('/');
+	await settle();
+	assert.equal(textOf(document), '<main id="home">home</main>');
+
+	// And back: the index act does not stay on screen at a path nothing matched.
+	router.push('/nope');
+	await settle();
+	assert.equal(textOf(document), '', 'nothing matched, and nothing is what this stage shows');
+	stop();
+});
+
 test('with no router the stage shows initial and is driven by open and close', async () => {
 	const document = createDocument();
 	let stage: StageValue | null = null;

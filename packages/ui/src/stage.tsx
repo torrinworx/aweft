@@ -275,8 +275,9 @@ const provider = (props: StageProps): Mounter => (elem, _item, before, context) 
 	// which open it is, and how many times something asked for it again. Not the tail, which
 	// belongs to the child stage: a move from `/posts/3/edit` to `/posts/3/comments` changes the
 	// child's act and leaves this one alone.
+	// The name as JSON, so showing nothing (`null`) and showing the index act (`""`) differ.
 	const signature = source.map(() =>
-		`${nameNow() ?? ''}|${writeQuery(params.get())}|${opened.get()?.id ?? 0}|${rebuilds.get()}`);
+		`${JSON.stringify(nameNow())}|${writeQuery(params.get())}|${opened.get()?.id ?? 0}|${rebuilds.get()}`);
 	/** Build the act the URL chose again, in place. What a refused act is handed as `retry`. */
 	const retry = (): void => { rebuilds.set(rebuilds.get() + 1); };
 
