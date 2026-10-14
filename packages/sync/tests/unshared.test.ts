@@ -91,6 +91,19 @@ test('a topic the other end leaves before it is paired is no longer held, and is
 	server.close();
 });
 
+test('a leave drops only the open it names, and every other held name still pairs', async () => {
+	const { server, page } = pair();
+	const left = page.share<Doc>('draft');
+	const kept = page.share<Doc>('board');
+	await settle();
+	left.stop();
+	await settle();
+	server.share('board', createObject<Doc>({ title: 'kept' }));
+	await settle();
+	assert.equal(kept.document?.title, 'kept');
+	server.close();
+});
+
 test('a share holding a document asks once, though it sends open twice to ask for state', async () => {
 	const { server, page, asked, toServer } = pair();
 	const held = page.share('board', createObject<Doc>({ title: 'mine' }));
