@@ -490,6 +490,64 @@ test('a prefix with a leading slash matches nothing, and an empty prefix matches
 	}
 });
 
+test('a prefix that is not a page may hold a space or a letter outside ASCII, as a headers prefix may', async () => {
+	const it = await serving({ 'index.html': 'home', 'shell.html': '<p>shell</p>' }, { unknown: 'shell', notPages: ['media files/', 'café/'] });
+	try {
+		for (const path of ['/media%20files/gone.png', '/caf%C3%A9/gone']) {
+			const answer = await fetch(`${it.url}${path}`);
+			assert.equal(answer.status, 404, path);
+			assert.equal(answer.headers.get('content-type'), 'application/json; charset=utf-8', path);
+			await answer.text();
+		}
+	} finally {
+		await it.stop();
+	}
+});
+
+test('a URL under a prefix that is not a page is 404 JSON with no file, in both settings, and a file there is still served', async () => {
+	for (const unknown of ['shell', '404'] as const) {
+		const it = await serving(
+			{ 'index.html': 'home', 'shell.html': '<p>shell</p>', '404.html': '<p>gone</p>', 'api/static.json': '{"held":true}' },
+			{ unknown, notPages: ['api/', 'files/'] },
+		);
+		try {
+			const missed = await fetch(`${it.url}/api/nope?x=1`);
+			assert.equal(missed.status, 404, unknown);
+			assert.equal(missed.headers.get('content-type'), 'application/json; charset=utf-8');
+			assert.equal(missed.headers.get('x-content-type-options'), 'nosniff');
+			assert.deepEqual(await missed.json(), { reasons: [{ code: 'not-found', message: 'nothing answers GET /api/nope' }] });
+
+			const posted = await fetch(`${it.url}/files/abc`, { method: 'POST', body: 'x' });
+			assert.equal(posted.status, 404, 'any method');
+			assert.deepEqual(await posted.json(), { reasons: [{ code: 'not-found', message: 'nothing answers POST /files/abc' }] });
+
+			const head = await fetch(`${it.url}/api/nope`, { method: 'HEAD' });
+			assert.equal(head.status, 404);
+			assert.equal(await head.text(), '');
+
+			// The prefix is matched against the decoded path, as a headers prefix is.
+			const spelled = await fetch(`${it.url}/fil%65s/abc`);
+			assert.equal(spelled.status, 404);
+			assert.equal((await spelled.json() as { reasons: { code: string }[] }).reasons[0]!.code, 'not-found');
+
+			// A path that does not decode still gets the 404 and not the shell.
+			const broken = await fetch(`${it.url}/api/%E0%A4%A`);
+			assert.equal(broken.status, 404);
+			assert.equal((await broken.json() as { reasons: { code: string }[] }).reasons[0]!.code, 'not-found');
+
+			const held = await fetch(`${it.url}/api/static.json`);
+			assert.equal(held.status, 200, 'a file under the prefix is still a file');
+			assert.equal(await held.text(), '{"held":true}');
+
+			const page = await fetch(`${it.url}/apiary`);
+			assert.equal(page.status, unknown === 'shell' ? 200 : 404, 'a path outside every prefix gets the unknown answer as before');
+			assert.equal(await page.text(), unknown === 'shell' ? '<p>shell</p>' : '<p>gone</p>');
+		} finally {
+			await it.stop();
+		}
+	}
+});
+
 test('a file larger than one stream chunk arrives byte-identical', async () => {
 	const written = pseudoRandom(200 * 1024);
 	const it = await serving({ 'assets/big.bin': written });
@@ -515,6 +573,9 @@ test('an invalid configuration is refused at load, with the fix on the error', a
 		['a public that is not a boolean', { dir: 'dist', public: 'yes' }],
 		['headers that are not a table', { dir: 'dist', headers: ['assets/'] }],
 		['a headers value that is not a string', { dir: 'dist', headers: { 'assets/': 600 } }],
+		['notPages that are not a list', { dir: 'dist', notPages: 'api/' }],
+		['a notPages entry that is not a string', { dir: 'dist', notPages: [1] }],
+		['a notPages entry with a leading slash', { dir: 'dist', notPages: ['/api/'] }],
 	];
 	for (const [what, config] of cases) {
 		await assert.rejects(() => boot(config), (error: Error) => {

@@ -7,12 +7,13 @@ import { codecError } from '@aweftjs/codec';
 import type { ModuleProps } from '@aweftjs/modules';
 
 import { pathOf } from '../rule.ts';
-import { NOSNIFF, answered, cacheFor, fileAt, fileOf, served } from '../serve.ts';
+import { NOSNIFF, answered, cacheFor, fileAt, fileOf, notFound, served } from '../serve.ts';
 
 export const defaults = {
 	dir: 'dist',
 	unknown: '404',
 	headers: {},
+	notPages: [],
 	public: true,
 };
 
@@ -41,6 +42,16 @@ const table = (held: unknown): Readonly<Record<string, string>> => {
 	return held as Readonly<Record<string, string>>;
 };
 
+// A prefix written with its leading slash would match nothing, and an API path would get the
+// shell, which is the answer this setting exists to stop, so it is refused rather than ignored.
+const prefixes = (held: unknown): readonly string[] => {
+	if (!Array.isArray(held) || held.some((one) => typeof one !== 'string' || one.startsWith('/'))) {
+		throw refuse(`notPages ${JSON.stringify(held)}`,
+			'Give notPages a list of path prefixes without their leading slash, such as ["api/", "files/"].');
+	}
+	return held as readonly string[];
+};
+
 export default ({ config }: ModuleProps): Files => {
 	if (typeof config.dir !== 'string' || config.dir === '') {
 		throw refuse(`dir ${JSON.stringify(config.dir)}`, 'Set dir to the directory to serve, such as "dist".');
@@ -52,14 +63,27 @@ export default ({ config }: ModuleProps): Files => {
 		throw refuse(`public ${JSON.stringify(config.public)}`, 'Set public to true for a site anyone may read, or false for a private one.');
 	}
 	const headers = table(config.headers);
+	const notPages = prefixes(config.notPages);
 	// Resolved once, from the working directory, so a program that changes its own directory
 	// later still serves what it was configured with.
 	const dir = resolve(config.dir);
 	const shell = config.unknown === 'shell';
 
 	// One page answers every URL with no file. It is read on each of them rather than held,
-	// because nothing here keeps a listing and a rebuilt site replaces that page too.
+	// because nothing here keeps a listing and a rebuilt site replaces that page too. A URL under
+	// a prefix that is not a page gets neither page (design 313). The prefix is matched against
+	// the decoded path, as a `headers` prefix is, and against the path as written when it does not
+	// decode, so that path still gets the 404 and not the shell.
 	const unknown = async (request: Request): Promise<Response> => {
+		const written = new URL(request.url).pathname;
+		let path = written;
+		try {
+			path = decodeURIComponent(written);
+		} catch {
+			// Matched as written.
+		}
+		const bare = path.replace(/^\/+/, '');
+		if (notPages.some((prefix) => bare.startsWith(prefix))) return notFound(request);
 		const found = await fileOf(join(dir, shell ? 'shell.html' : '404.html'));
 		if (found === undefined) return new Response(null, { status: 404, headers: NOSNIFF });
 		return answered(request, found, shell ? 200 : 404);

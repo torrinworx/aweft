@@ -135,3 +135,26 @@ export const answered = (request: Request, found: Found, status: number): Respon
 		status,
 		headers: { ...NOSNIFF, 'content-type': typeOf(found.file), 'content-length': String(found.size) },
 	});
+
+/**
+ * The answer for a URL under a prefix that is not a page, when no file answers it (design 313).
+ *
+ * Params:
+ *   request: the request, read for its method and its path
+ *
+ * Returns: 404 with the server's JSON for a refused request, `{ reasons: [{ code: 'not-found',
+ * message }] }`, so a page reads it the way it reads a refusal from anywhere else. HEAD carries
+ * the same headers and no body.
+ *
+ * Example:
+ *   notFound(new Request('http://app.test/api/nope'));
+ */
+export const notFound = (request: Request): Response => {
+	const text = JSON.stringify({
+		reasons: [{ code: 'not-found', message: `nothing answers ${request.method} ${new URL(request.url).pathname}` }],
+	});
+	return new Response(request.method === 'HEAD' ? null : text, {
+		status: 404,
+		headers: { ...NOSNIFF, 'content-type': 'application/json; charset=utf-8', 'content-length': String(Buffer.byteLength(text)) },
+	});
+};
