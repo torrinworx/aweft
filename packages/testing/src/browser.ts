@@ -64,6 +64,9 @@ export interface AuditOptions {
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] as const;
 
+// The longest an audit waits for the page's motion to end before it reads the page as it is.
+const SETTLE_MS = 5000;
+
 const installed = (): string => fileURLToPath(import.meta.resolve('axe-core/axe.min.js'));
 
 const sources = new Map<() => string, Promise<string>>();
@@ -95,7 +98,10 @@ const axe = (locate: () => string): Promise<string> => {
  *            where the axe-core script is, when the installed one is not the one to use
  *
  * Returns: the violations, each with axe's rule id, its WCAG tags, its help and the nodes, and
- * the count of rules that passed. Nothing is thrown for a violation; the test decides.
+ * the count of rules that passed. Nothing is thrown for a violation, and the test decides. Every
+ * animation and transition on the page that has an end is let finish first, for at most five
+ * seconds, so a colour still easing between modes is read where it lands. One that never ends is
+ * not waited for.
  *
  * Throws: `axe-not-installed` when `locate`, or the resolver in its place, finds nothing.
  *
@@ -111,10 +117,35 @@ export const audit = async (page: PageLike, options: AuditOptions = {}): Promise
 	const loaded = await page.evaluate('typeof globalThis.axe === "object" && globalThis.axe !== null');
 	if (loaded !== true) await page.addScriptTag({ content });
 
+	// axe reads the colours of the frame it runs in, so a page still moving between two colours is
+	// read halfway. What has an end is waited for, again until nothing is left, and for at most
+	// SETTLE_MS. What never ends, a spinner, is not (design 309).
 	const found = await page.evaluate(`(async () => {
 		const root = ${JSON.stringify(options.root ?? null)};
 		const target = root === null ? document : document.querySelector(root);
 		if (target === null) throw new Error('audit: nothing on the page matches ' + root);
+		const deadline = Date.now() + ${String(SETTLE_MS)};
+		// Two frames, so the events of what just ended are sent and a transition one of their
+		// handlers starts is running before the next look. A page that draws no frames gets 100 ms.
+		const frames = () => new Promise((done) => {
+			let left = 2;
+			const tick = () => { left -= 1; if (left === 0) done(); else requestAnimationFrame(tick); };
+			requestAnimationFrame(tick);
+			setTimeout(done, 100);
+		});
+		for (;;) {
+			await frames();
+			const moving = document.getAnimations().filter((one) => {
+				const end = one.effect === null ? Infinity : one.effect.getComputedTiming().endTime;
+				return one.playState === 'running' && Number.isFinite(Number(end));
+			});
+			const left = deadline - Date.now();
+			if (moving.length === 0 || left <= 0) break;
+			await Promise.race([
+				Promise.all(moving.map((one) => one.finished.catch(() => undefined))),
+				new Promise((done) => setTimeout(done, left)),
+			]);
+		}
 		const result = await globalThis.axe.run(target, { runOnly: { type: 'tag', values: ${JSON.stringify(tags)} } });
 		return {
 			passes: result.passes.length,
