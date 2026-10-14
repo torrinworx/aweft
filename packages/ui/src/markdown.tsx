@@ -27,6 +27,8 @@ export interface MarkdownProps {
 	readonly modifiers?: unknown;
 	/** What a fenced block's body becomes. Absent, the text as it stands. */
 	readonly code?: (text: string, language: string | null) => unknown;
+	/** What a block becomes, in its place with nothing around it. `null` draws nothing, and `undefined` keeps the block as drawn here. */
+	readonly block?: (block: Block) => unknown;
 	/** Decorate this node instead of building one. */
 	readonly element?: unknown;
 	/** Extra theme segments, appended to this component's own. */
@@ -101,8 +103,8 @@ const defaultCode = (text: string): unknown => h('code', {}, text);
  * A markdown string as themed blocks.
  *
  * Params:
- *   props: `source`, `modifiers`, `code`, `element`, `theme`, and anything else, which goes to
- *          the element
+ *   props: `source`, `modifiers`, `code`, `block`, `element`, `theme`, and anything else, which
+ *          goes to the element
  *
  * Returns: a `<div>` on the `markdown` entry holding one element per block. A heading is a
  * `Typography` `h1` to `h6` on `markdown_heading` with an `id` in GitHub's scheme; a paragraph
@@ -126,15 +128,21 @@ const defaultCode = (text: string): unknown => h('code', {}, text);
  * sentence or whose source's scheme would run something, a footnote, an HTML tag, an autolink and
  * an escape are text, as written.
  *
+ * `block` is handed each block `parseBlocks` reads, in order, and what it returns is put in that
+ * block's place with no element around it, under the same modifiers. `null` draws nothing there,
+ * `undefined` keeps the block as drawn here, and `code` still draws a fenced block `block` left
+ * alone (design 314).
+ *
  * Throws: the assert for a `source` that is neither a string, a number nor a cell holding one.
  *
  * Example:
  *   <Markdown source={readme} />
  *   <Markdown source={note} modifiers={[{ check: /@\w+/g, return: (who) => <Mention name={who} /> }]} />
  *   <Markdown source={doc} code={(text, language) => <Highlighted text={text} language={language} />} />
+ *   <Markdown source={post} block={(held) => held.kind === 'code' && held.language === 'scene' ? <Scene text={held.text} /> : undefined} />
  */
 export const Markdown = (props: MarkdownProps): Mounter => (elem, _item, before, context) => {
-	const { source, modifiers, code, element, theme, ...rest } = props;
+	const { source, modifiers, code, block: pageBlock, element, theme, ...rest } = props;
 	const own = modifiers === undefined || modifiers === null
 		? TextModifiers.read(context)
 		: (isSource(modifiers) ? modifiers.get() : modifiers) as readonly TextModifier[];
@@ -208,13 +216,18 @@ export const Markdown = (props: MarkdownProps): Mounter => (elem, _item, before,
 		}
 	};
 
+	const drawn = (held: Block): unknown => {
+		const replaced = pageBlock?.(held);
+		return replaced === undefined ? block(held) : replaced;
+	};
+
 	const node = h(
 		element === null || element === undefined ? 'div' : elementFor(element),
 		{ ...rest, theme: ['markdown', theme] },
 		through(source, (text) => {
 			assert(text === null || text === undefined || typeof text === 'string' || typeof text === 'number',
 				`Markdown source must be a string, or a cell holding one, and this one is ${typeof text}; hand it the markdown text`);
-			return h(TextModifiers, { value: list }, ...parseBlocks(String(text ?? '')).map(block));
+			return h(TextModifiers, { value: list }, ...parseBlocks(String(text ?? '')).map(drawn));
 		}),
 	);
 	return mount(elem, node, before, context);

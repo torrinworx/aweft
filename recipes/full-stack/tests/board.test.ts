@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 import { auth, paths } from '@aweftjs/auth';
 import { fromDirectory } from '@aweftjs/modules/node';
+import { files } from '@aweftjs/static';
 import { createStore, memoryDriver } from '@aweftjs/store';
 import { loadModule, loadServer } from '@aweftjs/testing';
 
@@ -42,7 +43,7 @@ const signUp = async (server: Awaited<ReturnType<typeof loadServer>>, email: str
 };
 
 const backend = async () => loadServer({
-	sources: [fromDirectory(modules), auth],
+	sources: [fromDirectory(modules), auth, files],
 	store: createStore({ driver: memoryDriver(), declare: { ...paths } }),
 	gate: 'auth/Gate',
 });
@@ -58,6 +59,23 @@ test('the gated call refuses a connection with no cookie', async () => {
 	const server = await backend();
 	const page = await server.open();
 	await assert.rejects(() => page.asks.ask('board/Mine'));
+	await server.stop();
+});
+
+test('the search answers what holds the words, and everything for none', async () => {
+	const server = await backend();
+	const page = await server.open();
+	assert.deepEqual(await page.asks.ask('board/Search', { text: 'Kitchen' }), [{ title: 'The kitchen closes at nine' }]);
+	assert.equal((await page.asks.ask('board/Search', {}) as unknown[]).length, 3);
+	await server.stop();
+});
+
+test('sharing a note\'s name is the ask: notes/Note offers it, and refuses a note nobody wrote', async () => {
+	const server = await backend();
+	const page = await server.open();
+	const note = await page.link.share<{ text: string }>('note:pinned').ready;
+	assert.equal(note.text, 'Nothing is written here yet.');
+	await assert.rejects(page.link.share('note:made-up').ready, { reason: 'no-such-note' });
 	await server.stop();
 });
 

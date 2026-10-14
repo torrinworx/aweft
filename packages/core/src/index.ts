@@ -23,6 +23,7 @@ export type { ArrayChange, MutableArray } from './mutable-array.ts';
 export { apply } from './apply.ts';
 
 export { fromSnapshot, snapshot } from './snapshot.ts';
+export { fromPlain, toPlain } from './plain.ts';
 export type { Snapshot, SnapshotObservable, SnapshotRef, SnapshotValue } from './snapshot.ts';
 
 export type { Change, Primitive } from './types.ts';

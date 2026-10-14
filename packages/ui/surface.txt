@@ -6,10 +6,12 @@ type ActInstance: interface ActInstance { readonly component: ActBody; readonly 
 type ActProps: interface ActProps { readonly stage: StageValue; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Alert: (props: AlertProps) => unknown
 type AlertProps: interface AlertProps { readonly title?: unknown; readonly icon?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
+type Align: type Align = 'left' | 'center' | 'right' | null;
 value Avatar: (props: AvatarProps) => unknown
 type AvatarProps: interface AvatarProps { readonly src?: unknown; readonly alt?: unknown; readonly fallback?: unknown; readonly size?: unknown; readonly round?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value Badge: (props: BadgeProps) => unknown
 type BadgeProps: interface BadgeProps { readonly label?: unknown; readonly type?: unknown; readonly size?: unknown; readonly icon?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
+type Block: type Block = HeadingBlock | ParagraphBlock | CodeBlock | ListBlock | TableBlock | QuoteBlock | RuleBlock | FigureBlock;
 value Breadcrumb: (props: BreadcrumbProps) => Mounter
 type BreadcrumbItem: interface BreadcrumbItem { readonly label?: unknown; readonly href?: unknown; }
 type BreadcrumbProps: interface BreadcrumbProps { readonly items?: unknown; readonly label?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
@@ -21,6 +23,7 @@ type Catalog: type Catalog = Readonly<Record<string, string>>;
 type Category: interface Category { readonly items: unknown[]; readonly props: Record<string, unknown>; }
 value Checkbox: (props: CheckboxProps) => Mounter
 type CheckboxProps: interface CheckboxProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly invert?: unknown; readonly indeterminate?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly onChange?: (next: boolean, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type CodeBlock: interface CodeBlock { readonly kind: 'code'; readonly language: string | null; readonly text: string; }
 value ColorPicker: (props: ColorPickerProps, cleanup: (...fns: (() => void)[]) => void) => Mounter
 type ColorPickerProps: interface ColorPickerProps { readonly value?: unknown; readonly hasAlpha?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type Component: type Component<P = Record<string, unknown>> = { component(props: P & { children?: unknown[]; each?: unknown; }, cleanup: Cleanup, mounted: Mounted, pending: Pending): unknown; }['component'];
@@ -39,15 +42,18 @@ type DropDownProps: interface DropDownProps { readonly open?: unknown; readonly 
 value Empty: (props: EmptyProps) => unknown
 type EmptyProps: interface EmptyProps { readonly icon?: unknown; readonly title?: unknown; readonly description?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type Entry: type Entry = Readonly<Record<string, unknown>>;
+type FigureBlock: interface FigureBlock { readonly kind: 'figure'; readonly media: 'image' | 'video'; readonly src: string; readonly alt: string; readonly width: number | null; readonly height: number | null; }
 value FileDrop: FileDropComponent
 type FileDropButtonProps: interface FileDropButtonProps extends ButtonProps { readonly files?: unknown; readonly extensions?: unknown; readonly multiple?: unknown; readonly limit?: unknown; readonly onDrop?: (files: unknown[]) => void; readonly ready?: unknown; }
 type FileDropComponent: interface FileDropComponent { (props: FileDropProps): Mounter; Button(props: FileDropButtonProps): Mounter; }
 type FileDropEntry: interface FileDropEntry { readonly name: string; readonly file: unknown; readonly status: 'ready' | 'loading' | 'error'; readonly error?: string; readonly reason?: 'type' | 'size' | 'count'; }
 type FileDropProps: interface FileDropProps { readonly files?: unknown; readonly extensions?: unknown; readonly multiple?: unknown; readonly limit?: unknown; readonly clickable?: unknown; readonly disabled?: unknown; readonly onDrop?: (files: unknown[]) => void; readonly ready?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
+type FontFile: interface FontFile { readonly src: string; readonly weight?: number | string; readonly style?: 'normal' | 'italic'; readonly range?: string; }
 value Head: (props: { children?: unknown[] | undefined; }) => unknown
 type HeadKind: type HeadKind = 'title' | 'meta' | 'link' | 'script' | 'style';
 type HeadList: interface HeadList extends Registry<HeadTag> { markup(): string; title(): string | null; }
 type HeadTag: interface HeadTag { readonly kind: HeadKind; readonly group: string | null; readonly depth: number; readonly attrs: Readonly<Record<string, unknown>>; readonly text?: unknown; }
+type HeadingBlock: interface HeadingBlock { readonly kind: 'heading'; readonly level: number; readonly text: string; readonly id: string; }
 type Hydrated: type Hydrated = Remove & { readonly ready: Promise<void>; }; (from @aweftjs/dom)
 value Icon: (props: IconProps, cleanup: (...fns: (() => void)[]) => void, _mounted: unknown, pending: (promise: Promise<unknown>) => void) => Mounter
 type IconAlias: interface IconAlias { readonly parent: string; readonly rotate?: number; readonly hFlip?: boolean; readonly vFlip?: boolean; }
@@ -61,6 +67,8 @@ type Ids: interface Ids { next(prefix?: string): string; }
 type Input: interface Input { readonly meta?: Readonly<Record<string, unknown>>; readonly on?: (event: Record<string, unknown>) => void; readonly [handler: string]: unknown; }
 value InputContext: Context<Input> & { fire: (context: unknown, type: string, payload?: Record<string, unknown>) => void; }
 value Link: (props: TagProps) => unknown
+type ListBlock: interface ListBlock { readonly kind: 'list'; readonly ordered: boolean; readonly start: number; readonly items: readonly ListItem[]; }
+type ListItem: interface ListItem { readonly text: string; readonly task: 'open' | 'done' | null; readonly line: number; readonly children: readonly ListBlock[]; }
 type Loader: type Loader<P> = (props: P, cleanup: (...fns: (() => void)[]) => void) => unknown;
 value LoaderContext: Context<Loaders>
 type Loaders: interface Loaders { readonly loading?: Component | null; readonly failed?: Component<{ error?: unknown; }> | null; }
@@ -69,7 +77,7 @@ type LoadingDotsProps: interface LoadingDotsProps { readonly type?: unknown; rea
 type Mark: interface Mark { (name: string, props?: Record<string, unknown> | null, ...children: unknown[]): Marked; readonly then: MarkMaker; readonly else: MarkMaker; readonly case: MarkMaker; readonly default: MarkMaker; readonly popup: MarkMaker; readonly anchor: MarkMaker; readonly tabs: MarkMaker; readonly panels: MarkMaker; readonly [slot: string]: MarkMaker; }
 type MarkMaker: type MarkMaker = ((props?: Record<string, unknown>, ...children: unknown[]) => unknown) & { readonly [MAKER]: string; };
 value Markdown: (props: MarkdownProps) => Mounter
-type MarkdownProps: interface MarkdownProps { readonly source?: unknown; readonly modifiers?: unknown; readonly code?: (text: string, language: string | null) => unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type MarkdownProps: interface MarkdownProps { readonly source?: unknown; readonly modifiers?: unknown; readonly code?: (text: string, language: string | null) => unknown; readonly block?: (block: Block) => unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type Marked: interface Marked { readonly [MARKED]: string; readonly name: string; readonly props: Record<string, unknown> & { readonly children: unknown[]; }; }
 value Menu: (props: MenuProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
 type MenuGroup: interface MenuGroup { readonly heading?: unknown; readonly items?: readonly MenuItem[]; }
@@ -81,6 +89,7 @@ type ModalProps: interface ModalProps { readonly label?: unknown; readonly noEsc
 type OpenOptions: interface OpenOptions { readonly name: string; readonly template?: Component; readonly history?: boolean; readonly [prop: string]: unknown; }
 value Pagination: (props: PaginationProps, cleanup: (...fns: (() => void)[]) => void) => Mounter
 type PaginationProps: interface PaginationProps { readonly page?: unknown; readonly count?: unknown; readonly siblings?: number; readonly onChange?: (page: number, event: unknown) => void; readonly size?: unknown; readonly label?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
+type ParagraphBlock: interface ParagraphBlock { readonly kind: 'paragraph'; readonly text: string; }
 type Placed: interface Placed { readonly mode: Placement; readonly left: number; readonly top: number; readonly maxWidth: number; readonly maxHeight: number; readonly transformOrigin: string; }
 type Placement: type Placement = 'below-start' | 'below-end' | 'above-start' | 'above-end' | 'right-start' | 'right-end' | 'left-start' | 'left-end' | 'below' | 'above' | 'right' | 'left';
 value Popup: (props: { placement?: unknown; canClose?: ((event: unknown) => boolean) | undefined; style?: Record<string, unknown> | undefined; ref?: ((element: unknown) => void) | undefined; children?: unknown[] | undefined; }) => Mounter
@@ -89,6 +98,7 @@ type PopupPlacement: type PopupPlacement = Placed | null;
 value Progress: (props: ProgressProps) => unknown
 type ProgressProps: interface ProgressProps { readonly value?: unknown; readonly label?: unknown; readonly size?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type ProviderProps: interface ProviderProps { readonly value?: unknown; readonly children?: unknown[]; }
+type QuoteBlock: interface QuoteBlock { readonly kind: 'quote'; readonly text: string; }
 value Radio: (props: RadioProps) => Mounter
 type RadioProps: interface RadioProps { readonly value?: unknown; readonly option?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly onChange?: (next: unknown, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 type Rect: interface Rect { readonly left: number; readonly top: number; readonly width: number; readonly height: number; }
@@ -96,6 +106,9 @@ value Region: (props: RegionProps) => Mounter
 type RegionProps: interface RegionProps { readonly value?: unknown; readonly country?: unknown; readonly [prop: string]: unknown; }
 type Registry: interface Registry<T = unknown> { readonly items: MutableArray<T>; add(item: T): () => void; claim(): boolean; }
 type Render: interface Render { readonly theme: Sheet; readonly head: HeadList; readonly stage: Registry<StageEntry>; readonly ids: Ids; readonly popups: Registry; readonly locale?: string; readonly catalog?: Catalog; }
+type RuleBlock: interface RuleBlock { readonly kind: 'rule'; }
+type SavedMode: interface SavedMode<M extends Definitions> extends Cell<M> { restore(): void; }
+type SavedModeOptions: interface SavedModeOptions<M extends Definitions> { readonly light?: M; readonly dark?: M; readonly key?: string; readonly fallback?: 'light' | 'dark' | 'system'; }
 value Script: (props: TagProps) => unknown
 value Select: (props: SelectProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
 type SelectProps: interface SelectProps { readonly value?: unknown; readonly options?: unknown; readonly display?: unknown; readonly placeholder?: unknown; readonly open?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly name?: unknown; readonly autocomplete?: unknown; readonly onChange?: (next: unknown, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
@@ -122,6 +135,7 @@ value TabPanel: (props: TabPanelProps) => Mounter
 type TabPanelProps: interface TabPanelProps { readonly value?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 type TabProps: interface TabProps { readonly value?: unknown; readonly label?: unknown; readonly disabled?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Table: (props: TableProps) => Mounter
+type TableBlock: interface TableBlock { readonly kind: 'table'; readonly header: readonly string[]; readonly align: readonly Align[]; readonly rows: readonly (readonly string[])[]; }
 type TableColumn: interface TableColumn { readonly key: string; readonly label?: unknown; readonly align?: string; readonly width?: unknown; }
 type TableProps: interface TableProps { readonly columns?: readonly (TableColumn | string)[]; readonly rows?: unknown; readonly cell?: (row: unknown, column: TableColumn) => unknown; readonly caption?: unknown; readonly foot?: unknown; readonly label?: unknown; readonly striped?: unknown; readonly tight?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value Tabs: (props: TabsProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
@@ -161,6 +175,7 @@ value context: (options?: ContextOptions) => Render
 value createContext: <T>(def: T, transform?: Transform<T>) => Context<T>
 value dark: Readonly<Record<string, Readonly<Record<string, unknown>>>>
 value flagOf: (code: string) => string
+value fontFaces: (family: string, files: readonly FontFile[], options?: { readonly display?: string | undefined; }) => Readonly<Record<string, unknown>>
 value h: { <P>(tag: ComponentTag<P>, props?: NoInfer<CallProps<P>> | null | undefined, ...children: unknown[]): unknown; (tag: string | NodeLike | MarkMaker | undefined, props?: Readonly<Record<string, unknown>> | null | undefined, ...children: unknown[]): unknown; }
 value html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown
 value hydrate: (target: ParentLike, item: unknown, render?: Render | undefined) => Hydrated
@@ -170,7 +185,9 @@ value localeOf: (context: unknown) => string | undefined
 value localeRegion: () => string | null
 value mark: Mark
 value mount: (target: ParentLike, item: unknown, before?: Remove | undefined, render?: Render | undefined) => Remove
+value parseBlocks: (source: string) => Block[]
 value render: (item: unknown, options?: { context?: Render | undefined; }) => Promise<string>
+value savedMode: <M extends Definitions = Readonly<Record<string, Readonly<Record<string, unknown>>>>>(options?: SavedModeOptions<M>) => SavedMode<M>
 value sizeProperties: ReadonlySet<string>
 value slugger: () => (text: string) => string
 value standardIcons: readonly string[]

@@ -1,4 +1,7 @@
 type AskOptions: interface AskOptions { readonly progress?: ((value: unknown) => void) | undefined; readonly timeout?: number | undefined; } (from @aweftjs/sync)
+type Asked: type Asked<T> = { readonly state: 'waiting'; readonly data: T | null; } | { readonly state: 'ready'; readonly data: T; } | { readonly state: 'failed'; readonly data: null; readonly error: unknown; };
+type AskingOptions: interface AskingOptions { readonly pending?: ((promise: Promise<unknown>) => void) | undefined; readonly timeout?: number | undefined; }
+type Cell: type Cell<T = unknown> = Derived<T>; (from @aweftjs/core)
 type Client: interface Client { readonly status: Derived<ClientStatus>; ask(name: string, args?: unknown, options?: AskOptions): Promise<unknown>; share<T extends object>(name: string, document?: T, handlers?: ShareHandlers): Handle<T>; reconnect(): void; close(): void; }
 type ClientOptions: interface ClientOptions { readonly url?: string | undefined; readonly open?: ((url: string) => SocketLike) | undefined; readonly reconnect?: boolean | undefined; readonly timeout?: number | undefined; }
 type ClientStatus: type ClientStatus = 'connecting' | 'open' | 'closed';
@@ -6,4 +9,5 @@ type Derived: interface Derived<T> { get(): T; set(value: T): void; isImmutable(
 type Handle: interface Handle<T extends object> { readonly document: T | undefined; readonly ready: Promise<T>; stop(): void; }
 type ShareHandlers: interface ShareHandlers { readonly accept?: ((commit: Commit) => readonly WireReason[]) | undefined; readonly refused?: ((report: Refused) => void) | undefined; readonly fault?: ((reason: string, message: string) => void) | undefined; } (from @aweftjs/sync)
 type SocketLike: interface SocketLike { binaryType: string; readyState: number; send(data: Uint8Array | string): void; close(): void; addEventListener(type: 'open' | 'message' | 'close' | 'error', fn: (event: { data?: unknown; }) => void): void; } (from @aweftjs/sync)
+value asking: <T = unknown>(client: Client, name: string, args?: unknown, options?: AskingOptions) => Cell<Asked<T>>
 value createClient: (options?: ClientOptions) => Client

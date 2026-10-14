@@ -54,6 +54,45 @@ socket drops rejects with `closed` and is never sent again, because it may have 
 effect at the far end. `timeout` on the options wins over `timeout` on the client, and neither
 ships a default.
 
+## A cell that follows an ask: `asking`
+
+```ts
+const query = mutable('');
+const found = asking<Post[]>(client, 'posts/Search', query.map((text) => ({ text })));
+
+// A component that reads `found` watches it. Outside a component, `effect` watches it.
+const stop = found.effect((now) => { console.log(now.state); });   // waiting, then ready
+query.set('aweft');   // asks again: waiting, then ready with the new answer
+stop();               // nothing watches, so nothing more is asked
+```
+
+`asking(client, name, args?, options?)` is a read-only cell of the latest answer to
+`client.ask(name, args)`. `args` may be a cell, and every value it takes asks again. An answer to an
+ask a newer one replaced is dropped, so a slow answer to an old query never lands over a new one.
+It reads:
+
+- `{ state: 'waiting', data }` while an ask is out. `data` is the last answer's, or `null` before
+  the first, so a list dims in place rather than blanking.
+- `{ state: 'ready', data }` with the answer.
+- `{ state: 'failed', data: null, error }` with what the ask rejected with: a refusal's `reason`,
+  `timeout`, or `closed` when the socket dropped under it. It is not asked again on the next
+  socket.
+
+**It asks only while something watches it.** The first watcher asks. When the last one stops, an
+answer still out is dropped, and the next watcher asks again with the arguments as they are then. A
+component that unmounts stops watching, so nothing has to stop it. `found.get()` with nothing
+watching reads the state it holds and asks nothing. Writing it throws `read-only`.
+
+`options.pending` is handed the first ask, settled either way: a component passes its own
+`pending` (its fourth argument), and a render on a server waits for the answer. `options.timeout`
+is each ask's.
+
+**A page that hydrates reads `waiting` first.** A server's render records the answer, and the
+page gets it a microtask after the hydration starts (`@aweftjs/ssg`'s `replay`). A component that
+draws its waiting state at that moment builds elements the server sent no match for. A page that
+must keep the server's markup reads its first answer through `ui`'s `suspend`, which draws nothing
+while a hydration is open (design 312).
+
 ## Sharing a document: `share`
 
 ```ts
@@ -84,9 +123,22 @@ client is closed before that, and with the topic's own fault otherwise. `stop()`
 socket's share, which sends `leave`, and takes the handle off the list re-shared on later
 sockets.
 
-**A link carries one topic per name, so share a name once per client.** A second share of a
-name that is already live waits for an offer that never comes, and so does `share('')` and a
-share of a name the server never offers. Their `ready` never settles: nothing refuses them, and
+**A share is how a page asks for a document by name.** A server module that declares `offer`
+(`@aweftjs/server`'s README, design 310) opens the document when a page shares a name no share on
+its connection is waiting for, and shares it back. A module that refuses ends the share: `ready`
+rejects with the module's reason and message, and `fault` hears them. Because every handle is shared
+again on every new socket, the page asks again after a drop with no code of its own, and the
+document lands on the object it already holds. This works only when the module offers the same
+document again. A new document has a new root, and the share ends with `root-mismatch`. A refused
+handle is shared again too, so after a sign-in, which reconnects, the module is asked as the person
+who is now signed in. Its `ready` rejected with the refusal and stays rejected, so the page reads
+the document off `handle.document` once it arrives, or shares the name again for a `ready` of its
+own.
+
+**A link carries one topic per name, so share a name once per client.** A second share of a name
+that is already live waits for an offer that never comes, and so does `share('')` and a share of a
+name nothing on the server shares, unless a server module's `offer` answers it: a module is asked
+about each of them (design 310). Otherwise their `ready` never settles: nothing refuses them, and
 nothing answers them either.
 
 **A write applies here at once and crosses on the next frame.** Reading it back through a
@@ -126,8 +178,9 @@ Two seams, and a page needs neither.
   dev server's proxy the socket takes a path of its own, `/ws`, proxied with `ws: true`, because
   a proxy entry for `/` takes the dev server's own socket with it; [`recipes/full-stack/`](https://github.com/torrinworx/aweft/tree/main/recipes/full-stack) is that
   setup.
-- `open(url)` makes the socket, `new WebSocket(url)` by default. A Node program hands in one
-  that carries a cookie header, which is how a script signs in:
+- `open(url)` makes the socket, `new WebSocket(url)` by default, which Node has too, so a script
+  with no session needs neither seam beyond `url`. A Node program that signs in hands in one that
+  carries a cookie header:
 
 ```ts
 const client = createClient({
@@ -157,4 +210,5 @@ reason for a refusal.
 
 The design notes are in
 [`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design): 183 (what this
-package is and what it opens) and 184 (the reconnect, and the server winning).
+package is and what it opens), 184 (the reconnect, and the server winning), 310 (a share a server
+module offers) and 312 (`asking`).

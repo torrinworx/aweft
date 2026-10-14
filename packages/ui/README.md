@@ -1132,7 +1132,7 @@ import { Markdown } from '@aweftjs/ui';
 
 | component | what it is | its own props | example |
 |---|---|---|---|
-| `Markdown` | a `<div>` on `markdown` holding one element per block of a markdown string | `source`, `modifiers`, `code`, `element`, `theme` | `markdown` |
+| `Markdown` | a `<div>` on `markdown` holding one element per block of a markdown string | `source`, `modifiers`, `code`, `block`, `element`, `theme` | `markdown` |
 
 **What it renders** (designs 288 and 296). A markdown string, or a cell holding one, as themed
 blocks whose text runs are `Typography`, for the subset a README and a post use:
@@ -1189,6 +1189,40 @@ const contents = headings.map((text) => ({ text, href: `#${id(text)}` }));
 **The `code` hook** is `(text, language) => anything mountable` and is called once per fenced
 block; absent, the block holds a `<code>` with the text. Highlighting is the application's, and
 this package ships none.
+
+**The `block` hook** is `(block) => anything mountable, or undefined`, called once per block in
+order. What it returns is put in that block's place with no element around it, so a fenced block
+that holds a scene is drawn as the scene and not inside a `<pre>`, and a quote that opens with
+`Note:` can be a callout. `null` draws nothing in its place. `undefined` keeps the block as the
+table above draws it, and `code`
+still draws a fenced block `block` left alone. What it returns sits inside the `markdown` element
+and under the same modifiers, so a `Typography` in it reads the markdown marks (design 314). A
+heading it draws gets whatever `id` it gives it.
+
+```tsx
+<Markdown source={post} block={(held) =>
+	held.kind === 'code' && held.language === 'scene' ? <Scene text={held.text} /> : undefined} />
+```
+
+**`parseBlocks`** is the reader `Markdown` draws from, exported so a site reads its own markdown,
+its headings, fenced blocks, image lines and tables, the way the page renders it rather than with a
+second grammar that disagrees. `parseBlocks(source)` answers the blocks in order, each told apart by
+`kind`, with the inline marks left in each text as written:
+
+| `kind` | fields |
+|---|---|
+| `heading` (`HeadingBlock`) | `level`, `text`, `id`: the one `Markdown` gives it |
+| `paragraph` (`ParagraphBlock`) | `text`: lines joined by a space, `\n` for a line break |
+| `code` (`CodeBlock`) | `language` (the word after the fence, or null), `text` |
+| `list` (`ListBlock`) | `ordered`, `start`, `items`: each a `ListItem` with `text`, `task` (`open`, `done` or null), `line` (the source line it starts on) and `children` (the lists under it) |
+| `table` (`TableBlock`) | `header`, `align` (one `Align` per column: `left`, `center`, `right` or null), `rows` |
+| `quote` (`QuoteBlock`) | `text` |
+| `rule` (`RuleBlock`) | nothing |
+| `figure` (`FigureBlock`) | `media` (`image` or `video`), `src`, `alt`, `width`, `height` |
+
+```ts
+const fences = parseBlocks(post).filter((block): block is CodeBlock => block.kind === 'code');
+```
 
 **A cell source re-renders every block when it changes**; there is no diff. A task item's box is
 disabled unless the source is a writable cell, and then a tick rewrites that item's `[ ]` or
@@ -1637,6 +1671,94 @@ with the `_media_` directive the engine already has.
 **A cell in the value is what a switch is.** `<Theme value={mode}>` with `mode` a cell holding
 `light` or `dark` moves every class below it when the cell moves, on a page that is already up. A
 plain object subscribes to nothing and costs nothing extra.
+
+**`savedMode` is that cell, kept for the visitor** (design 315). It holds one of two themes, this
+package's `light` and `dark` unless you give your own, and saves the visitor's choice in
+`localStorage`:
+
+```tsx
+const mode = savedMode({ fallback: 'system' });
+hydrate(document.body, <Theme value={mode}><Site /></Theme>);
+mode.restore();                                    // now the visitor's mode
+const toggle = () => mode.set(mode.get() === dark ? light : dark);
+```
+
+- **It starts in `light`**, the mode a server renders. `restore()` moves it to the visitor's mode:
+  what they chose last, else `fallback`, which is `'light'`, `'dark'` or `'system'` (the operating
+  system's `prefers-color-scheme`), and `'light'` unless you say. A page that hydrates calls
+  `restore()` once `hydrate`, or `@aweftjs/ssg/client`'s `attach`, has taken the server's markup
+  over: moving before that rewrites the stylesheet the server sent, and Chromium then drops every
+  web font on the page until it has them again (design 257). A page that mounts calls it before
+  `mount`, and its first paint is the visitor's mode.
+- **A set is a choice, and is saved** as `light` or `dark` under `key`, `'mode'` unless you say.
+  `restore()` saves nothing, so a visitor who never chose has nothing saved. Setting anything but
+  its two themes is a loud assert.
+- **It paints what no theme entry reaches**, on every value from the first: the root element's
+  `color-scheme`, its `background-color` from the mode's `$background` (so a short page and the
+  overscroll are the page's colour), and the `content` of `<meta name="theme-color">`, the colour a
+  phone paints its bar in, which it adds to the head when there is none. A theme whose `*` entry
+  has no `$background` gets the scheme and nothing else.
+- Where there is no `document`, a render on a server, it is a plain cell: nothing is painted,
+  read or saved. A storage that throws, as a private window's can, saves nothing and reads nothing
+  saved.
+- **Make one per page.** Each one paints the root for as long as the page lives, so two would take
+  turns painting it, and a second is a loud assert.
+
+A visitor who chose dark sees the browser's light canvas, or a server's light page, until the bundle
+runs. The page's HTML hides that with a few lines in its head that run before any script loads.
+These use `savedMode`'s default key, a `'system'` fallback and this package's two backgrounds:
+
+```html
+<script>
+	try {
+		const saved = localStorage.getItem('mode');
+		const dark = saved === 'dark' || (saved !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+		document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+		document.documentElement.style.backgroundColor = dark ? '#0f1216' : '#fcfcfd';
+	} catch {}
+</script>
+```
+
+The two colours are `dark` and `light`'s `$background`, and a page with themes of its own writes
+its own. `recipes/full-stack` carries these lines and checks that a saved dark reload, with its
+bundle held back, shows the dark background.
+
+Following the system live, as it changes, is not done: `'system'` is read when `restore()` runs.
+
+**`fontFaces` declares a family's files** (design 316). It answers the `_fontFace_` directives for
+one family, one per file, to spread into the entry the page's root wears:
+
+```ts
+Theme.define({ page: {
+	...fontFaces('IBM Plex Sans', [
+		{ src: '/plex/IBMPlexSans-Regular.woff2', weight: 400 },
+		{ src: '/plex/IBMPlexSans-Italic.woff2', weight: 400, style: 'italic' },
+	]),
+	...fontFaces('Source Serif 4', [{ src: '/serif/SourceSerif4-Variable.woff2', weight: '200 900' }]),
+} });
+```
+
+The family reaches the page through `$font`, the variable every component of this package sets its
+`fontFamily` to. A provider at the root redefines it:
+
+```tsx
+const face = { '*': { $font: '"IBM Plex Sans", system-ui, sans-serif' } };
+mount(document.body, <Theme value={face}><App /></Theme>);
+```
+
+A `fontFamily` on the page's own entry sets the page's text and stops at the first field or button,
+which sets its own.
+
+A file is `src`, and `weight` (a number, or a variable file's two in a string), `style` (`normal`
+unless set) and `range` (a `unicode-range`) where it has them. Each face says its family and its URL
+quoted, a `format()` named from the extension (`woff2`, `woff`, `ttf` or `otf`, and none for
+another), and `font-display: swap` unless `options.display` names another. Each directive is keyed
+by the family, the file and the face it declares, so two calls spread into one entry keep every
+face, one file declared upright and slanted is two faces, and the engine emits each once per render.
+An empty family, list or `src`, a weight that is not one number from 1 to 1000 or two of them, a
+style that is neither word, and a `$` in the family or a `src` are loud asserts. A `$` is where the
+stylesheet reads a theme variable, so a file named with one is written `%24` in its URL. A
+descriptor it does not name, such as `font-stretch`, is a `_fontFace_` directive written by hand.
 
 **No unnamed value.** A component of this package writes `$name`, never a colour, a size or a
 duration. `node packages/testing/scripts/check-theme.ts` refuses one that does, over

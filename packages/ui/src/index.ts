@@ -17,6 +17,10 @@ export type { Hydrated } from '@aweftjs/dom';
 export type { Ids, Registry } from './registry.ts';
 
 export { dark, light } from './modes.ts';
+export { savedMode } from './saved-mode.ts';
+export type { SavedMode, SavedModeOptions } from './saved-mode.ts';
+export { fontFaces } from './font-faces.ts';
+export type { FontFile } from './font-faces.ts';
 export { Head, Link, Meta, Script, Style, Title } from './head.tsx';
 export type { TagProps } from './head.tsx';
 export type { HeadKind, HeadList, HeadTag } from './head-list.ts';
@@ -73,7 +77,11 @@ export { TextModifiers, Typography } from './typography.tsx';
 export type { TextModifier, TypographyProps } from './typography.tsx';
 export { Markdown } from './markdown.tsx';
 export type { MarkdownProps } from './markdown.tsx';
-export { slugger } from './markdown-blocks.ts';
+export { parseBlocks, slugger } from './markdown-blocks.ts';
+export type {
+	Align, Block, CodeBlock, FigureBlock, HeadingBlock, ListBlock, ListItem, ParagraphBlock, QuoteBlock, RuleBlock,
+	TableBlock,
+} from './markdown-blocks.ts';
 
 export { Alert } from './alert.tsx';
 export type { AlertProps } from './alert.tsx';

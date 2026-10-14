@@ -22,24 +22,33 @@ await server.start();
 ```
 
 Its configuration is a file beside your application's own modules, exporting `config` and no
-factory, exactly as any battery module is configured:
+factory, exactly as any battery module is configured. An entry of the same name in a bundle,
+`fromBundle({ './static/Files.ts': { config } })`, is the same thing. Either way, the source that
+holds it is listed before `files`:
 
 ```ts
 // modules/static/Files.ts
 export const config = {
 	dir: 'dist',
-	unknown: '404',
-	headers: { 'assets/': 'public, max-age=31536000, immutable' },
+	unknown: 'shell',
+	notPages: ['api/', 'files/'],
+	headers: {
+		'assets/': 'public, max-age=31536000, immutable',
+		'room/': { 'access-control-allow-origin': '*', 'cache-control': 'no-cache' },
+	},
 	public: true,
 };
 ```
 
-The defaults are `dir: 'dist'`, `unknown: '404'`, no cache header on any path (`headers: {}`) and
-`public: true`, so a site in `dist` served to anyone needs no file at all. The cache rule above is
-not one of them: no path carries a `Cache-Control` until you name a prefix.
-`dir` is resolved from the working directory when the module is made. A `dir` that is not a
-non-empty string, an `unknown` that is neither word, a `headers` value that is not a string, or
-a `public` that is not a boolean is refused at load with reason `invalid-config`.
+The defaults are `dir: 'dist'`, `unknown: '404'`, no prefix that is not a page (`notPages: []`), no
+header on any path (`headers: {}`) and `public: true`, so a site in `dist` served to anyone needs no
+file at all. The rules above are not defaults: no path carries a `Cache-Control` until you name a
+prefix. `dir` is resolved from the working directory when the module is made. A `dir` that is not a
+non-empty string, an `unknown` that is neither word, a `headers` value that is neither a string nor
+an object of header names to strings, a header name or value HTTP cannot carry, one of the four
+headers this module writes itself or one of the six that belong to a single connection (both lists
+under Headers per prefix), a `notPages` that is not a list of strings or holds one with a leading
+slash, or a `public` that is not a boolean is refused at load with reason `invalid-config`.
 
 `public` is what a gate reads. Under `@aweftjs/auth`'s gate, `true` serves a reader with no
 cookie and `false` answers 403 with the gate's reasons, which is a private site in one word.
@@ -57,6 +66,23 @@ is a file:
 Otherwise the unknown answer: `404.html` from `dir` with status 404, or, when `unknown` is
 `'shell'`, `shell.html` with status 200. When that page is missing too, the answer is 404 with no
 body. `/docs` and `/docs/` are one page.
+
+**A prefix in `notPages` never gets a page** (design 313). A URL under one is looked up like any
+other, so a file there is still served, but when none answers it the answer is neither the shell
+nor `404.html`. It is 404 with the server's own JSON for a refused request, the shape every refusal
+in this stack takes, so a page reads it the way it reads one from anywhere else:
+
+```json
+{ "reasons": [{ "code": "not-found", "message": "nothing answers GET /api/nope" }] }
+```
+
+That is for the paths that are not pages: an API, uploaded files. Under `unknown: 'shell'` the shell
+answers every URL with no file with status 200, and without `notPages` a fetch of a mistyped `/api/`
+path reads a 200 and parses HTML as JSON, and a stale `/files/<id>` in an `<img>` paints the whole
+site. A prefix is matched as a `headers` prefix is, against the decoded path with its leading slash
+removed, so a prefix may hold a space or a letter outside ASCII. A path that does not decode is
+matched as it was written, and so still gets this 404 and not the shell. A prefix written with a
+leading slash would match nothing, so it is refused at load.
 
 ## How a file is served
 
@@ -115,12 +141,25 @@ compared weakly, so `"5-1a2b"` and `W/"5-1a2b"` are one tag. The unknown answer 
 one page answers every URL with no file, and an ETag off it would tell a reader their cached copy
 of one URL is the answer for another.
 
-**`Cache-Control`** is written only when a configured prefix matches the start of the path, and
-the longest matching prefix wins. Prefixes are matched against the path with its leading slash
-removed, so `assets/` matches `/assets/app.js` and `/assets/` matches nothing. A prefix of `''` is
-the start of every path, which is how you set a default for the whole site. A page with no
-matching prefix carries no cache header at all, because which paths carry a content hash in their
-name is your bundler's choice and this module does not know your bundler.
+**Headers per prefix.** `headers` maps a path prefix to a `Cache-Control` string, or to an object of
+header names to values. Any header goes but the four this module writes itself on every file
+(`content-type`, `content-length`, `etag` and `x-content-type-options`) and the six that belong to a
+single connection (`connection`, `keep-alive`, `proxy-connection`, `te`, `transfer-encoding` and
+`upgrade`). A value with a line break inside it is refused, and spaces, tabs and line breaks at
+either end are trimmed. A frame with an opaque origin imports its modules in CORS mode, so a room's
+bundle needs `access-control-allow-origin`, and this is where it goes (design 313). The headers are
+written on a file's 200, its 304 and its HEAD. The unknown answer carries none. A header name is one
+name whatever its case, so of two spellings in one prefix, the later is the one written.
+
+They are written only when a configured prefix matches the start of the path, and the longest
+matching prefix wins, whole: its headers are the ones written, and a shorter prefix's are not added
+to them, so a directory that wants a cache rule and CORS names both. Prefixes are matched against
+the path with its leading slash removed, so `assets/` matches `/assets/app.js` and `/assets/`
+matches nothing. A prefix of `''` is the start of every path, which is how you set a default for the
+whole site. A page with no matching prefix carries no configured header at all, because which paths
+carry a content hash in their name is your bundler's choice and this module does not know your
+bundler. A header whose value depends on the request, such as a policy naming the request's host, is
+a module of your own, loaded ahead of this one.
 
 ## What it never decides
 
@@ -155,8 +194,11 @@ and DELETE included, because a 405 there would say the URL exists and what exist
 word. Only a path that names a file answers 405.
 
 **A prefix of `''` matches every path**, which is the way to set one `Cache-Control` for the whole
-site; a prefix spelled with a leading slash matches nothing, because the path it is matched
-against has had its leading slash removed.
+site. A `headers` prefix spelled with a leading slash matches nothing, because the path it is
+matched against has had its leading slash removed.
+
+**Configured headers are files' only.** The unknown answer, the bare 404, the `notPages` 404 and the
+405 carry none of them, so a 404 under a CORS prefix carries no `access-control-allow-origin`.
 
 **`If-None-Match` is compared weakly and `*` matches**, per that header's own rule, so a reader
 that stored `"5-1a2b"` gets its 304 from a file whose tag is `W/"5-1a2b"`.
@@ -170,8 +212,10 @@ and a dot segment getting that answer and never the file beside the directory, a
 there answering a bare 404 for a refused path and an ordinary miss alike, HEAD with the headers
 and no body, 405 with `Allow`, the ETag and the 304 for `*`, for the strong spelling of the tag
 and for the tag among others, `Content-Type` for a named and an unnamed extension, `Cache-Control`
-for the longest matching prefix, for the empty prefix and absent otherwise, a file larger than one
-stream chunk arriving byte-identical, and an invalid configuration refused at load. Over a
+for the longest matching prefix, for the empty prefix and absent otherwise, any header on the 200,
+the 304 and HEAD with the longest prefix winning whole, a `notPages` path answering 404 JSON under
+both settings while a file there is still served, a file larger than one stream chunk arriving
+byte-identical, and an invalid configuration refused at load. Over a
 listener the test holds, so the answer is read as this module built it: HEAD carries no body at
 all and a GET body is a stream that arrives in chunks.
 [`packages/static/tests/surface.test.ts`](https://github.com/torrinworx/aweft/blob/main/packages/static/tests/surface.test.ts)
@@ -188,7 +232,8 @@ path are 404, and the sitemap is served as XML.
 
 An integrator: it may import anything, and nothing imports it. It reads `node:fs`, `node:path` and
 `node:stream`, and has no third-party dependency of any kind. The rule it implements is
-`design 249`; the hook it answers through is `design 248`.
+`design 249`, with `notPages` and the headers per prefix `design 313`. The hook it answers through
+is `design 248`.
 
 ## The design notes
 

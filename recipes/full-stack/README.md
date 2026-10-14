@@ -37,10 +37,13 @@ AWEFT_DEFAULT_H=@aweftjs/ui AWEFT_TEXT=1 node --import @aweftjs/build/loader rec
 ```
 
 It starts the backend on port 0, starts the dev server against that port programmatically, and
-drives the page in Chromium. Every check can only pass through the proxy: the board's title is on a
-document the server holds and reaches the browser over the socket, the public ask is answered on the
-same socket, and signing up sets a cookie on the dev server's origin that the socket after the
-reconnect carries to the gated module. It exits nonzero when a check fails.
+drives the page in Chromium. Every check can only pass through the proxy. The board's title is on a
+document the server holds, and it reaches the browser over the socket. The public ask and the search
+are answered on the same socket. The server offers the pinned note on it when the page shares the
+note's name. Signing up sets a cookie on the dev server's origin. The page then reconnects, the new
+socket carries the cookie to the gated module, and the server offers the note again on it. Then it
+builds the page and
+has the backend serve it on its own origin, as production does. It exits nonzero when a check fails.
 
 ## The text a page shows
 
@@ -116,6 +119,7 @@ node-options=--conditions=aweft-source
 		"@aweftjs/schema": "file:aweft/packages/schema",
 		"@aweftjs/server": "file:aweft/packages/server",
 		"@aweftjs/ssg": "file:aweft/packages/ssg",
+		"@aweftjs/static": "file:aweft/packages/static",
 		"@aweftjs/store": "file:aweft/packages/store",
 		"@aweftjs/sync": "file:aweft/packages/sync",
 		"@aweftjs/testing": "file:aweft/packages/testing",
@@ -199,22 +203,50 @@ script above does; `@aweftjs/testing` is for a driver or a listener of your own.
 ## What is in here
 
 `backend/main.ts` is the whole boot: the store, the listener, the sources and the gate. Everything
-the server does is a module in `backend/modules/`: `board/Board` holds one document and shares it
-with every connection, `board/Notice` is a public call, and `board/Mine` declares no `public` and so
-answers only a signed-in connection, with who asked.
+the server does is a module in `backend/modules/`:
 
-`page/entry.tsx` is the whole page: a client on this origin, an auth over it, the shared document
-rendered with `@aweftjs/ui`, and a form that calls `enter`. `enter` signs up when nobody has the
-email, so there is one form rather than two.
+- `board/Board` holds one document and shares it with every connection. What a new board starts
+  with is written as plain data and made into the document's observables with `fromPlain`, because
+  a slot refuses a plain array.
+- `board/Search` is a public call answering what is pinned whose title holds some words, copied out
+  of the document with `toPlain`.
+- `board/Notice` is a public call, and `board/Mine` declares no `public` and so answers only a
+  signed-in connection, with who asked.
+- `notes/Note` declares `offer` and nothing else: when a page shares a name such as `note:pinned`,
+  it opens that document and the server shares it on that page's connection. No call opens it, and
+  after a drop or a sign-in the client shares the name again on the new socket and the module
+  offers it again. A name that is not a note's is declined, and a note nobody wrote is refused
+  rather than made, so a page sharing made-up names writes nothing to the store.
+- `static/Files` is a file exporting `config` only, which configures the static battery: the
+  built page in `page/dist`, `/api/` never answered with a page, and a year-long cache on
+  `assets/`.
+
+`page/entry.tsx` is the whole page: a client on this origin, an auth over it, the shared board
+rendered with `@aweftjs/ui`, a search field whose list is an `asking` cell, the pinned note in a
+text field, a form that calls `enter`, and a switch for light and dark. `enter` signs up when nobody
+has the email, so there is one form rather than two. The mode is `savedMode`, restored before the
+mount so the first paint is the visitor's. The page's face is declared with `fontFaces`, set through
+`$font` so ui's fields and buttons wear it too, and served from `page/public/fonts` (IBM Plex Sans
+Medium, under the SIL Open Font License, which the file's own name table carries). The short text at
+the top is `Markdown` with a `block` hook that draws a fenced `tip` block as an aside of its own
+rather than as code.
+
+## Behind a proxy
+
+`backend/main.ts` starts the listener with `forwarded: 'x-real-ip'` and binds it to `127.0.0.1`.
+In production one proxy on the same machine, nginx, is in front of it and sets `X-Real-IP`, so the
+address the server's rate limit counts is the visitor's and not the proxy's. A request with no such
+header, such as the dev server's, keeps the socket's address. Bound anywhere a visitor can reach it
+directly, the setting would let them name any address they like, which is why the two go together.
 
 ## What it does not do for you
 
-**Production serving.** The proxy is development only. In production the page is built
-(`vite build`) and something serves the files on the same origin as the socket: the server itself,
-through a module whose `routes` answer the built files, which is what `recipes/client/main.ts`
-does under the name `site/Files`, or a static host with the backend behind the same name. Get
-that wrong and the symptom is a page that renders and a sign-in that never sticks, because the
-cookie went to an origin the socket never visits.
+**A host.** The proxy is development only. In production the page is built (`vite build`, into
+`page/dist`) and the backend serves it beside its socket, through `static/Files`, so the page and
+the socket share one origin and the cookie with it. Putting that process on a machine, TLS, and the
+proxy in front of it are yours. Serve the files from anywhere else and the symptom is a page that
+renders and a sign-in that never sticks, because the cookie went to an origin the socket never
+visits.
 
 **A gate of your own.** `auth/Gate` reads `public: true` and nothing else. Any rule past "is this
 somebody" is a module of yours that `deps` on it, which `packages/server/README.md` shows.
@@ -222,8 +254,10 @@ somebody" is a module of yours that `deps` on it, which `packages/server/README.
 **Password reset, email verification, a session lifetime.** The first two wait for the email
 battery. The third is one line of config on `auth/Session`, and none ships.
 
-**Routing.** One page, no router and no stage. `recipes/routed-site` is URLs, and `recipes/client`
-is a routed application whose every part is a module.
+**Routing.** One page, no router and no stage, so the static battery answers a URL with no file
+with a 404. A routed page sets `unknown: 'shell'` and writes `shell.html`, and `notPages` already
+keeps `/api/` out of it. `recipes/routed-site` is URLs, and `recipes/client` is a routed
+application whose every part is a module.
 
 **Anything the store keeps past this process.** `memoryDriver` forgets everything when the backend
 stops, accounts included.

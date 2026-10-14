@@ -120,7 +120,7 @@ other. The gate stands between the outside and a module.
 
 ## What a module can carry
 
-The server reads five things off a loaded module's instance, all optional:
+The server reads six things off a loaded module's instance, all optional:
 
 ```ts
 export default ({ store }) => ({
@@ -132,6 +132,8 @@ export default ({ store }) => ({
 	},
 	// An `ask` from the client naming this module, after the gate allowed it.
 	call: async (args, context, { progress }) => { progress('reading'); return report(args); },
+	// A name the page shared that no share on its connection waits for. An offer shares it, `undefined` declines.
+	offer: async (name, context) => name.startsWith('note:') ? { document: await note(name), accept } : undefined,
 	// HTTP, keyed by exact method and path.
 	routes: { 'GET /api/export': async (request, context) => new Response(await csv(context.user)) },
 	// An HTTP request no route matched. A `Response` answers it; `undefined` declines it.
@@ -142,8 +144,9 @@ export default ({ store }) => ({
 ```
 
 A document a hook shares is an `@aweftjs/core` observable: `createObject`, `createArray` and
-`createMap` make one, `atomic` groups writes into one commit, and a plain object or array in
-a slot is refused. The store's `open` hands back one ready to share.
+`createMap` make one, `fromPlain` makes one from plain data such as parsed JSON, `atomic` groups
+writes into one commit, and a plain object or array in a slot is refused. The store's `open` hands
+back one ready to share.
 
 `connection` hooks run in load order, which is dependency order, for the modules the gate
 allows; the functions they return run in reverse when the connection ends. A call is
@@ -162,6 +165,57 @@ behaviour is tested.
 streams back before the result, a throw answers with its `reason` and `message`. A module
 that is not loaded or has no `call` is `missing`; one the gate refuses is `refused` with the
 reasons.
+
+`offer` opens a document when a page asks for it by name (design 310). A page that shares a name no
+share on its connection is waiting for is how it asks: `client.share('note:42')`. That includes a
+second share of a name already live, and a share of `''`: whether to offer either is the module's.
+The server asks every loaded module that declares `offer`, in load order, behind the gate, once
+every `connection` hook on that connection has run, so a hook that shares the same name pairs first.
+A module answers `undefined` to decline, which asks the next one, or `{ document, accept, refused?,
+fault? }`, which the server shares under that name on that connection, `accept` required as for any
+share. The first offer ends the walk.
+
+```ts
+offer: async (name, { user }) => {
+	if (!name.startsWith('note:')) return undefined;
+	const handle = await store.open(name);
+	if (handle.root.owner !== user) {
+		await store.close(handle);
+		throw Object.assign(new Error(`${name} is not yours`), { reason: 'private' });
+	}
+	return { document: handle.root, accept: mine, fault: () => { void store.close(handle); } };
+},
+```
+
+A throw with a `reason` refuses: the page's share ends with that reason and that message, and
+its `ready` rejects with them. Its `fix` stays here, because a refusal of a share crosses as a
+reason and a message and nothing else. Any other throw, an offer with no `accept`, and a refusal
+whose reason is `closed` are reported to `handlers.failed` under the module's name, and the page's
+share ends with `failed`. `closed` is what every share ends with when a socket drops, and
+`@aweftjs/client` answers it with its next socket rather than telling the page, so a page refused
+with it would wait for good.
+
+When every module declines, or the gate skips them all, nothing is sent. The page's share waits, as
+it always has, so a share a `call` makes later still pairs with it.
+
+An application with no `offer` sends nothing new when a page shares a name nobody shares. Two
+changes to the link reach it anyway, both in cases that were broken before (design 310). First,
+when one end leaves a share before the other end shares the name, the later share no longer pairs
+with the topic that was left. Second, a share of a value that is not an observable throws at the
+share, not from a later frame.
+
+A module is asked once for each share the page makes that is still waiting when its turn comes. A
+second share of a name the page is already waiting on takes the first one's place, and only the
+second is asked about. After a reconnect, `@aweftjs/client` shares every handle again, so the module
+is asked again on the new connection. The page still holds the document it had, so the offer on the
+new connection has to be that same document: one the store opens again, or one the module keeps by
+name. A document made afresh for each offer, such as `fromPlain(row)` on every ask, has a new root,
+and the page's share ends with `root-mismatch`.
+
+The offered share's `fault` hears how it ended: `left` when the page stops it, `closed` when the
+connection ends. That is where a module closes what it opened. An offer that arrives after the page
+stopped asking, or after the connection ended, is not shared, and its `fault` hears `left` or
+`closed` all the same.
 
 `routes` are matched on `METHOD /path` exactly, the query aside; two loaded modules declaring
 one key are refused at `start()` by both names, and a conflict a later load introduces
@@ -301,16 +355,17 @@ the header itself.
 
 ## When something throws
 
-A `call` that throws a refusal, an error carrying a `reason`, answers its caller with it and is
-not reported: the caller heard what the module meant it to. A `call` that throws anything else
-answers its caller `failed` with the words `the call failed` and nothing of the error, and is
-reported: a module's own bug names files and values the caller has no business reading.
-Everything else reaches `handlers.failed(name, error)` on `createServer` too: a `connection`
-hook that throws (the connection is closed), an end function that throws (the rest still run),
-a route that throws (a bare 500), the gate that throws (500), and a route conflict met by a
-request (500). Without a handler, a call's error is written to the console and the process goes
-on, because any client can reach a public call; every other failure is raised where nothing
-catches it, and the process says so and ends. Pass a handler in production.
+A `call` that throws a refusal, an error carrying a `reason`, answers its caller with it and is not
+reported: the caller heard what the module meant it to. A `call` that throws anything else answers
+its caller `failed` with the words `the call failed` and nothing of the error, and is reported: a
+module's own bug names files and values the caller has no business reading. Everything else reaches
+`handlers.failed(name, error)` on `createServer` too: a `connection` hook that throws (the
+connection is closed), an end function that throws (the rest still run), a route that throws (a bare
+500), the gate that throws (500), and a route conflict met by a request (500). An `offer` that
+throws anything but a refusal is reported the way a call is, and the page's share ends with
+`failed`. Without a handler, a call's error and an offer's are written to the console and the
+process goes on, because any client can reach a public call or share a name. Every other failure is
+raised where nothing catches it, and the process says so and ends. Pass a handler in production.
 
 ## What this package never decides
 
@@ -331,8 +386,8 @@ Every error this package raises carries a `reason`: `missing` (`createServer` wi
 three, or a gate named that is not a loaded gate), `not-an-option` (`loader` or `props` passed to
 `createServer`, which builds its own loader), `route-conflict`, `no-accept`, `not-a-response`,
 `started`. The design notes are in
-[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 071 to 073, 240 and
-241.
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 071 to 073, 240,
+241 and 310.
 
 ## The design notes
 

@@ -132,7 +132,7 @@ export const createServer = (options: ServerOptions): Server => {
 	// that one line (design 260).
 	const observed = reporter(handlers);
 	const emit: Emit = emitter(loader, observed);
-	const report = (name: string, error: unknown, context?: unknown, soft = false): void => {
+	const report = (name: string, error: unknown, context?: unknown, soft?: string): void => {
 		observed(name, error, soft);
 		emit({ kind: 'failed', at: Date.now(), name, error }, context);
 	};
@@ -293,14 +293,15 @@ export const createServer = (options: ServerOptions): Server => {
 	};
 };
 
-const reporter = (handlers: ServerHandlers) => (name: string, error: unknown, soft = false): void => {
+const reporter = (handlers: ServerHandlers) => (name: string, error: unknown, soft?: string): void => {
 	// Without a handler the error is thrown from a fresh microtask, where nothing catches it
 	// and the process reports it as uncaught. A handler that throws is treated the same way.
-	// A soft report is a call that threw: any client can reach a public call, and a bug in one
-	// is written to the console rather than being a way to end the process (design 272).
+	// A soft report is a call or an offer that threw, and `soft` says which: any client can reach
+	// a public call or share a name, and a bug in either is written to the console rather than
+	// being a way to end the process (designs 272, 310).
 	const raise = (thrown: unknown): void => queueMicrotask(() => { throw thrown; });
 	if (handlers.failed === undefined) {
-		if (soft) console.error(`${name}: a call threw`, error);
+		if (soft !== undefined) console.error(`${name}: ${soft}`, error);
 		else raise(error);
 		return;
 	}

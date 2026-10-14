@@ -4,9 +4,11 @@
 import { codecError } from '@aweftjs/codec';
 import type { Loader } from '@aweftjs/modules';
 import { connect, fromWebSocket, requests } from '@aweftjs/sync';
-import type { SocketLike, WireReason } from '@aweftjs/sync';
+import type { SocketLike, Unshared, WireReason } from '@aweftjs/sync';
 
-import { type Connection, type Ending, type Gate, type GatedLink, type Outcome, type ServerModule, serverError } from './contract.ts';
+import {
+	type Connection, type Ending, type Gate, type GatedLink, type Offer, type Outcome, type ServerModule, serverError,
+} from './contract.ts';
 import type { Emit } from './observe.ts';
 
 export interface Live {
@@ -22,7 +24,7 @@ interface Wiring {
 	readonly context: unknown;
 	readonly loader: Loader;
 	readonly gate: Gate;
-	readonly report: (name: string, error: unknown, context?: unknown, soft?: boolean) => void;
+	readonly report: (name: string, error: unknown, context?: unknown, soft?: string) => void;
 	readonly emit: Emit;
 }
 
@@ -41,6 +43,25 @@ const callOf = (instance: unknown): Call | undefined => {
 	return typeof call === 'function' ? call as Call : undefined;
 };
 
+type Offering = NonNullable<ServerModule['offer']>;
+
+const offerOf = (instance: unknown): Offering | undefined => {
+	if (instance === null || typeof instance !== 'object') return undefined;
+	const offer: unknown = (instance as ServerModule).offer;
+	return typeof offer === 'function' ? offer as Offering : undefined;
+};
+
+// A fault carries a reason and a message, and the receiving end renders them as a refusal again.
+// So a refusal in the stack's shape, `reason: detail. fix`, crosses as its detail alone, and the
+// page does not read its reason twice.
+const detailOf = (error: { reason: string; message?: unknown; fix?: unknown }): string => {
+	const message = String(error.message ?? '');
+	const head = `${error.reason}: `;
+	const tail = typeof error.fix === 'string' ? `. ${error.fix}` : undefined;
+	if (!message.startsWith(head) || tail === undefined || !message.endsWith(tail)) return message;
+	return message.slice(head.length, message.length - tail.length);
+};
+
 /** What an `ask` is refused or fails with; the reason and reasons cross to the asker. */
 const asking = (reason: string, detail: string, fix: string, reasons?: readonly unknown[]): Error =>
 	reasons === undefined ? codecError(reason, detail, fix) : Object.assign(codecError(reason, detail, fix), { reasons });
@@ -51,7 +72,9 @@ const isRefusal = (error: unknown): boolean =>
 
 export const openConnection = ({ socket, request, context, loader, gate, report, emit }: Wiring): Live => {
 	const channel = fromWebSocket(socket);
-	const link = connect(channel);
+	// Called once the frame that asked has arrived, which is after this function returned, so
+	// `offering` below is defined by then.
+	const link = connect(channel, { unshared: (request) => { void offering(request); } });
 	const asks = requests(socket);
 	const ends: Array<{ readonly name: string; readonly end: () => unknown }> = [];
 	const opened = Date.now();
@@ -131,11 +154,75 @@ export const openConnection = ({ socket, request, context, loader, gate, report,
 			// own bug, whose message names things the caller has no business reading; the operator
 			// hears it and the caller hears that it failed (design 272).
 			if (isRefusal(outcome.error)) throw outcome.error;
-			report(name, outcome.error, context, true);
+			report(name, outcome.error, context, 'a call threw');
 			throw asking('failed', 'the call failed', 'Read what handlers.failed was told under the module\'s name.');
 		}
 		return outcome.result;
 	});
+
+	// A page shared a name nothing here shares (design 310). The modules that declare `offer` are
+	// asked in load order, behind the gate. They are asked after the `connection` hooks, so a hook
+	// that shares the same name pairs with the page first. When every module declines or the gate
+	// skips them all, nothing is sent. The page's share then waits for a `call` to share the name,
+	// as it did before this hook existed.
+	const offering = async (request: Unshared): Promise<void> => {
+		if (!loader.loaded().some((name) => offerOf(loader.get(name)) !== undefined)) return;
+		await ready;
+		for (const name of loader.loaded()) {
+			if (over || !request.held()) return;
+			const instance = loader.get(name);
+			const hook = offerOf(instance);
+			if (hook === undefined) continue;
+			let offer: Offer | undefined;
+			try {
+				const reasons = await gate.access({ name, instance }, context);
+				if (reasons.length > 0) continue;
+				if (over || !request.held()) return;
+				offer = await hook.call(instance, request.name, context);
+			} catch (error) {
+				// A client answers `closed` with its next socket and tells the page nothing, so a refusal
+				// under that reason would leave the page waiting. It is reported as a mistake instead.
+				if (isRefusal(error) && (error as { reason: string }).reason !== 'closed') {
+					request.refuse((error as { reason: string }).reason, detailOf(error as { reason: string }));
+					return;
+				}
+				report(name, error, context, 'an offer threw');
+				request.refuse('failed', `${request.name} could not be offered`);
+				return;
+			}
+			if (offer === undefined) continue;
+			if (over || !request.held()) {
+				// The document is not shared, but the module may have opened it. Its `fault` is told
+				// `left` or `closed`, as it would be if the share had begun and then ended.
+				try {
+					offer.fault?.(over ? 'closed' : 'left', over
+						? `the connection ended before ${request.name} was offered`
+						: `nothing was waiting for ${request.name} when this offer came`);
+				} catch (error) {
+					report(name, error, context, 'an offer threw');
+				}
+				return;
+			}
+			// The module's handlers run inside the link's own frames, where a throw would escape
+			// uncaught. One that throws is reported under the module's name instead.
+			const reported = <A extends unknown[]>(handler: ((...args: A) => void) | undefined) => (handler === undefined
+				? undefined
+				: (...args: A): void => {
+					try {
+						handler(...args);
+					} catch (error) {
+						report(name, error, context, 'an offer threw');
+					}
+				});
+			try {
+				gated.share(request.name, offer.document, { ...offer, refused: reported(offer.refused), fault: reported(offer.fault) });
+			} catch (error) {
+				report(name, error, context, 'an offer threw');
+				request.refuse('failed', `${request.name} could not be offered`);
+			}
+			return;
+		}
+	};
 
 	// The connection is over when its link is over. The socket closing ends the link, and a
 	// link that ended on bytes it could not read closes the socket itself (the adapter's rule),

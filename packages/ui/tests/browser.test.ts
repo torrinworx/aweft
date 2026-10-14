@@ -465,6 +465,80 @@ const drive = async (name: string, entry: string, check: (view: Page) => Promise
 	}
 };
 
+test('a saved dark mode paints the root and the bar a phone draws, and a toggle is saved', async () => {
+	await drive('saved-mode', `
+		import { Theme, dark, h, light, mount, savedMode } from '@aweftjs/ui';
+		localStorage.setItem('mode', 'dark');
+		const mode = savedMode();
+		const before = getComputedStyle(document.documentElement).backgroundColor;
+		mode.restore();
+		mount(document.body, <Theme value={mode}><main theme="text" id="done">a page</main></Theme>);
+		window.result = {
+			before,
+			after: getComputedStyle(document.documentElement).backgroundColor,
+			scheme: getComputedStyle(document.documentElement).colorScheme,
+			meta: document.querySelector('meta[name="theme-color"]')?.getAttribute('content'),
+			darkBackground: dark['*'].$background,
+		};
+		mode.set(light);
+		window.result.saved = localStorage.getItem('mode');
+		window.result.toggled = getComputedStyle(document.documentElement).backgroundColor;
+	`, async (view) => {
+		await view.waitForFunction(() => (window as unknown as { result?: unknown }).result !== undefined);
+		const result = await view.evaluate(() => (window as unknown as { result: Record<string, string> }).result);
+		// The role is written as six hex digits, and the browser computes it as rgb().
+		const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(result['darkBackground']!)!;
+		const rgb = `rgb(${hex.slice(1).map((pair) => String(Number.parseInt(pair, 16))).join(', ')})`;
+		assert.notEqual(result['before'], rgb, 'light before the restore');
+		assert.equal(result['after'], rgb, 'the root carries the dark $background');
+		assert.equal(result['scheme'], 'dark');
+		assert.equal(result['meta'], result['darkBackground'], 'the head gained a theme-color with it');
+		assert.equal(result['saved'], 'light', 'a toggle is the visitor\'s choice, and is saved');
+		assert.notEqual(result['toggled'], rgb);
+	});
+});
+
+test('a page that hydrates light markup and then restores a saved dark mode never rewrites the server\'s stylesheet', async () => {
+	await drive('saved-mode-hydrate', `
+		import { Theme, context, dark, h, hydrate, light, render, savedMode } from '@aweftjs/ui';
+		const App = () => <main theme="text" id="app"><p id="words">a page</p></main>;
+		const server = context();
+		const markup = await render(<Theme value={light}><App /></Theme>, { context: server });
+		const host = document.createElement('div');
+		host.innerHTML = markup;
+		document.body.appendChild(host);
+		const style = document.createElement('style');
+		style.setAttribute('data-aweft', '');
+		style.textContent = server.theme.markup();
+		document.head.appendChild(style);
+		const before = document.querySelector('#app');
+		const written = style.textContent;
+
+		localStorage.setItem('mode', 'dark');
+		const mode = savedMode();
+		hydrate(host, <Theme value={mode}><App /></Theme>);
+		const hydrated = style.textContent === written;
+		mode.restore();
+		window.result = {
+			sameElement: before === document.querySelector('#app'),
+			adopted: style === document.head.querySelector('style[data-aweft]'),
+			hydrated,
+			restored: style.textContent === written,
+			dark: mode.get() === dark,
+			scheme: getComputedStyle(document.documentElement).colorScheme,
+		};
+	`, async (view) => {
+		await view.waitForFunction(() => (window as unknown as { result?: unknown }).result !== undefined);
+		const result = await view.evaluate(() => (window as unknown as { result: Record<string, unknown> }).result);
+		assert.equal(result['sameElement'], true, 'the server element was adopted, not replaced');
+		assert.equal(result['adopted'], true, 'the server stylesheet is still the first one on the page');
+		assert.equal(result['hydrated'], true, 'the hydration left it as it was sent');
+		assert.equal(result['restored'], true, 'and so did the move to dark: its rules went to a sheet of their own');
+		assert.equal(result['dark'], true, 'restore moved the page to the saved mode after the hydration');
+		assert.equal(result['scheme'], 'dark');
+	});
+});
+
 // --- the page checks (design 266) ------------------------------------------------------------------
 
 /** Open a page built from a shell and an entry, and answer what it threw. */
