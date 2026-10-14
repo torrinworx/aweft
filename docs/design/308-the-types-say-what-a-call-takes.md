@@ -4,17 +4,18 @@
 
 These types change. Nothing at run time does.
 
-- **`Cell<T>`** is exported from `core`: the type of a cell, which is the type `mutable` returns.
-  It is `Derived<T>` under the name every README uses. The type `core` kept under that name for
-  what a slot holds is internal and is renamed `SlotCell`.
-- **`each`** is typed from the item. A component that declares `each: Item` takes
-  `each={items}` where `items` is an `Iterable<Item>` (an array, a document array, a list cell, a
-  `Set`) or a cell holding one, which is what `dom` mounts. A scope from `observer` reads its value
-  as `unknown`, so it is taken without an item type. A list of something else is a type error. One
-  item is taken as well, because code written against the old type cast its list to the item to
-  compile (`each={rows as unknown as Row}`), and that code keeps compiling. The runtime still
-  refuses an item that is not a list. `dom` exports the mapping as `CallProps<P>`. JSX reads it
-  through `JSX.LibraryManagedAttributes` in `ui`'s JSX types, and `h` through its own signature.
+- **`Cell<T>`** is exported from `core`. It is the type `mutable` returns, the same type as
+  `Derived<T>`, under the name every README uses. `core` had an internal type of that name for what
+  a slot holds. It is now `SlotCell`.
+- **`each`** is typed from the item. A component that declares `each: Item` takes `each={items}`
+  where `items` is an `Iterable<Item>` or a cell that holds one. Those are the lists `dom` mounts:
+  an array, a document array, a list cell, a `Set`. A scope from `observer` has its value typed
+  `unknown`, so it is taken with no item type. A list of anything else is a type error.
+- One item is taken as well. Code written against the old type cast its list to the item to compile
+  (`each={rows as unknown as Row}`), and that code keeps compiling. The runtime still refuses an item
+  that is not a list.
+- `dom` exports the mapping as `CallProps<P>`. JSX reads it through `JSX.LibraryManagedAttributes`
+  in `ui`'s JSX types, and `h` reads it through its own signature.
 - **`h`** with a component as its tag checks the props against the component's own props, with
   `each` read as above and `children` free. A component whose props are `unknown`, or that takes
   none, takes any. With an element name, a node or a mark as its tag it takes any record, as
@@ -40,22 +41,22 @@ source, where it is called `Derived`. Applications wrote their own (`type Cell =
 set(value: unknown): void }`), or `ReturnType<typeof mutable<boolean>>`. A second name for one type
 costs a line. Not finding the first one cost every application a cast.
 
-`each` is the list at the call site and the item in the body, and the component type said
-`each?: unknown`, so a row component that typed its item was refused at the call site (`Item[]`
-is not `Item`). Applications either typed the item `unknown` and cast it back in the body
-(`props.each as Grant`, once per row component) or cast the list to the item at the call site
-(`each={rows as unknown as Row}`). `LibraryManagedAttributes` is the hook TypeScript gives a JSX
-library for exactly this: the props a component declares are not the attributes a call site
-writes.
+`each` is the list at the call site and one item in the body. The component type said
+`each?: unknown`. So a row component that typed its item was refused at the call site, because
+`Item[]` is not `Item`. Applications did one of two things. Some typed the item `unknown` and cast
+it back in the body (`props.each as Grant`, once per row component). Others cast the list to the
+item at the call site (`each={rows as unknown as Row}`). TypeScript gives a JSX library
+`LibraryManagedAttributes` for this case, where a call site writes different props from the ones
+the component declares.
 
 `h` took `Record<string, unknown>` whatever the tag was, so a misspelled prop passed and an inline
 callback was an implicit `any` under `strict`. JSX already checks a component's props, and a
 direct `h` call now does too.
 
-An act was typed as a component of `Record<string, unknown>`, so an act that declared the `stage`
-prop the README's own example reads was refused. The act type is written as a method, whose
-parameter TypeScript compares in both directions, so an act may declare more than `stage`
-without the stage promising it, while a `stage` of the wrong type is still refused.
+An act was typed as a component of `Record<string, unknown>`. An act that declared the `stage`
+prop, which the README's own example reads, was refused. The act type is now written as a method.
+TypeScript compares a method's parameter in both directions. So an act may declare props beyond
+`stage` that the stage does not promise, and a `stage` of the wrong type is still refused.
 
 ## What this costs
 
@@ -72,30 +73,31 @@ Three shapes that typechecked before now fail, each at the line that writes it:
 The evidence below says how often each happens in the applications that exist. A call written with
 `as never` on the tag keeps compiling as before.
 
-Two refusals the types could make are given up so that code which compiles today still does: one
-item where a list goes, and a component with narrower props where any component is taken. Both
-were what applications wrote to get past the old types, and both pass the runtime as before.
+The types could refuse two more shapes, and they do not, so that code which compiles today still
+compiles. One is a single item where a list goes. The other is a component with props of its own
+where any component goes. Applications wrote both to get past the old types, and the runtime takes
+both as before.
 
 ## Evidence
 
-- `packages/ui/tests/fixtures/typed.tsx` (JSX, `h`, acts, `Cell`) and `packages/dom/tests/types.test.ts`
-  (`h`, `CallProps`) hold the cases as code the root typecheck reads, each refusal pinned with
-  `@ts-expect-error`, so a refusal that stops happening is itself a type error. The accepted calls
-  run in `packages/ui/tests/types.test.ts` and `packages/dom/tests/types.test.ts`, so a type that
-  takes a shape the runtime refuses shows up there.
-- A generic component through `h` and an act typed by an interface that extends `ActProps` are
+- The root typecheck reads the cases in `packages/ui/tests/fixtures/typed.tsx` (JSX, `h`, acts,
+  `Cell`) and `packages/dom/tests/types.test.ts` (`h`, `CallProps`). Each refusal there carries
+  `@ts-expect-error`, so a refusal that stops happening is itself a type error.
+- The accepted calls run in `packages/ui/tests/types.test.ts` and `packages/dom/tests/types.test.ts`.
+  A type that takes a shape the runtime refuses would fail there.
+- A generic component through `h`, and an act typed by an interface that extends `ActProps`, are
   accepted cases in the same files.
-- The stack's own sources, tests and recipes typecheck under the new types. They needed casts where
-  a tag was `unknown` (a component's `element` prop), where a test hands a wrong prop on purpose to
-  check a refusal, and in one `dom` test whose list was typed `unknown[]` for a row that declared
-  `string`: the type error was right.
+- The stack's own sources, tests and recipes typecheck under the new types. They needed a cast in
+  three places: where a tag was `unknown` (a component's `element` prop), where a test hands a wrong
+  prop on purpose to check a refusal, and in one `dom` test that gave a row declaring `string` a list
+  typed `unknown[]`. That last type error was right.
 - The five applications built on the stack were typechecked, unchanged, against these types and
-  against the stack before them. Both runs: 0 errors in all five. A first version that refused one
-  item where a list goes, and kept `Component` one-way, gave one application 3 errors: its two
-  `each={list as unknown as Item}` casts, and a test that handed an act declaring `stage` to a prop
-  typed `Component`. That is why the two are taken now.
+  against the stack before them. Both runs: 0 errors in all five.
+- A first version refused one item where a list goes, and kept `Component` one-way. It gave one
+  application 3 errors: its two `each={list as unknown as Item}` casts, and a test that handed an
+  act declaring `stage` to a prop typed `Component`. That is why the two shapes are taken now.
 
 ## What would reverse this
 
-A shape the types refuse that the runtime takes and an application needs, written as a case in the
-tests above: then the type widens to take it.
+An application needs a shape that the runtime takes and the types refuse. Then that shape goes
+into the tests above as a case, and the type widens to take it.
