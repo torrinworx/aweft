@@ -48,6 +48,7 @@ type FileDropButtonProps: interface FileDropButtonProps extends ButtonProps { re
 type FileDropComponent: interface FileDropComponent { (props: FileDropProps): Mounter; Button(props: FileDropButtonProps): Mounter; }
 type FileDropEntry: interface FileDropEntry { readonly name: string; readonly file: unknown; readonly status: 'ready' | 'loading' | 'error'; readonly error?: string; readonly reason?: 'type' | 'size' | 'count'; }
 type FileDropProps: interface FileDropProps { readonly files?: unknown; readonly extensions?: unknown; readonly multiple?: unknown; readonly limit?: unknown; readonly clickable?: unknown; readonly disabled?: unknown; readonly onDrop?: (files: unknown[]) => void; readonly ready?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
+type FontFile: interface FontFile { readonly src: string; readonly weight?: number | string; readonly style?: 'normal' | 'italic'; readonly range?: string; }
 value Head: (props: { children?: unknown[] | undefined; }) => unknown
 type HeadKind: type HeadKind = 'title' | 'meta' | 'link' | 'script' | 'style';
 type HeadList: interface HeadList extends Registry<HeadTag> { markup(): string; title(): string | null; }
@@ -174,6 +175,7 @@ value context: (options?: ContextOptions) => Render
 value createContext: <T>(def: T, transform?: Transform<T>) => Context<T>
 value dark: Readonly<Record<string, Readonly<Record<string, unknown>>>>
 value flagOf: (code: string) => string
+value fontFaces: (family: string, files: readonly FontFile[], options?: { readonly display?: string | undefined; }) => Readonly<Record<string, unknown>>
 value h: { <P>(tag: ComponentTag<P>, props?: NoInfer<CallProps<P>> | null | undefined, ...children: unknown[]): unknown; (tag: string | NodeLike | MarkMaker | undefined, props?: Readonly<Record<string, unknown>> | null | undefined, ...children: unknown[]): unknown; }
 value html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown
 value hydrate: (target: ParentLike, item: unknown, render?: Render | undefined) => Hydrated

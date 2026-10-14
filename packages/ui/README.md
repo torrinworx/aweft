@@ -1708,6 +1708,30 @@ A visitor who chose dark still sees the server's light page until the script run
 the page's HTML's job, a few lines of inline script in its head that run before any of this.
 Following the system live, as it changes, is not done: `'system'` is read when `restore()` runs.
 
+**`fontFaces` declares a family's files** (design 316). It answers the `_fontFace_` directives for
+one family, one per file, to spread into the entry the page's root wears:
+
+```ts
+Theme.define({ page: {
+	...fontFaces('IBM Plex Sans', [
+		{ src: '/plex/IBMPlexSans-Regular.woff2', weight: 400 },
+		{ src: '/plex/IBMPlexSans-Italic.woff2', weight: 400, style: 'italic' },
+	]),
+	...fontFaces('Source Serif 4', [{ src: '/serif/SourceSerif4-Variable.woff2', weight: '200 900' }]),
+	fontFamily: '"IBM Plex Sans", $font',
+} });
+```
+
+A file is `src`, and `weight` (a number, or a variable file's two in a string), `style` (`normal`
+unless set) and `range` (a `unicode-range`) where it has them. Each face says its family and its
+URL quoted, a `format()` named from the extension (`woff2`, `woff`, `ttf` or `otf`, and none for
+another), and `font-display: swap` unless `options.display` names another. Each directive is keyed
+by the family, the file and the face it declares, so two calls spread into one entry keep every
+face, one file declared upright and slanted is two faces, and the engine emits each once per
+render. An empty family, list or `src`, a weight that is not one number from 1
+to 1000 or two of them, and a style that is neither word are loud asserts. A descriptor it does not
+name, such as `font-stretch`, is a `_fontFace_` directive written by hand.
+
 **No unnamed value.** A component of this package writes `$name`, never a colour, a size or a
 duration. `node packages/testing/scripts/check-theme.ts` refuses one that does, over
 [`packages/ui/src`](https://github.com/torrinworx/aweft/tree/main/packages/ui/src) and
