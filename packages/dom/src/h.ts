@@ -65,10 +65,9 @@ export type CallProps<P> = unknown extends P ? Readonly<Record<string, unknown>>
 		: Without<P> & { readonly children?: unknown[] | null };
 
 /**
- * A component as `h` takes it: any function of props. It is written as a method, because
- * TypeScript checks a method's parameter in both directions. That way `h` still takes a generic
- * component, whose props TypeScript cannot work out from the tag, and leaves those props unchecked
- * (design 308).
+ * Any function of props, which is what `h` takes as a component. It is a method type, so
+ * TypeScript checks its parameter both ways. Then `h` still takes a generic component. TypeScript
+ * cannot work out that component's props from the tag, so they go unchecked (design 308).
  */
 export type ComponentTag<P> = { component(props: P, ...rest: never[]): unknown }['component'];
 

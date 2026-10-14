@@ -250,8 +250,8 @@ it. Off, both headers are ignored. The first request that carries one from a loo
 private address writes one warning to the console that names the setting. Such a request comes
 through a proxy the application runs, and without `forwarded` every request through that proxy
 counts as one address against the rate limit (design 307). The same header from a public address
-is a client's own claim, and the listener says nothing about it. A `TRACE` is answered 405 before any handler sees it. `port` is readable after `start`,
-so `port: 0` works in a test.
+is a client's own claim, and the listener says nothing about it. A `TRACE` is answered 405
+before any handler sees it. `port` is readable after `start`, so `port: 0` works in a test.
 
 A listener for another runtime proves itself with `listenerChecks()` from
 `@aweftjs/testing`, the way a store driver or a sandbox runner does:

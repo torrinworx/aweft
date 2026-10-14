@@ -131,13 +131,12 @@ const Todo = ({ each: todo }) => h('li', { class: observer(todo).path('done').bo
 h('ul', {}, h(Todo, { each: state.todos }));
 ```
 
-**`each` is typed from the item.** A component that declares `each: Item` is called with a list
-of `Item`. The list is an iterable, a list cell, or a cell that holds one. `h` with a component as
-its tag checks the props against the ones the component declares. So `h(Row, { each: rows })` is
-refused when `rows` holds something else, and an inline callback gets its parameter type from the
-prop. One item is taken too, so code that cast its list to the item under the old
-`each?: unknown` still compiles. `CallProps<P>` is that mapping, for code that builds the props
-apart from the call (design 308).
+**`each` is typed from the item.** A row that declares `each: Item` is called with a list of
+`Item`. The list can be an iterable, a list cell, or a cell that holds one. `h` checks a
+component's props against the ones it declares. So `h(Row, { each: rows })` fails to compile when
+`rows` holds something else. An inline callback gets its parameter type from the prop. A single
+item still compiles, so old code that cast its list to the item keeps working. `CallProps<P>` is
+this mapping, for code that builds the props before the call (design 308).
 
 ```ts
 const Row = (props: { each: Item, onPick(item: Item): void }) => h('li', {}, props.each.label)
