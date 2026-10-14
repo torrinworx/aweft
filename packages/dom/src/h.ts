@@ -16,6 +16,25 @@ import { isRowRecording, isRowReplaying, replayCall, traceChild, traceClose, tra
 import type { ElementLike, NodeLike } from './types.ts';
 import { isNodeLike } from './types.ts';
 
+const SVG = 'http://www.w3.org/2000/svg';
+let saidSvg = false;
+
+/**
+ * Warn, once, that an `<svg>` is about to be made as an HTML element (design 307).
+ *
+ * Not exported from the package: `h` and a hoisted template both call it. It returns true so the
+ * call is the condition of an `assert`, and leaves a release build with it. It never refuses,
+ * because a static render of the element is markup a browser reads as the SVG it looks like.
+ */
+export const warnHtmlSvg = (tag: string): boolean => {
+	if (saidSvg || tag.toLowerCase() !== 'svg') return true;
+	saidSvg = true;
+	console.warn('dom: an <svg> made by h is an HTML element, which draws nothing in a browser and does not hydrate. '
+		+ `Make it in the SVG namespace: createElement('svg', '${SVG}') handed to h as the tag, `
+		+ 'or svg() from @aweftjs/ui, which does that for every element under it.');
+	return true;
+};
+
 /**
  * Make an element, or a component's mounter.
  *
@@ -68,6 +87,7 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
 		if (tracing) traceNode(element);
 	} else {
 		assert(typeof tag === 'string', `unsupported tag: ${typeof tag}; pass an element name, a node or a component`);
+		assert(warnHtmlSvg(String(tag)), 'the svg warning never refuses an element');
 		element = markMade(activeDocument().createElement(String(tag)));
 	}
 

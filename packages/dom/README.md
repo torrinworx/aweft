@@ -62,6 +62,12 @@ or `false` attribute value removes the attribute; `true` sets it empty. An eleme
 reactive parts is returned as itself, so `const box = h('div', { class: 'box' })` is a node
 you can hand to the browser.
 
+A tag name is an HTML element, `svg` included, and an HTML `<svg>` draws nothing in a browser and
+does not hydrate against the server's markup. Make SVG in its namespace with
+`createElement('svg', 'http://www.w3.org/2000/svg')` and hand the node to `h` as the tag, or with
+`svg` from `@aweftjs/ui`, which does that for every element under it. A development build warns
+the first time `h` or a hoisted template makes an `<svg>` by name (design 307).
+
 `html` is a tag for template literals. A tag may be an expression (`<${Component}>`), `</>`
 closes the innermost open element, `<!-- ... -->` is a comment and goes, and `${value}` between
 tags is a child. Whitespace works as in JSX: lines are trimmed, blank lines go, and a line break

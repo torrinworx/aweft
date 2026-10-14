@@ -11,7 +11,7 @@
 
 import { assert } from './assert.ts';
 import { activeDocument } from './ambient.ts';
-import { bindProps } from './h.ts';
+import { bindProps, warnHtmlSvg } from './h.ts';
 import { type Bound, BOUND, type ChildSignal, type Signal, isBound } from './bound.ts';
 import { hydrating } from './mount.ts';
 import { markMade } from './props.ts';
@@ -63,6 +63,7 @@ const nodeAt = (root: ElementLike, path: readonly number[]): ElementLike => {
 };
 
 const build = (spec: TemplateElement, document: DocumentLike, mark: boolean): ElementLike => {
+	assert(warnHtmlSvg(spec[0]), 'the svg warning never refuses an element');
 	const element = document.createElement(spec[0]);
 	if (mark) markMade(element);
 	const attributes = spec[1];

@@ -92,6 +92,9 @@ mounter, not a node**: the theme it gets depends on where it is mounted, and `do
 mount context to a mounter and to nothing else. Hand it to `mount` as you would anything else.
 
 `svg` is the same in the SVG namespace, with no theme: `class` and `style` stay plain attributes.
+JSX always compiles to `h`, so an `<svg>` written in JSX is an HTML element that draws nothing, and
+a development build says so. Write an inline drawing as `svg('svg', props, svg('path', props))`
+calls, or use `Icon` (design 307).
 `html` is `dom`'s template-literal tag bound to this `h`.
 
 On a component, `each:name` renames the loop item: `<Row each:row={rows} />` hands each item to
