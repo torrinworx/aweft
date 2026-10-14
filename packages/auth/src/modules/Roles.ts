@@ -18,8 +18,12 @@ export interface RolesDocument extends Record<string, unknown> {
 }
 
 export interface Roles {
-	/** Does the person hold the name: granted, covered by a granted name, or implied by one. Reads the store. False for text that is not a name, since nobody holds one. */
-	may(user: string, name: string): Promise<boolean>;
+	/**
+	 * Does the person hold the name: granted, covered by a granted name, or implied by one. Reads
+	 * the store. False for text that is not a name, since nobody holds one, and false for a `null`
+	 * user, which is how the context names a connection nobody signed in on.
+	 */
+	may(user: string | null, name: string): Promise<boolean>;
 	/** Give the person these names. A name already held is left as it is. */
 	grant(user: string, ...names: string[]): Promise<void>;
 	/** Take these names away. A name not held is nothing. */
@@ -139,8 +143,12 @@ export default async ({ config, ...props }: ModuleProps): Promise<Roles> => {
 
 	return {
 		// A name built from a client's input can come out as no name at all, and the answer to
-		// "does anyone hold that" is no, not a fault.
-		may: async (user, name) => { checked(user, []); return isName(name) && holds(await granted(user), implies, name); },
+		// "does anyone hold that" is no, not a fault. Nobody signed in holds nothing either.
+		may: async (user, name) => {
+			if (user === null) return false;
+			checked(user, []);
+			return isName(name) && holds(await granted(user), implies, name);
+		},
 		grant,
 		revoke: async (user, ...names) => {
 			const unwanted = checked(user, names);

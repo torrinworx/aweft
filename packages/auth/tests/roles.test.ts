@@ -127,13 +127,23 @@ test('first grants the configured names to the first person to sign up and to no
 	await later.stop();
 });
 
-test('a user that is not text is refused by every call, and a grant or a revoke of no names writes nothing', async () => {
+test('nobody signed in holds no name: may(null) answers false and reads nothing', async () => {
+	const store = newStore();
+	const { instance: roles } = await module<Roles>('Roles', store);
+	await roles.grant('null', 'admin');
+	assert.equal(await roles.may(null, 'admin'), false, 'null is nobody, not a person named null');
+	assert.equal(await roles.may(null, 'not a name'), false);
+	assert.equal(await roles.may('null', 'admin'), true, 'the person whose id is the text null keeps the grant');
+	await store.stop();
+});
+
+test('a user that is not text is refused by every call but may, and a grant or a revoke of no names writes nothing', async () => {
 	const store = newStore();
 	const { instance: roles } = await module<Roles>('Roles', store);
 	for (const bad of [undefined, '', 7, null]) {
 		await assert.rejects(roles.grant(bad as string, 'admin'), (error: unknown) => reasonOf(error) === 'invalid-user', JSON.stringify(bad));
 		await assert.rejects(roles.revoke(bad as string, 'admin'), (error: unknown) => reasonOf(error) === 'invalid-user');
-		await assert.rejects(roles.may(bad as string, 'admin'), (error: unknown) => reasonOf(error) === 'invalid-user');
+		if (bad !== null) await assert.rejects(roles.may(bad as string, 'admin'), (error: unknown) => reasonOf(error) === 'invalid-user', JSON.stringify(bad));
 		await assert.rejects(roles.names(bad as string), (error: unknown) => reasonOf(error) === 'invalid-user');
 		await assert.rejects(roles.first(bad as string), (error: unknown) => reasonOf(error) === 'invalid-user');
 	}

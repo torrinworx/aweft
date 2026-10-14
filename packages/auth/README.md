@@ -107,9 +107,10 @@ export const config = {
 ```
 
 `may(user, name)` is true when the person was granted the name, was granted one that covers
-it, or was granted one the table implies it from, transitively. The table is keyed by the
-exact name held: `admin.super` implies what `admin.super` lists, not what `admin` does, so a
-hierarchy of roles is written into the table. `holds(granted, implies, name)` is the same
+it, or was granted one the table implies it from, transitively. A `null` user is false, so
+`may(context.user, 'admin')` needs no check for a visitor nobody signed in as (design 307). The
+table is keyed by the exact name held: `admin.super` implies what `admin.super` lists, not what
+`admin` does, so a hierarchy of roles is written into the table. `holds(granted, implies, name)` is the same
 check as a plain function, exported from the root for code that already holds a list.
 
 **Every check reads the store.** There is no cache and no per-connection snapshot: a grant or a
