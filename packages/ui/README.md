@@ -1704,8 +1704,25 @@ const toggle = () => mode.set(mode.get() === dark ? light : dark);
 - **Make one per page.** Each one paints the root for as long as the page lives, so two would take
   turns painting it, and a second is a loud assert.
 
-A visitor who chose dark still sees the server's light page until the script runs. Hiding that is
-the page's HTML's job, a few lines of inline script in its head that run before any of this.
+A visitor who chose dark sees the browser's light canvas, or a server's light page, until the bundle
+runs. The page's HTML hides that with a few lines in its head that run before any script loads.
+These use `savedMode`'s default key, a `'system'` fallback and this package's two backgrounds:
+
+```html
+<script>
+	try {
+		const saved = localStorage.getItem('mode');
+		const dark = saved === 'dark' || (saved !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+		document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+		document.documentElement.style.backgroundColor = dark ? '#0f1216' : '#fcfcfd';
+	} catch {}
+</script>
+```
+
+The two colours are `dark` and `light`'s `$background`, and a page with themes of its own writes
+its own. `recipes/full-stack` carries these lines and checks that a saved dark reload, with its
+bundle held back, shows the dark background.
+
 Following the system live, as it changes, is not done: `'system'` is read when `restore()` runs.
 
 **`fontFaces` declares a family's files** (design 316). It answers the `_fontFace_` directives for

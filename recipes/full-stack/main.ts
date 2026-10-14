@@ -262,6 +262,28 @@ try {
 	await built.goto(backendOrigin);
 	await built.locator('#board-title', { hasText: 'the notice board' }).waitFor();
 	check(await built.textContent('#board-title') === 'the notice board', 'the built page reaches the socket on the origin it came from');
+	// A visitor who chose dark, on a system that says light, reloads with the bundle held back.
+	// What shows then is the HTML shell alone, and it paints the saved mode, not the browser's
+	// default canvas.
+	const saved = await browser.newContext({ colorScheme: 'light' });
+	const early = await saved.newPage();
+	watch(early);
+	await early.goto(backendOrigin);
+	await early.locator('#page').waitFor();
+	await early.evaluate(() => { (globalThis as unknown as { localStorage: { setItem(k: string, v: string): void } }).localStorage.setItem('mode', 'dark'); });
+	let release: () => void = () => {};
+	const bundle = new Promise<void>((done) => { release = done; });
+	await early.route('**/assets/*.js', async (route) => { await bundle; await route.continue(); });
+	await early.reload({ waitUntil: 'commit' });
+	await early.waitForFunction(() => (globalThis as unknown as { document: { body: unknown } }).document.body !== null);
+	const before = await painted(early);
+	const bare = await early.evaluate(() => (globalThis as unknown as { document: { getElementById(id: string): unknown } }).document.getElementById('page') === null);
+	release();
+	check(bare && before.scheme === 'dark' && before.background === rgbOf(dark),
+		`before the bundle runs, a saved dark reload shows the dark background, set by the shell's own script (${JSON.stringify({ bare, ...before })})`);
+	await early.locator('#page').waitFor();
+	await saved.close();
+
 	check(problems.length === 0, `the built page threw nothing either${problems.length === 0 ? '' : `: ${problems.join(', ')}`}`);
 } finally {
 	await browser.close();

@@ -3,8 +3,21 @@
 	<head>
 		<meta charset="utf-8" />
 		<title>the board</title>
-			<!-- A theme entry cannot reach body, and its default margin shows as a band around the page. -->
+		<!-- A theme entry cannot reach body, and its default margin shows as a band around the page. -->
 		<style>body { margin: 0 }</style>
+		<!-- The saved mode's colours, set before any script loads, so a visitor who chose dark never
+		     sees a light frame while the bundle loads. The key and the fallback are savedMode's in
+		     entry.tsx, the colours are ui's $background in each mode, and main.ts checks them. -->
+		<script>
+			try {
+				const saved = localStorage.getItem('mode');
+				const dark = saved === 'dark' || (saved !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+				document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+				document.documentElement.style.backgroundColor = dark ? '#0f1216' : '#fcfcfd';
+			} catch {
+				// A private window's storage can throw, and the bundle paints the mode a moment later.
+			}
+		</script>
 	</head>
 	<body>
 		<script type="module" src="./entry.tsx"></script>
