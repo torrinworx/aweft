@@ -48,6 +48,23 @@ test('a script fromDirectory does not import is left out and said once, naming t
 	}
 });
 
+test('a .cjs and a .cts are said as well, and a .d.mts or a .d.cts is not', async () => {
+	// fixtures/left-more holds Kept.mjs, a module, beside Old.cjs, Typed.cts, shapes.d.mts and
+	// shapes.d.cts.
+	const said: string[] = [];
+	const real = console.warn;
+	console.warn = (...args: unknown[]): void => { said.push(args.map(String).join(' ')); };
+	try {
+		assert.deepEqual((await fromDirectory(fixture('left-more')).candidates()).map((c) => c.name), ['Kept']);
+		assert.equal(said.length, 2, said.join(' | '));
+		for (const file of ['Old.cjs', 'Typed.cts']) {
+			assert.ok(said.some((line) => line.includes(` ${file} out`)), `${file} is named`);
+		}
+	} finally {
+		console.warn = real;
+	}
+});
+
 test('listing a directory evaluates no file', async () => {
 	// A candidate whose exports were evaluated would be a module namespace; one that was not is
 	// just a name and a function. The only way to know is to load, so this checks the shape.
