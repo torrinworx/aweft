@@ -17,7 +17,8 @@ refuses is skipped.
 - A throw that carries a `reason` refuses. The page's share ends with that reason and message, and
   its `ready` rejects with them. The walk stops.
 - Any other throw, `no-accept` included, is reported to `handlers.failed` under the module's name,
-  and the page's share ends with `failed`. The walk stops.
+  and the page's share ends with `failed`. So is a refusal under `closed`, because a client answers
+  `closed` with its next socket and would leave the page waiting. The walk stops.
 - When every module declines, or the gate skips them all, nothing is sent. The page's share waits,
   as it always has, so a share that a `call` or a later hook makes still pairs with it.
 
