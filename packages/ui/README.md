@@ -1667,7 +1667,10 @@ node packages/testing/scripts/check-theme.ts /home/me/app/src
 **Overriding it.** `Theme.define` adds to the theme; it refuses one property of one entry given two
 different values, so it is not how you replace what the default already says. A `<Theme value={...}>`
 provider is, and it is also what scopes an override to part of a page. Entry names the default
-theme does not use are yours to define outright.
+theme does not use are yours to define outright. An entry you give one of the default's names
+replaces that entry everywhere it is worn, with no warning, because that is how an application
+restyles a component. A style of your own takes a name the default does not use, or a `menu` of
+yours reshapes every `Menu` on the page.
 
 **A dev-mode warning.** When a chain resolves both `color` and `background` from named values and
 the pair is below 4.5:1, this package says so in the console, with the ratio, the target and the
