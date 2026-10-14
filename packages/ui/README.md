@@ -1678,18 +1678,18 @@ package's `light` and `dark` unless you give your own, and saves the visitor's c
 
 ```tsx
 const mode = savedMode({ fallback: 'system' });
-attach(document.body, <Theme value={mode}><Site /></Theme>);
-mode.restore();                                   // now the visitor's mode
+hydrate(document.body, <Theme value={mode}><Site /></Theme>);
+mode.restore();                                    // now the visitor's mode
 const toggle = () => mode.set(mode.get() === dark ? light : dark);
 ```
 
 - **It starts in `light`**, the mode a server renders. `restore()` moves it to the visitor's mode:
   what they chose last, else `fallback`, which is `'light'`, `'dark'` or `'system'` (the operating
   system's `prefers-color-scheme`), and `'light'` unless you say. A page that hydrates calls
-  `restore()` once `attach` has taken the server's markup over: moving before that rewrites the
-  stylesheet the server sent, and Chromium then drops every web font on the page until it has
-  them again (design 257). A page that mounts calls it before `mount`, and its first paint is the
-  visitor's mode.
+  `restore()` once `hydrate`, or `@aweftjs/ssg/client`'s `attach`, has taken the server's markup
+  over: moving before that rewrites the stylesheet the server sent, and Chromium then drops every
+  web font on the page until it has them again (design 257). A page that mounts calls it before
+  `mount`, and its first paint is the visitor's mode.
 - **A set is a choice, and is saved** as `light` or `dark` under `key`, `'mode'` unless you say.
   `restore()` saves nothing, so a visitor who never chose has nothing saved. Setting anything but
   its two themes is a loud assert.

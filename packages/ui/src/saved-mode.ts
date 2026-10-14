@@ -31,7 +31,7 @@ export interface SavedMode<M extends Definitions> extends Cell<M> {
 	 * Returns: nothing.
 	 *
 	 * Example:
-	 *   attach(document.body, <Site mode={mode} />);
+	 *   hydrate(document.body, <Site mode={mode} />);
 	 *   mode.restore();
 	 */
 	restore(): void;
@@ -77,7 +77,7 @@ const painting = new WeakSet<object>();
  *
  * Example:
  *   const mode = savedMode({ light, dark, fallback: 'system' });
- *   attach(document.body, <Theme value={mode}><Site /></Theme>);
+ *   hydrate(document.body, <Theme value={mode}><Site /></Theme>);
  *   mode.restore();
  *   const toggle = () => mode.set(mode.get() === dark ? light : dark);
  */
