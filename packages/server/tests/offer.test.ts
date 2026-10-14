@@ -294,6 +294,27 @@ test('a page that stops asking while the gate decides is never offered the name'
 	await server.stop();
 });
 
+test('an offer that arrives after a share of the module\'s own paired with the page does not say the page left', async () => {
+	let answer: (offer: Offer) => void = () => {};
+	let link: GatedLink | undefined;
+	const faults: string[] = [];
+	const { server, client } = await started({
+		'a/Slow': instance(() => ({
+			connection: (connection: Connection) => { link = connection.link; },
+			offer: () => new Promise<Offer>((done) => { answer = done; }),
+		})),
+	});
+	const share = client.link.share<Doc>('board');
+	await settle();
+	link!.share('board', createObject<Doc>({ from: 'direct' }), open);
+	assert.equal((await share.ready).from, 'direct');
+	answer({ document: createObject<Doc>({}), ...open, fault: (reason, message) => { faults.push(`${reason}: ${message}`); } });
+	await settle();
+	assert.deepEqual(faults, ['left: nothing was waiting for board when this offer came']);
+	client.socket.close();
+	await server.stop();
+});
+
 test('an offer that arrives after the connection ended is not shared, and its fault hears closed', async () => {
 	let answer: (offer: Offer) => void = () => {};
 	const faults: string[] = [];

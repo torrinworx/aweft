@@ -195,7 +195,9 @@ export const openConnection = ({ socket, request, context, loader, gate, report,
 				// The document is not shared, but the module may have opened it. Its `fault` is told
 				// `left` or `closed`, as it would be if the share had begun and then ended.
 				try {
-					offer.fault?.(over ? 'closed' : 'left', `the page stopped asking for ${request.name} before it was offered`);
+					offer.fault?.(over ? 'closed' : 'left', over
+						? `the connection ended before ${request.name} was offered`
+						: `nothing was waiting for ${request.name} when this offer came`);
 				} catch (error) {
 					report(name, error, context, 'an offer threw');
 				}
