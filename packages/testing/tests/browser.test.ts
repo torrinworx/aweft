@@ -144,6 +144,24 @@ test('audit waits for a transition that one ending starts', async () => {
 	}
 });
 
+test('audit reads motion that outlasts five seconds where it is at five seconds', async () => {
+	const page = await open(shell('<main><h1>Slow</h1></main>', `<style>
+		h1 { color: #111111; transition: color 60s linear; }
+		body.late h1 { color: #222222; }
+	</style>`));
+	try {
+		await page.evaluate('document.body.classList.add("late")');
+		const started = Date.now();
+		const { violations } = await audit(page);
+		const took = Date.now() - started;
+		assert.deepEqual(violations, []);
+		assert.ok(took >= 4500, `the transition was waited for: ${String(took)} ms`);
+		assert.ok(took < 9000, `and not past five seconds: ${String(took)} ms`);
+	} finally {
+		await page.close();
+	}
+});
+
 test('audit does not wait on motion that never ends', async () => {
 	const page = await open(shell('<main><h1>Loading</h1><span class="spin" aria-hidden="true">o</span></main>', `<style>
 		@keyframes spin { to { transform: rotate(1turn); } }
