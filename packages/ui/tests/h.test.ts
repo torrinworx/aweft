@@ -2,7 +2,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
+import { transform } from '@aweftjs/build';
 import { mutable, mutableArray } from '@aweftjs/core';
 import { createDocument, parseHtml, toHtml } from '@aweftjs/dom';
 import type { LightElement } from '@aweftjs/dom';
@@ -143,6 +145,14 @@ test('a themed element, theme="", a $$ escape and a call say nothing', () => {
 	assert.deepEqual(said, []);
 	assert.match(toHtml(document.body.childNodes), /width: min\(10px, ?2em\)/, 'a call with no theme is the CSS function of that name');
 	for (const stop of stops) stop();
+});
+
+test('the unthemed $var warning is not in a release build', () => {
+	const source = readFileSync(new URL('../src/wrapper.ts', import.meta.url), 'utf8');
+	assert.match(source, /warnUnthemed\(/, 'the style resolver calls it in development');
+
+	const built = transform(source, { filename: 'wrapper.ts', release: true }).code;
+	assert.doesNotMatch(built, /warnUnthemed\(/, 'and a release build has no call left to make');
 });
 
 test('an onXxx prop is a handler property, and it goes out of the page with its element', () => {

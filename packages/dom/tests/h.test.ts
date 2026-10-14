@@ -2,7 +2,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
+import { transform } from '@aweftjs/build';
 import { mutable } from '@aweftjs/core';
 import { recordingDocument } from '@aweftjs/testing';
 
@@ -183,5 +185,15 @@ test('an <svg> made by name is an HTML element, said once with the namespace to 
 		assert.equal(said.length, 1, 'once per process, not once per element');
 	} finally {
 		console.warn = real;
+	}
+});
+
+test('the svg warning is not in a release build, from h or from a hoisted template', () => {
+	for (const file of ['h.ts', 'template.ts']) {
+		const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
+		assert.match(source, /warnHtmlSvg\(/, `${file} calls it in development`);
+
+		const built = transform(source, { filename: file, release: true }).code;
+		assert.doesNotMatch(built, /warnHtmlSvg\(/, `${file}: a release build has no call left to make`);
 	}
 });
