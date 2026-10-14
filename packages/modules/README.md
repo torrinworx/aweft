@@ -77,6 +77,18 @@ A **source** lists candidates and evaluates nothing until `load` asks for a name
 `fromDirectory` is on its own subpath because it reads the filesystem; the main entry loads in
 a browser. `fromBundle` takes the two shapes a bundler's glob import produces, eager or lazy.
 
+`fromDirectory` imports `.js`, `.mjs` and `.ts` files with Node's own `import()`. It leaves out a
+file that is not code (`.json`, `.md`, `.d.ts`) quietly, and one that is code it does not import
+(`.tsx`, `.jsx`, `.mts`, `.cts`, `.cjs`, or an extension in capitals) with one warning per file and
+process, naming the file: a module written that way would otherwise be absent with nothing saying
+why. Such a file is not refused, because a module beside it may import it, and that directory works
+(design 307). A module that has to be `.tsx` is renamed `.ts`, or listed with `fromBundle` in a
+process run under `@aweftjs/build/loader`, which compiles it:
+
+```ts
+const pages = fromBundle({ './Hello.tsx': () => import('./modules/Hello.tsx') });
+```
+
 `fromDirectory` hands its path to `node:fs`, which resolves a relative one against the process's
 working directory rather than the file that called it, so `'./modules'` finds nothing when the
 program is started from anywhere else. Build an absolute path from `import.meta.url`:
