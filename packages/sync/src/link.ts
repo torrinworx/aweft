@@ -215,7 +215,8 @@ export const connect = (channel: Channel, options: LinkOptions = {}): Link => {
 	// tracker came from the other end and is not sent back; everything else goes, including a
 	// commit that landed through a second link on the same document.
 	const adopt = (topic: Topic, document: object): void => {
-		topic.document = document;
+		// Tracked before it is kept, so a value that is not an observable throws here and leaves
+		// the topic holding nothing.
 		topic.tracker = track(document, ({ commit, undo, landed }) => {
 			if (landed || topic.ended) return;
 			const entry: Sent = { seq: topic.nextSeq, commit, undo };
@@ -229,6 +230,7 @@ export const connect = (channel: Channel, options: LinkOptions = {}): Link => {
 				topic.held.push(entry);
 			}
 		});
+		topic.document = document;
 		// A minted document is empty until the state arrives, and handing an empty document to
 		// whoever awaited it is how a caller ends up reading a board with no columns in it.
 		if (!topic.wanted) topic.settle?.(document);
@@ -476,8 +478,6 @@ export const connect = (channel: Channel, options: LinkOptions = {}): Link => {
 				handlers, opened: false, live: false, ended: false, wanted: false, theyWant: false,
 				nextSeq: 1, sent: [], held: [], settle: undefined, fail: undefined,
 			};
-			next += 1;
-			mine.set(topic.mine, topic);
 
 			const ready = new Promise<object>((settle, fail) => {
 				topic.settle = settle;
@@ -487,7 +487,11 @@ export const connect = (channel: Channel, options: LinkOptions = {}): Link => {
 			// the document arrived. The promise handed back still rejects for whoever awaits it.
 			ready.catch(() => {});
 
+			// Before the topic is kept, so a document that is not an observable throws and leaves
+			// nothing for a later `open` of the name to pair with (design 310).
 			if (document !== undefined) adopt(topic, document);
+			next += 1;
+			mine.set(topic.mine, topic);
 
 			const held = waiting.get(name);
 			if (held !== undefined) {

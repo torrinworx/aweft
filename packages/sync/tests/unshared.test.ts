@@ -115,6 +115,16 @@ test('a second share of the name from the other end is heard again, and takes th
 	server.close();
 });
 
+test('a share of something that is not an observable throws and leaves nothing for a later open to pair with', async () => {
+	const { server, page } = pair();
+	assert.throws(() => server.share('board', { plain: true } as Doc), { reason: 'not-observable' });
+	const minted = page.share<Doc>('board');
+	await settle();
+	server.share('board', createObject<Doc>({ title: 'kept' }));
+	assert.equal((await minted.ready).title, 'kept', 'the open waited for the share that worked, and paired with it');
+	server.close();
+});
+
 test('nothing is held once the link ends', async () => {
 	const { server, page, asked } = pair();
 	page.share<Doc>('board').ready.catch(() => {});
