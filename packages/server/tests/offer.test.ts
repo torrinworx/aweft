@@ -259,6 +259,27 @@ test('an offer that arrives after the page stopped asking is not shared, and its
 	await server.stop();
 });
 
+test('a page that stops asking while the gate decides is never offered the name', async () => {
+	let decide: () => void = () => {};
+	let asked = 0;
+	const gate: Gate = {
+		identify: () => ({ context: {} }),
+		access: () => new Promise((done) => { decide = () => { done([]); }; }),
+	};
+	const { server, client } = await started({
+		'a/Board': instance(() => ({ offer: (): Offer => { asked += 1; return { document: createObject<Doc>({}), ...open }; } })),
+	}, gate);
+	const share = client.link.share<Doc>('board');
+	await settle();
+	share.stop();
+	await settle();
+	decide();
+	await settle();
+	assert.equal(asked, 0, 'a module is asked only for a share still waiting when its turn comes');
+	client.socket.close();
+	await server.stop();
+});
+
 test('an offer that arrives after the connection ended is not shared, and its fault hears closed', async () => {
 	let answer: (offer: Offer) => void = () => {};
 	const faults: string[] = [];
