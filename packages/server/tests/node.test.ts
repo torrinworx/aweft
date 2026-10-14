@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer as createHttpServer, request as httpRequest } from 'node:http';
+import { Readable } from 'node:stream';
 
 import { createObject } from '@aweftjs/core';
 import { connect, fromWebSocket, requests } from '@aweftjs/sync';
@@ -181,6 +182,105 @@ test('forwarded reads the scheme and the proxy\'s own entry for the peer, x-real
 		} else {
 			assert.deepEqual(seen, ['https: 10.0.0.2', 'http: 127.0.0.1', 'ws https: 10.0.0.2'], `forwarded: ${String(forwarded)}`);
 		}
+	}
+});
+
+/** What `console.warn` was handed while `run` ran. */
+const warnings = async (run: () => Promise<void>): Promise<string[]> => {
+	const said: string[] = [];
+	const real = console.warn;
+	console.warn = (...args: unknown[]): void => { said.push(args.map(String).join(' ')); };
+	try {
+		await run();
+	} finally {
+		console.warn = real;
+	}
+	return said;
+};
+
+test('a proxy\'s header reaching a listener with forwarded off is said once, naming the setting', async () => {
+	for (const [header, option] of [['x-real-ip', "forwarded: 'x-real-ip'"], ['x-forwarded-for', 'forwarded: true']] as const) {
+		const listener = node({ port: 0, host: '127.0.0.1' });
+		const said = await warnings(async () => {
+			await listener.start({ request: async () => new Response(null, { status: 204 }), socket: async () => new Response(null, { status: 404 }) });
+			const base = `127.0.0.1:${String(listener.port)}`;
+			await fetch(`http://${base}/`);
+			assert.equal((await fetch(`http://${base}/`, { headers: { [header]: '203.0.113.9' } })).status, 204, 'the request is answered');
+			await fetch(`http://${base}/`, { headers: { [header]: '203.0.113.10' } });
+			await listener.stop();
+		});
+		assert.equal(said.length, 1, `${header}: once per listener, not per request: ${said.join(' | ')}`);
+		assert.match(said[0]!, new RegExp(`from 127\\.0\\.0\\.1 carried ${header}`));
+		assert.ok(said[0]!.includes(option), `${header}: names ${option}`);
+		assert.match(said[0]!, /rate limit/);
+	}
+
+	// A handshake carries it too.
+	const listener = node({ port: 0, host: '127.0.0.1' });
+	const said = await warnings(async () => {
+		await listener.start({ request: async () => new Response(null, { status: 204 }), socket: async () => new Response(null, { status: 404 }) });
+		const ws = new WebSocket(`ws://127.0.0.1:${String(listener.port)}/`, { headers: { 'x-real-ip': '203.0.113.9' } });
+		await new Promise<void>((done) => { ws.once('unexpected-response', () => done()); ws.once('error', () => done()); });
+		await listener.stop();
+	});
+	assert.equal(said.length, 1, 'the handshake path warns as well');
+});
+
+test('a console that throws on the warning still leaves the request answered', async () => {
+	const listener = node({ port: 0, host: '127.0.0.1' });
+	const real = console.warn;
+	console.warn = (): void => { throw new Error('a warning is a failure here'); };
+	try {
+		await listener.start({ request: async () => new Response('answered'), socket: async () => new Response(null, { status: 404 }) });
+		const answer = await fetch(`http://127.0.0.1:${String(listener.port)}/`, { headers: { 'x-real-ip': '203.0.113.9' } });
+		assert.equal(await answer.text(), 'answered');
+	} finally {
+		console.warn = real;
+		await listener.stop();
+	}
+});
+
+test('nothing is said with forwarded set, and nothing for the header from a public address', async () => {
+	for (const forwarded of [true, 'x-real-ip'] as const) {
+		const listener = node({ port: 0, host: '127.0.0.1', forwarded });
+		const said = await warnings(async () => {
+			await listener.start({ request: async () => new Response(null, { status: 204 }), socket: async () => new Response(null, { status: 404 }) });
+			await fetch(`http://127.0.0.1:${String(listener.port)}/`, { headers: { 'x-real-ip': '203.0.113.9', 'x-forwarded-for': '203.0.113.9' } });
+			await listener.stop();
+		});
+		assert.deepEqual(said, [], `forwarded: ${String(forwarded)}`);
+	}
+
+	// A request from the open internet carrying the header is a client's own claim, and the
+	// listener must not suggest trusting it. Handed straight to the server the listener answers on.
+	const server = createHttpServer();
+	const listener = node({ server });
+	const answered: string[] = [];
+	const said = await warnings(async () => {
+		await listener.start({ request: async (_request, peer) => { answered.push(String(peer.address)); return new Response(null, { status: 204 }); }, socket: async () => new Response(null, { status: 404 }) });
+		for (const address of ['203.0.113.9', '::ffff:8.8.8.8', '2001:db8::1', '172.32.0.1', '192.169.0.1']) {
+			const req = Object.assign(Readable.from([]), { headers: { 'x-real-ip': '10.0.0.1', 'x-forwarded-for': '10.0.0.1' }, method: 'GET', url: '/', socket: { remoteAddress: address } });
+			const ended = new Promise<void>((done) => {
+				server.emit('request', req, { headersSent: false, writeHead: () => undefined, end: () => { done(); } });
+			});
+			await ended;
+		}
+		await listener.stop();
+	});
+	assert.equal(answered.length, 5, 'every one was answered');
+	assert.deepEqual(said, [], 'a public address is never read as a proxy');
+
+	// And each private range is.
+	for (const address of ['10.1.2.3', '172.16.0.1', '172.31.255.1', '192.168.1.1', '::1', '::ffff:127.0.0.1', 'fd12:3456::1', 'fe80::1']) {
+		const own = createHttpServer();
+		const local = node({ server: own });
+		const heard = await warnings(async () => {
+			await local.start({ request: async () => new Response(null, { status: 204 }), socket: async () => new Response(null, { status: 404 }) });
+			const req = Object.assign(Readable.from([]), { headers: { 'x-real-ip': '203.0.113.9' }, method: 'GET', url: '/', socket: { remoteAddress: address } });
+			await new Promise<void>((done) => { own.emit('request', req, { headersSent: false, writeHead: () => undefined, end: () => { done(); } }); });
+			await local.stop();
+		});
+		assert.equal(heard.length, 1, `${address} is where a proxy the application runs would be`);
 	}
 });
 

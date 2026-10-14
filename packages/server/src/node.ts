@@ -27,7 +27,9 @@ export interface NodeSettings {
 	 * from the last entry of `x-forwarded-for`, the one that proxy appended, or with
 	 * `'x-real-ip'` from that header, for a proxy that sets it. Off, both come from the socket
 	 * itself, and a client that sends those headers is ignored. Set it only when a proxy is in
-	 * front, because with it whoever writes the header names the address.
+	 * front, because with it whoever writes the header names the address. Off, the first request
+	 * that carries either header from a loopback or private address writes one warning, because
+	 * that is a proxy reaching a listener that counts all its requests as one address.
 	 */
 	readonly forwarded?: boolean | 'x-real-ip' | undefined;
 }
@@ -69,6 +71,28 @@ const last = (header: string | string[] | undefined): string | undefined => {
 const peerOf = (req: IncomingMessage, forwarded: Forwarded): Peer => ({
 	address: (forwarded === false ? undefined : last(req.headers[forwarded])) ?? req.socket.remoteAddress,
 });
+
+// Where a proxy the application runs reaches the listener from: this machine or its own network.
+// The same header from anywhere else is a client's own claim (design 307).
+const isLocal = (address: string | undefined): boolean => {
+	const bare = (address ?? '').toLowerCase().replace(/^::ffff:(?=\d+\.)/, '');
+	const v4 = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(bare);
+	if (v4 !== null) {
+		const [a, b] = [Number(v4[1]), Number(v4[2])];
+		return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+	}
+	return bare === '::1' || /^f[cd][0-9a-f]{0,2}:/.test(bare) || /^fe[89ab][0-9a-f]?:/.test(bare);
+};
+
+/** The warning for a proxied request this listener reads the socket's address for, or null. */
+const unforwarded = (req: IncomingMessage): string | null => {
+	const header = req.headers['x-real-ip'] !== undefined ? 'x-real-ip' : req.headers['x-forwarded-for'] !== undefined ? 'x-forwarded-for' : null;
+	if (header === null || !isLocal(req.socket.remoteAddress)) return null;
+	const option = header === 'x-real-ip' ? "forwarded: 'x-real-ip'" : 'forwarded: true';
+	return `server: a request from ${String(req.socket.remoteAddress)} carried ${header}, and this listener's forwarded is off, `
+		+ 'so every request through that proxy is one address to the rate limit. '
+		+ `Behind a proxy you run, start the listener with ${option}.`;
+};
 
 /** A body that errors, and ends the request, once it has carried more than `max` bytes. */
 const bounded = (req: IncomingMessage, max: number): ReadableStream => {
@@ -164,6 +188,20 @@ export const node = (options: NodeOptions): NodeListener => {
 	let onUpgrade: ((req: IncomingMessage, socket: Duplex, head: Buffer) => void) | undefined;
 	const sockets = new Set<WebSocket>();
 	const alive = new WeakMap<WebSocket, boolean>();
+	// Said once: the request is answered either way, and one line is enough to find the setting.
+	let warned = forwarded !== false;
+	const notice = (req: IncomingMessage): void => {
+		if (warned) return;
+		const said = unforwarded(req);
+		if (said === null) return;
+		warned = true;
+		try {
+			console.warn(said);
+		} catch {
+			// A console that throws (a harness that fails on a warning) is the host's business. The
+			// request it came with is answered either way.
+		}
+	};
 
 	const track = (ws: WebSocket): void => {
 		sockets.add(ws);
@@ -207,6 +245,7 @@ export const node = (options: NodeOptions): NodeListener => {
 					req.destroy();
 					return;
 				}
+				notice(req);
 				// A body that says up front it is over the bound is refused before it is read; one
 				// that lies, or says nothing, is cut off where it crosses the bound (`bounded`).
 				const declared = Number(req.headers['content-length']);
@@ -227,6 +266,7 @@ export const node = (options: NodeOptions): NodeListener => {
 					});
 			};
 			onUpgrade = (req, socket, head) => {
+				notice(req);
 				void handlers.socket(toRequest(req, forwarded, undefined), peerOf(req, forwarded))
 					.then(async (answer) => {
 						if (answer instanceof Response) {
