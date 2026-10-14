@@ -174,8 +174,9 @@ Two seams, and a page needs neither.
   dev server's proxy the socket takes a path of its own, `/ws`, proxied with `ws: true`, because
   a proxy entry for `/` takes the dev server's own socket with it; [`recipes/full-stack/`](https://github.com/torrinworx/aweft/tree/main/recipes/full-stack) is that
   setup.
-- `open(url)` makes the socket, `new WebSocket(url)` by default. A Node program hands in one
-  that carries a cookie header, which is how a script signs in:
+- `open(url)` makes the socket, `new WebSocket(url)` by default, which Node has too, so a script
+  with no session needs neither seam beyond `url`. A Node program that signs in hands in one that
+  carries a cookie header:
 
 ```ts
 const client = createClient({
