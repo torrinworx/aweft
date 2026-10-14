@@ -58,10 +58,52 @@ export interface Link {
 	close(): void;
 }
 
+/**
+ * An `open` nothing on this end pairs with, as `unshared` hears it (design 310): a name this end
+ * does not share, or one whose every share here is already paired.
+ */
+export interface Unshared {
+	/** The name the other end shared. */
+	readonly name: string;
+	/**
+	 * Whether the link still holds this open unpaired.
+	 *
+	 * Params: none.
+	 *
+	 * Returns: false once a share of the name paired with it, the other end left it, a newer open
+	 * of the name took its place, it was refused, or the link ended.
+	 *
+	 * Example:
+	 *   if (request.held()) link.share(request.name, document, handlers);
+	 */
+	held(): boolean;
+	/**
+	 * Answer the open with `fault`, which ends that topic at the other end.
+	 *
+	 * Params:
+	 *   reason: what the other end's `fault` and its rejected `ready` carry, such as `private`
+	 *   message: the sentence beside it
+	 *
+	 * Returns: true when the open was still held and is answered now. False when `held()` was
+	 * already false, and then nothing is sent.
+	 *
+	 * Example:
+	 *   request.refuse('private', `${request.name} is not yours`);
+	 */
+	refuse(reason: string, message: string): boolean;
+}
+
 /** What a link may be told about how it runs. */
 export interface LinkOptions {
 	/** How many sent commits per topic to keep so a `refused` can be reported with its commit. Default 256. */
 	readonly window?: number;
+	/**
+	 * Hears an `open` nothing here pairs with, once per topic the other end opens: a name this end
+	 * does not share, or a second share of a name already live.
+	 * The link holds the open either way, so a share made later pairs with it. A throw is raised
+	 * on a fresh task, as a watcher's is, and the frame goes on.
+	 */
+	readonly unshared?: ((request: Unshared) => void) | undefined;
 }
 
 /** One commit this end sent, kept so a refusal about it can be reported with it. */
@@ -277,7 +319,32 @@ export const connect = (channel: Channel, options: LinkOptions = {}): Link => {
 			}
 		}
 		// Nothing here shares that name yet. Hold it, so sharing later still opens the topic.
+		const before = waiting.get(frame.name);
 		waiting.set(frame.name, frame);
+		// An end holding a document sends `open` again to ask for state (design 184), and that is
+		// one share, not a second one to tell the application about.
+		if (before?.topic === frame.topic || options.unshared === undefined) return;
+		tell(options.unshared, frame.name, frame.topic);
+	};
+
+	// The link empties `waiting` when it ends, so an ended link holds nothing.
+	const holds = (name: string, topic: number): boolean => waiting.get(name)?.topic === topic;
+
+	const tell = (hear: (request: Unshared) => void, name: string, topic: number): void => {
+		try {
+			hear({
+				name,
+				held: () => holds(name, topic),
+				refuse: (reason, message) => {
+					if (!holds(name, topic)) return false;
+					waiting.delete(name);
+					post.send({ kind: 'fault', topic, reason, message });
+					return true;
+				},
+			});
+		} catch (error) {
+			queueMicrotask(() => { throw error; });
+		}
 	};
 
 	const refuse = (topic: Topic, seq: number, reasons: readonly WireReason[], commit: Commit): void => {
@@ -366,6 +433,12 @@ export const connect = (channel: Channel, options: LinkOptions = {}): Link => {
 
 		const topic = theirs.get(frame.topic);
 		if (topic === undefined) {
+			// A topic the other end left before anything here shared its name is no longer held,
+			// so a share made later does not pair with a topic that is gone (design 310). The
+			// answer is the one it always was.
+			if (frame.kind === 'leave') {
+				for (const [name, held] of waiting) if (held.topic === frame.topic) waiting.delete(name);
+			}
 			// The number is the sender's, and the sender is the end being told, so it can find
 			// the topic that ended. The link carries on.
 			post.send({

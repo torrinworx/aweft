@@ -85,6 +85,36 @@ link.share('inbox', inbox, {
 Which end may write what is a rule you write here, or a topology you arrange: one end that
 refuses is a server, if you want one. The package never asks who made a commit.
 
+## A name the other end asks for
+
+An `open` nothing here pairs with is held, so a share made later pairs with it. That is a name this
+end does not share, or a second share of a name whose share here is already live. The application
+can hear it arrive and answer it, which is how a server offers a document a page asks for by name
+(design 310):
+
+```ts
+const link = connect(channel, {
+	unshared: (request) => {
+		if (!mayRead(request.name)) { request.refuse('private', `${request.name} is not yours`); return; }
+		void open(request.name).then((document) => {
+			if (request.held()) link.share(request.name, document, { accept });
+		});
+	},
+});
+```
+
+`unshared` is called once for each topic the other end opens that nothing here pairs with. An
+end holding a document sends `open` a second time to ask for state, and that is one topic, heard
+once. `request.held()` is false once a share paired with the open, the other end left it, a newer
+open of the name took its place, it was refused, or the link ended. Check it before sharing late:
+a share made for an open that is no longer held pairs with nothing, and keeps every commit made
+on it waiting for an `open` that never comes. `request.refuse(reason, message)` answers the open
+with `fault`, so the other end's `fault` hears that reason and its `ready` rejects with it. It
+returns false, and sends nothing, when the open is no longer held. Nothing on the wire is new:
+the answer is the `fault` frame, naming the other end's number for the topic.
+
+A throw out of `unshared` is raised on a fresh task, as a watcher's is, and the open stays held.
+
 ## A refusal is reported at both ends
 
 A commit that does not apply, because `accept` said no or because the applier refused it,

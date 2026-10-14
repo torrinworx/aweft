@@ -1,5 +1,5 @@
 export { connect } from './link.ts';
-export type { Link, LinkOptions, Refused, ShareHandlers, Shared } from './link.ts';
+export type { Link, LinkOptions, Refused, ShareHandlers, Shared, Unshared } from './link.ts';
 
 export { mirror } from './mirror.ts';
 
