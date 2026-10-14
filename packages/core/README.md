@@ -299,6 +299,31 @@ aliases, and it accepts commits addressed to the original's ids from then on. It
 what the document says, not the detached observables the original still indexes, so
 replaying a history that resurrects one is the commit log's job, not a snapshot's.
 
+## Plain data in, and a plain copy out
+
+A slot refuses a plain object or array (`inline-container`), so data from a request, a file or an
+import is converted on the way in. `fromPlain` builds the observables, all the way down, and
+`toPlain` copies a document, or any part of it, back out as plain data.
+
+```ts
+handle.root.rows = fromPlain(JSON.parse(text).rows);   // objects and arrays, each one observable
+const saved = JSON.stringify(toPlain(handle.root));    // nothing in the copy is live
+```
+
+On the way in, a key holding `undefined` is dropped and an `undefined` or a hole in an array is
+`null`, as `JSON.stringify` writes them. A key named `__proto__`, which `JSON.parse` makes an own
+key, is a slot like any other both ways, and sets no prototype. A primitive, bytes and an
+observable come back as they are, so a tree that is partly observable keeps the observables it
+holds, and an `alias(x)` marker stays an alias. A `Date`, a `Map`, a class instance, a function or
+a cell is refused with `invalid-value`, naming where in the value it was.
+
+On the way out, an object and a map are plain objects (a map keyed by each entry's id), an array a
+plain array, bytes a copy of the bytes, and every slot is there, a private one too. An observable
+reached twice through an alias is copied at each place, and an `alias(x)` marker is copied as the
+observable it names. A value reached again inside itself is refused with `cycle`, either way, and
+one nested deeper than the runtime's stack with `too-deep`. So `fromPlain(toPlain(map))` is an
+object and not a map (design 311).
+
 ## Removing something takes it out of the document
 
 Taking an observable out of the document leaves it readable and no longer writable. A write

@@ -62,7 +62,8 @@ export const alias = (observable: object): object => {
 	return { [ALIAS]: node };
 };
 
-const aliased = (value: object): Node | undefined => (value as Partial<Alias>)[ALIAS];
+/** The observable an `alias` marker names, or undefined for anything else. Internal to this package. */
+export const aliased = (value: object): Node | undefined => (value as Partial<Alias>)[ALIAS];
 
 /**
  * Turn a written value into a cell, refusing anything the format cannot carry.

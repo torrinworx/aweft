@@ -28,6 +28,7 @@ value createArray: <T = unknown>(items?: Iterable<T> | undefined, id?: Id | unde
 value createMap: <T = unknown>(entries?: Iterable<readonly [unknown, T]> | undefined, id?: Id | undefined) => ObservableMap<T>
 value createObject: <T extends object = Record<string, unknown>>(init?: Readonly<Partial<T>> | undefined, id?: Id | undefined) => T
 value fromEvent: <E>(target: EventEmitting<E>, type: string) => Cell<E | undefined>
+value fromPlain: <T>(value: T) => T
 value fromSnapshot: (snap: Snapshot) => object
 value idOf: (observable: unknown) => Id
 value immutable: { <T>(value: Derived<T>): Cell<T>; <T>(value: T): Cell<T>; }
@@ -46,3 +47,4 @@ value positionsOf: (list: object) => Position[]
 value snapshot: (observable: unknown) => Snapshot
 value textIdOf: (observable: unknown) => string
 value timer: (ms: number) => Cell<number>
+value toPlain: <T = unknown>(value: unknown) => T

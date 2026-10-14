@@ -15,10 +15,12 @@ test('the entry file exports exactly what was decided', () => {
 		'RefusedError',
 		'alias', 'all', 'apply', 'atomic', 'byId',
 		'createArray', 'createMap', 'createObject',
-		'fromEvent', 'fromSnapshot',
+		'fromEvent', 'fromPlain', 'fromSnapshot',
 		'idOf', 'immutable', 'insertAt', 'intercept', 'isMutableArray', 'isObservable', 'isReachable',
 		'kindOf', 'mutable', 'mutableArray', 'observer', 'parentOf', 'pathOf', 'positionsOf',
 		'snapshot', 'textIdOf', 'timer',
+		// Plain data in and out of a document. Design 311.
+		'toPlain',
 	];
 
 	assert.deepEqual(Object.keys(core).sort(), decided);
