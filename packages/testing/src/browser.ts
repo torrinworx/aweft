@@ -117,9 +117,9 @@ export const audit = async (page: PageLike, options: AuditOptions = {}): Promise
 	const loaded = await page.evaluate('typeof globalThis.axe === "object" && globalThis.axe !== null');
 	if (loaded !== true) await page.addScriptTag({ content });
 
-	// axe reads the colours of the frame it runs in, so a page still moving between two colours is
-	// read halfway. What has an end is waited for, again until nothing is left, and for at most
-	// SETTLE_MS. What never ends, a spinner, is not (design 309).
+	// axe reads the colours of the frame it runs in, so a page that is still changing colour is read
+	// halfway. Wait for every animation that has an end, again until none is left, for at most
+	// SETTLE_MS. Do not wait for one that never ends, such as a spinner (design 309).
 	const found = await page.evaluate(`(async () => {
 		const root = ${JSON.stringify(options.root ?? null)};
 		const target = root === null ? document : document.querySelector(root);

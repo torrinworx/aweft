@@ -86,7 +86,7 @@ why. Such a file is not refused, because a module beside it may import it, and t
 process run under `@aweftjs/build/loader`, which compiles it:
 
 ```ts
-const pages = fromBundle({ './Hello.tsx': () => import('./modules/Hello.tsx') });
+const pages = fromBundle({ './Hello.tsx': () => import('./modules/Hello.tsx') })
 ```
 
 `fromDirectory` hands its path to `node:fs`, which resolves a relative one against the process's

@@ -39,20 +39,20 @@ export const warnHtmlSvg = (tag: string): boolean => {
 
 type Without<P> = { [K in keyof P as K extends 'each' | 'children' ? never : K]: P[K] };
 
-// What `each` takes: a list, a document array or a list cell, or a cell or scope whose value is
-// one, which the list follows. A scope reads its value as `unknown`, so it carries no item type.
-// The item itself is taken too: a call written against the old `each?: unknown` cast its list to
-// the item to compile, and that call keeps compiling. The runtime refuses an item that is no list.
+// What `each` takes. A list, a document array or a list cell, or a cell or scope that holds one,
+// which the list follows. A scope types its value `unknown`, so it has no item type. One item is
+// taken too, because code written against the old `each?: unknown` cast its list to the item, and
+// that code keeps compiling. The runtime refuses an item that is not a list.
 type ListOf<I> = Iterable<I> | Derived<Iterable<I>> | Observer | I;
 
 /**
  * What a call site writes for a component whose own props are `P` (design 308).
  *
- * The props the component declares, with `each` read as a list of the item it declares, since
- * `each` is the list where the component is called and one item in its body: an iterable of the
- * item, or a cell or scope holding one. `children` is left to the rest arguments. A component
- * whose props are `unknown`, or that takes none, takes any props. JSX checks a component's
- * attributes against this too.
+ * These are the props the component declares, with one change. `each` is a list where the
+ * component is called and one item in its body, so here it is a list of the item: an iterable, or
+ * a cell or scope that holds one. `children` goes in the rest arguments. A component whose props
+ * are `unknown`, or that takes none, takes any props. JSX checks a component's attributes against
+ * this too.
  *
  * Example:
  *   const Row = (props: { each: Item, onPick(item: Item): void }) => h('li', null, props.each.label)
@@ -65,9 +65,10 @@ export type CallProps<P> = unknown extends P ? Readonly<Record<string, unknown>>
 		: Without<P> & { readonly children?: unknown[] | null };
 
 /**
- * A component as `h` takes it: any function of props. Written as a method, so its parameter is
- * compared both ways and a generic component, whose props TypeScript cannot pin down here, is
- * still taken, with its props then left unchecked (design 308).
+ * A component as `h` takes it: any function of props. It is written as a method, because
+ * TypeScript checks a method's parameter in both directions. That way `h` still takes a generic
+ * component, whose props TypeScript cannot work out from the tag, and leaves those props unchecked
+ * (design 308).
  */
 export type ComponentTag<P> = { component(props: P, ...rest: never[]): unknown }['component'];
 
@@ -79,8 +80,8 @@ export type ComponentTag<P> = { component(props: P, ...rest: never[]): unknown }
  *   props: attributes by bare name, properties by `$name` (`$value`, `$onclick`, a `$style`
  *          object), each static or a scope, cell or derived value; `children` as an
  *          alternative to the rest arguments; `each` on a component to mount it once per
- *          item of a list. With a component as the tag they are checked against its own
- *          props, `each` as a list of its item (`CallProps`)
+ *          item of a list. With a component as the tag, the props must match the ones the
+ *          component declares, and `each` must be a list of its item (`CallProps`)
  *   children: what goes inside: primitives, nodes, `h()` output, iterables, scopes and cells,
  *             components. `null` is skipped and `undefined` is refused
  *

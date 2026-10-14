@@ -24,7 +24,7 @@ import { type Match, checkActKeys, hashOf, matchAct, parseQuery, pathOf, queryOf
 import { suspend } from './suspend.tsx';
 
 /**
- * What every act is handed: `stage`, and whatever an `open` or the `refused` act passes beside it.
+ * The props every act gets: `stage`, plus any props an `open` passes or the `refused` act gets.
  */
 export interface ActProps {
 	readonly stage: StageValue;
@@ -33,9 +33,10 @@ export interface ActProps {
 }
 
 /**
- * The body of an act. Written as a method, whose parameter is compared in both directions, so an
- * act may declare props beyond `stage` (`refusal`, `retry`, what an `open` passes) that the stage
- * cannot promise in general, while a `stage` of the wrong type is still refused (design 308).
+ * The body of an act. It is written as a method, because TypeScript checks a method's parameter in
+ * both directions. That way an act may declare props beyond `stage`, such as `refusal`, `retry` or
+ * what an `open` passes, which the stage cannot always promise. A `stage` of the wrong type is
+ * still refused (design 308).
  */
 export type ActBody = { act(props: ActProps, cleanup: Cleanup, mounted: Mounted, pending: Pending): unknown }['act'];
 

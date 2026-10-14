@@ -511,9 +511,9 @@ defineTheme({
 		// `field`'s rules cannot name this one's.
 		'_elem_[data-invalid]': { color: '$dangerSubtleForeground' },
 	},
-	// A whole line each in a field laid out in a row, by width rather than by basis: in a column
-	// field the basis is a height, and a field stretched to a definite height gave its whole height
-	// to the line and took it from the input.
+	// Each takes a whole line in a field laid out in a row. The rule sets the width, not the flex
+	// basis. In a column field the basis is the height, so a field of fixed height gave the line all
+	// of it and the input shrank.
 	field_hint: {
 		fontFamily: '$font',
 		fontSize: '$textXs',

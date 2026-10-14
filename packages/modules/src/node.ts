@@ -10,9 +10,9 @@ import { nameOfPath } from './names.ts';
 
 const EXTENSIONS = ['.js', '.mjs', '.ts'];
 
-// Script by its name, in any case. One of these this source does not import is left out and said,
-// once a process, because left out quietly a module is simply absent. Said rather than refused,
-// because a module beside it may import it, and that directory works (design 307).
+// A script file name, in any case. A script this source does not import gets one warning per
+// process, because a module left out with no word is absent and nothing says why. It is not
+// refused, because a module beside it may import it (design 307).
 const SCRIPT = /\.[cm]?[jt]sx?$/i;
 const said = new Set<string>();
 

@@ -13,8 +13,9 @@ import { assert } from './assert.ts';
 import { isSource } from './types.ts';
 
 /**
- * Any `h` the tag can call. Written as a method so its parameters are compared both ways, which is
- * what lets an `h` whose tag and props are typed (this package's own, design 308) be handed in.
+ * Any `h` the tag can call. It is written as a method, because TypeScript checks a method's
+ * parameters in both directions. That way it takes an `h` with typed tags and props, such as this
+ * package's own (design 308).
  */
 export type H = { h(tag: unknown, props: Record<string, unknown> | null, ...children: unknown[]): unknown }['h'];
 

@@ -3347,9 +3347,9 @@ test('a face, a keyframes and an import compiled at runtime land in an element o
 });
 
 test('a field\'s hint and error line take their own line without taking the input\'s height', async () => {
-	// Two fields side by side in a row, so each column field is stretched to a definite height,
-	// which is where a percentage basis on the main axis resolves. The second theme is how an
-	// application sizes its inputs to their padding: no minimum height of its own.
+	// Two fields side by side in a row. The row stretches each field to a fixed height, and only
+	// then does a percentage flex basis act on a column field's height. The second pair is themed
+	// the way an application does it when its inputs set no minimum height.
 	const site = await page('field-lines', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
 		import { Checkbox, TextField, Theme, h, mount } from '@aweftjs/ui';
 		const pair = (prefix) => (

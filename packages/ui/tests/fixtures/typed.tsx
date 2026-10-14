@@ -1,4 +1,4 @@
-// Call sites written the way an application writes them, read by the root typecheck (design 308).
+// Calls written the way an application writes them. The root typecheck reads them (design 308).
 //
 // Each refusal is pinned with `@ts-expect-error`, so a refusal that stops happening is itself a
 // type error. A refused call sits in a function `types.test.ts` never calls.

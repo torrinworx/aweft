@@ -246,11 +246,11 @@ length over it is 413, a body that crosses it is cut off): 1 MiB with nothing se
 you trust: `true` reads the scheme from `x-forwarded-proto` and the peer address from the last
 entry of `x-forwarded-for`, the one that proxy appended, since the first entry is whatever the
 client wrote; `'x-real-ip'` reads the address from that header instead, for a proxy that sets
-it. Off, both headers are ignored, and the first request that carries one from a loopback or
-private address writes one warning to the console naming the setting: that is a proxy the
-application runs, and without `forwarded` every request through it is one address to the rate
-limit (design 307). The same header from a public address is a client's own claim and says
-nothing. A `TRACE` is answered 405 before any handler sees it. `port` is readable after `start`,
+it. Off, both headers are ignored. The first request that carries one from a loopback or
+private address writes one warning to the console that names the setting. Such a request comes
+through a proxy the application runs, and without `forwarded` every request through that proxy
+counts as one address against the rate limit (design 307). The same header from a public address
+is a client's own claim, and the listener says nothing about it. A `TRACE` is answered 405 before any handler sees it. `port` is readable after `start`,
 so `port: 0` works in a test.
 
 A listener for another runtime proves itself with `listenerChecks()` from

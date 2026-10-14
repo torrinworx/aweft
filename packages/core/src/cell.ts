@@ -19,9 +19,8 @@ const markAll = (marks: Set<() => void>): void => {
 /**
  * A cell: one reactive value outside any document, which a component follows.
  *
- * What `mutable`, `immutable`, `timer` and `fromEvent` return, and the type to give a prop that
- * takes one. It is `Derived`, the type every chain is, under the name the documentation uses
- * (design 308).
+ * `mutable`, `immutable`, `timer` and `fromEvent` return one. Give this type to a prop that takes
+ * a cell. It is the same type as `Derived`, under the name the documentation uses (design 308).
  *
  * Example:
  *   const Count = (props: { count: Cell<number> }) => h('p', null, props.count)
