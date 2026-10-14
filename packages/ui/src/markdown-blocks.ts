@@ -6,8 +6,10 @@
 // the item above it, an indented block is a paragraph, a setext underline is a rule or a
 // paragraph line. The inline syntax is not read here; it is the modifiers' job (`markdown.tsx`).
 
+/** A table column's alignment, from its delimiter cell: `:-` left, `:-:` center, `-:` right, `-` none. */
 export type Align = 'left' | 'center' | 'right' | null;
 
+/** A `#` line. `Markdown` draws it as `Typography` `h1` to `h6` with `id` as its id. */
 export interface HeadingBlock {
 	readonly kind: 'heading';
 	readonly level: number;
@@ -15,8 +17,11 @@ export interface HeadingBlock {
 	/** GitHub's id for the heading: lowercased, marks and punctuation dropped, spaces to hyphens, a repeat suffixed. */
 	readonly id: string;
 }
+/** Lines of prose up to a blank line or a line that opens another block, joined by a space. Two trailing spaces are a line break, `\n` in `text`. */
 export interface ParagraphBlock { readonly kind: 'paragraph'; readonly text: string; }
+/** A fenced block: the word after the fence, or null, and the lines between the fences as written. */
 export interface CodeBlock { readonly kind: 'code'; readonly language: string | null; readonly text: string; }
+/** One item of a list, its text with its marks as written. */
 export interface ListItem {
 	readonly text: string;
 	/** `open` or `done` for a task item, null for a plain one. */
@@ -26,6 +31,7 @@ export interface ListItem {
 	/** The lists nested under this item, in order; a change of kind starts another. */
 	readonly children: readonly ListBlock[];
 }
+/** A list, three levels deep at most. A fourth level is text joined to the item above it. */
 export interface ListBlock {
 	readonly kind: 'list';
 	readonly ordered: boolean;
@@ -33,6 +39,7 @@ export interface ListBlock {
 	readonly start: number;
 	readonly items: readonly ListItem[];
 }
+/** A paragraph that is one image line, `![alt](src)` or `![alt](src =WxH)`, whose source runs nothing. It is a video when it ends `.mp4`, `.webm` or `.mov`. */
 export interface FigureBlock {
 	readonly kind: 'figure';
 	readonly media: 'image' | 'video';
@@ -43,15 +50,25 @@ export interface FigureBlock {
 	readonly width: number | null;
 	readonly height: number | null;
 }
+/** A pipe table: the header's cells, each column's alignment, and the rows, each padded or cut to the header's width. */
 export interface TableBlock {
 	readonly kind: 'table';
 	readonly header: readonly string[];
 	readonly align: readonly Align[];
 	readonly rows: readonly (readonly string[])[];
 }
+/** `>` lines, and the prose lines carrying them on, as one text joined by spaces. */
 export interface QuoteBlock { readonly kind: 'quote'; readonly text: string; }
+/** A line of three or more `-`, `*` or `_`. */
 export interface RuleBlock { readonly kind: 'rule'; }
 
+/**
+ * One block of a markdown string, as `parseBlocks` reads it and `Markdown` draws it, told apart by
+ * `kind`. Inline marks are left in each text as written, for the modifiers to read.
+ *
+ * Example:
+ *   const fences = parseBlocks(post).filter((block): block is CodeBlock => block.kind === 'code');
+ */
 export type Block = HeadingBlock | ParagraphBlock | CodeBlock | ListBlock | TableBlock | QuoteBlock | RuleBlock | FigureBlock;
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)/;
@@ -202,8 +219,10 @@ const parseList = (lines: readonly string[], from: number, floor: number, depth:
  * Params:
  *   source: the text
  *
- * Returns: the blocks in order. A heading carries its id, a list item the line it starts on and
- * the lists nested under it, a figure its source, alt text and size.
+ * Returns: the blocks in order, the ones `Markdown` draws (design 314). A heading carries the id
+ * `Markdown` gives it, a list item the line it starts on and the lists nested under it, a figure its
+ * source, alt text and size. Anything this subset does not read is the characters written, inside a
+ * paragraph. It never throws: every string is some list of blocks.
  *
  * Example:
  *   parseBlocks('# Title\n\nA paragraph.');

@@ -1190,6 +1190,26 @@ const contents = headings.map((text) => ({ text, href: `#${id(text)}` }));
 block; absent, the block holds a `<code>` with the text. Highlighting is the application's, and
 this package ships none.
 
+**`parseBlocks`** is the reader `Markdown` draws from, exported so a site reads its own markdown,
+its headings, fenced blocks, image lines and tables, the way the page renders it rather than with a
+second grammar that disagrees. `parseBlocks(source)` answers the blocks in order, each told apart by
+`kind`, with the inline marks left in each text as written:
+
+| `kind` | fields |
+|---|---|
+| `heading` (`HeadingBlock`) | `level`, `text`, `id`: the one `Markdown` gives it |
+| `paragraph` (`ParagraphBlock`) | `text`: lines joined by a space, `\n` for a line break |
+| `code` (`CodeBlock`) | `language` (the word after the fence, or null), `text` |
+| `list` (`ListBlock`) | `ordered`, `start`, `items`: each a `ListItem` with `text`, `task` (`open`, `done` or null), `line` (the source line it starts on) and `children` (the lists under it) |
+| `table` (`TableBlock`) | `header`, `align` (one `Align` per column: `left`, `center`, `right` or null), `rows` |
+| `quote` (`QuoteBlock`) | `text` |
+| `rule` (`RuleBlock`) | nothing |
+| `figure` (`FigureBlock`) | `media` (`image` or `video`), `src`, `alt`, `width`, `height` |
+
+```ts
+const fences = parseBlocks(post).filter((block): block is CodeBlock => block.kind === 'code');
+```
+
 **A cell source re-renders every block when it changes**; there is no diff. A task item's box is
 disabled unless the source is a writable cell, and then a tick rewrites that item's `[ ]` or
 `[x]` in the source and sets the cell, so a document a page shares is what moved.

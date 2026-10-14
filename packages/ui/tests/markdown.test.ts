@@ -20,13 +20,12 @@ import type { Token, Tokens } from 'marked';
 import { mutable } from '@aweftjs/core';
 import { createDocument, parseHtml, toHtml } from '@aweftjs/dom';
 import type { ElementLike, LightElement, NodeLike } from '@aweftjs/dom';
-import { Markdown, TextModifiers, context, h, hydrate, mount, render, slugger } from '@aweftjs/ui';
-import type { Render } from '@aweftjs/ui';
+import { Markdown, TextModifiers, context, h, hydrate, mount, parseBlocks, render, slugger } from '@aweftjs/ui';
+import type { Block, CodeBlock, Render } from '@aweftjs/ui';
 
-// The parser is not on the surface; the corpus test reads it through the file, as an
-// `internal.*` file would, because the blocks are what the oracle can be compared with.
-import { parseBlocks, toggled } from '../src/markdown-blocks.ts';
-import type { Block } from '../src/markdown-blocks.ts';
+// The task-box rewrite is not on the surface. The test reads it through the file, as an
+// `internal.*` file would.
+import { toggled } from '../src/markdown-blocks.ts';
 
 const root = fileURLToPath(new URL('../../..', import.meta.url));
 
@@ -427,6 +426,30 @@ test('a numbered list from 1 carries no start, and a delimiter row aligns a colu
 		classes(['table_cell']), classes(['table_cell', 'center']), classes(['table_cell', 'right']), classes(['table_cell']),
 	], 'left is the default and gets no segment');
 	own.stop();
+});
+
+test('parseBlocks hands out every kind with the fields the README names', () => {
+	const blocks = parseBlocks([
+		'# Title', '', 'Prose.', '', '```scene', 'forest', '```', '', '- [x] done', '  - under', '',
+		'| a | b |', '|:-|-:|', '| 1 | 2 |', '', '> Note: mind it', '', '***', '', '![a cat](/cat.png =4x3)',
+	].join('\n'));
+	assert.deepEqual(blocks, [
+		{ kind: 'heading', level: 1, text: 'Title', id: 'title' },
+		{ kind: 'paragraph', text: 'Prose.' },
+		{ kind: 'code', language: 'scene', text: 'forest' },
+		{
+			kind: 'list', ordered: false, start: 1, items: [{
+				text: 'done', task: 'done', line: 8,
+				children: [{ kind: 'list', ordered: false, start: 1, items: [{ text: 'under', task: null, line: 9, children: [] }] }],
+			}],
+		},
+		{ kind: 'table', header: ['a', 'b'], align: ['left', 'right'], rows: [['1', '2']] },
+		{ kind: 'quote', text: 'Note: mind it' },
+		{ kind: 'rule' },
+		{ kind: 'figure', media: 'image', src: '/cat.png', alt: 'a cat', width: 4, height: 3 },
+	]);
+	const fences = blocks.filter((block): block is CodeBlock => block.kind === 'code');
+	assert.deepEqual(fences.map((fence) => fence.language), ['scene']);
 });
 
 test('with no source at all the block holds nothing', () => {
