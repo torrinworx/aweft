@@ -60,7 +60,10 @@ ships a default.
 const query = mutable('');
 const found = asking<Post[]>(client, 'posts/Search', query.map((text) => ({ text })));
 
-found.get();   // { state: 'waiting', data: null }, then { state: 'ready', data: [...] }
+// A component that reads `found` watches it. Outside a component, `effect` watches it.
+const stop = found.effect((now) => { console.log(now.state); });   // waiting, then ready
+query.set('aweft');   // asks again: waiting, then ready with the new answer
+stop();               // nothing watches, so nothing more is asked
 ```
 
 `asking(client, name, args?, options?)` is a read-only cell of the latest answer to
