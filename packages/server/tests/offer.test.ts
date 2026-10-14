@@ -325,9 +325,9 @@ test('an offer that arrives after the connection ended is not shared, and its fa
 	await settle();
 	client.socket.close();
 	await settle();
-	answer({ document: createObject<Doc>({}), ...open, fault: (reason) => { faults.push(reason); } });
+	answer({ document: createObject<Doc>({}), ...open, fault: (reason, message) => { faults.push(`${reason}: ${message}`); } });
 	await settle();
-	assert.deepEqual(faults, ['closed']);
+	assert.deepEqual(faults, ['closed: the connection ended before board was offered']);
 	await server.stop();
 });
 
