@@ -79,3 +79,22 @@ test('a refusal rejects ready with the module\'s reason, and a reconnect asks ag
 	client.close();
 	await server.stop();
 });
+
+test('an offer that makes a new document for each ask ends the page\'s share with root-mismatch after a reconnect', async () => {
+	// The page holds the document it had, and a new one has a root of its own.
+	const faults: string[] = [];
+	const { server, handlers } = await serverOf({
+		'notes/Open': instance(() => ({ offer: (): Offer => ({ document: createObject<Note>({ text: 'from the row' }), ...open }) })),
+	});
+	const dial = dialer(handlers);
+	const client = createClient({ url: 'ws://app.test/', open: dial.open });
+	const shared = client.share<Note>('note:3', undefined, { fault: (reason) => { faults.push(reason); } });
+	assert.equal((await shared.ready).text, 'from the row');
+	dial.sockets[0]!.close();
+	await after(700);
+	await settle(20);
+	assert.equal(client.status.get(), 'open');
+	assert.deepEqual(faults, ['root-mismatch']);
+	client.close();
+	await server.stop();
+});

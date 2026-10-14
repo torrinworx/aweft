@@ -195,13 +195,16 @@ share ends with `failed`. `closed` is what every share ends with when a socket d
 `@aweftjs/client` answers it with its next socket rather than telling the page, so a page refused
 with it would wait for good.
 
-When every module declines, or the gate skips them all, nothing is sent and the page's share
-waits, as it always has, so a share a `call` makes later still pairs with it. An application with
-no `offer` behaves as it did before this hook existed. A module is asked once for each share the
-page makes that is still waiting when its turn comes: a second share of a name the page is already
+When every module declines, or the gate skips them all, nothing is sent and the page's share waits,
+as it always has, so a share a `call` makes later still pairs with it. An application with no
+`offer` behaves as it did before this hook existed. A module is asked once for each share the page
+makes that is still waiting when its turn comes: a second share of a name the page is already
 waiting on takes the first one's place, and only the second is asked about. A page that shares the
 name again after a reconnect, which `@aweftjs/client` does for every handle, is asked again on the
-new connection.
+new connection. The page still holds the document it had, so the offer on the new connection has to
+be that same document: one the store opens again, or one the module keeps by name. A document made
+afresh for each offer, such as `fromPlain(row)` on every ask, has a root of its own, and the page's
+share ends with `root-mismatch`.
 
 The offered share's `fault` hears how it ended: `left` when the page stops it, `closed` when the
 connection ends. That is where a module closes what it opened. An offer that arrives after the page

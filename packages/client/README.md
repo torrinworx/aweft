@@ -128,10 +128,11 @@ sockets.
 its connection is waiting for, and shares it back. A module that refuses ends the share: `ready`
 rejects with the module's reason and message, and `fault` hears them. Because every handle is shared
 again on every new socket, the page asks again after a drop with no code of its own, and the
-document lands on the object it already holds. A refused handle is shared again too, so after a
-sign-in, which reconnects, the module is asked as the person who is now signed in. Its `ready`
-rejected with the refusal and stays rejected, so the page reads the document off `handle.document`
-once it arrives, or shares the name again for a `ready` of its own.
+document lands on the object it already holds. That needs the module to offer the same document
+again. A new one has a root of its own, and the share ends with `root-mismatch`. A refused handle is
+shared again too, so after a sign-in, which reconnects, the module is asked as the person who is now
+signed in. Its `ready` rejected with the refusal and stays rejected, so the page reads the document
+off `handle.document` once it arrives, or shares the name again for a `ready` of its own.
 
 **A link carries one topic per name, so share a name once per client.** A second share of a name
 that is already live waits for an offer that never comes, and so does `share('')` and a share of a
