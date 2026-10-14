@@ -80,7 +80,7 @@ repo.
 |---|---|
 | `theme` | a string, a list, a cell, or lists of those; flattened at mount into a class list and matched against the theme |
 | `class` | kept, and joined in front of the classes the theme generated. Without a `theme` it is an ordinary attribute |
-| `style` | an object (or a string). A bare number in a size property gets `px`, and `$var` and `$fn()` resolve against the element's own theme chain. With no `theme` prop there is no chain, so a `$var` in an object style resolves to nothing and a development build warns once per name. `theme=""` gives the element the chain it is under. An `svg` element takes no theme, and its warning says to write the value (design 307) |
+| `style` | an object (or a string). A bare number in a size property gets `px`, and `$var` and `$fn()` resolve against the element's own theme chain. With no `theme` prop there is no chain, so a `$var` in an object style resolves to nothing and anything but a release bundle warns once per name, a server render under Node included. `theme=""` gives the element the chain it is under. An `svg` element takes no theme, and its warning says to write the value (design 307) |
 | `isHovered`, `isFocused`, `isClicked`, `isTouched` | a cell this package writes from real events. `isFocused` is the element's own focus, and `isTouched` is a pointer event that says it was a finger |
 | `onClick`, `onInput`, `onKeyDown`, … | `on` and an uppercase letter: a handler, handed to `dom` as `$on<type>` so a hydration replays it, and gone when its element goes. Your own `$onclick` beside it runs first |
 
@@ -93,7 +93,7 @@ mount context to a mounter and to nothing else. Hand it to `mount` as you would 
 
 `svg` is the same in the SVG namespace, with no theme: `class` and `style` stay plain attributes.
 JSX always compiles to `h`, so an `<svg>` written in JSX is an HTML element that draws nothing, and
-a development build says so. Write an inline drawing as `svg('svg', props, svg('path', props))`
+anything but a release bundle says so. Write an inline drawing as `svg('svg', props, svg('path', props))`
 calls, or use `Icon` (design 307).
 `html` is `dom`'s template-literal tag bound to this `h`.
 
