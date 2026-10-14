@@ -23,6 +23,7 @@ test('each file is one face, quoted, with its format, weight, style, display and
 			{ src: '/serif/Variable.ttf?v=2', weight: '200 900', range: 'U+0000-00FF, U+0131' },
 			{ src: '/mono/Mono.otf' },
 			{ src: '/old/Face.eot' },
+			{ src: '/caps/Face.WOFF2' },
 		]),
 		color: 'red',
 	});
@@ -32,6 +33,7 @@ test('each file is one face, quoted, with its format, weight, style, display and
 		'font-family: "IBM Plex Sans"; src: url("/serif/Variable.ttf?v=2") format("truetype"); font-weight: 200 900; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131;',
 		'font-family: "IBM Plex Sans"; src: url("/mono/Mono.otf") format("opentype"); font-style: normal; font-display: swap;',
 		'font-family: "IBM Plex Sans"; src: url("/old/Face.eot"); font-style: normal; font-display: swap;',
+		'font-family: "IBM Plex Sans"; src: url("/caps/Face.WOFF2") format("woff2"); font-style: normal; font-display: swap;',
 	]);
 	assert.match(css, /color: red/, 'the entry the faces were spread into keeps its own declarations');
 });
