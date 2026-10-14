@@ -85,6 +85,66 @@ test('a style with no theme still resolves, with nothing to look a $var up in', 
 	stop();
 });
 
+/** What `console.warn` was handed while `run` ran. */
+const warned = (run: () => void): string[] => {
+	const said: string[] = [];
+	const real = console.warn;
+	console.warn = (...args: unknown[]): void => { said.push(args.map(String).join(' ')); };
+	try {
+		run();
+	} finally {
+		console.warn = real;
+	}
+	return said;
+};
+
+test('a $var in a style with no theme says so once per name, naming theme="", and the page still renders', () => {
+	const document = createDocument();
+	let stops: (() => void)[] = [];
+	const said = warned(() => {
+		stops = [
+			mount(document.body, h('div', { style: { padding: '$unthemedGap', width: 4 } })),
+			mount(document.body, h('div', { style: { margin: '$unthemedGap' } })),
+			// A cell holding text is claimed and resolved too. Plain text is an attribute as written.
+			mount(document.body, h('p', { style: mutable('color: $unthemedInk') })),
+		];
+	});
+	assert.equal(said.length, 2, `one line per name, not per element: ${said.join(' | ')}`);
+	assert.match(said[0]!, /\$unthemedGap/);
+	assert.match(said[0]!, /theme=""/);
+	assert.match(said[1]!, /\$unthemedInk/);
+	assert.match(toHtml(document.body.childNodes), /style="padding: ; width: 4px;"/, 'the value is still nothing');
+	for (const stop of stops) stop();
+});
+
+test('a $var in an SVG element\'s style names the fix an SVG element can take', () => {
+	const document = createDocument();
+	let stop = (): void => {};
+	const said = warned(() => {
+		stop = mount(document.body, svg('svg', { viewBox: '0 0 4 4' }, svg('circle', { r: 2, style: { fill: '$svgInk' } })));
+	});
+	assert.equal(said.length, 1);
+	assert.match(said[0]!, /SVG element takes no theme/);
+	assert.match(said[0]!, /currentColor/);
+	assert.doesNotMatch(said[0]!, /theme=""/, 'theme="" does nothing on an SVG element, so it is not offered');
+	stop();
+});
+
+test('a themed element, theme="", a $$ escape and a call say nothing', () => {
+	const document = createDocument();
+	let stops: (() => void)[] = [];
+	const said = warned(() => {
+		stops = [
+			mount(document.body, h('div', { theme: 'sized', style: { padding: '$step$px' } })),
+			mount(document.body, h('div', { theme: '', style: { padding: '$step$px' } })),
+			mount(document.body, h('div', { style: { content: '$$5', width: '$min(10px, 2em)' } })),
+		];
+	});
+	assert.deepEqual(said, []);
+	assert.match(toHtml(document.body.childNodes), /width: min\(10px, ?2em\)/, 'a call with no theme is the CSS function of that name');
+	for (const stop of stops) stop();
+});
+
 test('an onXxx prop is a handler property, and it goes out of the page with its element', () => {
 	const seen: string[] = [];
 	const document = createDocument();
