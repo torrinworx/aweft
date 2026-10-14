@@ -7,7 +7,7 @@ import { codecError } from '@aweftjs/codec';
 import type { ModuleProps } from '@aweftjs/modules';
 
 import { pathOf } from '../rule.ts';
-import { NOSNIFF, answered, cacheFor, fileAt, fileOf, notFound, served } from '../serve.ts';
+import { type Extra, NOSNIFF, answered, fileAt, fileOf, headersFor, notFound, served } from '../serve.ts';
 
 export const defaults = {
 	dir: 'dist',
@@ -28,18 +28,54 @@ export interface Files {
 const refuse = (detail: string, fix: string): Error =>
 	codecError('invalid-config', `static/Files was given ${detail}`, fix);
 
-const table = (held: unknown): Readonly<Record<string, string>> => {
-	if (held === null || typeof held !== 'object' || Array.isArray(held)) {
-		throw refuse(`headers ${JSON.stringify(held)}`,
-			'Give headers a Cache-Control string per path prefix, such as { "assets/": "public, max-age=31536000" }.');
+const SHAPE_FIX = 'Give headers a Cache-Control string, or an object of header names to values, per path prefix, such as { "room/": { "access-control-allow-origin": "*" } }.';
+
+// What this module writes itself on every file, so a configured value would contradict it or,
+// for nosniff, take away what design 276 promises.
+const OWNED = new Set(['content-type', 'content-length', 'etag', 'x-content-type-options']);
+
+// One prefix's headers, lowercased. A name or value `Headers` itself would refuse is refused
+// here, at load, rather than turning every request under the prefix into a 500.
+const headerSet = (prefix: string, held: object): Extra => {
+	const set: Record<string, string> = {};
+	for (const [name, value] of Object.entries(held)) {
+		const lower = name.toLowerCase();
+		if (OWNED.has(lower)) {
+			throw refuse(`the header ${name} for ${JSON.stringify(prefix)}, which it writes itself`,
+				'Leave content-type, content-length, etag and x-content-type-options out of headers; static/Files writes them for every file.');
+		}
+		let valid = typeof value === 'string';
+		if (valid) {
+			try {
+				new Headers([[lower, value as string]]);
+			} catch {
+				valid = false;
+			}
+		}
+		if (!valid) {
+			throw refuse(`the header ${JSON.stringify(name)} with the value ${JSON.stringify(value)} for ${JSON.stringify(prefix)}`,
+				'Name each header as HTTP spells one, and give it a string on one line.');
+		}
+		set[lower] = value as string;
 	}
-	for (const value of Object.values(held)) {
-		if (typeof value !== 'string') {
-			throw refuse(`a headers value that is not a string: ${JSON.stringify(value)}`,
-				'Give headers a Cache-Control string per path prefix, such as { "assets/": "public, max-age=31536000" }.');
+	return set;
+};
+
+const table = (held: unknown): Readonly<Record<string, Extra>> => {
+	if (held === null || typeof held !== 'object' || Array.isArray(held)) {
+		throw refuse(`headers ${JSON.stringify(held)}`, SHAPE_FIX);
+	}
+	const out: Record<string, Extra> = {};
+	for (const [prefix, value] of Object.entries(held)) {
+		if (typeof value === 'string') {
+			out[prefix] = headerSet(prefix, { 'cache-control': value });
+		} else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+			out[prefix] = headerSet(prefix, value as object);
+		} else {
+			throw refuse(`a headers value that is neither a string nor an object: ${JSON.stringify(value)}`, SHAPE_FIX);
 		}
 	}
-	return held as Readonly<Record<string, string>>;
+	return out;
 };
 
 // A prefix written with its leading slash would match nothing, and an API path would get the
@@ -102,7 +138,7 @@ export default ({ config }: ModuleProps): Files => {
 			if (request.method !== 'GET' && request.method !== 'HEAD') {
 				return new Response(null, { status: 405, headers: { ...NOSNIFF, allow: 'GET, HEAD' } });
 			}
-			return served(request, found, cacheFor(headers, path));
+			return served(request, found, headersFor(headers, path));
 		},
 	};
 };

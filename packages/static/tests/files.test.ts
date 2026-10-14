@@ -490,6 +490,58 @@ test('a prefix with a leading slash matches nothing, and an empty prefix matches
 	}
 });
 
+test('a prefix may carry any header, on the 200, the 304 and HEAD, and the longest prefix wins whole', async () => {
+	const it = await serving(
+		{ 'index.html': 'home', 'room/host.js': 'host', 'room/deep/chunk.js': 'chunk' },
+		{
+			headers: {
+				'': 'no-cache',
+				'room/': { 'Access-Control-Allow-Origin': '*', 'cache-control': 'no-cache' },
+				'room/deep/': { 'x-frame-note': 'deep' },
+			},
+		},
+	);
+	try {
+		const host = await fetch(`${it.url}/room/host.js`);
+		await host.text();
+		assert.equal(host.headers.get('access-control-allow-origin'), '*');
+		assert.equal(host.headers.get('cache-control'), 'no-cache');
+		assert.equal(host.headers.get('content-type'), 'text/javascript; charset=utf-8', 'the module still writes the type');
+
+		const again = await fetch(`${it.url}/room/host.js`, { headers: { 'if-none-match': host.headers.get('etag')! } });
+		assert.equal(again.status, 304);
+		assert.equal(again.headers.get('access-control-allow-origin'), '*', 'the 304 carries them too');
+
+		const head = await fetch(`${it.url}/room/host.js`, { method: 'HEAD' });
+		assert.equal(head.headers.get('access-control-allow-origin'), '*', 'and HEAD');
+
+		const deep = await fetch(`${it.url}/room/deep/chunk.js`);
+		await deep.text();
+		assert.equal(deep.headers.get('x-frame-note'), 'deep');
+		assert.equal(deep.headers.get('access-control-allow-origin'), null, 'the longest prefix wins whole: a shorter one adds nothing');
+		assert.equal(deep.headers.get('cache-control'), null);
+
+		const home = await fetch(`${it.url}/`);
+		await home.text();
+		assert.equal(home.headers.get('cache-control'), 'no-cache', 'a string is still a Cache-Control');
+		assert.equal(home.headers.get('access-control-allow-origin'), null);
+		assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
+
+		const missing = await fetch(`${it.url}/room/gone.js`);
+		await missing.text();
+		assert.equal(missing.status, 404);
+		assert.equal(missing.headers.get('access-control-allow-origin'), null, 'the unknown answer carries no configured header');
+		assert.equal(missing.headers.get('cache-control'), null);
+
+		const put = await fetch(`${it.url}/room/host.js`, { method: 'PUT', body: 'x' });
+		await put.text();
+		assert.equal(put.status, 405);
+		assert.equal(put.headers.get('access-control-allow-origin'), null, 'and nor does the 405');
+	} finally {
+		await it.stop();
+	}
+});
+
 test('a prefix that is not a page may hold a space or a letter outside ASCII, as a headers prefix may', async () => {
 	const it = await serving({ 'index.html': 'home', 'shell.html': '<p>shell</p>' }, { unknown: 'shell', notPages: ['media files/', 'café/'] });
 	try {
@@ -499,6 +551,20 @@ test('a prefix that is not a page may hold a space or a letter outside ASCII, as
 			assert.equal(answer.headers.get('content-type'), 'application/json; charset=utf-8', path);
 			await answer.text();
 		}
+	} finally {
+		await it.stop();
+	}
+});
+
+test('a header name is one name whatever its case, so of two spellings in one prefix the later is written', async () => {
+	const it = await serving({ 'room/host.js': 'host' }, {
+		headers: { 'room/': { 'Cache-Control': 'no-store', 'cache-control': 'no-cache', 'X-Note': 'kept' } },
+	});
+	try {
+		const answer = await fetch(`${it.url}/room/host.js`);
+		await answer.text();
+		assert.equal(answer.headers.get('cache-control'), 'no-cache', 'one value, not the two joined');
+		assert.equal(answer.headers.get('x-note'), 'kept');
 	} finally {
 		await it.stop();
 	}
@@ -572,7 +638,15 @@ test('an invalid configuration is refused at load, with the fix on the error', a
 		['an unknown that is neither word', { dir: 'dist', unknown: 'shell.html' }],
 		['a public that is not a boolean', { dir: 'dist', public: 'yes' }],
 		['headers that are not a table', { dir: 'dist', headers: ['assets/'] }],
-		['a headers value that is not a string', { dir: 'dist', headers: { 'assets/': 600 } }],
+		['a headers value that is neither a string nor an object', { dir: 'dist', headers: { 'assets/': 600 } }],
+		['a headers value that is a list', { dir: 'dist', headers: { 'assets/': ['a'] } }],
+		['a header value that is not a string', { dir: 'dist', headers: { 'room/': { 'access-control-allow-origin': 1 } } }],
+		['a header name HTTP cannot carry', { dir: 'dist', headers: { 'room/': { 'bad name': 'x' } } }],
+		['a header value on two lines', { dir: 'dist', headers: { 'room/': { 'x-note': 'one\r\ntwo' } } }],
+		['a content type, which the module writes', { dir: 'dist', headers: { 'room/': { 'Content-Type': 'text/plain' } } }],
+		['a content length, which the module writes', { dir: 'dist', headers: { 'room/': { 'content-length': '1' } } }],
+		['an etag, which the module writes', { dir: 'dist', headers: { 'room/': { etag: '"x"' } } }],
+		['nosniff turned off', { dir: 'dist', headers: { '': { 'x-content-type-options': 'none' } } }],
 		['notPages that are not a list', { dir: 'dist', notPages: 'api/' }],
 		['a notPages entry that is not a string', { dir: 'dist', notPages: [1] }],
 		['a notPages entry with a leading slash', { dir: 'dist', notPages: ['/api/'] }],

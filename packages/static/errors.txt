@@ -1,5 +1,7 @@
-invalid-config: Give headers a Cache-Control string per path prefix, such as { "assets/": "public, max-age=31536000" }.
+invalid-config: Give headers a Cache-Control string, or an object of header names to values, per path prefix, such as { "room/": { "access-control-allow-origin": "*" } }.
 invalid-config: Give notPages a list of path prefixes without their leading slash, such as ["api/", "files/"].
+invalid-config: Leave content-type, content-length, etag and x-content-type-options out of headers; static/Files writes them for every file.
+invalid-config: Name each header as HTTP spells one, and give it a string on one line.
 invalid-config: Set dir to the directory to serve, such as "dist".
 invalid-config: Set public to true for a site anyone may read, or false for a private one.
 invalid-config: Set unknown to "404" or to "shell".

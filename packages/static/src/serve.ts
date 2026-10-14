@@ -43,21 +43,24 @@ export const fileOf = async (file: string): Promise<Found | undefined> => {
 export const fileAt = async (dir: string, path: string): Promise<Found | undefined> =>
 	await fileOf(join(dir, path)) ?? await fileOf(join(dir, path, 'index.html'));
 
+/** Header names to values, lowercased, as the configuration's table holds them for one prefix. */
+export type Extra = Readonly<Record<string, string>>;
+
 /**
- * The Cache-Control for a path, from the configured prefixes.
+ * The headers for a path, from the configured prefixes (design 313).
  *
  * Params:
- *   headers: the configuration's prefix to value table
+ *   headers: the configuration's prefix to headers table
  *   path: the path under the served directory, with no leading slash
  *
- * Returns: the value of the longest prefix the path starts with, or undefined when none
- * matches, which is a page with no cache header at all.
+ * Returns: the headers of the longest prefix the path starts with, whole, or undefined when none
+ * matches, which is a file with no configured header at all.
  *
  * Example:
- *   cacheFor({ 'assets/': 'public, max-age=31536000, immutable' }, 'assets/app.js');
+ *   headersFor({ 'assets/': { 'cache-control': 'public, max-age=31536000, immutable' } }, 'assets/app.js');
  */
-export const cacheFor = (headers: Readonly<Record<string, string>>, path: string): string | undefined => {
-	let value: string | undefined;
+export const headersFor = (headers: Readonly<Record<string, Extra>>, path: string): Extra | undefined => {
+	let value: Extra | undefined;
 	let longest = -1;
 	for (const [prefix, held] of Object.entries(headers)) {
 		if (path.startsWith(prefix) && prefix.length > longest) {
@@ -86,6 +89,9 @@ const carries = (header: string | null, etag: string): boolean => {
 	return header.split(',').some((one) => opaque(one.trim()) === held);
 };
 
+/** On every answer: a browser that guesses a file's type from its bytes turns a text file into a script (design 276). */
+export const NOSNIFF: Readonly<Record<string, string>> = { 'x-content-type-options': 'nosniff' };
+
 /**
  * The answer for a file the URL named: 200 with the bytes, or 304 when the request already
  * carries its ETag.
@@ -93,21 +99,20 @@ const carries = (header: string | null, etag: string): boolean => {
  * Params:
  *   request: the request, read for its method and its `If-None-Match`
  *   found: the file
- *   cache: the Cache-Control to write, or undefined to write none
+ *   extra: the configured headers for its path, or undefined for none
  *
- * Returns: 304 with the ETag and no body, or 200 with the type, the length, the ETag and a
- * stream over the file. HEAD carries the same headers and no body.
+ * Returns: 304 with the ETag, the configured headers and no body, or 200 with the type, the
+ * length, the ETag, the configured headers and a stream over the file. HEAD carries the same
+ * headers and no body.
  *
  * Example:
- *   served(request, found, 'public, max-age=31536000, immutable');
+ *   served(request, found, { 'cache-control': 'public, max-age=31536000, immutable' });
  */
-/** On every answer: a browser that guesses a file's type from its bytes turns a text file into a script (design 276). */
-export const NOSNIFF: Readonly<Record<string, string>> = { 'x-content-type-options': 'nosniff' };
-
-export const served = (request: Request, found: Found, cache: string | undefined): Response => {
+export const served = (request: Request, found: Found, extra: Extra | undefined): Response => {
 	const etag = etagOf(found);
-	const headers: Record<string, string> = { ...NOSNIFF, etag };
-	if (cache !== undefined) headers['cache-control'] = cache;
+	// The configured ones first, so a name this module writes is always its own. The
+	// configuration refuses those names anyway.
+	const headers: Record<string, string> = { ...extra, ...NOSNIFF, etag };
 	if (carries(request.headers.get('if-none-match'), etag)) return new Response(null, { status: 304, headers });
 
 	headers['content-type'] = typeOf(found.file);
