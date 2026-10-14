@@ -18,9 +18,10 @@ Theme.define({ page: { ...fontFaces('IBM Plex Sans', [
 Each file is `src`, `weight` (a number, or two numbers in a string for a variable file), `style`
 (`normal` unless set) and `range` (a `unicode-range`). Every face gets `font-display: swap` unless
 `options.display` says otherwise, and a `format()` named from the file's extension. The family and
-the URL are written quoted, with a quote or a backslash in either escaped. Each directive is keyed
-by the family, the file and the face it declares, so two calls spread into one entry keep every
-face, and one file declared upright and slanted is two faces.
+the URL are written quoted, with a quote or a backslash in either escaped. A `$` in either is a loud
+assert, because the stylesheet reads it as a theme variable and writes that variable's value. Each
+directive is keyed by the family, the file and the face it declares, so two calls spread into one
+entry keep every face, and one file declared upright and slanted is two faces.
 
 ## Why
 

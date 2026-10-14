@@ -47,7 +47,8 @@ const isWeight = (weight: number | string): boolean => (typeof weight === 'numbe
  * given. The theme engine emits each once per render, however many elements wear the entry.
  *
  * Throws: the assert for an empty family, an empty list, a file with no `src`, a weight that is
- * not one number from 1 to 1000 or two of them, and a style that is neither word.
+ * not one number from 1 to 1000 or two of them, a style that is neither word, and a `$` in the
+ * family or a `src`, which the stylesheet would read as a theme variable.
  *
  * Example:
  *   Theme.define({ page: {
@@ -60,10 +61,13 @@ const isWeight = (weight: number | string): boolean => (typeof weight === 'numbe
  */
 export const fontFaces = (family: string, files: readonly FontFile[], options: { readonly display?: string } = {}): Entry => {
 	assert(typeof family === 'string' && family.trim() !== '', 'fontFaces needs the family\'s name, such as \'IBM Plex Sans\'');
+	// A $ in a theme value starts a variable, which the stylesheet replaces with its value.
+	assert(!family.includes('$'), `${family} holds a $, which the stylesheet reads as a theme variable; name the family without one`);
 	assert(files.length > 0, `fontFaces was given no files for ${family}; list each file with its src`);
 	const entry: Record<string, Record<string, string>> = {};
 	for (const file of files) {
 		assert(typeof file.src === 'string' && file.src !== '', `a file of ${family} has no src; give each file its URL`);
+		assert(!file.src.includes('$'), `${file.src} holds a $, which the stylesheet reads as a theme variable; write it as %24 in the URL`);
 		assert(file.weight === undefined || isWeight(file.weight),
 			`${file.src} has the weight ${JSON.stringify(file.weight)}; give a number from 1 to 1000, or two in a string for a variable file`);
 		assert(file.style === undefined || file.style === 'normal' || file.style === 'italic',

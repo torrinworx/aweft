@@ -1723,14 +1723,15 @@ Theme.define({ page: {
 ```
 
 A file is `src`, and `weight` (a number, or a variable file's two in a string), `style` (`normal`
-unless set) and `range` (a `unicode-range`) where it has them. Each face says its family and its
-URL quoted, a `format()` named from the extension (`woff2`, `woff`, `ttf` or `otf`, and none for
+unless set) and `range` (a `unicode-range`) where it has them. Each face says its family and its URL
+quoted, a `format()` named from the extension (`woff2`, `woff`, `ttf` or `otf`, and none for
 another), and `font-display: swap` unless `options.display` names another. Each directive is keyed
 by the family, the file and the face it declares, so two calls spread into one entry keep every
-face, one file declared upright and slanted is two faces, and the engine emits each once per
-render. An empty family, list or `src`, a weight that is not one number from 1
-to 1000 or two of them, and a style that is neither word are loud asserts. A descriptor it does not
-name, such as `font-stretch`, is a `_fontFace_` directive written by hand.
+face, one file declared upright and slanted is two faces, and the engine emits each once per render.
+An empty family, list or `src`, a weight that is not one number from 1 to 1000 or two of them, a
+style that is neither word, and a `$` in the family or a `src` are loud asserts. A `$` is where the
+stylesheet reads a theme variable, so a file named with one is written `%24` in its URL. A
+descriptor it does not name, such as `font-stretch`, is a `_fontFace_` directive written by hand.
 
 **No unnamed value.** A component of this package writes `$name`, never a colour, a size or a
 duration. `node packages/testing/scripts/check-theme.ts` refuses one that does, over

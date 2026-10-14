@@ -59,7 +59,7 @@ test('two calls spread into one entry keep every face', async () => {
 	assert.deepEqual(faces(twice).map((face) => /font-style: (\w+)/.exec(face)?.[1]), ['normal', 'italic'], 'one file declared upright and slanted is two faces');
 });
 
-test('an empty family, list or source, a weight out of range and a style that is not a word are loud', () => {
+test('an empty family, list or source, a weight out of range, a style that is not a word and a $ are loud', () => {
 	const bad: [() => unknown, RegExp][] = [
 		[() => fontFaces('', [{ src: '/a.woff2' }]), /the family's name/],
 		[() => fontFaces('  ', [{ src: '/a.woff2' }]), /the family's name/],
@@ -73,7 +73,15 @@ test('an empty family, list or source, a weight out of range and a style that is
 		[() => fontFaces('Mono', [{ src: '/a.woff2', weight: '0 0' }]), /weight "0 0"/],
 		[() => fontFaces('Mono', [{ src: '/a.woff2', weight: '100 1001' }]), /weight "100 1001"/],
 		[() => fontFaces('Mono', [{ src: '/a.woff2', style: 'oblique' as 'italic' }]), /style "oblique"/],
+		// The stylesheet reads a $ as the start of a theme variable and writes that variable's value.
+		[() => fontFaces('Plex $font', [{ src: '/a.woff2' }]), /Plex \$font holds a \$/],
+		[() => fontFaces('Mono', [{ src: '/fonts/$space1.woff2' }]), /\/fonts\/\$space1\.woff2 holds a \$/],
 	];
 	for (const [call, said] of bad) assert.throws(call, said);
 	assert.doesNotThrow(() => fontFaces('Mono', [{ src: '/a.woff2', weight: 1 }, { src: '/b.woff2', weight: 1000 }, { src: '/c.woff2', weight: '100 900' }]));
+});
+
+test('a file named with a $ is written %24 in its URL, and the stylesheet keeps it as written', async () => {
+	const css = await sheetOf(fontFaces('Mono', [{ src: '/fonts/%24space1.woff2' }]));
+	assert.deepEqual(faces(css), ['font-family: "Mono"; src: url("/fonts/%24space1.woff2") format("woff2"); font-style: normal; font-display: swap;']);
 });
