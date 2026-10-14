@@ -7,7 +7,7 @@ runs today. One stays as it is, for the reason under its heading.
 
 | Mistake | What happens now | Form |
 |---|---|---|
-| A `$var` in an inline object `style` on an element with no `theme` prop | `ui` writes a warning naming the variable and `theme=""`, once per name; on an `svg` element, which takes no theme, it says to write the value | development warning |
+| A `$var` in an inline object `style` on an element with no `theme` prop | `ui` writes a warning naming the variable and `theme=""`, once per name. On an `svg` element, which takes no theme, it says to write the value | development warning |
 | An `<svg>` made by `h` or by a hoisted template, which is an HTML element | `dom` writes a warning naming the SVG namespace, once per process | development warning |
 | A script under `fromDirectory` it does not import (`.tsx`, `.jsx`, `.mts`, `.cts`, `.cjs`, an extension in capitals) | the listing leaves it out, as before, and writes a warning naming the file, once per file and process | warning |
 | A request carrying `x-forwarded-for` or `x-real-ip` from a loopback or private address while the Node listener's `forwarded` is off | the listener writes a warning naming `forwarded`, once per listener | warning |
@@ -19,15 +19,17 @@ with `console.warn` and nothing else.
 
 ### Why each takes its form
 
-**The inline `$var`.** The variable resolves to nothing, so the page renders with that one value
-missing. A refusal would be an assert, and asserts are live under Node, where a server renders the
-page: one stray `$var` would turn a page that renders into one that does not. The warning says the
-fix the theme section of the README already gives: `theme=""` takes the cascade and nothing else.
-An element made by `svg` claims its style but takes no theme, so `theme=""` does nothing there and
-its warning says to write the value, or to draw with `currentColor` and theme the element around
-it. A `$fn()` with no theme is not warned about, because it is written back as the CSS function of
-that name (`$min(` becomes `min(`), which is a value the browser reads. A style written as plain
-text is an attribute as written and is not read for `$var` at all, as before.
+**The inline `$var`.** The variable resolves to nothing, and the page renders without that value.
+A refusal would be an assert. Asserts run under Node, where a server renders the page, so one stray
+`$var` would stop a page that renders today. The warning gives the fix the README's theme section
+already gives: `theme=""` takes the cascade and nothing else.
+
+An element made by `svg` takes no theme, so `theme=""` does nothing there. Its warning says to write
+the value, or to draw with `currentColor` and theme the element around it.
+
+A `$fn()` with no theme gets no warning. It is written back as the CSS function of that name
+(`$min(` becomes `min(`), which the browser reads. A style written as plain text is an attribute as
+written, and `ui` does not read it for `$var`, as before.
 
 **The HTML `<svg>`.** `render` writes the element as `<svg viewBox="0 0 10 10">`, and a browser
 parses that markup into the SVG namespace, so a static page that never hydrates draws it today. A
@@ -36,18 +38,21 @@ attributes, which is the failure the warning explains before it happens. The fix
 `createElement(tag, 'http://www.w3.org/2000/svg')` handed to `h` as the tag, or `svg` from
 `@aweftjs/ui`, which does that for every element under it.
 
-**The script `fromDirectory` leaves out.** `fromDirectory` imports `.js`, `.mjs` and `.ts` and
-skipped anything else without a word, so a module written as `.tsx` was simply absent. It is not
-refused, because a `.ts` module may import a `.tsx` file beside it under the loader, and that
-directory works today: a refusal would stop it. It is not loaded, because `fromDirectory` imports
-with Node's own `import()`, Node runs `.ts` and does not run `.tsx`, and a source that works in one
-process and fails in another depending on a flag is a worse surprise. So it is said, once, with
-both readings: a module is renamed `.ts` or listed with `fromBundle` under the loader, and a file a
-module imports can stay, or move out of the directory to quiet the line. A file that is not code
-(`.json`, `.md`, `.d.ts`) stays out quietly.
+**The script `fromDirectory` leaves out.** `fromDirectory` imports `.js`, `.mjs` and `.ts`. It
+skipped every other file without a word, so a module written as `.tsx` was absent and nothing said
+why.
 
-**The forwarded headers.** The request is fine and is answered; what is wrong is that every
-request through the proxy counts as one address against the rate limit (design 272). Refusing it
+A refusal is wrong here. A `.ts` module may import a `.tsx` file beside it under the loader, and
+that directory works today. Loading the file is wrong too. `fromDirectory` imports with Node's own
+`import()`, and Node runs `.ts` but not `.tsx`, so the same directory would load in one process and
+fail in another.
+
+So the warning names the file once and gives both fixes. A module is renamed `.ts`, or listed with
+`fromBundle` under the loader. A file a module imports can stay, or move out of the directory to end
+the warning. A file that is not code (`.json`, `.md`, `.d.ts`) stays out with no warning.
+
+**The forwarded headers.** The request itself is fine, and the listener answers it. The fault is
+that every request through the proxy counts as one address against the rate limit (design 272). Refusing it
 would take the site down. Only a request from a loopback or private address is read this way,
 because that is where a proxy the application runs sits. The same header from a public address is
 a client's own claim, and telling that operator to turn `forwarded` on would hand every client the
@@ -88,7 +93,7 @@ is written.
   private range read as local, and a request still answered when the console throws.
 - `packages/auth/tests/roles.test.ts` checks that `may(null, name)` is false, that a user whose id
   is the text `null` keeps their names, and that `undefined` and `''` still refuse.
-- Three applications list a modules directory with `fromDirectory`; none of those directories holds
+- Three applications list a modules directory with `fromDirectory`. None of those directories holds
   a script it leaves out, so none of them writes the line.
 
 ## What would reverse this
