@@ -102,8 +102,8 @@ test('a share holding a document asks once, though it sends open twice to ask fo
 	server.close();
 });
 
-// The link keeps one live topic per name, a limit its README states. Which of the other end's two
-// shares a later share here pairs with follows from that limit, so this test does not check it.
+// The link keeps one live topic per name, as its README says. So when the other end shares a name
+// twice, this test does not check which of the two a later share here pairs with.
 test('a second share of the name from the other end is heard again, and takes the first one\'s place', async () => {
 	const { server, page, asked } = pair();
 	page.share<Doc>('board').ready.catch(() => {});
