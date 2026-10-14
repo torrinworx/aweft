@@ -16,9 +16,11 @@ against the path as written when it does not decode, so that path still gets the
 **A `headers` value may be an object** of header names to values, beside the string it is today. A
 string is still a `Cache-Control`. The longest matching prefix still wins, whole: its headers are
 the ones written, and a shorter prefix's are not added to them. The headers go on a file's 200 and
-its 304, as `Cache-Control` does today. `content-type`, `content-length`, `etag` and
-`x-content-type-options` are this module's to write and are refused in the configuration, and so is
-a name that is not a header name or a value that holds a line break.
+its 304, as `Cache-Control` does today. The configuration refuses the four headers this module
+writes itself (`content-type`, `content-length`, `etag` and `x-content-type-options`) and the six
+that belong to a single connection (`connection`, `keep-alive`, `proxy-connection`, `te`,
+`transfer-encoding` and `upgrade`). It also refuses a name that is not a header name and a value
+that holds a line break.
 
 ## Why
 
