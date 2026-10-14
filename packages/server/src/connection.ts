@@ -180,7 +180,9 @@ export const openConnection = ({ socket, request, context, loader, gate, report,
 				if (over || !request.held()) return;
 				offer = await hook.call(instance, request.name, context);
 			} catch (error) {
-				if (isRefusal(error)) {
+				// A client answers `closed` with its next socket and tells the page nothing, so a refusal
+				// under that reason would leave the page waiting. It is reported as a mistake instead.
+				if (isRefusal(error) && (error as { reason: string }).reason !== 'closed') {
 					request.refuse((error as { reason: string }).reason, detailOf(error as { reason: string }));
 					return;
 				}

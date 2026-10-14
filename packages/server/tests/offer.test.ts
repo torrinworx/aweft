@@ -132,6 +132,20 @@ test('a refusal that is not in the stack\'s shape crosses with its message whole
 	await server.stop();
 });
 
+test('a refusal that names closed is reported, and the page hears failed', async () => {
+	// A client answers `closed` with its next socket and tells the page nothing, so a module's
+	// refusal under that reason would leave the page waiting for good.
+	const { server, client, failed } = await started({
+		'a/Shut': instance(() => ({ offer: () => { throw codecError('closed', 'the room is shut', 'Open the room first.'); } })),
+	});
+	const share = client.link.share<Doc>('room:shut');
+	await assert.rejects(share.ready, (error: unknown) => reasonOf(error) === 'failed');
+	assert.equal(failed.length, 1);
+	assert.match(failed[0]!, /^a\/Shut: .*the room is shut/);
+	client.socket.close();
+	await server.stop();
+});
+
 test('an offer that throws anything else is reported, and the page hears failed and nothing of the error', async () => {
 	const { server, client, failed } = await started({
 		'a/Broken': instance(() => ({ offer: () => { throw new TypeError('cannot read /srv/notes/secret.json'); } })),

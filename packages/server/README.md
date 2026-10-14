@@ -189,8 +189,11 @@ offer: async (name, { user }) => {
 
 A throw with a `reason` refuses: the page's share ends with that reason and that message, and
 its `ready` rejects with them. Its `fix` stays here, because a refusal of a share crosses as a
-reason and a message and nothing else. Any other throw, and an offer with no `accept`, is reported
-to `handlers.failed` under the module's name, and the page's share ends with `failed`.
+reason and a message and nothing else. Any other throw, an offer with no `accept`, and a refusal
+whose reason is `closed` are reported to `handlers.failed` under the module's name, and the page's
+share ends with `failed`. `closed` is what every share ends with when a socket drops, and
+`@aweftjs/client` answers it with its next socket rather than telling the page, so a page refused
+with it would wait for good.
 
 When every module declines, or the gate skips them all, nothing is sent and the page's share
 waits, as it always has, so a share a `call` makes later still pairs with it. An application with
