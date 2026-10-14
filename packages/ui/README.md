@@ -1672,6 +1672,42 @@ with the `_media_` directive the engine already has.
 `light` or `dark` moves every class below it when the cell moves, on a page that is already up. A
 plain object subscribes to nothing and costs nothing extra.
 
+**`savedMode` is that cell, kept for the visitor** (design 315). It holds one of two themes, this
+package's `light` and `dark` unless you give your own, and saves the visitor's choice in
+`localStorage`:
+
+```tsx
+const mode = savedMode({ fallback: 'system' });
+attach(document.body, <Theme value={mode}><Site /></Theme>);
+mode.restore();                                   // now the visitor's mode
+const toggle = () => mode.set(mode.get() === dark ? light : dark);
+```
+
+- **It starts in `light`**, the mode a server renders. `restore()` moves it to the visitor's mode:
+  what they chose last, else `fallback`, which is `'light'`, `'dark'` or `'system'` (the operating
+  system's `prefers-color-scheme`), and `'light'` unless you say. A page that hydrates calls
+  `restore()` once `attach` has taken the server's markup over: moving before that rewrites the
+  stylesheet the server sent, and Chromium then drops every web font on the page until it has
+  them again (design 257). A page that mounts calls it before `mount`, and its first paint is the
+  visitor's mode.
+- **A set is a choice, and is saved** as `light` or `dark` under `key`, `'mode'` unless you say.
+  `restore()` saves nothing, so a visitor who never chose has nothing saved. Setting anything but
+  its two themes is a loud assert.
+- **It paints what no theme entry reaches**, on every value from the first: the root element's
+  `color-scheme`, its `background-color` from the mode's `$background` (so a short page and the
+  overscroll are the page's colour), and the `content` of `<meta name="theme-color">`, the colour a
+  phone paints its bar in, which it adds to the head when there is none. A theme whose `*` entry
+  has no `$background` gets the scheme and nothing else.
+- Where there is no `document`, a render on a server, it is a plain cell: nothing is painted,
+  read or saved. A storage that throws, as a private window's can, saves nothing and reads nothing
+  saved.
+- **Make one per page.** Each one paints the root for as long as the page lives, so two would take
+  turns painting it, and a second is a loud assert.
+
+A visitor who chose dark still sees the server's light page until the script runs. Hiding that is
+the page's HTML's job, a few lines of inline script in its head that run before any of this.
+Following the system live, as it changes, is not done: `'system'` is read when `restore()` runs.
+
 **No unnamed value.** A component of this package writes `$name`, never a colour, a size or a
 duration. `node packages/testing/scripts/check-theme.ts` refuses one that does, over
 [`packages/ui/src`](https://github.com/torrinworx/aweft/tree/main/packages/ui/src) and

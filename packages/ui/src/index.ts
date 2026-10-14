@@ -17,6 +17,8 @@ export type { Hydrated } from '@aweftjs/dom';
 export type { Ids, Registry } from './registry.ts';
 
 export { dark, light } from './modes.ts';
+export { savedMode } from './saved-mode.ts';
+export type { SavedMode, SavedModeOptions } from './saved-mode.ts';
 export { Head, Link, Meta, Script, Style, Title } from './head.tsx';
 export type { TagProps } from './head.tsx';
 export type { HeadKind, HeadList, HeadTag } from './head-list.ts';

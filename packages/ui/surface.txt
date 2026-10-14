@@ -106,6 +106,8 @@ type RegionProps: interface RegionProps { readonly value?: unknown; readonly cou
 type Registry: interface Registry<T = unknown> { readonly items: MutableArray<T>; add(item: T): () => void; claim(): boolean; }
 type Render: interface Render { readonly theme: Sheet; readonly head: HeadList; readonly stage: Registry<StageEntry>; readonly ids: Ids; readonly popups: Registry; readonly locale?: string; readonly catalog?: Catalog; }
 type RuleBlock: interface RuleBlock { readonly kind: 'rule'; }
+type SavedMode: interface SavedMode<M extends Definitions> extends Cell<M> { restore(): void; }
+type SavedModeOptions: interface SavedModeOptions<M extends Definitions> { readonly light?: M; readonly dark?: M; readonly key?: string; readonly fallback?: 'light' | 'dark' | 'system'; }
 value Script: (props: TagProps) => unknown
 value Select: (props: SelectProps, cleanup: (...fns: (() => void)[]) => void, mounted: (...fns: (() => void)[]) => void) => Mounter
 type SelectProps: interface SelectProps { readonly value?: unknown; readonly options?: unknown; readonly display?: unknown; readonly placeholder?: unknown; readonly open?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly name?: unknown; readonly autocomplete?: unknown; readonly onChange?: (next: unknown, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
@@ -183,6 +185,7 @@ value mark: Mark
 value mount: (target: ParentLike, item: unknown, before?: Remove | undefined, render?: Render | undefined) => Remove
 value parseBlocks: (source: string) => Block[]
 value render: (item: unknown, options?: { context?: Render | undefined; }) => Promise<string>
+value savedMode: <M extends Definitions = Readonly<Record<string, Readonly<Record<string, unknown>>>>>(options?: SavedModeOptions<M>) => SavedMode<M>
 value sizeProperties: ReadonlySet<string>
 value slugger: () => (text: string) => string
 value standardIcons: readonly string[]

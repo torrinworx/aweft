@@ -465,6 +465,39 @@ const drive = async (name: string, entry: string, check: (view: Page) => Promise
 	}
 };
 
+test('a saved dark mode paints the root and the bar a phone draws, and a toggle is saved', async () => {
+	await drive('saved-mode', `
+		import { Theme, dark, h, light, mount, savedMode } from '@aweftjs/ui';
+		localStorage.setItem('mode', 'dark');
+		const mode = savedMode();
+		const before = getComputedStyle(document.documentElement).backgroundColor;
+		mode.restore();
+		mount(document.body, <Theme value={mode}><main theme="text" id="done">a page</main></Theme>);
+		window.result = {
+			before,
+			after: getComputedStyle(document.documentElement).backgroundColor,
+			scheme: getComputedStyle(document.documentElement).colorScheme,
+			meta: document.querySelector('meta[name="theme-color"]')?.getAttribute('content'),
+			darkBackground: dark['*'].$background,
+		};
+		mode.set(light);
+		window.result.saved = localStorage.getItem('mode');
+		window.result.toggled = getComputedStyle(document.documentElement).backgroundColor;
+	`, async (view) => {
+		await view.waitForFunction(() => (window as unknown as { result?: unknown }).result !== undefined);
+		const result = await view.evaluate(() => (window as unknown as { result: Record<string, string> }).result);
+		// The role is written as six hex digits, and the browser computes it as rgb().
+		const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(result['darkBackground']!)!;
+		const rgb = `rgb(${hex.slice(1).map((pair) => String(Number.parseInt(pair, 16))).join(', ')})`;
+		assert.notEqual(result['before'], rgb, 'light before the restore');
+		assert.equal(result['after'], rgb, 'the root carries the dark $background');
+		assert.equal(result['scheme'], 'dark');
+		assert.equal(result['meta'], result['darkBackground'], 'the head gained a theme-color with it');
+		assert.equal(result['saved'], 'light', 'a toggle is the visitor\'s choice, and is saved');
+		assert.notEqual(result['toggled'], rgb);
+	});
+});
+
 // --- the page checks (design 266) ------------------------------------------------------------------
 
 /** Open a page built from a shell and an entry, and answer what it threw. */
