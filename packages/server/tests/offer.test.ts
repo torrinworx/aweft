@@ -390,6 +390,23 @@ test('a module is asked once per share still waiting: a second share of the name
 	await server.stop();
 });
 
+// The server README says a second share of a name already live asks the modules too, and the
+// module decides whether to offer it.
+test('a second share of a name the page holds live asks the modules again', async () => {
+	let asked = 0;
+	const { server, client } = await started({
+		'a/Counts': instance(() => ({ offer: (): Offer => { asked += 1; return { document: createObject<Doc>({ n: asked }), ...open }; } })),
+	});
+	const first = client.link.share<Doc>('board');
+	await settle();
+	const second = client.link.share<Doc>('board');
+	await settle();
+	assert.equal(asked, 2);
+	assert.deepEqual([first.document?.n, second.document?.n], [1, 2]);
+	client.socket.close();
+	await server.stop();
+});
+
 test('an application with no offer hook sends nothing for a name nobody shares, as before', async () => {
 	const { server, client } = await started({ 'a/Plain': instance(() => ({ call: () => 'x' })) });
 	const share = client.link.share<Doc>('board');
