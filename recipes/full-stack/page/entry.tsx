@@ -87,14 +87,13 @@ const ABOUT = [
 Theme.define({
 	page: {
 		// The face this page is set in, served from `public/fonts`. The engine writes it once per
-		// render however many elements wear the entry.
+		// render however many elements wear the entry. `face` below is what sets the page in it.
 		...fontFaces('IBM Plex Sans', [{ src: '/fonts/IBMPlexSans-Medium.woff2', weight: 500 }]),
 		// As tall as the viewport, so a short page is painted to the bottom. The host's body margin
 		// is `index.html`'s to take off: a theme entry cannot reach `body`.
 		minHeight: '100vh',
 		background: '$background',
 		color: '$foreground',
-		fontFamily: '"IBM Plex Sans", $font',
 		display: 'flex',
 		flexDirection: 'column',
 		alignItems: 'start',
@@ -157,4 +156,8 @@ const App = (): unknown => {
 	);
 };
 
-mount(page.document.body as never, <Theme value={mode}><App /></Theme>);
+// Every component of ui sets its own font to `$font`, so the page's face goes there, in a provider
+// below the mode's, and reaches the fields and buttons as well as the page's own text.
+const face = { '*': { $font: '"IBM Plex Sans", system-ui, sans-serif' } };
+
+mount(page.document.body as never, <Theme value={mode}><Theme value={face}><App /></Theme></Theme>);

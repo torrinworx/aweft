@@ -36,7 +36,7 @@ const isWeight = (weight: number | string): boolean => (typeof weight === 'numbe
  * entry the page's root wears.
  *
  * Params:
- *   family: the family's name, as `fontFamily` names it elsewhere in the theme
+ *   family: the family's name, as `$font` names it
  *   files: each file's `src`, and its `weight`, `style` and `range` where it has them
  *   options.display: `font-display` for every face, `swap` unless given
  *
@@ -56,8 +56,10 @@ const isWeight = (weight: number | string): boolean => (typeof weight === 'numbe
  *       { src: '/plex/Regular.woff2', weight: 400 },
  *       { src: '/plex/Italic.woff2', weight: 400, style: 'italic' },
  *     ]),
- *     fontFamily: '"IBM Plex Sans", $font',
  *   } });
+ *   // Every component sets its font to `$font`, so the family is set there, at the root.
+ *   const face = { '*': { $font: '"IBM Plex Sans", system-ui, sans-serif' } };
+ *   mount(document.body, <Theme value={face}><App /></Theme>);
  */
 export const fontFaces = (family: string, files: readonly FontFile[], options: { readonly display?: string } = {}): Entry => {
 	assert(typeof family === 'string' && family.trim() !== '', 'fontFaces needs the family\'s name, such as \'IBM Plex Sans\'');

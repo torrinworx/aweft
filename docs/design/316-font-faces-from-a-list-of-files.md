@@ -12,8 +12,19 @@ Theme.define({ page: { ...fontFaces('IBM Plex Sans', [
 	{ src: '/plex/Regular.woff2', weight: 400 },
 	{ src: '/plex/Italic.woff2', weight: 400, style: 'italic' },
 	{ src: '/serif/Variable.woff2', weight: '200 900', range: 'U+0000-00FF' },
-]), fontFamily: '"IBM Plex Sans", $font' } });
+]) } });
 ```
+
+The family reaches the page through `$font`, the variable every component of `ui` sets its
+`fontFamily` to, redefined by a provider at the root:
+
+```tsx
+const face = { '*': { $font: '"IBM Plex Sans", system-ui, sans-serif' } };
+mount(document.body, <Theme value={face}><App /></Theme>);
+```
+
+A `fontFamily` on the page's own entry sets the page's text and stops at the first field or button,
+which sets its own.
 
 Each file is `src`, `weight` (a number, or two numbers in a string for a variable file), `style`
 (`normal` unless set) and `range` (a `unicode-range`). Every face gets `font-display: swap` unless

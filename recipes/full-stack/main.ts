@@ -137,12 +137,22 @@ try {
 	await view.waitForSelector('#page');
 	check((await painted(view)).scheme === 'light', 'a reload keeps the choice, though the system still says dark');
 
+	// ui's components set their own font to `$font`, so the face is checked on two of them as well
+	// as loaded: a face set only on the page's entry stops at the first field.
 	const face = await view.evaluate(async () => {
-		const fonts = (globalThis as unknown as { document: { fonts: { ready: Promise<unknown>; check(font: string): boolean } } }).document.fonts;
-		await fonts.ready;
-		return fonts.check('500 16px "IBM Plex Sans"');
+		const page = globalThis as unknown as {
+			document: { fonts: { ready: Promise<unknown>; check(font: string): boolean }; querySelector(selector: string): unknown };
+			getComputedStyle(element: unknown): { fontFamily: string };
+		};
+		await page.document.fonts.ready;
+		const first = (selector: string): string => {
+			const element = page.document.querySelector(selector);
+			return element === null ? 'missing' : page.getComputedStyle(element).fontFamily.split(',')[0]!.trim();
+		};
+		return { loaded: page.document.fonts.check('500 16px "IBM Plex Sans"'), button: first('#mode'), field: first('#page input') };
 	});
-	check(face, 'the page is set in its own face, declared by fontFaces and loaded from public/fonts');
+	check(face.loaded && face.button === '"IBM Plex Sans"' && face.field === '"IBM Plex Sans"',
+		`the page is set in its own face, declared by fontFaces, loaded from public/fonts and worn by ui's Button and TextField (${JSON.stringify(face)})`);
 
 	const tip = await view.evaluate(() => {
 		const element = (globalThis as unknown as { document: { getElementById(id: string): { parentElement: { localName: string } | null; textContent: string | null } | null } }).document.getElementById('tip');

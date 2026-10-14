@@ -225,10 +225,11 @@ the server does is a module in `backend/modules/`:
 rendered with `@aweftjs/ui`, a search field whose list is an `asking` cell, the pinned note in a
 text field, a form that calls `enter`, and a switch for light and dark. `enter` signs up when nobody
 has the email, so there is one form rather than two. The mode is `savedMode`, restored before the
-mount so the first paint is the visitor's. The page's face is declared with `fontFaces` and served
-from `page/public/fonts` (IBM Plex Sans Medium, under the SIL Open Font License, which the file's
-own name table carries). The short text at the top is `Markdown` with a `block` hook that draws a
-fenced `tip` block as an aside of its own rather than as code.
+mount so the first paint is the visitor's. The page's face is declared with `fontFaces`, set through
+`$font` so ui's fields and buttons wear it too, and served from `page/public/fonts` (IBM Plex Sans
+Medium, under the SIL Open Font License, which the file's own name table carries). The short text at
+the top is `Markdown` with a `block` hook that draws a fenced `tip` block as an aside of its own
+rather than as code.
 
 ## Behind a proxy
 
