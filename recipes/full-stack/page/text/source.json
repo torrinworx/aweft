@@ -43,6 +43,9 @@
 		"@aweftjs/auth/text.json",
 		"entry.tsx"
 	],
+	"Pinned note": [
+		"entry.tsx"
+	],
 	"Previous": [
 		"@aweftjs/ui/text.json"
 	],
@@ -54,6 +57,9 @@
 	],
 	"Search": [
 		"@aweftjs/ui/text.json"
+	],
+	"Search the board": [
+		"entry.tsx"
 	],
 	"Send the link": [
 		"@aweftjs/auth/text.json"

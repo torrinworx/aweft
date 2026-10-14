@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { auth, paths } from '@aweftjs/auth';
 import { fromDirectory } from '@aweftjs/modules/node';
+import { files } from '@aweftjs/static';
 import { createStore, memoryDriver } from '@aweftjs/store';
 import { loadServer, securityChecks } from '@aweftjs/testing';
 
@@ -17,7 +18,7 @@ const modules = fileURLToPath(new URL('../backend/modules', import.meta.url));
 for (const c of securityChecks({ gate: 'auth/Gate' })) {
 	test(`${c.requirements.join(' ')}: ${c.name}`, () => c.run(async (given) => {
 		const store = createStore({ driver: memoryDriver(), declare: { ...paths } });
-		const server = await loadServer({ ...given, sources: [fromDirectory(modules), auth, ...given.sources], store });
+		const server = await loadServer({ ...given, sources: [fromDirectory(modules), auth, ...given.sources, files], store });
 		return { ...server, stop: async () => { await server.stop(); await store.stop(); } };
 	}));
 }
