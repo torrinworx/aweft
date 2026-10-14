@@ -144,8 +144,9 @@ export default ({ store }) => ({
 ```
 
 A document a hook shares is an `@aweftjs/core` observable: `createObject`, `createArray` and
-`createMap` make one, `atomic` groups writes into one commit, and a plain object or array in
-a slot is refused. The store's `open` hands back one ready to share.
+`createMap` make one, `fromPlain` makes one from plain data such as parsed JSON, `atomic` groups
+writes into one commit, and a plain object or array in a slot is refused. The store's `open` hands
+back one ready to share.
 
 `connection` hooks run in load order, which is dependency order, for the modules the gate
 allows; the functions they return run in reverse when the connection ends. A call is
