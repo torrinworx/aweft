@@ -54,6 +54,43 @@ socket drops rejects with `closed` and is never sent again, because it may have 
 effect at the far end. `timeout` on the options wins over `timeout` on the client, and neither
 ships a default.
 
+## A cell that follows an ask: `asking`
+
+```ts
+const query = mutable('');
+const found = asking<Post[]>(client, 'posts/Search', query.map((text) => ({ text })));
+
+found.get();   // { state: 'waiting', data: null }, then { state: 'ready', data: [...] }
+```
+
+`asking(client, name, args?, options?)` is a read-only cell of the latest answer to
+`client.ask(name, args)`. `args` may be a cell, and every value it takes asks again. An answer to an
+ask a newer one replaced is dropped, so a slow answer to an old query never lands over a new one.
+It reads:
+
+- `{ state: 'waiting', data }` while an ask is out. `data` is the last answer's, or `null` before
+  the first, so a list dims in place rather than blanking.
+- `{ state: 'ready', data }` with the answer.
+- `{ state: 'failed', data: null, error }` with what the ask rejected with: a refusal's `reason`,
+  `timeout`, or `closed` when the socket dropped under it. It is not asked again on the next
+  socket.
+
+**It asks only while something watches it**, the way a cell from `fromEvent` listens only while
+watched. The first watcher asks. When the last one stops, an answer still out is dropped, and the
+next watcher asks again with the arguments as they are then. A component that unmounts stops
+watching, so nothing has to stop it. `found.get()` with nothing watching reads the state it holds
+and asks nothing. Writing it throws `read-only`.
+
+`options.pending` is handed the first ask, settled either way: a component passes its own
+`pending` (its fourth argument), and a render on a server waits for the answer. `options.timeout`
+is each ask's.
+
+**A page that hydrates reads `waiting` first.** The answer a server's render recorded arrives a
+microtask after the hydration starts (`@aweftjs/ssg`'s `replay`), so a component that draws its
+waiting state builds elements the server sent no pair for. A page that must keep the server's
+markup reads its first answer through `ui`'s `suspend`, which draws nothing while a hydration is
+open (design 312).
+
 ## Sharing a document: `share`
 
 ```ts
@@ -168,5 +205,5 @@ reason for a refusal.
 
 The design notes are in
 [`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design): 183 (what this
-package is and what it opens), 184 (the reconnect, and the server winning) and 310 (a share a
-server module offers).
+package is and what it opens), 184 (the reconnect, and the server winning), 310 (a share a server
+module offers) and 312 (`asking`).
