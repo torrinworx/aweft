@@ -49,6 +49,16 @@ test('a generic component is taken by h as before, its props left to what it dec
 	stop();
 });
 
+// A row that may be mounted on its own as well as under a list declares its item optional.
+const Maybe = (props: { each?: Item }): unknown => h('li', null, props.each?.name ?? 'none');
+
+test('a row whose item is optional takes a list of it, or nothing', () => {
+	const document = createDocument();
+	const stop = mount(document.body, h('ul', null, h(Maybe, { each: items }), h(Maybe, {})));
+	assert.equal(toHtml(document.body.childNodes).replace(/<!--.?-->/g, ''), '<ul><li>one</li><li>two</li><li>none</li></ul>');
+	stop();
+});
+
 test('CallProps is what a call site writes: the list for each, children left to the rest', () => {
 	const written: CallProps<{ each: Item; prefix: string }> = { each: new Set(items), prefix: '' };
 	const loose: CallProps<unknown> = { anything: 1 };
@@ -65,8 +75,10 @@ export const refused = {
 	wrong: () => h(Row, { each: items, prefix: 1 }),
 	// @ts-expect-error a prop the row does not declare
 	extra: () => h(Row, { each: items, prefix: '', colour: 'red' }),
+	// @ts-expect-error a list of numbers where the row declares an optional Item
+	optional: () => h(Maybe, { each: [1, 2] }),
 };
 
 test('the refused calls are never made', () => {
-	assert.deepEqual(Object.keys(refused), ['numbers', 'missing', 'wrong', 'extra']);
+	assert.deepEqual(Object.keys(refused), ['numbers', 'missing', 'wrong', 'extra', 'optional']);
 });
