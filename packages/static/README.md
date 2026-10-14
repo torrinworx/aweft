@@ -40,15 +40,15 @@ export const config = {
 };
 ```
 
-The defaults are `dir: 'dist'`, `unknown: '404'`, no prefix that is not a page (`notPages: []`),
-no header on any path (`headers: {}`) and `public: true`, so a site in `dist` served to anyone
-needs no file at all. The rules above are not defaults: no path carries a `Cache-Control` until
-you name a prefix.
-`dir` is resolved from the working directory when the module is made. A `dir` that is not a
-non-empty string, an `unknown` that is neither word, a `headers` value that is neither a string
-nor an object of header names to strings, a header this module writes itself or one HTTP cannot
-carry, a `notPages` that is not a list of strings or holds one with a leading slash, or a `public`
-that is not a boolean is refused at load with reason `invalid-config`.
+The defaults are `dir: 'dist'`, `unknown: '404'`, no prefix that is not a page (`notPages: []`), no
+header on any path (`headers: {}`) and `public: true`, so a site in `dist` served to anyone needs no
+file at all. The rules above are not defaults: no path carries a `Cache-Control` until you name a
+prefix. `dir` is resolved from the working directory when the module is made. A `dir` that is not a
+non-empty string, an `unknown` that is neither word, a `headers` value that is neither a string nor
+an object of header names to strings, a header this module writes itself, one HTTP cannot carry or
+one that belongs to a single connection (`transfer-encoding`, `connection` and the rest of RFC
+9110's list), a `notPages` that is not a list of strings or holds one with a leading slash, or a
+`public` that is not a boolean is refused at load with reason `invalid-config`.
 
 `public` is what a gate reads. Under `@aweftjs/auth`'s gate, `true` serves a reader with no
 cookie and `false` answers 403 with the gate's reasons, which is a private site in one word.

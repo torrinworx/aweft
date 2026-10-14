@@ -34,6 +34,11 @@ const SHAPE_FIX = 'Give headers a Cache-Control string, or an object of header n
 // for nosniff, take away what design 276 promises.
 const OWNED = new Set(['content-type', 'content-length', 'etag', 'x-content-type-options']);
 
+// The headers that describe one connection rather than the answer (RFC 9110, 7.6.1). Node frames
+// the answer itself, and a transfer encoding beside the length this module writes is an answer
+// every client refuses.
+const HOP = new Set(['connection', 'keep-alive', 'proxy-connection', 'te', 'transfer-encoding', 'upgrade']);
+
 // One prefix's headers, lowercased. A name or value `Headers` itself would refuse is refused
 // here, at load, rather than turning every request under the prefix into a 500.
 const headerSet = (prefix: string, held: object): Extra => {
@@ -43,6 +48,10 @@ const headerSet = (prefix: string, held: object): Extra => {
 		if (OWNED.has(lower)) {
 			throw refuse(`the header ${name} for ${JSON.stringify(prefix)}, which it writes itself`,
 				'Leave content-type, content-length, etag and x-content-type-options out of headers; static/Files writes them for every file.');
+		}
+		if (HOP.has(lower)) {
+			throw refuse(`the header ${name} for ${JSON.stringify(prefix)}, which belongs to one connection`,
+				'Leave connection, keep-alive, proxy-connection, te, transfer-encoding and upgrade out of headers. The server frames each answer itself.');
 		}
 		let valid = typeof value === 'string';
 		if (valid) {

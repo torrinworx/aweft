@@ -659,6 +659,8 @@ test('an invalid configuration is refused at load, with the fix on the error', a
 		['a content length, which the module writes', { dir: 'dist', headers: { 'room/': { 'content-length': '1' } } }],
 		['an etag, which the module writes', { dir: 'dist', headers: { 'room/': { etag: '"x"' } } }],
 		['nosniff turned off', { dir: 'dist', headers: { '': { 'x-content-type-options': 'none' } } }],
+		['a transfer encoding, which belongs to one connection and not to a file', { dir: 'dist', headers: { 'room/': { 'Transfer-Encoding': 'chunked' } } }],
+		['a connection header', { dir: 'dist', headers: { 'room/': { connection: 'close' } } }],
 		['notPages that are not a list', { dir: 'dist', notPages: 'api/' }],
 		['a notPages entry that is not a string', { dir: 'dist', notPages: [1] }],
 		['a notPages entry with a leading slash', { dir: 'dist', notPages: ['/api/'] }],
