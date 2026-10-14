@@ -104,6 +104,23 @@ test('a leave drops only the open it names, and every other held name still pair
 	server.close();
 });
 
+// Every page's link is made with no `unshared`, and design 310 says this change applies to an
+// application that never uses offer.
+test('a link with no unshared drops a topic the other end left too, and its later share asks on its own', async () => {
+	const { server, page, toServer } = pair();
+	server.share('board', createObject<Doc>({ title: 'gone' })).stop();
+	await settle();
+	const minted = page.share<Doc>('board');
+	await settle();
+	const asked = toServer.filter((frame) => frame.kind === 'open').at(-1);
+	assert.equal(asked?.kind === 'open' && asked.root, null, 'the page did not pair with the topic the server left');
+
+	server.share('board', createObject<Doc>({ title: 'kept' }));
+	await settle();
+	assert.equal(minted.document?.title, 'kept');
+	server.close();
+});
+
 test('a share holding a document asks once, though it sends open twice to ask for state', async () => {
 	const { server, page, asked, toServer } = pair();
 	const held = page.share('board', createObject<Doc>({ title: 'mine' }));
