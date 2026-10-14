@@ -20,7 +20,8 @@ its 304, as `Cache-Control` does today. The configuration refuses the four heade
 writes itself (`content-type`, `content-length`, `etag` and `x-content-type-options`) and the six
 that belong to a single connection (`connection`, `keep-alive`, `proxy-connection`, `te`,
 `transfer-encoding` and `upgrade`). It also refuses a name that is not a header name and a value
-that holds a line break.
+with a line break inside it. Spaces, tabs and line breaks at either end of a value are trimmed, as
+`Headers` trims them, and the trimmed value is the one written.
 
 ## Why
 

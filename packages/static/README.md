@@ -145,10 +145,11 @@ of one URL is the answer for another.
 header names to values. Any header goes but the four this module writes itself on every file
 (`content-type`, `content-length`, `etag` and `x-content-type-options`) and the six that belong to a
 single connection (`connection`, `keep-alive`, `proxy-connection`, `te`, `transfer-encoding` and
-`upgrade`). A frame with an opaque origin imports its modules in CORS mode, so a room's bundle needs
-`access-control-allow-origin`, and this is where it goes (design 313). The headers are written on a
-file's 200, its 304 and its HEAD. The unknown answer carries none. A header name is one name
-whatever its case, so of two spellings in one prefix, the later is the one written.
+`upgrade`). A value with a line break inside it is refused, and spaces, tabs and line breaks at
+either end are trimmed. A frame with an opaque origin imports its modules in CORS mode, so a room's
+bundle needs `access-control-allow-origin`, and this is where it goes (design 313). The headers are
+written on a file's 200, its 304 and its HEAD. The unknown answer carries none. A header name is one
+name whatever its case, so of two spellings in one prefix, the later is the one written.
 
 They are written only when a configured prefix matches the start of the path, and the longest
 matching prefix wins, whole: its headers are the ones written, and a shorter prefix's are not added

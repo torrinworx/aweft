@@ -626,6 +626,15 @@ test('the 404 under a prefix that is not a page holds no body for HEAD', async (
 	}
 });
 
+test('a header value is trimmed at both ends, line breaks included, and written trimmed', async () => {
+	const it = await answering({ 'index.html': 'home' }, { headers: { '': { 'x-note': '\r\n\t kept as written \r\n' } } });
+	try {
+		assert.equal((await it.ask('/')).headers.get('x-note'), 'kept as written');
+	} finally {
+		await it.stop();
+	}
+});
+
 test('a file larger than one stream chunk arrives byte-identical', async () => {
 	const written = pseudoRandom(200 * 1024);
 	const it = await serving({ 'assets/big.bin': written });
