@@ -614,6 +614,18 @@ test('a URL under a prefix that is not a page is 404 JSON with no file, in both 
 	}
 });
 
+// Node drops a HEAD body on the socket, so the answer is read before a listener sees it.
+test('the 404 under a prefix that is not a page holds no body for HEAD', async () => {
+	const it = await answering({ 'index.html': 'home' }, { notPages: ['api/'] });
+	try {
+		const head = await it.ask('/api/nope', { method: 'HEAD' });
+		assert.equal(head.status, 404);
+		assert.equal(head.body, null);
+	} finally {
+		await it.stop();
+	}
+});
+
 test('a file larger than one stream chunk arrives byte-identical', async () => {
 	const written = pseudoRandom(200 * 1024);
 	const it = await serving({ 'assets/big.bin': written });
