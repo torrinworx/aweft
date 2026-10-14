@@ -3345,3 +3345,48 @@ test('a face, a keyframes and an import compiled at runtime land in an element o
 		await site.close();
 	}
 });
+
+test('a field\'s hint and error line take their own line without taking the input\'s height', async () => {
+	// Two fields side by side in a row, so each column field is stretched to a definite height,
+	// which is where a percentage basis on the main axis resolves. The second theme is how an
+	// application sizes its inputs to their padding: no minimum height of its own.
+	const site = await page('field-lines', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { Checkbox, TextField, Theme, h, mount } from '@aweftjs/ui';
+		const pair = (prefix) => (
+			<div style={{ display: 'flex', gap: 16, width: 640 }}>
+				<TextField id={prefix + 'plain'} label="Name" />
+				<TextField id={prefix + 'error'} label="Email" description="We never share it." error="Enter an email address." />
+			</div>
+		);
+		mount(document.body, <main>
+			{pair('a-')}
+			<Theme value={{ input: { height: 'auto', minHeight: 0, padding: 12 } }}>{pair('b-')}</Theme>
+			<div id="inline" style={{ display: 'flex', width: 640 }}>
+				<Checkbox id="box" label="Remember me" error="Tick the box to go on." />
+			</div>
+		</main>);
+	`);
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForSelector('#b-error');
+		const seen = await view.evaluate(() => {
+			const height = (id: string): number => document.querySelector(`#${id}`)!.getBoundingClientRect().height;
+			const box = document.querySelector('#box')!.getBoundingClientRect();
+			const error = document.querySelector('#inline [role="alert"]')!.getBoundingClientRect();
+			return {
+				a: [height('a-plain'), height('a-error')],
+				b: [height('b-plain'), height('b-error')],
+				errorBelow: error.top >= box.bottom,
+			};
+		});
+		assert.equal(seen.a[1], seen.a[0], `the input keeps its height under its lines: ${JSON.stringify(seen.a)}`);
+		assert.equal(seen.b[1], seen.b[0], `and with no minimum height of its own: ${JSON.stringify(seen.b)}`);
+		assert.ok(seen.errorBelow, 'in a field laid out in a row, the error still takes a line of its own');
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});
