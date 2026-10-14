@@ -78,9 +78,9 @@ pairs with nothing. It keeps every commit it makes, waiting for an `open` that n
 
 Two of the link's changes reach every application, offer or not, and change frames in two cases. A
 page that leaves a share before the server shares the name: the server's later share used to pair
-with the topic the page had left, send it `open` and `state`, and get `no-topic` back; now it sends
+with the topic the page had left, send it `open` and `state`, and get `no-topic` back. Now it sends
 its own `open` and waits. A share of a value that is not an observable: it used to leave a topic
-that threw out of the next frame naming that name, uncaught; now the throw is the share's own and
+that threw out of the next frame naming that name, uncaught. Now the throw is the share's own and
 nothing is left. Both are cases where the old behaviour was already broken, and a page that works
 today sends neither.
 
