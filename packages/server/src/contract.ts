@@ -171,13 +171,18 @@ export interface ServerModule<C = unknown> {
 	 *
 	 * Throws: a refusal, an error with a `reason`, to refuse the page: its share ends with that
 	 * reason and message. Anything else is reported to `handlers.failed` under this module's name,
-	 * and the page's share ends with `failed`. An offer with no `accept` is that too (`no-accept`).
+	 * and the page's share ends with `failed`. An offer with no `accept` is that too (`no-accept`), and
+	 * so is a refusal whose reason is `closed`, because a client answers `closed` with its next socket
+	 * and would leave the page waiting.
 	 *
 	 * Examples:
 	 *   offer: async (name, { user }) => {
 	 *     if (!name.startsWith('note:')) return undefined;
 	 *     const handle = await store.open(name);
-	 *     if (handle.root.owner !== user) throw Object.assign(new Error(`${name} is not yours`), { reason: 'private' });
+	 *     if (handle.root.owner !== user) {
+	 *       await store.close(handle);
+	 *       throw Object.assign(new Error(`${name} is not yours`), { reason: 'private' });
+	 *     }
 	 *     return { document: handle.root, accept: () => [], fault: () => { void store.close(handle); } };
 	 *   }
 	 */
