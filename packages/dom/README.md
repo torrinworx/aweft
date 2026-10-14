@@ -131,6 +131,18 @@ const Todo = ({ each: todo }) => h('li', { class: observer(todo).path('done').bo
 h('ul', {}, h(Todo, { each: state.todos }));
 ```
 
+**`each` is typed from the item.** A component that declares `each: Item` is called with a list
+of `Item`: an iterable, a list cell, or a cell holding one. `h` with a component as its tag checks
+the props against the component's own, so `h(Row, { each: rows })` is refused when `rows` holds
+something else, and an inline callback's parameter is typed by the prop it is handed to. One item
+is taken too, so a list cast to its item to get past the old `each?: unknown` still compiles.
+`CallProps<P>` is that mapping, for code that builds the props apart from the call (design 308).
+
+```ts
+const Row = (props: { each: Item; onPick(item: Item): void }) => h('li', {}, props.each.label);
+h('ul', {}, h(Row, { each: items, onPick: (item) => open(item.id) }));
+```
+
 **A component under `each` renders the same node shape on every call.** The first row is
 built and remembered; every row after it is a clone of that one with this row's values
 written in, which is what makes a long list cheap. So the tags, their order, the prop keys

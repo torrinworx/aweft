@@ -8,7 +8,7 @@
 
 import type { Client, ShareHandlers } from '@aweftjs/client';
 import { codecError } from '@aweftjs/codec';
-import { type ParentLike, type Remove, h, isComponentCall } from '@aweftjs/dom';
+import { type Component, type ParentLike, type Remove, h, isComponentCall } from '@aweftjs/dom';
 import { type Render, hydrate, mount } from '@aweftjs/ui';
 
 // The only files this half imports besides `ui`: one string, and the key and error both halves
@@ -67,7 +67,7 @@ export const attach = (target: ParentLike, item: unknown, render?: Render): Remo
 	// A bare function means the same thing on both branches, so it is wrapped here rather than
 	// left to `hydrate`, which does its own wrapping, and to `mount`, which would read it as a
 	// mounter and render nothing. `mount`'s own contract is untouched.
-	const mounted = typeof item === 'function' && !isComponentCall(item) ? h(item) : item;
+	const mounted = typeof item === 'function' && !isComponentCall(item) ? h(item as Component) : item;
 	if (!generated) return mount(target, mounted, undefined, render);
 	const removal = hydrate(target, mounted, render);
 	// The answers are for the hydration alone: once it has settled, a later ask with the same

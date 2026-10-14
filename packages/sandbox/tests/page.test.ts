@@ -259,7 +259,7 @@ test('a Room with no label is refused before a frame is made, and the label is t
 	const modules = document({ 'app/Main': ACT });
 	for (const label of [undefined, '', '  ', 7, { text: 'x' }]) {
 		assert.throws(
-			() => mount(page.body as never, h(Room, { inside: 'http://rooms.test/room.js', modules, grants: grantsOf(), act: 'app/Main', ...(label === undefined ? {} : { label }) })),
+			() => mount(page.body as never, h(Room as never, { inside: 'http://rooms.test/room.js', modules, grants: grantsOf(), act: 'app/Main', ...(label === undefined ? {} : { label }) })),
 			(error: { reason?: string; fix?: string; message?: string }) => error.reason === 'malformed' && /label/.test(error.fix ?? '') && (typeof label === 'string' || label === undefined ? /no label/ : /not text/).test(error.message ?? ''),
 		);
 		assert.doesNotMatch(toHtml(page.body as never), /<iframe/, 'nothing was made');
@@ -270,7 +270,7 @@ test('a Room with no label is refused before a frame is made, and the label is t
 		let port: unknown;
 		const { doc: claimed, ports } = pageWith((posted) => { port = posted; });
 		const Later = (): unknown => h(Room, { inside: 'http://rooms.test/room.js', modules: document({}), grants: grantsOf(), act: 'app/Main', label: 'The app' });
-		const Bad = (): unknown => h(Room, { inside: 'http://rooms.test/room.js', modules: document({}), grants: grantsOf(), act: 'app/Main' });
+		const Bad = (): unknown => h(Room as never, { inside: 'http://rooms.test/room.js', modules: document({}), grants: grantsOf(), act: 'app/Main' });
 		const router = createRouter({ url: '/other' });
 		const stop = mount(claimed.body as never, h(StageContext, { router, acts: { 'app/*': Bad, 'later/*': Later, other: () => h('main') } } as never, h(Stage, {})));
 		assert.throws(() => { router.push('/app/first'); }, (error: { reason?: string }) => error.reason === 'malformed');

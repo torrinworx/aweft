@@ -420,6 +420,13 @@ pieces and grouping pieces alike.
 
 **Every state prop is a cell, or absent.** Given one, the component writes it and follows it; given
 none, it keeps its own. A display prop takes a value or a cell. There are no imperative handles.
+A component of your own types a prop that takes a cell as `Cell<T>`, from `@aweftjs/core`.
+
+**A component's props are checked where it is called.** JSX checks them against what the component
+declares, and so does `h` with a component as its tag. `each` is the list at the call site and one
+item in the body, so a row declares `each: Item` and is called with `each={items}` (design 308).
+JSX does not refuse an attribute the component does not declare, so that a component can hand on
+what it was given. A direct `h` call does refuse one.
 
 ## Controls
 
@@ -1824,6 +1831,12 @@ act is handed it as its **`stage` prop**, so `const Post = (props) => <h1>{props
 needs no context at all. It holds `current`, `params` (the `:name` values), `query` (a cell: write
 to it and the URL's query is updated with `replace`, so a filter leaves one history entry), `open`
 and `close`. A prop named `stage` in an `open` does not reach the act; the stage does.
+
+An act types its props with a type literal, `(props: { stage: StageValue }) => ...`, or with an
+interface that extends `ActProps`, which is what every act is handed. `stage` has to be a
+`StageValue`. Anything else an act declares (`refusal` and `retry` on the `refused` act, what an
+`open` passes) is taken as declared, because the stage cannot know it in general. An interface of
+its own that does not extend `ActProps` is refused, since it has no index signature (design 308).
 
 **Nesting.** An act that renders a `StageContext` of its own gets what the act above it did not
 match: `/docs/install` reaches the `docs` act, whose child stage sees `install`. A deep link that

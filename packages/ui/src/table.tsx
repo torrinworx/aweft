@@ -128,7 +128,7 @@ export const Table = (props: TableProps): Mounter => (elem, _item, before, conte
 	// puts it under the table with `caption-side`.
 	empty(caption) ? null : h('caption', { theme: ['table_caption'] }, caption),
 	head,
-	h('tbody', {}, h(Row, { each: rowsOf })),
+	h('tbody', {}, h(Row, { each: rowsOf as Iterable<unknown> })),
 	foot === undefined || foot === null
 		? null
 		: h('tfoot', { theme: ['table_foot'] },

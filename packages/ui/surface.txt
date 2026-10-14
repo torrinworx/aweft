@@ -1,7 +1,9 @@
 type Act: type Act = ActComponent | string;
-type ActComponent: type ActComponent = Component<Record<string, unknown>> & { entries?: ActEntries; };
+type ActBody: type ActBody = { act(props: ActProps, cleanup: Cleanup, mounted: Mounted, pending: Pending): unknown; }['act'];
+type ActComponent: type ActComponent = ActBody & { entries?: ActEntries; };
 type ActEntries: type ActEntries = () => Promise<readonly Readonly<Record<string, string>>[] | null>;
-type ActInstance: interface ActInstance { readonly component: Component<Record<string, unknown>>; readonly title?: unknown; }
+type ActInstance: interface ActInstance { readonly component: ActBody; readonly title?: unknown; }
+type ActProps: interface ActProps { readonly stage: StageValue; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Alert: (props: AlertProps) => unknown
 type AlertProps: interface AlertProps { readonly title?: unknown; readonly icon?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly children?: unknown[]; readonly [prop: string]: unknown; }
 value Avatar: (props: AvatarProps) => unknown
@@ -21,7 +23,7 @@ value Checkbox: (props: CheckboxProps) => Mounter
 type CheckboxProps: interface CheckboxProps { readonly value?: unknown; readonly label?: unknown; readonly description?: unknown; readonly error?: unknown; readonly invert?: unknown; readonly indeterminate?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly size?: unknown; readonly onChange?: (next: boolean, event: unknown) => void; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
 value ColorPicker: (props: ColorPickerProps, cleanup: (...fns: (() => void)[]) => void) => Mounter
 type ColorPickerProps: interface ColorPickerProps { readonly value?: unknown; readonly hasAlpha?: unknown; readonly disabled?: unknown; readonly type?: unknown; readonly element?: unknown; readonly theme?: unknown; readonly [prop: string]: unknown; }
-type Component: type Component<P = Record<string, unknown>> = (props: P & { children?: unknown[]; each?: unknown; }, cleanup: Cleanup, mounted: Mounted, pending: Pending) => unknown;
+type Component: type Component<P = Record<string, unknown>> = { component(props: P & { children?: unknown[]; each?: unknown; }, cleanup: Cleanup, mounted: Mounted, pending: Pending): unknown; }['component'];
 type Context: interface Context<T> { (props: ProviderProps): unknown; readonly def: T; read(context: unknown): T; node(context: unknown): ContextNode<T> | null; use<P extends Record<string, unknown>>(build: (value: T) => Component<P>): Component<P>; }
 type ContextNode: interface ContextNode<T> { readonly id: string; readonly parent: ContextNode<T> | null; readonly children: MutableArray<ContextNode<T>>; value(): T; }
 type ContextOptions: interface ContextOptions { readonly locale?: string | undefined; readonly catalog?: Catalog | undefined; }
@@ -159,7 +161,7 @@ value context: (options?: ContextOptions) => Render
 value createContext: <T>(def: T, transform?: Transform<T>) => Context<T>
 value dark: Readonly<Record<string, Readonly<Record<string, unknown>>>>
 value flagOf: (code: string) => string
-value h: (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown
+value h: { <P>(tag: ComponentTag<P>, props?: NoInfer<CallProps<P>> | null | undefined, ...children: unknown[]): unknown; (tag: string | NodeLike | MarkMaker | undefined, props?: Readonly<Record<string, unknown>> | null | undefined, ...children: unknown[]): unknown; }
 value html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown
 value hydrate: (target: ParentLike, item: unknown, render?: Render | undefined) => Hydrated
 value isText: (value: unknown) => value is TextToken
@@ -173,7 +175,7 @@ value sizeProperties: ReadonlySet<string>
 value slugger: () => (text: string) => string
 value standardIcons: readonly string[]
 value suspend: <P extends Record<string, unknown>>(fallback: Component | null, loader: Loader<P>, failed?: Component<{ error?: unknown; }> | null | undefined) => (props: P & { children?: unknown[] | undefined; }, cleanup: (...fns: (() => void)[]) => void, _mounted: unknown, pending: (promise: Promise<unknown>) => void) => Mounter
-value svg: (tag: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown
+value svg: { <P>(tag: ComponentTag<P>, props?: NoInfer<CallProps<P>> | null | undefined, ...children: unknown[]): unknown; (tag: string | NodeLike | MarkMaker | undefined, props?: Readonly<Record<string, unknown>> | null | undefined, ...children: unknown[]): unknown; }
 value template: (spec: TemplateElement, edits: readonly TemplateEdit[]) => Template
 value text: (source: string, values?: TextValues | undefined) => TextToken
 value textOf: (context: unknown, value: unknown) => string

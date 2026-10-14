@@ -3,6 +3,8 @@
 // One `<span>` and nothing else. It answers to nothing, so there is no handler, no `disabled` and
 // no `href` here: a badge somebody presses is a small `Button`.
 
+import type { NodeLike } from '@aweftjs/dom';
+
 import { h } from './h.ts';
 import { sizeSegments } from './control.ts';
 
@@ -43,7 +45,7 @@ export interface BadgeProps {
  */
 export const Badge = (props: BadgeProps): unknown => {
 	const { label, type, size, icon, element, theme, children, ...rest } = props;
-	return h(element ?? 'span', {
+	return h((element ?? 'span') as string | NodeLike, {
 		...rest,
 		theme: ['badge', type, sizeSegments(size), theme],
 	}, icon ?? null, label ?? null, ...(children ?? []));

@@ -7,7 +7,7 @@
 
 import { type Derived, all, mutable } from '@aweftjs/core';
 import {
-	type ElementLike, type Mounter, type NodeLike, type Remove,
+	type Cleanup, type ElementLike, type Mounted, type Mounter, type NodeLike, type Pending, type Remove,
 	getFirst, h as domH, mount,
 } from '@aweftjs/dom';
 import type { Router } from '@aweftjs/dom/router';
@@ -23,13 +23,29 @@ import { textOf } from './text.ts';
 import { type Match, checkActKeys, hashOf, matchAct, parseQuery, pathOf, queryOf, writeQuery } from './route.ts';
 import { suspend } from './suspend.tsx';
 
+/**
+ * What every act is handed: `stage`, and whatever an `open` or the `refused` act passes beside it.
+ */
+export interface ActProps {
+	readonly stage: StageValue;
+	readonly children?: unknown[];
+	readonly [prop: string]: unknown;
+}
+
+/**
+ * The body of an act. Written as a method, whose parameter is compared in both directions, so an
+ * act may declare props beyond `stage` (`refusal`, `retry`, what an `open` passes) that the stage
+ * cannot promise in general, while a `stage` of the wrong type is still refused (design 308).
+ */
+export type ActBody = { act(props: ActProps, cleanup: Cleanup, mounted: Mounted, pending: Pending): unknown }['act'];
+
 /** An act that is the component itself, with the static walk's parameter source on it. */
-export type ActComponent = Component<Record<string, unknown>> & { entries?: ActEntries };
+export type ActComponent = ActBody & { entries?: ActEntries };
 
 /** What an act module's factory answers (design 242). */
 export interface ActInstance {
 	/** The component the stage renders. */
-	readonly component: Component<Record<string, unknown>>;
+	readonly component: ActBody;
 	/** What the live region says when this act arrives, a string or a text token. The head's title is not touched. */
 	readonly title?: unknown;
 }

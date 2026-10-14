@@ -4,10 +4,10 @@
 // is a mounter, because the theme it gets and the `$var`s in its style are decided where the
 // context is, and `dom` hands the context to a mounter and to nothing else.
 
-import { createElement, h as domH, htm } from '@aweftjs/dom';
+import { type CallProps, type Component, type ComponentTag, type NodeLike, createElement, h as domH, htm } from '@aweftjs/dom';
 
 import { assert } from './assert.ts';
-import { type Marked, makeMark, markNameOf } from './mark.ts';
+import { type MarkMaker, type Marked, makeMark, markNameOf } from './mark.ts';
 import { type Claimed, dress, foldChildren, splitProps } from './wrapper.ts';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -28,7 +28,7 @@ const withEachName = (
 
 const build = (
 	tag: unknown,
-	props: Record<string, unknown> | null,
+	props: Readonly<Record<string, unknown>> | null,
 	children: unknown[],
 	namespace: string | null,
 ): unknown => {
@@ -44,9 +44,9 @@ const build = (
 
 	if (typeof tag === 'function') {
 		const renamed = Object.keys(given).map((key) => EACH.exec(key)).find((found) => found !== null);
-		if (renamed === null || renamed === undefined) return domH(tag, given, ...children);
+		if (renamed === null || renamed === undefined) return domH(tag as Component, given, ...children);
 		const { [renamed[0]]: item, ...rest } = given;
-		return domH(withEachName(tag as (...args: never[]) => unknown, renamed[1]!), { ...rest, each: item }, ...children);
+		return domH(withEachName(tag as (...args: never[]) => unknown, renamed[1]!) as Component, { ...rest, each: item as Iterable<unknown> }, ...children);
 	}
 
 	const { rest, claimed } = splitProps(given, namespace === null);
@@ -57,7 +57,7 @@ const build = (
 	// makes it one and `h` takes a tag name with no namespace beside it. A node handed in is
 	// already the element, in whatever namespace it was made in.
 	const target = namespace === null || isNode(tag) ? tag : createElement(String(tag), namespace);
-	const made = domH(target, rest, ...folded.children);
+	const made = domH(target as string | NodeLike, rest, ...folded.children);
 	if (claimed === null && folded.claims.length === 0) return made;
 	// This element's own props first: document order is what decides which element asks the
 	// render's class cache for a name first, and a compiled page has to ask in the same order.
@@ -83,11 +83,18 @@ const build = (
  * prop that is not a writable cell, an `onXxx` that is not a function, and everything `dom`'s own
  * `h` refuses.
  *
+ * With a component as the tag, the props are checked against its own, `each` as a list of the
+ * item it declares (`CallProps`, design 308).
+ *
  * Example:
  *   mount(document.body, h('button', { theme: ['button', tone], onClick: go }, 'Go'));
+ *   mount(list, h(Row, { each: items, onPick: (item) => open(item) }))
  */
-export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...children: unknown[]): unknown =>
-	build(tag, props, children, null);
+export function h<P>(tag: ComponentTag<P>, props?: NoInfer<CallProps<P>> | null, ...children: unknown[]): unknown;
+export function h(tag: string | NodeLike | MarkMaker | undefined, props?: Readonly<Record<string, unknown>> | null, ...children: unknown[]): unknown;
+export function h(tag: unknown, props: Readonly<Record<string, unknown>> | null = {}, ...children: unknown[]): unknown {
+	return build(tag, props, children, null);
+}
 
 /**
  * Make an SVG element.
@@ -105,8 +112,11 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
  * Example:
  *   svg('svg', { viewBox: '0 0 24 24' }, svg('circle', { cx: 12, cy: 12, r: 10 }));
  */
-export const svg = (tag: unknown, props: Record<string, unknown> | null = {}, ...children: unknown[]): unknown =>
-	build(tag, props, children, SVG);
+export function svg<P>(tag: ComponentTag<P>, props?: NoInfer<CallProps<P>> | null, ...children: unknown[]): unknown;
+export function svg(tag: string | NodeLike | MarkMaker | undefined, props?: Readonly<Record<string, unknown>> | null, ...children: unknown[]): unknown;
+export function svg(tag: unknown, props: Readonly<Record<string, unknown>> | null = {}, ...children: unknown[]): unknown {
+	return build(tag, props, children, SVG);
+}
 
 /**
  * Markup in a template literal, bound to `ui`'s `h`.

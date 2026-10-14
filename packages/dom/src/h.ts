@@ -6,6 +6,8 @@
 // is recorded and bound when the element is mounted, because that is when its place in the
 // document is known.
 
+import type { Derived, Observer } from '@aweftjs/core';
+
 import { assert } from './assert.ts';
 import { activeDocument } from './ambient.ts';
 import { bindAttribute, bindProperty } from './bind.ts';
@@ -35,6 +37,40 @@ export const warnHtmlSvg = (tag: string): boolean => {
 	return true;
 };
 
+type Without<P> = { [K in keyof P as K extends 'each' | 'children' ? never : K]: P[K] };
+
+// What `each` takes: a list, a document array or a list cell, or a cell or scope whose value is
+// one, which the list follows. A scope reads its value as `unknown`, so it carries no item type.
+// The item itself is taken too: a call written against the old `each?: unknown` cast its list to
+// the item to compile, and that call keeps compiling. The runtime refuses an item that is no list.
+type ListOf<I> = Iterable<I> | Derived<Iterable<I>> | Observer | I;
+
+/**
+ * What a call site writes for a component whose own props are `P` (design 308).
+ *
+ * The props the component declares, with `each` read as a list of the item it declares, since
+ * `each` is the list where the component is called and one item in its body: an iterable of the
+ * item, or a cell or scope holding one. `children` is left to the rest arguments. A component
+ * whose props are `unknown`, or that takes none, takes any props. JSX checks a component's
+ * attributes against this too.
+ *
+ * Example:
+ *   const Row = (props: { each: Item, onPick(item: Item): void }) => h('li', null, props.each.label)
+ *   const props: CallProps<{ each: Item, onPick(item: Item): void }> = { each: items, onPick: pick }
+ */
+export type CallProps<P> = unknown extends P ? Readonly<Record<string, unknown>> : P extends { readonly each: infer I }
+	? Without<P> & { readonly each: ListOf<I>; readonly children?: unknown[] | null }
+	: P extends { readonly each?: infer I }
+		? Without<P> & { readonly each?: ListOf<I>; readonly children?: unknown[] | null }
+		: Without<P> & { readonly children?: unknown[] | null };
+
+/**
+ * A component as `h` takes it: any function of props. Written as a method, so its parameter is
+ * compared both ways and a generic component, whose props TypeScript cannot pin down here, is
+ * still taken, with its props then left unchecked (design 308).
+ */
+export type ComponentTag<P> = { component(props: P, ...rest: never[]): unknown }['component'];
+
 /**
  * Make an element, or a component's mounter.
  *
@@ -43,7 +79,8 @@ export const warnHtmlSvg = (tag: string): boolean => {
  *   props: attributes by bare name, properties by `$name` (`$value`, `$onclick`, a `$style`
  *          object), each static or a scope, cell or derived value; `children` as an
  *          alternative to the rest arguments; `each` on a component to mount it once per
- *          item of a list
+ *          item of a list. With a component as the tag they are checked against its own
+ *          props, `each` as a list of its item (`CallProps`)
  *   children: what goes inside: primitives, nodes, `h()` output, iterables, scopes and cells,
  *             components. `null` is skipped and `undefined` is refused
  *
@@ -56,8 +93,11 @@ export const warnHtmlSvg = (tag: string): boolean => {
  *
  * Example:
  *   mount(document.body, h('button', { $onclick: () => count.set(count.get() + 1) }, 'clicked ', count));
+ *   mount(list, h(Row, { each: items, onPick: (item) => open(item) }))
  */
-export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...children: unknown[]): unknown => {
+export function h<P>(tag: ComponentTag<P>, props?: NoInfer<CallProps<P>> | null, ...children: unknown[]): unknown;
+export function h(tag: string | NodeLike, props?: Readonly<Record<string, unknown>> | null, ...children: unknown[]): unknown;
+export function h(tag: unknown, props: Readonly<Record<string, unknown>> | null = {}, ...children: unknown[]): unknown {
 	assert(tag !== null && tag !== undefined, 'a tag name cannot be null or undefined; pass an element name, a node or a component');
 	const given = props ?? {};
 
@@ -135,7 +175,7 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
 	const bound: Bound = { [BOUND]: true, node: element, signals };
 	if (tracing) traceClose(element, bound);
 	return bound;
-};
+}
 
 /**
  * Write one element's properties and attributes, collecting a signal for each reactive one.

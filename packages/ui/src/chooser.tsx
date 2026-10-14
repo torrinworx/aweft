@@ -322,7 +322,7 @@ export const Chooser = (
 				const held = (event as { target?: { value?: unknown } }).target?.value;
 				choose(typeof held === 'string' && held !== '' ? held : null, event);
 			},
-		}, blank, h(Option, { each: items ?? [] }));
+		}, blank, h(Option, { each: (items ?? []) as Iterable<unknown> }));
 
 		// --- the control --------------------------------------------------------------------------
 

@@ -14,8 +14,8 @@ test('a static element is returned as the element itself, children and attribute
 	assert.equal(typeof (div as { nodeType?: unknown }).nodeType, 'number', 'a plain element');
 	assert.equal(toHtml(div as never), '<div class="box" title="T" hidden data-n="3">a1<i></i></div>');
 	assert.throws(() => h('div', {}, 'a', undefined), /undefined/);
-	assert.throws(() => h(null), /tag/);
-	assert.throws(() => h(3), /unsupported/);
+	assert.throws(() => h(null as never), /tag/);
+	assert.throws(() => h(3 as never), /unsupported/);
 	assert.throws(() => h('div', { style: { color: 'red' } }), /\$style/);
 });
 

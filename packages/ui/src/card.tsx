@@ -5,6 +5,8 @@
 // together, and the column is the modifier `card_stack` rather than a change to `card`, so the
 // bare block is the same markup a `<div theme="card">` is.
 
+import type { NodeLike } from '@aweftjs/dom';
+
 import { h } from './h.ts';
 import { through } from './source.ts';
 
@@ -66,9 +68,9 @@ export const Card = (props: CardProps): unknown => {
 		...rest,
 		theme: ['card', type, through(tight, (held) => (held ? 'tight' : null)), parted ? 'stack' : null, theme],
 	};
-	if (!parted) return h(element ?? 'div', box, ...body);
+	if (!parted) return h((element ?? 'div') as string | NodeLike, box, ...body);
 
-	return h(element ?? 'div', box,
+	return h((element ?? 'div') as string | NodeLike, box,
 		titled || described
 			? h('div', { theme: ['card_head'] },
 				titled ? h('p', { theme: ['card_title'] }, title) : null,

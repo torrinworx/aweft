@@ -254,7 +254,7 @@ test('nested themed elements mount under one bracket, not one each', async () =>
 });
 
 test('a null tag is refused, and the message says what to pass', () => {
-	assert.throws(() => h(null), /pass an element name, a node, a component or a mark/);
+	assert.throws(() => h(null as never), /pass an element name, a node, a component or a mark/);
 });
 
 test('a themed element with a handler and a state cell still works after a hydration', async () => {

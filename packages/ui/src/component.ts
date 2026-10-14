@@ -6,10 +6,12 @@
 
 import type { Cleanup, Mounted, Pending } from '@aweftjs/dom';
 
-/** A component: called once with its props, and what it returns is mounted. */
-export type Component<P = Record<string, unknown>> = (
-	props: P & { children?: unknown[]; each?: unknown },
-	cleanup: Cleanup,
-	mounted: Mounted,
-	pending: Pending,
-) => unknown;
+/**
+ * A component: called once with its props, and what it returns is mounted.
+ *
+ * Written as a method, whose parameter TypeScript compares in both directions, so a component that
+ * declares props of its own (an act's `stage`) is taken where any component is (design 308).
+ */
+export type Component<P = Record<string, unknown>> = {
+	component(props: P & { children?: unknown[]; each?: unknown }, cleanup: Cleanup, mounted: Mounted, pending: Pending): unknown;
+}['component'];

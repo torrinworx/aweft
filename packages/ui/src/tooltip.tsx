@@ -12,7 +12,7 @@ import { type ElementLike, type Mounter, mount } from '@aweftjs/dom';
 import { mutable } from '@aweftjs/core';
 
 import { Detached, runOf } from './popup.tsx';
-import { SIDES } from './placement.ts';
+import { type Placement, SIDES } from './placement.ts';
 import { assert } from './assert.ts';
 import { categories, mark } from './mark.ts';
 import { h } from './h.ts';
@@ -105,7 +105,7 @@ export const Tooltip = (
 		// stays in front of it however late it arrives. `Detached` renders the anchor where it was
 		// written and its panel at the sink, so the elements between the two are the anchor alone.
 		const tail = mount(elem, '', before, context);
-		const remove = mount(elem, h(Detached, { enabled: open, locations: locations ?? SIDES },
+		const remove = mount(elem, h(Detached, { enabled: open, locations: (locations ?? SIDES) as readonly Placement[] },
 			...anchor!.items,
 			mark('popup', null, panel)), tail, context);
 
