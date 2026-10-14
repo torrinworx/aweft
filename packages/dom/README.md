@@ -65,9 +65,9 @@ you can hand to the browser.
 A tag name is an HTML element, `svg` included, and an HTML `<svg>` draws nothing in a browser and
 does not hydrate against the server's markup. Make SVG in its namespace with
 `createElement('svg', 'http://www.w3.org/2000/svg')` and hand the node to `h` as the tag, or with
-`svg` from `@aweftjs/ui`, which does that for every element under it. Anything but a release
-bundle warns the first time `h` or a hoisted template makes an `<svg>` by name, a server render
-under Node included (design 307).
+`svg` from `@aweftjs/ui`, which does that for every element under it. `h` or a hoisted template
+warns the first time it makes an `<svg>` by name. Only a release bundle drops the warning, so a
+page rendered on a server warns too (design 307).
 
 `html` is a tag for template literals. A tag may be an expression (`<${Component}>`), `</>`
 closes the innermost open element, `<!-- ... -->` is a comment and goes, and `${value}` between
