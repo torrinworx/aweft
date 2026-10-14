@@ -22,7 +22,9 @@ await server.start();
 ```
 
 Its configuration is a file beside your application's own modules, exporting `config` and no
-factory, exactly as any battery module is configured:
+factory, exactly as any battery module is configured. An entry of the same name in a bundle,
+`fromBundle({ './static/Files.ts': { config } })`, is the same thing. Either way, the source that
+holds it is listed before `files`:
 
 ```ts
 // modules/static/Files.ts
