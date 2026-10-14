@@ -8,6 +8,7 @@
 // This is not exported.
 
 import { mutable } from '@aweftjs/core';
+import type { NodeLike } from '@aweftjs/dom';
 
 import { assert } from './assert.ts';
 import { type Render, use } from './render.ts';
@@ -153,7 +154,7 @@ const describe = (value: unknown): string => {
  * Example:
  *   const node = elementFor(props.element, 'input');
  */
-export const elementFor = (element: unknown, ...tags: string[]): unknown => {
+export const elementFor = (element: unknown, ...tags: string[]): string | NodeLike => {
 	if (element === undefined || element === null) return tags[0]!;
 	const name = (element as { localName?: unknown }).localName;
 	if (tags.length === 0) {
@@ -161,12 +162,12 @@ export const elementFor = (element: unknown, ...tags: string[]): unknown => {
 		// name, and both render nothing where an element was meant.
 		assert(typeof name === 'string' && name !== '',
 			`element must be an element and this one is ${describe(element)}`);
-		return element;
+		return element as NodeLike;
 	}
 	const got = String(name ?? '').toLowerCase();
 	assert(tags.includes(got),
 		`element must be <${tags.join('> or <')}> and this one is <${got}>`);
-	return element;
+	return element as NodeLike;
 };
 
 /**

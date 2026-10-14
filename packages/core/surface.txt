@@ -1,4 +1,5 @@
 type ArrayChange: type ArrayChange<T> = { readonly type: 'add'; readonly at: number; readonly value: T; } | { readonly type: 'replace'; readonly at: number; readonly value: T; } | { readonly type: 'remove'; readonly at: number; };
+type Cell: type Cell<T = unknown> = Derived<T>;
 type Change: interface Change extends Commit { readonly deltas: readonly Delta[]; inverse(): Commit; }
 type Commit: interface Commit { readonly deltas: readonly Delta[]; readonly tag?: Tag; } (from @aweftjs/codec)
 type Delta: interface Delta { readonly type: DeltaType; readonly id: Id; readonly ref: Ref; readonly value?: Value; } (from @aweftjs/codec)
@@ -26,17 +27,17 @@ value byId: (document: unknown, id: string | Id) => object | undefined
 value createArray: <T = unknown>(items?: Iterable<T> | undefined, id?: Id | undefined) => T[]
 value createMap: <T = unknown>(entries?: Iterable<readonly [unknown, T]> | undefined, id?: Id | undefined) => ObservableMap<T>
 value createObject: <T extends object = Record<string, unknown>>(init?: Readonly<Partial<T>> | undefined, id?: Id | undefined) => T
-value fromEvent: <E>(target: EventEmitting<E>, type: string) => Derived<E | undefined>
+value fromEvent: <E>(target: EventEmitting<E>, type: string) => Cell<E | undefined>
 value fromSnapshot: (snap: Snapshot) => object
 value idOf: (observable: unknown) => Id
-value immutable: { <T>(value: Derived<T>): Derived<T>; <T>(value: T): Derived<T>; }
+value immutable: { <T>(value: Derived<T>): Cell<T>; <T>(value: T): Cell<T>; }
 value insertAt: (list: object, position: Position, value: unknown) => void
 value intercept: (document: unknown, fn: Interceptor) => () => void
 value isMutableArray: (value: unknown) => boolean
 value isObservable: (value: unknown) => boolean
 value isReachable: (observable: unknown) => boolean
 value kindOf: (observable: unknown) => ObservableKind
-value mutable: <T>(initial: T) => Derived<T>
+value mutable: <T>(initial: T) => Cell<T>
 value mutableArray: <T = unknown>(items?: Iterable<T> | undefined) => MutableArray<T>
 value observer: (observable: unknown) => Observer
 value parentOf: (observable: unknown) => object | undefined
@@ -44,4 +45,4 @@ value pathOf: (observable: unknown) => readonly string[] | undefined
 value positionsOf: (list: object) => Position[]
 value snapshot: (observable: unknown) => Snapshot
 value textIdOf: (observable: unknown) => string
-value timer: (ms: number) => Derived<number>
+value timer: (ms: number) => Cell<number>

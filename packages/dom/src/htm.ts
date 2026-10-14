@@ -12,7 +12,12 @@ import { all } from '@aweftjs/core';
 import { assert } from './assert.ts';
 import { isSource } from './types.ts';
 
-export type H = (tag: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => unknown;
+/**
+ * Any `h` the tag can call. It is written as a method, because TypeScript checks a method's
+ * parameters in both directions. That way it takes an `h` with typed tags and props, such as this
+ * package's own (design 308).
+ */
+export type H = { h(tag: unknown, props: Record<string, unknown> | null, ...children: unknown[]): unknown }['h'];
 
 interface Frame {
 	tag: unknown;

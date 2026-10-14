@@ -4,7 +4,7 @@
 // in front of every `theme` prop it writes. Nothing per element has to remember to do it, and a
 // component cannot forget.
 
-import { type Mounter, h as domH, mount } from '@aweftjs/dom';
+import { type Component as DomComponent, type Mounter, h as domH, mount } from '@aweftjs/dom';
 
 import type { Component } from './component.ts';
 
@@ -53,10 +53,10 @@ const used = <P extends Record<string, unknown>>(build: (h: Themed) => Component
 		const inherited = base.read(context);
 		const themed: Themed = (tag, given = {}, ...children) => {
 			const props2 = given ?? {};
-			if (!('theme' in props2)) return h(tag, props2, ...children);
-			return h(tag, { ...props2, theme: [...inherited, props2['theme']] }, ...children);
+			if (!('theme' in props2)) return h(tag as string, props2, ...children);
+			return h(tag as string, { ...props2, theme: [...inherited, props2['theme']] }, ...children);
 		};
-		return mount(elem, domH(build(themed), props as Record<string, unknown>), before, context);
+		return mount(elem, domH(build(themed) as DomComponent, props as Record<string, unknown>), before, context);
 	}) as unknown as Component<P>;
 
 /**

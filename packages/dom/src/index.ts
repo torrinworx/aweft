@@ -1,6 +1,7 @@
 export { mount, getFirst, hydrating, isComponentCall } from './mount.ts';
 export type { Cleanup, Component, Mounted, Mounter, Pending, Remove } from './mount.ts';
 export { h } from './h.ts';
+export type { CallProps, ComponentTag } from './h.ts';
 export { htm, joined } from './htm.ts';
 export type { H } from './htm.ts';
 export { template } from './template.ts';

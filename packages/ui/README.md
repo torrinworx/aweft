@@ -80,7 +80,7 @@ repo.
 |---|---|
 | `theme` | a string, a list, a cell, or lists of those; flattened at mount into a class list and matched against the theme |
 | `class` | kept, and joined in front of the classes the theme generated. Without a `theme` it is an ordinary attribute |
-| `style` | an object (or a string); a bare number in a size property gets `px`, and `$var` and `$fn()` resolve against the element's own theme chain |
+| `style` | an object (or a string). A bare number in a size property gets `px`, and `$var` and `$fn()` resolve against the element's own theme chain. With no `theme` prop there is no chain, so a `$var` in an object style resolves to nothing, and the element warns once per name. Only a release bundle drops the warning, so a page rendered on a server warns too. `theme=""` gives the element the chain it is under. An `svg` element takes no theme, and its warning says to write the value (design 307) |
 | `isHovered`, `isFocused`, `isClicked`, `isTouched` | a cell this package writes from real events. `isFocused` is the element's own focus, and `isTouched` is a pointer event that says it was a finger |
 | `onClick`, `onInput`, `onKeyDown`, … | `on` and an uppercase letter: a handler, handed to `dom` as `$on<type>` so a hydration replays it, and gone when its element goes. Your own `$onclick` beside it runs first |
 
@@ -92,6 +92,9 @@ mounter, not a node**: the theme it gets depends on where it is mounted, and `do
 mount context to a mounter and to nothing else. Hand it to `mount` as you would anything else.
 
 `svg` is the same in the SVG namespace, with no theme: `class` and `style` stay plain attributes.
+JSX always compiles to `h`, so an `<svg>` written in JSX is an HTML element that draws nothing, and
+the page warns about it unless it is a release bundle. Write an inline drawing as `svg('svg', props, svg('path', props))`
+calls, or use `Icon` (design 307).
 `html` is `dom`'s template-literal tag bound to this `h`.
 
 On a component, `each:name` renames the loop item: `<Row each:row={rows} />` hands each item to
@@ -417,6 +420,13 @@ pieces and grouping pieces alike.
 
 **Every state prop is a cell, or absent.** Given one, the component writes it and follows it; given
 none, it keeps its own. A display prop takes a value or a cell. There are no imperative handles.
+A component of your own types a prop that takes a cell as `Cell<T>`, from `@aweftjs/core`.
+
+**A component's props are checked where it is called.** JSX checks them against what the component
+declares, and so does `h` with a component as its tag. `each` is the list at the call site and one
+item in the body, so a row declares `each: Item` and is called with `each={items}` (design 308).
+JSX does not refuse an attribute the component does not declare, so that a component can hand on
+what it was given. A direct `h` call does refuse one.
 
 ## Controls
 
@@ -1657,7 +1667,10 @@ node packages/testing/scripts/check-theme.ts /home/me/app/src
 **Overriding it.** `Theme.define` adds to the theme; it refuses one property of one entry given two
 different values, so it is not how you replace what the default already says. A `<Theme value={...}>`
 provider is, and it is also what scopes an override to part of a page. Entry names the default
-theme does not use are yours to define outright.
+theme does not use are yours to define outright. An entry you give one of the default's names
+replaces that entry everywhere it is worn, with no warning, because that is how an application
+restyles a component. A style of your own takes a name the default does not use, or a `menu` of
+yours reshapes every `Menu` on the page.
 
 **A dev-mode warning.** When a chain resolves both `color` and `background` from named values and
 the pair is below 4.5:1, this package says so in the console, with the ratio, the target and the
@@ -1821,6 +1834,12 @@ act is handed it as its **`stage` prop**, so `const Post = (props) => <h1>{props
 needs no context at all. It holds `current`, `params` (the `:name` values), `query` (a cell: write
 to it and the URL's query is updated with `replace`, so a filter leaves one history entry), `open`
 and `close`. A prop named `stage` in an `open` does not reach the act; the stage does.
+
+An act types its props with a type literal, `(props: { stage: StageValue }) => ...`, or with an
+interface that extends `ActProps`, which is what every act is handed. `stage` has to be a
+`StageValue`. Anything else an act declares (`refusal` and `retry` on the `refused` act, what an
+`open` passes) is taken as declared, because the stage cannot know it in general. An interface of
+its own that does not extend `ActProps` is refused, since it has no index signature (design 308).
 
 **Nesting.** An act that renders a `StageContext` of its own gets what the act above it did not
 match: `/docs/install` reaches the `docs` act, whose child stage sees `install`. A deep link that

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { mutable } from '@aweftjs/core';
 import { createDocument } from '@aweftjs/dom';
 import type { LightElement, NodeLike } from '@aweftjs/dom';
-import { Alert, Avatar, Badge, Button, Card, Empty, Progress, Skeleton, context, h, mount } from '@aweftjs/ui';
+import { Alert, Avatar, Badge, Button, Card, Empty, Progress, Skeleton, context, h, mount, svg } from '@aweftjs/ui';
 import type { Render } from '@aweftjs/ui';
 
 const elements = (node: NodeLike | null): LightElement[] => {
@@ -76,7 +76,7 @@ const fire = (element: LightElement, type: string): void => {
 
 test('a badge is a span on its own fill, and its icon comes before its label', () => {
 	const { render, root, stop } = page(
-		h(Badge as never, { label: 'New', icon: h('svg', {}) }));
+		h(Badge as never, { label: 'New', icon: svg('svg', {}) }));
 
 	assert.equal(root.localName, 'span');
 	assert.equal(root.getAttribute('role'), null, 'a badge is not a control and claims no role');
@@ -145,7 +145,7 @@ test('an alert grows its icon column only when it was given an icon', () => {
 		'the title and the body, and no icon cell');
 	bare.stop();
 
-	const led = page(h(Alert as never, { title: 'Saved', icon: h('svg', {}) }, 'body'));
+	const led = page(h(Alert as never, { title: 'Saved', icon: svg('svg', {}) }, 'body'));
 	assert.match(rulesOn(led.render, led.root), /grid-template-columns: auto 1fr/);
 	const parts = childrenOf(led.root);
 	assert.deepEqual(parts.map((node) => node.localName), ['span', 'span', 'div'],
@@ -304,7 +304,7 @@ test('a progress given an element that is not a progress is refused', () => {
 
 test('an empty state renders only the parts it was given', () => {
 	const full = page(h(Empty as never, {
-		icon: h('svg', {}), title: 'No messages', description: 'They will show up here.',
+		icon: svg('svg', {}), title: 'No messages', description: 'They will show up here.',
 	}, h(Button as never, { label: 'Refresh' })));
 
 	const parts = childrenOf(full.root);

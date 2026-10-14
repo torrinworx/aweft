@@ -11,7 +11,7 @@ import {
 	assertId, assertPosition, assertValue, codecError, idToText, isReference, slotKeyOf,
 } from '@aweftjs/codec';
 
-import type { Cell, Node } from './types.ts';
+import type { SlotCell, Node } from './types.ts';
 import { anchorOf, indexOf } from './node.ts';
 import { nodeFor } from './create.ts';
 import { atomic, write } from './transaction.ts';
@@ -179,7 +179,7 @@ const checkSlots = (commit: Commit, index: Map<string, Node>): void => {
 
 type Resolve = (key: string, kind: ObservableKind, id: Id) => Node;
 
-const cellFor = (delta: Delta, resolve: Resolve): Cell | undefined => {
+const cellFor = (delta: Delta, resolve: Resolve): SlotCell | undefined => {
 	if (delta.type === 'remove') return undefined;
 
 	const value = delta.value!;

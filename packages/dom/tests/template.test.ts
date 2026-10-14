@@ -234,3 +234,19 @@ test('hydration adopts the server nodes, and an instance made outside the mount 
 	assert.equal(document.body.children.length, 1, 'nothing was inserted beside the server markup');
 	assert.equal(document.body.children[0], sent, 'and the server node is the one still there');
 });
+
+test('a hoisted <svg> is an HTML element too, and says so as h does', () => {
+	const said: string[] = [];
+	const real = console.warn;
+	console.warn = (...args: unknown[]): void => { said.push(args.map(String).join(' ')); };
+	try {
+		const icon = template(['svg', { viewBox: '0 0 10 10' }, ['path', { d: 'M0 0' }]], []);
+		const one = icon([]) as LightElement;
+		icon([]);
+		assert.equal(one.namespaceURI, 'http://www.w3.org/1999/xhtml');
+		assert.equal(said.length, 1, `once: ${said.join(' | ')}`);
+		assert.match(said[0]!, /SVG namespace/);
+	} finally {
+		console.warn = real;
+	}
+});

@@ -21,14 +21,14 @@ export interface RefCell {
 }
 
 /** What a slot holds: a primitive, or a named observable and the kind of edge naming it. */
-export type Cell = ValueCell | RefCell;
+export type SlotCell = ValueCell | RefCell;
 
 export interface Node {
 	readonly id: Id;
 	/** The id in text form. Slot maps, indexes and record keys are all keyed by it. */
 	readonly key: string;
 	readonly kind: ObservableKind;
-	readonly slots: Map<string, Cell>;
+	readonly slots: Map<string, SlotCell>;
 	/** Arrays only: slot keys in position order, and the values behind the proxy. Every other
 	 * kind shares one empty pair, so making an object allocates two arrays fewer. */
 	readonly order: string[];

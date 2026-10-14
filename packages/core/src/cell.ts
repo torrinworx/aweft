@@ -17,6 +17,17 @@ const markAll = (marks: Set<() => void>): void => {
 };
 
 /**
+ * A cell: one reactive value outside any document, which a component follows.
+ *
+ * `mutable`, `immutable`, `timer` and `fromEvent` return one. Give this type to a prop that takes
+ * a cell. It is the same type as `Derived`, under the name the documentation uses (design 308).
+ *
+ * Example:
+ *   const Count = (props: { count: Cell<number> }) => h('p', null, props.count)
+ */
+export type Cell<T = unknown> = Derived<T>;
+
+/**
  * A standalone reactive value.
  *
  * Params:
@@ -31,7 +42,7 @@ const markAll = (marks: Set<() => void>): void => {
  *   open.watch((now) => menu.hidden = !now);
  *   open.set(true);
  */
-export const mutable = <T>(initial: T): Derived<T> => {
+export const mutable = <T>(initial: T): Cell<T> => {
 	let value = initial;
 	const marks = new Set<() => void>();
 
@@ -67,8 +78,8 @@ export const mutable = <T>(initial: T): Derived<T> => {
  *   const label = immutable('untitled');
  *   const width = immutable(observer(doc).path('width'));
  */
-export function immutable<T>(value: Derived<T>): Derived<T>;
-export function immutable<T>(value: T): Derived<T>;
+export function immutable<T>(value: Derived<T>): Cell<T>;
+export function immutable<T>(value: T): Cell<T>;
 export function immutable(value: unknown): Derived<unknown> {
 	const source = sourceOf(value);
 	if (source !== undefined) {
@@ -93,7 +104,7 @@ export function immutable(value: unknown): Derived<unknown> {
  * Example:
  *   timer(1000).map(() => new Date().toLocaleTimeString()).effect(show);
  */
-export const timer = (ms: number): Derived<number> => {
+export const timer = (ms: number): Cell<number> => {
 	let ticks = 0;
 	const marks = new Set<() => void>();
 	let handle: ReturnType<typeof setInterval> | null = null;
@@ -141,7 +152,7 @@ export interface EventEmitting<E> {
  * Example:
  *   fromEvent(window, 'resize').wait(100).effect(relayout);
  */
-export const fromEvent = <E>(target: EventEmitting<E>, type: string): Derived<E | undefined> => {
+export const fromEvent = <E>(target: EventEmitting<E>, type: string): Cell<E | undefined> => {
 	let last: E | undefined;
 	const marks = new Set<() => void>();
 	let listening = false;

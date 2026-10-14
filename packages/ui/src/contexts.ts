@@ -6,7 +6,7 @@
 // plain upward lookup cannot do.
 
 import { type MutableArray, mutableArray } from '@aweftjs/core';
-import { type Mounter, h, mount, watch } from '@aweftjs/dom';
+import { type Component as DomComponent, type Mounter, h, mount, watch } from '@aweftjs/dom';
 
 import type { Component } from './component.ts';
 
@@ -148,7 +148,7 @@ export const createContext = <T>(def: T, transform: Transform<T> = inherited): C
 
 	const used = <P extends Record<string, unknown>>(build: (value: T) => Component<P>): Component<P> =>
 		((props: P & { children?: unknown[] }): Mounter => (elem, _item, before, context) =>
-			mount(elem, h(build(read(context)), props as Record<string, unknown>), before, context)
+			mount(elem, h(build(read(context)) as DomComponent, props as Record<string, unknown>), before, context)
 		) as unknown as Component<P>;
 
 	return Object.assign(provider as unknown as (props: ProviderProps) => unknown, {

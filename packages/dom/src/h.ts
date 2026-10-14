@@ -6,6 +6,8 @@
 // is recorded and bound when the element is mounted, because that is when its place in the
 // document is known.
 
+import type { Derived, Observer } from '@aweftjs/core';
+
 import { assert } from './assert.ts';
 import { activeDocument } from './ambient.ts';
 import { bindAttribute, bindProperty } from './bind.ts';
@@ -16,6 +18,59 @@ import { isRowRecording, isRowReplaying, replayCall, traceChild, traceClose, tra
 import type { ElementLike, NodeLike } from './types.ts';
 import { isNodeLike } from './types.ts';
 
+const SVG = 'http://www.w3.org/2000/svg';
+let saidSvg = false;
+
+/**
+ * Warn, once, that an `<svg>` is about to be made as an HTML element (design 307).
+ *
+ * Not exported from the package: `h` and a hoisted template both call it. It returns true so the
+ * call is the condition of an `assert`, and leaves a release build with it. It never refuses,
+ * because a static render of the element is markup a browser reads as the SVG it looks like.
+ */
+export const warnHtmlSvg = (tag: string): boolean => {
+	if (saidSvg || tag.toLowerCase() !== 'svg') return true;
+	saidSvg = true;
+	console.warn('dom: an <svg> made by h is an HTML element, which draws nothing in a browser and does not hydrate. '
+		+ `Make it in the SVG namespace: createElement('svg', '${SVG}') handed to h as the tag, `
+		+ 'or svg() from @aweftjs/ui, which does that for every element under it.');
+	return true;
+};
+
+type Without<P> = { [K in keyof P as K extends 'each' | 'children' ? never : K]: P[K] };
+
+// What `each` takes. A list, a document array or a list cell, or a cell or scope that holds one,
+// which the list follows. A scope types its value `unknown`, so it has no item type. One item is
+// taken too, because code written against the old `each?: unknown` cast its list to the item, and
+// that code keeps compiling. The runtime refuses an item that is not a list.
+type ListOf<I> = Iterable<I> | Derived<Iterable<I>> | Observer | I;
+
+/**
+ * What a call site writes for a component whose own props are `P` (design 308).
+ *
+ * These are the props the component declares, with one change. `each` is a list where the
+ * component is called and one item in its body, so here it is a list of the item: an iterable, or
+ * a cell or scope that holds one. `children` goes in the rest arguments. A component whose props
+ * are `unknown`, or that takes none, takes any props. JSX checks a component's attributes against
+ * this too.
+ *
+ * Example:
+ *   const Row = (props: { each: Item, onPick(item: Item): void }) => h('li', null, props.each.label)
+ *   const props: CallProps<{ each: Item, onPick(item: Item): void }> = { each: items, onPick: pick }
+ */
+export type CallProps<P> = unknown extends P ? Readonly<Record<string, unknown>> : P extends { readonly each: infer I }
+	? Without<P> & { readonly each: ListOf<I>; readonly children?: unknown[] | null }
+	: P extends { readonly each?: infer I }
+		? Without<P> & { readonly each?: ListOf<I>; readonly children?: unknown[] | null }
+		: Without<P> & { readonly children?: unknown[] | null };
+
+/**
+ * Any function of props, which is what `h` takes as a component. It is a method type, so
+ * TypeScript checks its parameter both ways. Then `h` still takes a generic component. TypeScript
+ * cannot work out that component's props from the tag, so they go unchecked (design 308).
+ */
+export type ComponentTag<P> = { component(props: P, ...rest: never[]): unknown }['component'];
+
 /**
  * Make an element, or a component's mounter.
  *
@@ -24,7 +79,8 @@ import { isNodeLike } from './types.ts';
  *   props: attributes by bare name, properties by `$name` (`$value`, `$onclick`, a `$style`
  *          object), each static or a scope, cell or derived value; `children` as an
  *          alternative to the rest arguments; `each` on a component to mount it once per
- *          item of a list
+ *          item of a list. With a component as the tag, the props must match the ones the
+ *          component declares, and `each` must be a list of its item (`CallProps`)
  *   children: what goes inside: primitives, nodes, `h()` output, iterables, scopes and cells,
  *             components. `null` is skipped and `undefined` is refused
  *
@@ -37,8 +93,11 @@ import { isNodeLike } from './types.ts';
  *
  * Example:
  *   mount(document.body, h('button', { $onclick: () => count.set(count.get() + 1) }, 'clicked ', count));
+ *   mount(list, h(Row, { each: items, onPick: (item) => open(item) }))
  */
-export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...children: unknown[]): unknown => {
+export function h<P>(tag: ComponentTag<P>, props?: NoInfer<CallProps<P>> | null, ...children: unknown[]): unknown;
+export function h(tag: string | NodeLike, props?: Readonly<Record<string, unknown>> | null, ...children: unknown[]): unknown;
+export function h(tag: unknown, props: Readonly<Record<string, unknown>> | null = {}, ...children: unknown[]): unknown {
 	assert(tag !== null && tag !== undefined, 'a tag name cannot be null or undefined; pass an element name, a node or a component');
 	const given = props ?? {};
 
@@ -68,6 +127,7 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
 		if (tracing) traceNode(element);
 	} else {
 		assert(typeof tag === 'string', `unsupported tag: ${typeof tag}; pass an element name, a node or a component`);
+		assert(warnHtmlSvg(String(tag)), 'the svg warning never refuses an element');
 		element = markMade(activeDocument().createElement(String(tag)));
 	}
 
@@ -115,7 +175,7 @@ export const h = (tag: unknown, props: Record<string, unknown> | null = {}, ...c
 	const bound: Bound = { [BOUND]: true, node: element, signals };
 	if (tracing) traceClose(element, bound);
 	return bound;
-};
+}
 
 /**
  * Write one element's properties and attributes, collecting a signal for each reactive one.

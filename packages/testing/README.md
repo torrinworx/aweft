@@ -300,7 +300,10 @@ assert.deepEqual(problems, [], problems.map((p) => `${p.reason} at ${p.target}: 
 with the WCAG 2.x A and AA tags (`options.tags` replaces the list). A violation carries axe's rule
 id, its `wcag*` tags as axe writes them (`wcag2aa`, `wcag143`), its help sentence and link, and the
 nodes as a selector and the markup. Run it once per colour scheme: the page's colours are what it
-measures, and a second run on the same page reuses the script.
+measures, and a second run on the same page reuses the script. Before axe reads the page, every
+animation and transition on it that has an end is let finish, for at most five seconds, so a mode
+switch is read where its colours land rather than halfway. One that never ends, a spinner, is not
+waited for (design 309).
 
 **`walk`** presses Tab from the top of the page until the focus comes back round, or `options.limit`
 (300) presses have gone by, and answers every stop (tag, id, role, name, and whether it draws a ring

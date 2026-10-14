@@ -1,5 +1,7 @@
 // Nothing here yet, and what to do about it (design 199).
 
+import type { NodeLike } from '@aweftjs/dom';
+
 import { h } from './h.ts';
 
 /** What `Empty` takes. Everything not named here goes to the element. */
@@ -37,7 +39,7 @@ export interface EmptyProps {
 export const Empty = (props: EmptyProps): unknown => {
 	const { icon, title, description, element, theme, children, ...rest } = props;
 	const actions = children ?? [];
-	return h(element ?? 'div', { ...rest, theme: ['empty', theme] },
+	return h((element ?? 'div') as string | NodeLike, { ...rest, theme: ['empty', theme] },
 		icon === undefined || icon === null ? null : h('span', { theme: ['empty_symbol'] }, icon),
 		title === undefined || title === null ? null : h('p', { theme: ['empty_title'] }, title),
 		description === undefined || description === null

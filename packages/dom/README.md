@@ -62,6 +62,13 @@ or `false` attribute value removes the attribute; `true` sets it empty. An eleme
 reactive parts is returned as itself, so `const box = h('div', { class: 'box' })` is a node
 you can hand to the browser.
 
+A tag name is an HTML element, `svg` included, and an HTML `<svg>` draws nothing in a browser and
+does not hydrate against the server's markup. Make SVG in its namespace with
+`createElement('svg', 'http://www.w3.org/2000/svg')` and hand the node to `h` as the tag, or with
+`svg` from `@aweftjs/ui`, which does that for every element under it. `h` or a hoisted template
+warns the first time it makes an `<svg>` by name. Only a release bundle drops the warning, so a
+page rendered on a server warns too (design 307).
+
 `html` is a tag for template literals. A tag may be an expression (`<${Component}>`), `</>`
 closes the innermost open element, `<!-- ... -->` is a comment and goes, and `${value}` between
 tags is a child. Whitespace works as in JSX: lines are trimmed, blank lines go, and a line break
@@ -123,6 +130,18 @@ const Todo = ({ each: todo }) => h('li', { class: observer(todo).path('done').bo
 	observer(todo).path('title'));
 
 h('ul', {}, h(Todo, { each: state.todos }));
+```
+
+**`each` is typed from the item.** A row that declares `each: Item` is called with a list of
+`Item`. The list can be an iterable, a list cell, or a cell that holds one. `h` checks a
+component's props against the ones it declares. So `h(Row, { each: rows })` fails to compile when
+`rows` holds something else. An inline callback gets its parameter type from the prop. A single
+item still compiles, so old code that cast its list to the item keeps working. `CallProps<P>` is
+this mapping, for code that builds the props before the call (design 308).
+
+```ts
+const Row = (props: { each: Item, onPick(item: Item): void }) => h('li', {}, props.each.label)
+h('ul', {}, h(Row, { each: items, onPick: (item) => open(item.id) }))
 ```
 
 **A component under `each` renders the same node shape on every call.** The first row is

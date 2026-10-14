@@ -4,6 +4,8 @@
 // types cannot know which `h` a file means and do not try to. An element is whatever `h`
 // returns, which is `unknown`, and a component is any function.
 
+import type { CallProps } from '@aweftjs/dom';
+
 declare global {
 	namespace JSX {
 		type Element = unknown;
@@ -17,6 +19,9 @@ declare global {
 		interface ElementChildrenAttribute { readonly childrenGoToTheRestArguments: object }
 		interface IntrinsicElements { [tag: string]: Record<string, unknown> }
 		interface IntrinsicAttributes { [prop: string]: unknown }
+		// What a call site writes is not what the component declares: `each` is the list there and
+		// one item in the body (design 308).
+		type LibraryManagedAttributes<C, P> = CallProps<P>;
 	}
 }
 

@@ -440,7 +440,14 @@ test('a part named as one class token wears its own rules and none of its compon
 	for (const part of ['field_label', 'field_hint', 'field_error']) {
 		const rules = rulesFor([part]);
 		assert.doesNotMatch(rules, /flex-direction: column/, `${part} is not a column`);
-		assert.doesNotMatch(rules, /width: 100%/, `${part} does not take the whole row`);
+		assert.doesNotMatch(rules, /gap: /, `${part} has none of the field's spacing`);
+	}
+	assert.doesNotMatch(rulesFor(['field_label']), /width: 100%/, 'the label does not take the whole row');
+	// In a row field, the hint and the error each take a whole line. They do it with width, not
+	// flex basis, because in a column field the basis sets the height. browser.test.ts measures it.
+	for (const part of ['field_hint', 'field_error']) {
+		assert.match(rulesFor([part]), /width: 100%/, `${part} takes its line by width`);
+		assert.doesNotMatch(rulesFor([part]), /flex-basis/, `${part} sets no basis`);
 	}
 	assert.match(rulesFor(['field']), /flex-direction: column/, 'and the field itself still is one');
 

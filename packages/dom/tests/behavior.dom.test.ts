@@ -122,7 +122,7 @@ test('a component that edits a sibling list while it mounts does not corrupt the
 
 test('overwriting a list from a cleanup while its clear is in progress lands after the clear', () => {
 	const doc = createDocument();
-	const items = mutable<unknown[]>([]);
+	const items = mutable<string[]>([]);
 	const Rowc = ({ each }: { each: string }, cleanup: Cleanup) => {
 		cleanup(() => { if (items.get().length === 0) items.set(['after']); });
 		return h('li', {}, each);

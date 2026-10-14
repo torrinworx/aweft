@@ -10,7 +10,7 @@ import {
 	idToText,
 } from '@aweftjs/codec';
 
-import type { Cell, Listener, Node } from './types.ts';
+import type { SlotCell, Listener, Node } from './types.ts';
 
 // Only an array uses these. Every other kind shares them rather than allocating a pair per
 // observable, and nothing writes to them because `setCell` returns early for the other kinds.
@@ -62,11 +62,11 @@ export const slotRef = (node: Node, slot: string): Ref => {
 };
 
 /** What a delta carries for this cell: the primitive itself, or the name of an observable. */
-export const cellValue = (cell: Cell): Value =>
+export const cellValue = (cell: SlotCell): Value =>
 	cell.kind === 'value' ? cell.value : { edge: cell.edge, kind: cell.node.kind, id: cell.node.id };
 
 /** What a reader sees: the primitive, or the observable's proxy. */
-export const userValue = (cell: Cell | undefined): unknown => {
+export const userValue = (cell: SlotCell | undefined): unknown => {
 	if (cell === undefined) return undefined;
 	return cell.kind === 'value' ? cell.value : cell.node.proxy;
 };
@@ -78,7 +78,7 @@ export const userValue = (cell: Cell | undefined): unknown => {
  * for that. Byte strings compare by content, because two byte strings holding the same bytes
  * are the same value to the format.
  */
-export const sameCell = (a: Cell | undefined, b: Cell | undefined): boolean => {
+export const sameCell = (a: SlotCell | undefined, b: SlotCell | undefined): boolean => {
 	if (a === undefined || b === undefined) return a === b;
 	if (a.kind !== b.kind) return false;
 	if (a.kind === 'ref' && b.kind === 'ref') return a.node === b.node && a.edge === b.edge;
@@ -113,7 +113,7 @@ export const indexOfSlot = (node: Node, slot: string): number => {
  * An array keeps two parallel views of itself, the slot keys in position order and the values
  * the proxy hands out, and they are written together here so nothing else has to remember to.
  */
-export const setCell = (node: Node, slot: string, cell: Cell | undefined): void => {
+export const setCell = (node: Node, slot: string, cell: SlotCell | undefined): void => {
 	const had = node.slots.has(slot);
 
 	if (cell === undefined) {
@@ -146,7 +146,7 @@ export const setCell = (node: Node, slot: string, cell: Cell | undefined): void 
  * Construction is not a mutation: a fresh observable belongs to no document, so there is
  * nothing to tell and no commit to open. The attach rules still hold, and are checked here.
  */
-export const plantCell = (node: Node, slot: string, cell: Cell): void => {
+export const plantCell = (node: Node, slot: string, cell: SlotCell): void => {
 	if (cell.kind === 'ref' && cell.edge === 'attach') {
 		if (cell.node.parent !== null) {
 			throw codecError(

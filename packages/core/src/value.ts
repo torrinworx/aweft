@@ -6,7 +6,7 @@
 
 import { assertValue, codecError } from '@aweftjs/codec';
 
-import type { Cell, Node } from './types.ts';
+import type { SlotCell, Node } from './types.ts';
 import { sourceOf } from './derived.ts';
 
 const nodes = new WeakMap<object, Node>();
@@ -71,7 +71,7 @@ const aliased = (value: object): Node | undefined => (value as Partial<Alias>)[A
  * that looks live and reports nothing, and finding that out costs far more than being told
  * here to write `createObject`.
  */
-export const toCell = (value: unknown): Cell => {
+export const toCell = (value: unknown): SlotCell => {
 	if (value === null) return { kind: 'value', value };
 
 	switch (typeof value) {

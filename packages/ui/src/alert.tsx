@@ -1,5 +1,7 @@
 // A message about the page, on the two live-region roles the platform has for one (design 199).
 
+import type { NodeLike } from '@aweftjs/dom';
+
 import { h } from './h.ts';
 
 /** What `Alert` takes. Everything not named here goes to the element. */
@@ -43,7 +45,7 @@ export const Alert = (props: AlertProps): unknown => {
 	const { title, icon, type, element, theme, children, ...rest } = props;
 	const led = icon !== undefined && icon !== null && icon !== false;
 	const body = children ?? [];
-	return h(element ?? 'div', {
+	return h((element ?? 'div') as string | NodeLike, {
 		role: type === 'danger' ? 'alert' : 'status',
 		...rest,
 		theme: ['alert', type, led ? 'lead' : null, theme],

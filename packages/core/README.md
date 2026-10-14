@@ -212,6 +212,10 @@ timer(1000).map(() => new Date().toLocaleTimeString()).effect(show);
 fromEvent(window, 'resize').wait(100).effect(relayout);
 ```
 
+`Cell<T>` is the type of one, and the type to give a prop that takes one:
+`(props: { open: Cell<boolean> }) => ...`. It is `Derived<T>`, the type every chain is, under
+the name this documentation uses.
+
 `mutableArray(items)` is a list cell: an array edited in place (`push`, `splice`, index
 assignment) whose `watch` delivers each edit as a list of changes, with no delta and no place
 in a document. A list on the page that is not part of the document, such as open toasts.

@@ -103,6 +103,80 @@ test('audit refuses when axe-core cannot be found, and says how to install it', 
 	}
 });
 
+test('audit reads a colour switch where it lands, not halfway through its transition', async () => {
+	// The background switches at once and the text eases over two seconds, which is what a page
+	// with a colour mode does when it changes. Read straight away, the heading is still dark on a
+	// dark background.
+	const page = await open(shell('<main><h1>Dashboard</h1><p>The home screen.</p></main>', `<style>
+		body { background: #ffffff; }
+		h1, p { color: #111111; transition: color 2s linear; }
+		body.dark { background: #111111; }
+		body.dark h1, body.dark p { color: #eeeeee; }
+	</style>`));
+	try {
+		await page.evaluate('document.body.classList.add("dark")');
+		const { violations } = await audit(page);
+		assert.deepEqual(violations.map((violation) => violation.rule), [], 'the dark page, once it has arrived, is clean');
+		const color = await page.evaluate('getComputedStyle(document.querySelector("h1")).color');
+		assert.equal(color, 'rgb(238, 238, 238)', 'the audit waited for the colour to land');
+	} finally {
+		await page.close();
+	}
+});
+
+test('audit waits for a transition that one ending starts', async () => {
+	// The background eases first, and only its end starts the colour's own transition.
+	const page = await open(shell('<main><h1>Dashboard</h1></main>', `<style>
+		body { background: #ffffff; transition: background-color 0.4s linear; }
+		h1 { color: #111111; transition: color 1.5s linear; }
+		body.dark { background: #111111; }
+		body.inked h1 { color: #eeeeee; }
+	</style>`));
+	try {
+		await page.evaluate(`document.body.addEventListener('transitionend', () => document.body.classList.add('inked'), { once: true });
+			document.body.classList.add('dark');`);
+		const { violations } = await audit(page);
+		assert.deepEqual(violations.map((violation) => violation.rule), []);
+		const color = await page.evaluate('getComputedStyle(document.querySelector("h1")).color');
+		assert.equal(color, 'rgb(238, 238, 238)', 'the second transition was waited for too');
+	} finally {
+		await page.close();
+	}
+});
+
+test('audit reads motion that outlasts five seconds where it is at five seconds', async () => {
+	const page = await open(shell('<main><h1>Slow</h1></main>', `<style>
+		h1 { color: #111111; transition: color 60s linear; }
+		body.late h1 { color: #222222; }
+	</style>`));
+	try {
+		await page.evaluate('document.body.classList.add("late")');
+		const started = Date.now();
+		const { violations } = await audit(page);
+		const took = Date.now() - started;
+		assert.deepEqual(violations, []);
+		assert.ok(took >= 4500, `the transition was waited for: ${String(took)} ms`);
+		assert.ok(took < 9000, `and not past five seconds: ${String(took)} ms`);
+	} finally {
+		await page.close();
+	}
+});
+
+test('audit does not wait on motion that never ends', async () => {
+	const page = await open(shell('<main><h1>Loading</h1><span class="spin" aria-hidden="true">o</span></main>', `<style>
+		@keyframes spin { to { transform: rotate(1turn); } }
+		.spin { display: inline-block; animation: spin 1s linear infinite; }
+	</style>`));
+	try {
+		const started = Date.now();
+		const { violations } = await audit(page);
+		assert.deepEqual(violations, []);
+		assert.ok(Date.now() - started < 3000, `an endless spinner is not waited for: ${String(Date.now() - started)} ms`);
+	} finally {
+		await page.close();
+	}
+});
+
 // --- walk ---------------------------------------------------------------------------------------
 
 const RING = '<style>:focus-visible { outline: 2px solid blue; }</style>';

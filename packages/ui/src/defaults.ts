@@ -102,6 +102,9 @@ defineTheme({
 		lineHeight: '$textSmLine',
 		fontWeight: 500,
 		cursor: 'pointer',
+		// An `<a>` with an `href` wears this entry too, and the host underlines a link. A control is
+		// not a run of text. `button_inline`, which sits in one, puts the line back.
+		textDecoration: 'none',
 		// An icon reads narrower than the text beside it, so the side it sits on gives up `$space`
 		// of its padding. Written as two rules because a button may hold one at each end; a button
 		// holding one icon and a bare text label matches both, because a text node is not a child
@@ -508,19 +511,22 @@ defineTheme({
 		// `field`'s rules cannot name this one's.
 		'_elem_[data-invalid]': { color: '$dangerSubtleForeground' },
 	},
+	// Each takes a whole line in a field laid out in a row. The rule sets the width, not the flex
+	// basis. In a column field the basis is the height, so a field of fixed height gave the line all
+	// of it and the input shrank.
 	field_hint: {
 		fontFamily: '$font',
 		fontSize: '$textXs',
 		lineHeight: '$textXsLine',
 		color: '$mutedForeground',
-		flexBasis: '100%',
+		width: '100%',
 	},
 	field_error: {
 		fontFamily: '$font',
 		fontSize: '$textXs',
 		lineHeight: '$textXsLine',
 		color: '$dangerSubtleForeground',
-		flexBasis: '100%',
+		width: '100%',
 	},
 
 	// A select is an input that opens, and unlike an input it lays out children of its own: the

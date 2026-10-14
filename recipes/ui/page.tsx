@@ -80,7 +80,7 @@ const Slow = suspend(Spinner, async () => {
 
 const Failing = suspend(Spinner, async () => { throw new Error('the loader said no'); }, Broken);
 
-const Row = (props: { each?: unknown }): unknown => <li theme="tile">{props.each as string}</li>;
+const Row = (props: { each: string }): unknown => <li theme="tile">{props.each}</li>;
 
 /** A component that takes its `h` from the cascade, so everything it themes inherits the prefix. */
 const Card = ThemeContext.use((themed) => (props: { children?: unknown[] }) =>

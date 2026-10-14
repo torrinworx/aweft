@@ -230,7 +230,7 @@ export const Select = (
 				const held = list();
 				choose(at < 0 || at >= held.length ? null : held[at], event);
 			},
-		}, blank, h(Option, { each: options ?? [] }));
+		}, blank, h(Option, { each: (options ?? []) as Iterable<unknown> }));
 
 		// --- the control --------------------------------------------------------------------------
 

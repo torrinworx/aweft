@@ -61,6 +61,8 @@ export interface Claimed {
 	classInto?: Attribute;
 	/** Required beside a `style`: the `style` attribute cell. */
 	styleInto?: Attribute;
+	/** The style is an SVG element's, which takes no theme, so a `$var` in it has nothing to read. */
+	svg?: true;
 	/** Each prop that held a text token, and the cell its resolved string goes into (design 278). */
 	text?: { readonly token: TextToken; readonly into: Attribute }[];
 }
@@ -141,6 +143,7 @@ export const splitProps = (
 		}
 		if (key === 'style' && value !== undefined && value !== null && typeof value !== 'string') {
 			claimed.style = value;
+			if (!themes) claimed.svg = true;
 			continue;
 		}
 		if ((STATE as readonly string[]).includes(key)) {
@@ -255,6 +258,32 @@ const flatten = (value: unknown, deep: Deep, out: string[]): void => {
 	out.push(String(held));
 };
 
+// A `$name` on an element with no theme has no chain to resolve against and comes out as
+// nothing, which is never what the style meant. Said once per name, in development only: the
+// page renders either way (design 307). An SVG element takes no theme at all, so its fix differs.
+const unthemed = new Set<string>();
+const warnUnthemed = (name: string, svg: boolean): boolean => {
+	const key = svg ? `svg ${name}` : name;
+	if (unthemed.has(key)) return true;
+	unthemed.add(key);
+	console.warn(svg
+		? `ui: an inline style on an SVG element asks for $${name}, and an SVG element takes no theme, so it `
+			+ 'resolves to nothing. Write the value itself, or draw with currentColor and theme the element around it.'
+		: `ui: an inline style asks for $${name} on an element with no theme prop, so it resolves to `
+			+ 'nothing. Give the element theme="" to read the theme it is under, or a theme list of its own.');
+	return true;
+};
+
+const unthemedLookup = (svg: boolean): Lookup => ({
+	variable: (name) => {
+		assert(warnUnthemed(name, svg), 'the unthemed warning never refuses a style');
+		return NO_THEME.variable(name);
+	},
+	call: NO_THEME.call,
+});
+const UNTHEMED = unthemedLookup(false);
+const UNTHEMED_SVG = unthemedLookup(true);
+
 /** A `style` prop as one declaration string, with `$var` resolved and a bare size given `px`. */
 const cssTextOf = (value: unknown, deep: Deep, lookup: Lookup): string => {
 	const held = deep(value);
@@ -345,7 +374,7 @@ export const applyClaimed = (claimed: Claimed, context: unknown): (() => void) =
 		// No theme means no chain to resolve a `$var` or a `$fn()` against, so a `$name` resolves
 		// to nothing, a call is left as written, and `$$` is still an escape.
 		stops.push(track(
-			(deep) => cssTextOf(claimed.style, deep, NO_THEME),
+			(deep) => cssTextOf(claimed.style, deep, claimed.svg === true ? UNTHEMED_SVG : UNTHEMED),
 			(css) => { claimed.styleInto?.set(css === '' ? null : css); },
 		));
 	}

@@ -11,7 +11,7 @@ import {
 	codecError, compareDeltas,
 } from '@aweftjs/codec';
 
-import type { Cell, Change, Listener, Node } from './types.ts';
+import type { SlotCell, Change, Listener, Node } from './types.ts';
 import { stamp } from './clock.ts';
 import { RefusedError, hasInterceptors, hasRulesFor, refusalsFor } from './refusal.ts';
 import {
@@ -23,7 +23,7 @@ interface Touch {
 	readonly node: Node;
 	readonly slot: string;
 	/** What the slot held when this block first touched it. Restores it, and inverts it. */
-	readonly prior: Cell | undefined;
+	readonly prior: SlotCell | undefined;
 	/** Set when the slot arrived with an observable joining the document, so it is an add. */
 	fresh: boolean;
 }
@@ -149,7 +149,7 @@ const release = (child: Node, from: Node, slot: string): void => {
  * of these, which is why coalescing, inversion, attach bookkeeping and delivery are decided
  * in one place instead of once per kind.
  */
-export const write = (node: Node, slot: string, next: Cell | undefined): void => {
+export const write = (node: Node, slot: string, next: SlotCell | undefined): void => {
 	// An interceptor answers a commit; changing the tree from inside one would change the
 	// commit it has already been asked about, and the answer would be about something else.
 	if (sealed) {
@@ -266,7 +266,7 @@ interface Entry {
 	 */
 	readonly inverse: Delta | null;
 	/** What the slot held before this commit, or undefined when it held nothing. */
-	readonly prior: Cell | undefined;
+	readonly prior: SlotCell | undefined;
 	/** The top of a subtree this delta took out of the document, for the inverse to put back. */
 	readonly dropped: Node | null;
 }
@@ -594,7 +594,7 @@ const screen = (byRoot: Map<Node, Entry[]>): void => {
 };
 
 /** Every node of one dropped subtree, with the slots it held as the commit closed. */
-type Kept = ReadonlyArray<readonly [Node, Map<string, Cell>]>;
+type Kept = ReadonlyArray<readonly [Node, Map<string, SlotCell>]>;
 
 /**
  * Stands in for the capture on a commit that dropped nothing, which is nearly all of them, so
@@ -627,15 +627,15 @@ const inverseOf = (matched: readonly Entry[], kept: ReadonlyMap<Node, Kept>): De
 		return out;
 	}
 
-	const gone = new Map<Node, Map<string, Cell>>();
+	const gone = new Map<Node, Map<string, SlotCell>>();
 	for (const top of tops) {
 		const nodes = kept.get(top);
 		if (nodes === undefined) continue;
 		for (const [node, slots] of nodes) gone.set(node, slots);
 	}
 
-	const before = new Map<Node, Map<string, Cell | undefined>>();
-	const mark = (node: Node, slot: string, cell: Cell | undefined): void => {
+	const before = new Map<Node, Map<string, SlotCell | undefined>>();
+	const mark = (node: Node, slot: string, cell: SlotCell | undefined): void => {
 		let slots = before.get(node);
 		if (slots === undefined) before.set(node, slots = new Map());
 		// The first mark wins: an entry says what the slot held before the commit, and the walk
@@ -717,7 +717,7 @@ const forget = (kept: Map<Node, Kept>): void => {
 			continue;
 		}
 
-		const nodes: Array<readonly [Node, Map<string, Cell>]> = [];
+		const nodes: Array<readonly [Node, Map<string, SlotCell>]> = [];
 		walk(top, (node) => {
 			nodes.push([node, new Map(node.slots)]);
 			if (index !== null && index.get(node.key) === node) index.delete(node.key);
