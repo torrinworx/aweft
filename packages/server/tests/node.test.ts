@@ -284,6 +284,27 @@ test('nothing is said with forwarded set, and nothing for the header from a publ
 	}
 });
 
+test('one step past the edge of a local range is a public address, and one step inside is local', async () => {
+	const heard = async (address: string): Promise<number> => {
+		const own = createHttpServer();
+		const local = node({ server: own });
+		const said = await warnings(async () => {
+			await local.start({ request: async () => new Response(null, { status: 204 }), socket: async () => new Response(null, { status: 404 }) });
+			const req = Object.assign(Readable.from([]), { headers: { 'x-forwarded-for': '203.0.113.9' }, method: 'GET', url: '/', socket: { remoteAddress: address } });
+			await new Promise<void>((done) => { own.emit('request', req, { headersSent: false, writeHead: () => undefined, end: () => { done(); } }); });
+			await local.stop();
+		});
+		return said.length;
+	};
+	// 127/8, 10/8, 172.16/12, 192.168/16, fc00::/7 and fe80::/10, each from both sides.
+	for (const address of ['126.255.255.255', '128.0.0.1', '9.255.255.255', '11.0.0.0', '172.15.255.255', '192.167.255.255', 'fb00::1', 'fe7f::1', 'fec0::1', '::2']) {
+		assert.equal(await heard(address), 0, `${address} is a public address`);
+	}
+	for (const address of ['127.255.255.254', '10.0.0.0', '172.16.0.0', '192.168.0.0', 'fc00::1', 'FD00::1', 'febf::1', '::ffff:10.0.0.1']) {
+		assert.equal(await heard(address), 1, `${address} is a local address`);
+	}
+});
+
 test('TRACE is 405 and echoes nothing, before any handler sees it', async () => {
 	const listener = node({ port: 0, host: '127.0.0.1' });
 	let seen = 0;
