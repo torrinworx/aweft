@@ -13,9 +13,9 @@ the latest answer to `client.ask(name, args)`:
 `args` may be a cell. Every value it takes asks again, and an answer to an ask that a newer one
 replaced is dropped. A plain value is asked once.
 
-The cell asks only while something watches it, the way `fromEvent` listens only while watched. The
-first watcher asks. When the last one stops, an answer still out is dropped, and the next watcher
-asks again. Reading it with nothing watching answers the state it holds and asks nothing.
+The cell asks only while something watches it. The first watcher asks. When the last one stops, an
+answer still out is dropped, and the next watcher asks again. Reading it with nothing watching
+answers the state it holds and asks nothing.
 
 `options.pending` is handed the first ask, settled either way, so a component passes its own
 `pending` and a render on a server waits for the answer. `options.timeout` is the ask's own.

@@ -8,11 +8,11 @@
 // origin: it serves what `vite build` wrote through the static battery, beside its socket.
 //
 // This starts the backend on a port of its own, starts that dev server against it, and drives
-// the page in Chromium. Every check here can only pass through the proxy: the board's title
-// arrives over the socket, the public ask and the search are answered over it, the pinned note
-// is offered on it when the page shares its name, and signing up sets a cookie on the dev
-// server's origin that the socket after it carries to the gated module and the note. Then it
-// builds the page, and the backend serves it on its own.
+// the page in Chromium. Every check here can only pass through the proxy. The board's title
+// arrives over the socket. The public ask and the search are answered over it. The server offers
+// the pinned note on it when the page shares the note's name. Signing up sets a cookie on the dev
+// server's origin, and the next socket carries that cookie to the gated module and the note.
+// Then it builds the page, and the backend serves it on its own.
 //
 // It does not do password reset, and it does not do anything else a real application adds.
 //

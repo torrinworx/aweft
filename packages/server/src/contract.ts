@@ -155,8 +155,9 @@ export interface ServerModule<C = unknown> {
 	 */
 	call?(args: unknown, context: C, tools: Progress): unknown;
 	/**
-	 * Offer a document a page asks for by sharing a name no share on its connection is waiting
-	 * for: one nothing shares, or one shared again while its first share is live (design 310).
+	 * Offer a document to a page that asked for it (design 310). A page asks by sharing a name
+	 * that no share on its connection is waiting for. Either nothing here shares that name, or
+	 * the page shared it a second time while its first share is still live.
 	 *
 	 * Params:
 	 *   name: the name the page shared

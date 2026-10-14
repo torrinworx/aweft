@@ -75,21 +75,20 @@ It reads:
   `timeout`, or `closed` when the socket dropped under it. It is not asked again on the next
   socket.
 
-**It asks only while something watches it**, the way a cell from `fromEvent` listens only while
-watched. The first watcher asks. When the last one stops, an answer still out is dropped, and the
-next watcher asks again with the arguments as they are then. A component that unmounts stops
-watching, so nothing has to stop it. `found.get()` with nothing watching reads the state it holds
-and asks nothing. Writing it throws `read-only`.
+**It asks only while something watches it.** The first watcher asks. When the last one stops, an
+answer still out is dropped, and the next watcher asks again with the arguments as they are then. A
+component that unmounts stops watching, so nothing has to stop it. `found.get()` with nothing
+watching reads the state it holds and asks nothing. Writing it throws `read-only`.
 
 `options.pending` is handed the first ask, settled either way: a component passes its own
 `pending` (its fourth argument), and a render on a server waits for the answer. `options.timeout`
 is each ask's.
 
-**A page that hydrates reads `waiting` first.** The answer a server's render recorded arrives a
-microtask after the hydration starts (`@aweftjs/ssg`'s `replay`), so a component that draws its
-waiting state builds elements the server sent no pair for. A page that must keep the server's
-markup reads its first answer through `ui`'s `suspend`, which draws nothing while a hydration is
-open (design 312).
+**A page that hydrates reads `waiting` first.** A server's render records the answer, and the
+page gets it a microtask after the hydration starts (`@aweftjs/ssg`'s `replay`). A component that
+draws its waiting state at that moment builds elements the server sent no match for. A page that
+must keep the server's markup reads its first answer through `ui`'s `suspend`, which draws nothing
+while a hydration is open (design 312).
 
 ## Sharing a document: `share`
 

@@ -37,11 +37,12 @@ AWEFT_DEFAULT_H=@aweftjs/ui AWEFT_TEXT=1 node --import @aweftjs/build/loader rec
 ```
 
 It starts the backend on port 0, starts the dev server against that port programmatically, and
-drives the page in Chromium. Every check can only pass through the proxy: the board's title is on a
-document the server holds and reaches the browser over the socket, the public ask and the search are
-answered on the same socket, the pinned note is offered on it when the page shares its name, and
-signing up sets a cookie on the dev server's origin that the socket after the reconnect carries to
-the gated module, while the note is offered again on that new socket. Then it builds the page and
+drives the page in Chromium. Every check can only pass through the proxy. The board's title is on a
+document the server holds, and it reaches the browser over the socket. The public ask and the search
+are answered on the same socket. The server offers the pinned note on it when the page shares the
+note's name. Signing up sets a cookie on the dev server's origin. The page then reconnects, the new
+socket carries the cookie to the gated module, and the server offers the note again on it. Then it
+builds the page and
 has the backend serve it on its own origin, as production does. It exits nonzero when a check fails.
 
 ## The text a page shows

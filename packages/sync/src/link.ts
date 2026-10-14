@@ -59,8 +59,8 @@ export interface Link {
 }
 
 /**
- * An `open` nothing on this end pairs with, as `unshared` hears it (design 310): a name this end
- * does not share, or one whose every share here is already paired.
+ * An `open` from the other end that no share on this end pairs with, as `unshared` receives it
+ * (design 310). Either this end does not share the name, or every share of it here is already paired.
  */
 export interface Unshared {
 	/** The name the other end shared. */
@@ -98,8 +98,9 @@ export interface LinkOptions {
 	/** How many sent commits per topic to keep so a `refused` can be reported with its commit. Default 256. */
 	readonly window?: number;
 	/**
-	 * Hears an `open` nothing here pairs with, once per topic the other end opens: a name this end
-	 * does not share, or a second share of a name already live.
+	 * Called when an `open` arrives that no share here pairs with, once per topic the other end
+	 * opens. Either this end does not share the name, or the other end shared it a second time
+	 * while its first share is live.
 	 * The link holds the open either way, so a share made later pairs with it. A throw is raised
 	 * on a fresh task, as a watcher's is, and the frame goes on.
 	 */

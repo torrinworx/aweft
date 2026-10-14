@@ -1,5 +1,6 @@
-// An open for a name this end does not share, heard by the application and answered by it
-// (design 310): held as it always was, refused with a fault, dropped when the other end leaves.
+// An `open` for a name this end does not share (design 310). The application hears it and answers
+// it. The link holds it as it always did, refuses it with a fault, and drops it when the other end
+// leaves.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -101,8 +102,8 @@ test('a share holding a document asks once, though it sends open twice to ask fo
 	server.close();
 });
 
-// Which of the other end's two shares a share here then pairs with is the link's known limit, one
-// live topic per name (README), and not this seam's.
+// The link keeps one live topic per name, a limit its README states. Which of the other end's two
+// shares a later share here pairs with follows from that limit, so this test does not check it.
 test('a second share of the name from the other end is heard again, and takes the first one\'s place', async () => {
 	const { server, page, asked } = pair();
 	page.share<Doc>('board').ready.catch(() => {});

@@ -161,9 +161,10 @@ export const openConnection = ({ socket, request, context, loader, gate, report,
 	});
 
 	// A page shared a name nothing here shares (design 310). The modules that declare `offer` are
-	// asked in load order behind the gate, after the hooks, so a `connection` hook sharing the same
-	// name pairs first. A decline, or a gate that skips every module, sends nothing: the page's
-	// share waits, as it did before this hook existed, for a share a `call` may still make.
+	// asked in load order, behind the gate. They are asked after the `connection` hooks, so a hook
+	// that shares the same name pairs with the page first. When every module declines or the gate
+	// skips them all, nothing is sent. The page's share then waits for a `call` to share the name,
+	// as it did before this hook existed.
 	const offering = async (request: Unshared): Promise<void> => {
 		if (!loader.loaded().some((name) => offerOf(loader.get(name)) !== undefined)) return;
 		await ready;
@@ -189,8 +190,8 @@ export const openConnection = ({ socket, request, context, loader, gate, report,
 			}
 			if (offer === undefined) continue;
 			if (over || !request.held()) {
-				// Nothing will share it, and the module may be holding it open: its `fault` hears the
-				// end it would have heard had the share begun.
+				// The document is not shared, but the module may have opened it. Its `fault` is told
+				// `left` or `closed`, as it would be if the share had begun and then ended.
 				try {
 					offer.fault?.(over ? 'closed' : 'left', `the page stopped asking for ${request.name} before it was offered`);
 				} catch (error) {

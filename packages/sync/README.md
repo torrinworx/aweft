@@ -87,10 +87,10 @@ refuses is a server, if you want one. The package never asks who made a commit.
 
 ## A name the other end asks for
 
-An `open` nothing here pairs with is held, so a share made later pairs with it. That is a name this
-end does not share, or a second share of a name whose share here is already live. The application
-can hear it arrive and answer it, which is how a server offers a document a page asks for by name
-(design 310):
+The link holds an `open` that no share here pairs with, so a share made later pairs with it. Either
+this end does not share the name, or the other end shared it a second time while its first share
+here is live. The application can hear the open arrive and answer it. That is how a server offers a
+document a page asks for by name (design 310):
 
 ```ts
 const link = connect(channel, {

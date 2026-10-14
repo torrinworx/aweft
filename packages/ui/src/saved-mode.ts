@@ -91,7 +91,8 @@ export const savedMode = <M extends Definitions = Definitions>(options: SavedMod
 
 	const held = mutable<M>(light);
 	const document = page.document;
-	// Each one paints the root for the page's life, so a second would take turns with the first.
+	// Each one sets the root's colours on every change for as long as the page is open. A second
+	// one would overwrite the first one's colours each time it changed.
 	assert(document === undefined || (!painting.has(document) && Boolean(painting.add(document))),
 		'savedMode is made once per page, and this page has one; hand that one to whatever needs the mode');
 

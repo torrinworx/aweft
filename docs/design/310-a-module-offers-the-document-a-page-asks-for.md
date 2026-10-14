@@ -29,8 +29,9 @@ the same name replaced it, is not shared, and its `fault` hears `left`. After th
 it hears `closed`.
 
 **`@aweftjs/sync` gets the seam this needs.** `connect(channel, { unshared })` calls
-`unshared(request)` when an `open` arrives that nothing here pairs with, a name this end does not
-share or a second share of a name already live, once for each topic the other end opens. The link
+`unshared(request)` when an `open` arrives that no share here pairs with, once for each topic the
+other end opens. Either this end does not share the name, or the other end shared it a second time
+while its first share is live. The link
 holds that open, as it always has, so a share made later pairs with it. `request.name` is the name.
 `request.held()` says whether the link still holds that open unpaired. `request.refuse(reason,
 message)` answers it with `fault`, naming the other end's number for the topic, and stops holding
@@ -76,13 +77,13 @@ pairs with nothing. It keeps every commit it makes, waiting for an `open` that n
 
 ## What this costs
 
-Two of the link's changes reach every application, offer or not, and change frames in two cases. A
-page that leaves a share before the server shares the name: the server's later share used to pair
-with the topic the page had left, send it `open` and `state`, and get `no-topic` back. Now it sends
-its own `open` and waits. A share of a value that is not an observable: it used to leave a topic
-that threw out of the next frame naming that name, uncaught. Now the throw is the share's own and
-nothing is left. Both are cases where the old behaviour was already broken, and a page that works
-today sends neither.
+Two of the link's changes reach every application, whether it uses offer or not. Each changes the
+frames sent in one case. First, a page leaves a share before the server shares the name. The
+server's later share used to pair with the topic the page had left, send it `open` and `state`, and
+get `no-topic` back. Now the server sends its own `open` and waits. Second, a module shares a value
+that is not an observable. The link used to keep a topic for it, and the next frame naming that name
+threw an error nothing caught. Now the share itself throws, and the link keeps nothing. Both are
+cases where the old behaviour was already broken, and a page that works today sends neither.
 
 One more hook on a module, and one more option on `connect`. A module is asked once per share, so a
 page that shares one name again after the first was answered is offered it again. A slow offer holds

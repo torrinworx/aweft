@@ -102,7 +102,7 @@ export const asking = <T = unknown>(client: Client, name: string, args?: unknown
 			hear = undefined;
 			stop?.();
 			stop = undefined;
-			// Nobody is listening for the answer that is out, so it lands nowhere.
+			// Nobody is listening, so the answer to the ask still out is dropped when it comes.
 			latest += 1;
 		},
 	};
