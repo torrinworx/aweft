@@ -3390,3 +3390,29 @@ test('a field\'s hint and error line take their own line without taking the inpu
 		await site.close();
 	}
 });
+
+test('a Button with an href is not underlined, and an inline one still is', async () => {
+	const site = await page('link-button', '<!doctype html><html lang="en"><head><title>test</title></head><body><script type="module" src="./entry.tsx"></script></body></html>', `
+		import { Button, h, mount } from '@aweftjs/ui';
+		mount(document.body, <main>
+			<Button id="link" label="Docs" href="/docs" hrefNewTab={false} />
+			<Button id="quiet" label="Docs" href="/docs" type="quiet" hrefNewTab={false} />
+			<p>Read <Button id="inline" label="the guide" href="/guide" inline hrefNewTab={false} /> first.</p>
+		</main>);
+	`);
+
+	const browser = await chromium.launch();
+	try {
+		const view = await browser.newPage();
+		await view.goto(site.url);
+		await view.waitForSelector('#inline');
+		const seen = await view.evaluate(() => Object.fromEntries(['link', 'quiet', 'inline'].map((id) => {
+			const element = document.querySelector(`#${id}`)!;
+			return [id, `${element.tagName.toLowerCase()} ${getComputedStyle(element).textDecorationLine}`];
+		})));
+		assert.deepEqual(seen, { link: 'a none', quiet: 'a none', inline: 'a underline' });
+	} finally {
+		await browser.close();
+		await site.close();
+	}
+});

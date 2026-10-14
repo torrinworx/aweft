@@ -102,6 +102,9 @@ defineTheme({
 		lineHeight: '$textSmLine',
 		fontWeight: 500,
 		cursor: 'pointer',
+		// An `<a>` with an `href` wears this entry too, and the host underlines a link. A control is
+		// not a run of text. `button_inline`, which sits in one, puts the line back.
+		textDecoration: 'none',
 		// An icon reads narrower than the text beside it, so the side it sits on gives up `$space`
 		// of its padding. Written as two rules because a button may hold one at each end; a button
 		// holding one icon and a bare text label matches both, because a text node is not a child
