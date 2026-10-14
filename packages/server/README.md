@@ -197,14 +197,17 @@ with it would wait for good.
 
 When every module declines, or the gate skips them all, nothing is sent and the page's share waits,
 as it always has, so a share a `call` makes later still pairs with it. An application with no
-`offer` behaves as it did before this hook existed. A module is asked once for each share the page
-makes that is still waiting when its turn comes: a second share of a name the page is already
-waiting on takes the first one's place, and only the second is asked about. A page that shares the
-name again after a reconnect, which `@aweftjs/client` does for every handle, is asked again on the
-new connection. The page still holds the document it had, so the offer on the new connection has to
-be that same document: one the store opens again, or one the module keeps by name. A document made
-afresh for each offer, such as `fromPlain(row)` on every ask, has a root of its own, and the page's
-share ends with `root-mismatch`.
+`offer` sends nothing new when a page shares a name nobody shares. Two changes to the link reach it
+anyway, both where the old behaviour was broken (design 310): a share made after the other end left
+its share of the name no longer pairs with the topic that was left, and a share of a value that is
+not an observable throws at the share rather than out of a later frame. A module is asked once for
+each share the page makes that is still waiting when its turn comes: a second share of a name the
+page is already waiting on takes the first one's place, and only the second is asked about. A page
+that shares the name again after a reconnect, which `@aweftjs/client` does for every handle, is
+asked again on the new connection. The page still holds the document it had, so the offer on the new
+connection has to be that same document: one the store opens again, or one the module keeps by name.
+A document made afresh for each offer, such as `fromPlain(row)` on every ask, has a root of its own,
+and the page's share ends with `root-mismatch`.
 
 The offered share's `fault` hears how it ended: `left` when the page stops it, `closed` when the
 connection ends. That is where a module closes what it opened. An offer that arrives after the page

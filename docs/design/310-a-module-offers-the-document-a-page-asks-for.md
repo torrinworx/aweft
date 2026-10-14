@@ -78,9 +78,11 @@ pairs with nothing. It keeps every commit it makes, waiting for an `open` that n
 ## What this costs
 
 Two of the link's changes reach every application, whether it uses offer or not. Each changes the
-frames sent in one case. First, a page leaves a share before the server shares the name. The
-server's later share used to pair with the topic the page had left, send it `open` and `state`, and
-get `no-topic` back. Now the server sends its own `open` and waits. Second, a module shares a value
+frames sent in one case. First, one end leaves a share before the other end shares the name. The
+other end's later share used to pair with the topic that had been left. When the page left first,
+the server sent it `open` and `state` and got `no-topic` back. When the server left first, the page
+sent `open` with the root of a document nobody shared any more. Now the later share sends its own
+`open`, with no root, and waits. Second, a module shares a value
 that is not an observable. The link used to keep a topic for it, and the next frame naming that name
 threw an error nothing caught. Now the share itself throws, and the link keeps nothing. Both are
 cases where the old behaviour was already broken, and a page that works today sends neither.
