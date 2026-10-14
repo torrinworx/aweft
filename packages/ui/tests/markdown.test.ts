@@ -20,7 +20,7 @@ import type { Token, Tokens } from 'marked';
 import { mutable } from '@aweftjs/core';
 import { createDocument, parseHtml, toHtml } from '@aweftjs/dom';
 import type { ElementLike, LightElement, NodeLike } from '@aweftjs/dom';
-import { Markdown, TextModifiers, context, h, hydrate, mount, parseBlocks, render, slugger } from '@aweftjs/ui';
+import { Markdown, TextModifiers, Typography, context, h, hydrate, mount, parseBlocks, render, slugger } from '@aweftjs/ui';
 import type { Block, CodeBlock, Render } from '@aweftjs/ui';
 
 // The task-box rewrite is not on the surface. The test reads it through the file, as an
@@ -450,6 +450,57 @@ test('parseBlocks hands out every kind with the fields the README names', () => 
 	]);
 	const fences = blocks.filter((block): block is CodeBlock => block.kind === 'code');
 	assert.deepEqual(fences.map((fence) => fence.language), ['scene']);
+});
+
+test('block puts what it returns in the block\'s place with nothing around it, and undefined keeps the block', () => {
+	const seen: string[] = [];
+	const own = page(h(Markdown, {
+		source: '# Kept\n\n```scene\nforest\n```\n\n```ts\nconst x = 1;\n```\n\n> Note: mind it\n\nA *plain* paragraph.',
+		code: (text: string) => h('code', { 'data-coded': 'yes' }, text),
+		block: (held: Block): unknown => {
+			seen.push(held.kind);
+			if (held.kind === 'code' && held.language === 'scene') return h('figure', { id: 'scene' }, held.text);
+			if (held.kind === 'quote' && held.text.startsWith('Note:')) {
+				return h('aside', { id: 'note' }, h('strong', {}, 'Note'), held.text.slice(5));
+			}
+			return undefined;
+		},
+	}));
+	assert.deepEqual(seen, ['heading', 'code', 'code', 'quote', 'paragraph'], 'every block, in order');
+	const children = elements(own.root.firstChild).filter((element) =>
+		(element as unknown as { parentNode: unknown }).parentNode === (own.root as unknown));
+	assert.deepEqual(children.map((element) => element.localName), ['h1', 'figure', 'pre', 'aside', 'p'],
+		'the scene is a figure on its own, with no pre around it, and the rest are drawn as before');
+	assert.equal(children[1]!.getAttribute('id'), 'scene');
+	assert.equal(children[1]!.textContent, 'forest');
+	assert.equal(toHtml(children[2]!.firstChild as unknown as LightElement), '<code data-coded="yes">const x = 1;</code>',
+		'a fenced block block left alone still goes through code');
+	assert.equal(children[3]!.getAttribute('id'), 'note');
+	assert.equal(children[0]!.getAttribute('id'), 'kept');
+	assert.ok(elements(children[4]!).some((element) => element.localName === 'em'), 'a paragraph left alone keeps its marks');
+	own.stop();
+});
+
+test('a block the hook answers null for draws nothing in its place', () => {
+	const own = page(h(Markdown, {
+		source: '# Kept\n\n```secret\nnot shown\n```\n\nAfter.',
+		block: (held: Block): unknown => (held.kind === 'code' && held.language === 'secret' ? null : undefined),
+	}));
+	const children = elements(own.root.firstChild).filter((element) =>
+		(element as unknown as { parentNode: unknown }).parentNode === (own.root as unknown));
+	assert.deepEqual(children.map((element) => element.localName), ['h1', 'p']);
+	assert.ok(!String(own.root.textContent).includes('not shown'));
+	own.stop();
+});
+
+test('a block drawn by the page sits under the markdown modifiers', () => {
+	const own = page(h(Markdown, {
+		source: '> a *marked* quote',
+		block: (held: Block): unknown => (held.kind === 'quote' ? h('aside', { id: 'callout' }, h(Typography, { type: 'p1', label: held.text })) : undefined),
+	}));
+	const aside = elements(own.root.firstChild).find((element) => element.localName === 'aside')!;
+	assert.ok(elements(aside.firstChild).some((element) => element.localName === 'em'), 'Typography inside it reads the markdown marks');
+	own.stop();
 });
 
 test('with no source at all the block holds nothing', () => {

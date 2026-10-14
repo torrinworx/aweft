@@ -1132,7 +1132,7 @@ import { Markdown } from '@aweftjs/ui';
 
 | component | what it is | its own props | example |
 |---|---|---|---|
-| `Markdown` | a `<div>` on `markdown` holding one element per block of a markdown string | `source`, `modifiers`, `code`, `element`, `theme` | `markdown` |
+| `Markdown` | a `<div>` on `markdown` holding one element per block of a markdown string | `source`, `modifiers`, `code`, `block`, `element`, `theme` | `markdown` |
 
 **What it renders** (designs 288 and 296). A markdown string, or a cell holding one, as themed
 blocks whose text runs are `Typography`, for the subset a README and a post use:
@@ -1189,6 +1189,20 @@ const contents = headings.map((text) => ({ text, href: `#${id(text)}` }));
 **The `code` hook** is `(text, language) => anything mountable` and is called once per fenced
 block; absent, the block holds a `<code>` with the text. Highlighting is the application's, and
 this package ships none.
+
+**The `block` hook** is `(block) => anything mountable, or undefined`, called once per block in
+order. What it returns is put in that block's place with no element around it, so a fenced block
+that holds a scene is drawn as the scene and not inside a `<pre>`, and a quote that opens with
+`Note:` can be a callout. `null` draws nothing in its place. `undefined` keeps the block as the
+table above draws it, and `code`
+still draws a fenced block `block` left alone. What it returns sits inside the `markdown` element
+and under the same modifiers, so a `Typography` in it reads the markdown marks (design 314). A
+heading it draws gets whatever `id` it gives it.
+
+```tsx
+<Markdown source={post} block={(held) =>
+	held.kind === 'code' && held.language === 'scene' ? <Scene text={held.text} /> : undefined} />
+```
 
 **`parseBlocks`** is the reader `Markdown` draws from, exported so a site reads its own markdown,
 its headings, fenced blocks, image lines and tables, the way the page renders it rather than with a
