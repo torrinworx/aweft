@@ -81,6 +81,18 @@ export interface GatedLink {
 	share<T extends object>(name: string, document: T | undefined, handlers: Accepting): Shared<T>;
 }
 
+/**
+ * What an `offer` hook answers: the document to share under the name the page asked for, and the
+ * handlers a share on a connection takes, `accept` always (design 310).
+ *
+ * `fault(reason, message)` hears the end of the share as any share's does: `left` when the page
+ * stops it, `closed` when the connection ends. It hears the same when the offer is not shared at
+ * all, because the page stopped asking, or the connection ended, before the offer arrived.
+ */
+export interface Offer<T extends object = object> extends Accepting {
+	readonly document: T;
+}
+
 /** What a `connection` hook is handed. */
 export interface Connection<C = unknown> {
 	readonly link: GatedLink;
@@ -142,6 +154,33 @@ export interface ServerModule<C = unknown> {
 	 * no `call`, and `refused` when the gate answered with reasons.
 	 */
 	call?(args: unknown, context: C, tools: Progress): unknown;
+	/**
+	 * Offer a document a page asks for by sharing a name no share on its connection is waiting
+	 * for: one nothing shares, or one shared again while its first share is live (design 310).
+	 *
+	 * Params:
+	 *   name: the name the page shared
+	 *   context: what `identify` answered for the page's connection
+	 *
+	 * Returns: an `Offer`, which the server shares under `name` on that connection, or
+	 * `undefined` to decline, which asks the next module. The modules that declare this are
+	 * asked in load order, behind the gate, once every `connection` hook has run, and the first
+	 * offer wins. When every one declines the page's share waits, as it always has, so a share a
+	 * `call` makes later still pairs with it.
+	 *
+	 * Throws: a refusal, an error with a `reason`, to refuse the page: its share ends with that
+	 * reason and message. Anything else is reported to `handlers.failed` under this module's name,
+	 * and the page's share ends with `failed`. An offer with no `accept` is that too (`no-accept`).
+	 *
+	 * Examples:
+	 *   offer: async (name, { user }) => {
+	 *     if (!name.startsWith('note:')) return undefined;
+	 *     const handle = await store.open(name);
+	 *     if (handle.root.owner !== user) throw Object.assign(new Error(`${name} is not yours`), { reason: 'private' });
+	 *     return { document: handle.root, accept: () => [], fault: () => { void store.close(handle); } };
+	 *   }
+	 */
+	offer?(name: string, context: C): Offer | undefined | Promise<Offer | undefined>;
 	/** HTTP routes keyed by exact `METHOD /path`, such as `POST /api/session`. */
 	readonly routes?: Readonly<Record<string, Route<C>>>;
 	/**

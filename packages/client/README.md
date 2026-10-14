@@ -84,9 +84,20 @@ client is closed before that, and with the topic's own fault otherwise. `stop()`
 socket's share, which sends `leave`, and takes the handle off the list re-shared on later
 sockets.
 
-**A link carries one topic per name, so share a name once per client.** A second share of a
-name that is already live waits for an offer that never comes, and so does `share('')` and a
-share of a name the server never offers. Their `ready` never settles: nothing refuses them, and
+**A share is how a page asks for a document by name.** A server module that declares `offer`
+(`@aweftjs/server`'s README, design 310) opens the document when a page shares a name no share on
+its connection is waiting for, and shares it back. A module that refuses ends the share: `ready`
+rejects with the module's reason and message, and `fault` hears them. Because every handle is shared
+again on every new socket, the page asks again after a drop with no code of its own, and the
+document lands on the object it already holds. A refused handle is shared again too, so after a
+sign-in, which reconnects, the module is asked as the person who is now signed in. Its `ready`
+rejected with the refusal and stays rejected, so the page reads the document off `handle.document`
+once it arrives, or shares the name again for a `ready` of its own.
+
+**A link carries one topic per name, so share a name once per client.** A second share of a name
+that is already live waits for an offer that never comes, and so does `share('')` and a share of a
+name nothing on the server shares, unless a server module's `offer` answers it: a module is asked
+about each of them (design 310). Otherwise their `ready` never settles: nothing refuses them, and
 nothing answers them either.
 
 **A write applies here at once and crosses on the next frame.** Reading it back through a
@@ -157,4 +168,5 @@ reason for a refusal.
 
 The design notes are in
 [`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design): 183 (what this
-package is and what it opens) and 184 (the reconnect, and the server winning).
+package is and what it opens), 184 (the reconnect, and the server winning) and 310 (a share a
+server module offers).

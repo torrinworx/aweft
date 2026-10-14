@@ -120,7 +120,7 @@ other. The gate stands between the outside and a module.
 
 ## What a module can carry
 
-The server reads five things off a loaded module's instance, all optional:
+The server reads six things off a loaded module's instance, all optional:
 
 ```ts
 export default ({ store }) => ({
@@ -132,6 +132,8 @@ export default ({ store }) => ({
 	},
 	// An `ask` from the client naming this module, after the gate allowed it.
 	call: async (args, context, { progress }) => { progress('reading'); return report(args); },
+	// A name the page shared that no share on its connection waits for. An offer shares it, `undefined` declines.
+	offer: async (name, context) => name.startsWith('note:') ? { document: await note(name), accept } : undefined,
 	// HTTP, keyed by exact method and path.
 	routes: { 'GET /api/export': async (request, context) => new Response(await csv(context.user)) },
 	// An HTTP request no route matched. A `Response` answers it; `undefined` declines it.
@@ -162,6 +164,45 @@ behaviour is tested.
 streams back before the result, a throw answers with its `reason` and `message`. A module
 that is not loaded or has no `call` is `missing`; one the gate refuses is `refused` with the
 reasons.
+
+`offer` opens a document when a page asks for it by name (design 310). A page that shares a name no
+share on its connection is waiting for is how it asks: `client.share('note:42')`. That includes a
+second share of a name already live, and a share of `''`: whether to offer either is the module's.
+The server asks every loaded module that declares `offer`, in load order, behind the gate, once
+every `connection` hook on that connection has run, so a hook that shares the same name pairs first.
+A module answers `undefined` to decline, which asks the next one, or `{ document, accept, refused?,
+fault? }`, which the server shares under that name on that connection, `accept` required as for any
+share. The first offer ends the walk.
+
+```ts
+offer: async (name, { user }) => {
+	if (!name.startsWith('note:')) return undefined;
+	const handle = await store.open(name);
+	if (handle.root.owner !== user) {
+		await store.close(handle);
+		throw Object.assign(new Error(`${name} is not yours`), { reason: 'private' });
+	}
+	return { document: handle.root, accept: mine, fault: () => { void store.close(handle); } };
+},
+```
+
+A throw with a `reason` refuses: the page's share ends with that reason and that message, and
+its `ready` rejects with them. Its `fix` stays here, because a refusal of a share crosses as a
+reason and a message and nothing else. Any other throw, and an offer with no `accept`, is reported
+to `handlers.failed` under the module's name, and the page's share ends with `failed`.
+
+When every module declines, or the gate skips them all, nothing is sent and the page's share
+waits, as it always has, so a share a `call` makes later still pairs with it. An application with
+no `offer` behaves as it did before this hook existed. A module is asked once for each share the
+page makes that is still waiting when its turn comes: a second share of a name the page is already
+waiting on takes the first one's place, and only the second is asked about. A page that shares the
+name again after a reconnect, which `@aweftjs/client` does for every handle, is asked again on the
+new connection.
+
+The offered share's `fault` hears how it ended: `left` when the page stops it, `closed` when the
+connection ends. That is where a module closes what it opened. An offer that arrives after the page
+stopped asking, or after the connection ended, is not shared, and its `fault` hears `left` or
+`closed` all the same.
 
 `routes` are matched on `METHOD /path` exactly, the query aside; two loaded modules declaring
 one key are refused at `start()` by both names, and a conflict a later load introduces
@@ -301,16 +342,17 @@ the header itself.
 
 ## When something throws
 
-A `call` that throws a refusal, an error carrying a `reason`, answers its caller with it and is
-not reported: the caller heard what the module meant it to. A `call` that throws anything else
-answers its caller `failed` with the words `the call failed` and nothing of the error, and is
-reported: a module's own bug names files and values the caller has no business reading.
-Everything else reaches `handlers.failed(name, error)` on `createServer` too: a `connection`
-hook that throws (the connection is closed), an end function that throws (the rest still run),
-a route that throws (a bare 500), the gate that throws (500), and a route conflict met by a
-request (500). Without a handler, a call's error is written to the console and the process goes
-on, because any client can reach a public call; every other failure is raised where nothing
-catches it, and the process says so and ends. Pass a handler in production.
+A `call` that throws a refusal, an error carrying a `reason`, answers its caller with it and is not
+reported: the caller heard what the module meant it to. A `call` that throws anything else answers
+its caller `failed` with the words `the call failed` and nothing of the error, and is reported: a
+module's own bug names files and values the caller has no business reading. Everything else reaches
+`handlers.failed(name, error)` on `createServer` too: a `connection` hook that throws (the
+connection is closed), an end function that throws (the rest still run), a route that throws (a bare
+500), the gate that throws (500), and a route conflict met by a request (500). An `offer` that
+throws anything but a refusal is reported the way a call is, and the page's share ends with
+`failed`. Without a handler, a call's error and an offer's are written to the console and the
+process goes on, because any client can reach a public call or share a name. Every other failure is
+raised where nothing catches it, and the process says so and ends. Pass a handler in production.
 
 ## What this package never decides
 
@@ -331,8 +373,8 @@ Every error this package raises carries a `reason`: `missing` (`createServer` wi
 three, or a gate named that is not a loaded gate), `not-an-option` (`loader` or `props` passed to
 `createServer`, which builds its own loader), `route-conflict`, `no-accept`, `not-a-response`,
 `started`. The design notes are in
-[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 071 to 073, 240 and
-241.
+[`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 071 to 073, 240,
+241 and 310.
 
 ## The design notes
 

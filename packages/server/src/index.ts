@@ -5,7 +5,7 @@ export type { Sliding, Taken, Window } from './limits.ts';
 export type { Origins } from './origin.ts';
 export type {
 	Accept, Accepting, Connection, Ending, Gate, GatedLink, Identified, Limits, Listener, ListenerHandlers,
-	Named, Outcome, Peer, Progress, Route, Server, ServerError, ServerEvent, ServerHandlers, ServerModule,
+	Named, Offer, Outcome, Peer, Progress, Route, Server, ServerError, ServerEvent, ServerHandlers, ServerModule,
 	ServerOptions,
 } from './contract.ts';
 
