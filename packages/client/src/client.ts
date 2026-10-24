@@ -113,7 +113,7 @@ export interface Client {
 	 * Params: none.
 	 *
 	 * Returns: nothing. The backoff goes back to its first delay, and a client that was closed
-	 * stays closed.
+	 * stays closed. Every ask in flight on the old socket rejects `closed` at once.
 	 *
 	 * Example:
 	 *   await fetch('/api/session', { method: 'POST', body });
@@ -427,6 +427,8 @@ export const createClient = (options: ClientOptions = {}): Client => {
 			delay = FIRST_DELAY;
 			const live = current;
 			current = undefined;
+			// Its asks end here, not on a close event a dead socket may never raise.
+			live?.asks.stop();
 			live?.link.close();
 			attempt();
 		},
@@ -444,6 +446,7 @@ export const createClient = (options: ClientOptions = {}): Client => {
 			// nothing.
 			const live = current;
 			current = undefined;
+			live?.asks.stop();
 			live?.link.close();
 			state.set('closed');
 

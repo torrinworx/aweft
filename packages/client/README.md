@@ -153,7 +153,9 @@ also tries at once when the browser fires `online` and when the tab becomes visi
 lets go of both listeners on `close()`. `reconnect: false` turns the automatic retry off and
 leaves every attempt to the application.
 
-`client.reconnect()` drops the socket and opens a new one now, with the delay reset. That is
+`client.reconnect()` drops the socket and opens a new one now, with the delay reset. Every ask
+still in flight on the old socket rejects `closed` at once, rather than when its close event
+comes, which a dead connection may never raise. That is
 the call to make after signing in or out over HTTP: a browser cannot set a cookie on an open
 socket, and identity is fixed for a connection's life. On a client that was closed it does
 nothing.

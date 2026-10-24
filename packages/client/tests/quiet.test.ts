@@ -174,6 +174,25 @@ test('a far end that answers the probe missing, as one older than the probe does
 	client.close();
 });
 
+test('an ask in flight on a dead socket rejects closed at once on reconnect() and on close(), not when a close event comes', async () => {
+	const { server, handlers } = await appServer(createObject<Board>({ title: 'manual' }));
+	const dial = dialer(handlers);
+	const client = createClient({ url: 'ws://app.test/', open: dial.open, quiet: false });
+	await client.share<Board>('board').ready;
+
+	silence(dial.sockets[0]!);
+	const first = client.ask('app/Board', {}).then(() => 'answered', (error: unknown) => reasonOf(error));
+	client.reconnect();
+	assert.equal(await Promise.race([first, after(QUIET).then(() => 'still waiting')]), 'closed', 'reconnect() ends the old socket\'s asks');
+	assert.equal(await client.ask('app/Board', {}), 'answered', 'and the new socket answers');
+
+	silence(dial.sockets.at(-1)!);
+	const second = client.ask('app/Board', {}).then(() => 'answered', (error: unknown) => reasonOf(error));
+	client.close();
+	assert.equal(await Promise.race([second, after(QUIET).then(() => 'still waiting')]), 'closed', 'close() does too');
+	await server.stop();
+});
+
 test('an ask made on a socket that was already quiet is dropped after one quiet period, not two', async () => {
 	const { server, handlers } = await appServer(createObject<Board>({ title: 'idle first' }));
 	const dial = dialer(handlers);
