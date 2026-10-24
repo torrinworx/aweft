@@ -210,3 +210,31 @@ test('an ask made on a socket that was already quiet is dropped after one quiet 
 	client.close();
 	await server.stop();
 });
+
+test('a socket that was replaced stops its probe timer, so reconnects do not pile timers up', async () => {
+	// The timers this client makes, counted through the globals it calls.
+	const live = new Set<unknown>();
+	const { setInterval: set, clearInterval: clear } = globalThis;
+	globalThis.setInterval = ((fn: () => void, ms: number) => { const id = set(fn, ms); live.add(id); return id; }) as typeof setInterval;
+	globalThis.clearInterval = ((id: Parameters<typeof clearInterval>[0]) => { live.delete(id); clear(id); }) as typeof clearInterval;
+	try {
+		const { server, handlers } = await appServer(createObject<Board>({ title: 'many sockets' }));
+		const dial = dialer(handlers);
+		const client = createClient({ url: 'ws://app.test/', open: dial.open, quiet: QUIET });
+		await client.share<Board>('board').ready;
+		for (let i = 0; i < 3; i++) {
+			client.reconnect();
+			await client.ask('app/Board', {});
+		}
+		await after(QUIET / 2);
+		assert.equal(dial.sockets.length, 4);
+		assert.equal(live.size, 1, 'only the open socket has a probe timer');
+		client.close();
+		await after(QUIET / 2);
+		assert.equal(live.size, 0, 'and close() stops it');
+		await server.stop();
+	} finally {
+		globalThis.setInterval = set;
+		globalThis.clearInterval = clear;
+	}
+});
