@@ -18,7 +18,7 @@ const report = await client.ask('notes/Export', { month: '2026-09' });
 client.status.effect((now) => banner.hidden = now === 'open');
 ```
 
-`createClient({ url?, open?, reconnect?, timeout? })` returns one connection. Nothing is held
+`createClient({ url?, open?, reconnect?, timeout?, quiet? })` returns one connection. Nothing is held
 at module scope, so a page with two servers makes two clients.
 
 The socket is made before `createClient` returns, and the link and the request channel are on
@@ -162,6 +162,21 @@ nothing.
 the server holds, so anything typed while there was no socket is gone. An application that must
 not lose one turns the automatic reconnect off, or waits for `open` before writing.
 
+## A socket that went quiet: `quiet`
+
+A connection can die without closing: the Wi-Fi drops, the laptop changes network, and the
+browser hears nothing for minutes. While an ask is in flight or a share's document has not
+arrived, and nothing has come over the socket for `quiet` milliseconds (10 000 by default), the
+client sends a probe, an ask the far end's request channel answers itself. When that goes
+unanswered for another `quiet`, the socket is taken as dropped: every ask in flight on it rejects
+`closed`, every share is shared again on a new socket, and the new socket is made at once. So a
+page stuck on a dead connection hears about it after one to two `quiet` periods: two when the
+socket was busy just before it died, one when it was already silent. An answer that takes longer
+than that to arrive whole (a very large result on a slow link) looks the same as a dead socket,
+because a message counts as heard only once it has all arrived. A socket nothing waits on
+is never probed, so an idle tab sends nothing. `quiet: false` turns it off, for an application
+whose calls hold the server's event loop longer than that.
+
 ## Ending it: `close`
 
 `client.close()` stops reconnecting, ends the link and the socket, rejects every held ask with
@@ -210,5 +225,5 @@ reason for a refusal.
 
 The design notes are in
 [`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design): 183 (what this
-package is and what it opens), 184 (the reconnect, and the server winning), 310 (a share a server
+package is and what it opens), 184 (the reconnect, and the server winning), 317 (a quiet socket is probed and dropped), 310 (a share a server
 module offers) and 312 (`asking`).

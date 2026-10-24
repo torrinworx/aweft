@@ -23,6 +23,12 @@ export type ClientStatus = 'connecting' | 'open' | 'closed';
 export interface ClientOptions {
 	/** The server's address. Defaults to the page's own origin as a WebSocket address. */
 	readonly url?: string | undefined;
+	/**
+	 * How long an open socket may stay silent, in milliseconds, while an ask or a share waits on
+	 * it, before the client probes it and drops it when the probe goes unanswered. 10 000 by
+	 * default; `false` never probes (design 317).
+	 */
+	readonly quiet?: number | false | undefined;
 	/** Makes the socket. Defaults to `new WebSocket(url)`; a Node program hands in one that carries a cookie header. */
 	readonly open?: ((url: string) => SocketLike) | undefined;
 	/** Come back on a drop. On by default; `false` leaves every attempt to `reconnect()`. */
@@ -131,6 +137,7 @@ export interface Client {
 
 const FIRST_DELAY = 500;
 const MAX_DELAY = 10_000;
+const QUIET = 10_000;
 
 const CLOSED_FIX = 'Make a new client with createClient; a closed one opens no socket.';
 const TIMEOUT_FIX = 'Raise the timeout, or wait for status to read open before asking.';
@@ -147,6 +154,11 @@ interface Live {
 	readonly link: Link;
 	readonly asks: Requests;
 	open: boolean;
+	/** When anything last arrived on the socket. */
+	heard: number;
+	/** Asks sent on this socket and not yet answered. */
+	asking: number;
+	probing: boolean;
 }
 
 /** An ask made while no socket was open, waiting for the next one. */
@@ -178,6 +190,7 @@ interface Sharing {
  *   options.open: makes the socket; `new WebSocket(url)` by default
  *   options.reconnect: come back on a drop, on by default
  *   options.timeout: the default timeout for every ask; none by default
+ *   options.quiet: the silence, while something waits, before the socket is probed; 10 s
  *
  * Returns: the client. The socket is made before this returns and the link and the request
  * channel are on it, so a share and an ask written on the next line reach the server.
@@ -194,6 +207,7 @@ export const createClient = (options: ClientOptions = {}): Client => {
 	const make = options.open ?? ((at: string) => new WebSocket(at) as SocketLike);
 	const retries = options.reconnect ?? true;
 	const fallback = options.timeout;
+	const quiet = options.quiet ?? QUIET;
 	const state = mutable<ClientStatus>('connecting');
 
 	const sharings = new Set<Sharing>();
@@ -245,11 +259,19 @@ export const createClient = (options: ClientOptions = {}): Client => {
 		});
 	};
 
+	// Counted, because a socket nothing waits on is never probed.
+	const send = (live: Live, name: string, args: unknown, settings: AskOptions): Promise<unknown> => {
+		live.asking += 1;
+		const asked = live.asks.ask(name, args, settings);
+		asked.then(() => { live.asking -= 1; }, () => { live.asking -= 1; });
+		return asked;
+	};
+
 	const drain = (live: Live): void => {
 		for (const held of [...waiting]) {
 			waiting.delete(held);
 			clearTimeout(held.timer);
-			live.asks.ask(held.name, held.args, held.options).then(held.settle, held.fail);
+			send(live, held.name, held.args, held.options).then(held.settle, held.fail);
 		}
 	};
 
@@ -281,16 +303,22 @@ export const createClient = (options: ClientOptions = {}): Client => {
 			dropped();
 			return;
 		}
-		const live: Live = { socket, link: connect(fromWebSocket(socket)), asks: requests(socket), open: false };
+		const live: Live = {
+			socket, link: connect(fromWebSocket(socket)), asks: requests(socket), open: false,
+			heard: Date.now(), asking: 0, probing: false,
+		};
 		current = live;
 		state.set('connecting');
 
+		socket.addEventListener('message', () => { live.heard = Date.now(); });
 		socket.addEventListener('open', () => {
 			if (current !== live) return;
 			live.open = true;
+			live.heard = Date.now();
 			delay = FIRST_DELAY;
 			state.set('open');
 			drain(live);
+			if (quiet !== false) listen(live, quiet);
 		});
 		const lost = (): void => {
 			if (current === live) dropped();
@@ -299,6 +327,29 @@ export const createClient = (options: ClientOptions = {}): Client => {
 		socket.addEventListener('error', lost);
 
 		for (const sharing of [...sharings]) shareOn(live, sharing);
+	};
+
+	// A socket that died without closing hears nothing and says nothing, so while something
+	// waits on it, a silence as long as `ms` is answered with a probe, and an unanswered probe
+	// is a drop (design 317). Its asks are stopped here rather than by a close event, which a
+	// dead connection may not raise for minutes.
+	const listen = (live: Live, ms: number): void => {
+		const beat = setInterval(() => {
+			if (stopped || current !== live) { clearInterval(beat); return; }
+			const waits = live.asking > 0 || [...sharings].some((sharing) => !sharing.settled);
+			if (!waits || live.probing || Date.now() - live.heard < ms) return;
+			live.probing = true;
+			live.asks.ask('', null, { timeout: ms }).then(() => { live.probing = false; }, (error: unknown) => {
+				live.probing = false;
+				if (reasonOf(error) !== 'timeout' || stopped || current !== live) return;
+				clearInterval(beat);
+				live.asks.stop();
+				live.link.close();
+				dropped();
+				attemptNow();
+			});
+		}, ms / 4);
+		(beat as { unref?: () => void }).unref?.();
 	};
 
 	const attemptNow = (): void => {
@@ -333,7 +384,7 @@ export const createClient = (options: ClientOptions = {}): Client => {
 			const settings: AskOptions = { ...options, timeout: options.timeout ?? fallback };
 			const live = current;
 			return live !== undefined && live.open
-				? live.asks.ask(name, args, settings)
+				? send(live, name, args, settings)
 				: hold(name, args, settings);
 		},
 
