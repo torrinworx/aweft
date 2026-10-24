@@ -21,6 +21,7 @@ Start here if you know what you are trying to build.
 | `full-stack/` | A page and a server in one directory, where an application starts: the page reaching the server in development through the dev server's proxy, a sign-in that sets the cookie on that one origin, a document a module offers when the page shares its name, a search that follows its field, a saved light or dark, and the built page served by the backend behind a proxy | client, server, auth, store, modules, static, sync, core, ui, build |
 | `todo-list/` | A list you add to, toggle, filter and reorder, with the list following each edit rather than being rebuilt | core, dom |
 | `two-clients/` | Two people editing one document at once, including what happens when they write the same slot and who yields | core, sync |
+| `dropped-wifi/` | A page whose Wi-Fi drops without closing the socket: the ask hears `closed`, the client reconnects, the shared board follows again, and the visit log says what it waited on | client, sync, server, logs |
 | `optimistic-write/` | A write that applies locally before the server sees it, is refused, and is rolled back | core, sync, debug |
 | `debug/` | Finding a bug in a document you did not write | core, debug |
 | `ui/` | A page with themes, contexts, control flow, a popup and a suspend, built by vite and driven in a real browser | core, dom, ui, build |
