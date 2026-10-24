@@ -121,7 +121,9 @@ const errorOf = (value: unknown): RequestError => {
  * A request is one text message, `{ id, name, args }`; its answer is `{ id, result }`, each
  * progress report `{ id, progress }`, and a failure `{ id, error }`. A text message that is
  * not one of those closes the socket, as bytes that are not a frame end the link. A request
- * that arrives with no answerer registered is answered `missing`. One channel per socket: a
+ * that arrives with no answerer registered is answered `missing`. A request named `''` is
+ * answered `null` here, before any answerer: an asker sends one to learn the other end is still
+ * there, and no module is ever named `''` (design 317). One channel per socket: a
  * second `requests` on the same socket throws `duplicate` until the first has stopped.
  *
  * Throws: `duplicate` when this socket already has a request channel.
@@ -189,6 +191,10 @@ export const requests = (socket: SocketLike): Requests => {
 			answered = true;
 			send({ id, ...frame });
 		};
+		if (name === '') {
+			finish({ result: null });
+			return;
+		}
 		if (answerer === undefined) {
 			finish({ error: { reason: 'missing', message: `nothing here answers ${name}` } });
 			return;

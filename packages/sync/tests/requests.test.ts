@@ -134,6 +134,19 @@ test('a request nothing answers is missing, and answering is one at a time', asy
 	assert.equal(await asks.ask('x'), 'third');
 });
 
+test('a request named the empty string is answered null by the channel, before any answerer', async () => {
+	const [here, there] = pair();
+	const asks = requests(here);
+	const answers = requests(there);
+	assert.equal(await asks.ask(''), null, 'with no answerer registered it is still answered, not missing');
+
+	const seen: string[] = [];
+	answers.answer((name) => { seen.push(name); throw new Error('the answerer was asked'); });
+	assert.equal(await asks.ask(''), null);
+	assert.deepEqual(seen, [], 'the answerer never hears the probe');
+	await assert.rejects(asks.ask('x'), (e: RequestError) => e.message === 'the answerer was asked');
+});
+
 test('a timeout rejects, and a late answer is dropped rather than resolving a dead ask', async () => {
 	const [here, there] = pair();
 	const asks = requests(here);

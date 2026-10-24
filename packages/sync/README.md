@@ -228,6 +228,11 @@ frame end the link and close the socket under it. `stop()` stops asking and answ
 leaves the socket alone. One `requests` per socket: a second throws `duplicate` until the
 first has stopped.
 
+A request named `''` is answered `null` by the channel itself, before any answerer hears it. No
+module is named `''`, so it costs nothing to keep free, and it is how one end learns the other is
+still there: `@aweftjs/client` sends one when a socket has gone quiet while something waits
+(design 317). An end that predates the rule answers it `missing`, which is an answer all the same.
+
 The frames are `{ id, name, args }`, `{ id, result }`, `{ id, progress }` and `{ id, error }`,
 so a client in another language writes them by hand. Design 073.
 
