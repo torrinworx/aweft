@@ -61,6 +61,7 @@ them in the same visit.
 | `commit` | a shared document changed: the `topic`, the `paths` touched, the delta count, the bytes; never a value |
 | `refused`, `fault` | a share the server refused a write to, or a topic that faulted |
 | `ask` | a call the page made: `name`, `ms`, `ok`, and the reason when it failed; never the args or the result |
+| `waiting` | an ask (`name`) or a share (`topic`) still unanswered 5 s after it was made, written once at the next batch tick with `ms` so far; a visit that hangs says what it hung on even when no `ask` entry ever comes (design 317). A dead socket is dropped one to two of the client's `quiet` periods after the ask, so at its default of 10 s the ask is still waiting at 5 s; with a `quiet` under 5 s it can end `closed` first, and then only its `ask` entry is written. A leaving page's last batch tells them too, so a reload of a stuck page still says what it waited on |
 | `status` | the connection went connecting, open or closed |
 | `url` | the router's URL changed (when a router is handed in): its path and the names of its query, never a value or the fragment, so `/reset?token=…` is `/reset?token` (design 301) |
 | `input` | a `click`, `keydown` or `submit`: a target descriptor, and for a key, the key when it is a named one (`Enter`, `ArrowLeft`), never what a layout produces for a character |

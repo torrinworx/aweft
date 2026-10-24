@@ -337,3 +337,56 @@ test('a console argument whose toString throws does not throw into the page', ()
 	assert.equal(seen.find((e) => e.kind === 'console')?.level, 'error', 'the console entry was still recorded');
 	log.stop();
 });
+
+test('an ask or a share still waiting after 5 s is recorded once as waiting, and one answered in time is not (design 317)', async (t) => {
+	t.mock.timers.enable({ apis: ['setInterval', 'Date'] });
+	const { win } = fakeWindow();
+	const base = fakeClient().client;
+	const client: Client = {
+		...base,
+		ask: (name, args) => (name === 'app/Hang' ? new Promise(() => {}) : base.ask(name, args)),
+		share: <T extends object>(name: string): Handle<T> => (name === 'board'
+			? { document: undefined, ready: new Promise<T>(() => {}), stop: () => {} }
+			: base.share<T>(name)),
+	};
+	const seen: Entry[] = [];
+	const log = createLog(client, { window: win, fetch: async () => new Response(), flushMs: 1000 });
+	log.each((e) => seen.push(e));
+
+	void log.client.ask('app/Hang', {});
+	await log.client.ask('app/Quick', {});
+	log.client.share('board');
+	log.client.share('arrived');
+	await drain();
+
+	t.mock.timers.tick(4000);
+	assert.deepEqual(seen.filter((e) => e.kind === 'waiting'), [], 'nothing has waited 5 s yet');
+	// app/Quick was answered and the arrived share's document came, so neither is told.
+	t.mock.timers.tick(1000);
+	const waiting = seen.filter((e) => e.kind === 'waiting');
+	assert.deepEqual(waiting.map((e) => [e.name ?? null, e.topic ?? null, e.ms]), [['app/Hang', null, 5000], [null, 'board', 5000]]);
+	t.mock.timers.tick(10_000);
+	assert.equal(seen.filter((e) => e.kind === 'waiting').length, 2, 'each is told once, not on every tick');
+	log.stop();
+});
+
+test('a share stopped before its document came is never told as waiting, and a leaving page tells what is still waiting (design 317)', async (t) => {
+	t.mock.timers.enable({ apis: ['setInterval', 'Date'] });
+	const { win, fire, beacons } = fakeWindow();
+	const base = fakeClient().client;
+	const client: Client = {
+		...base,
+		ask: (name, args) => (name === 'app/Hang' ? new Promise(() => {}) : base.ask(name, args)),
+		share: <T extends object>(): Handle<T> => ({ document: undefined, ready: new Promise<T>(() => {}), stop: () => {} }),
+	};
+	const log = createLog(client, { window: win, fetch: async () => new Response(), flushMs: 60_000 });
+	log.client.share('left-early').stop();
+	void log.client.ask('app/Hang', {});
+	await drain();
+
+	t.mock.timers.tick(6000);
+	fire('pagehide', {});
+	const sent = beacons.flatMap((beacon) => (JSON.parse(beacon.body) as Batch).entries).filter((e) => e.kind === 'waiting');
+	assert.deepEqual(sent.map((e) => [e.name ?? null, e.topic ?? null]), [['app/Hang', null]], 'the leaving batch names the hung ask, before any tick ran, and not the stopped share');
+	log.stop();
+});

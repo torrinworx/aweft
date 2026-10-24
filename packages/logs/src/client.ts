@@ -192,6 +192,21 @@ export const createLog = (client: Client, options: LogOptions = {}): Log => {
 		}
 	});
 
+	// What has been asked or shared and not yet heard back, so a page that hangs on one says
+	// so while it hangs: an `ask` entry is written only once its answer comes (design 317).
+	const open = new Set<{ readonly kind: 'ask' | 'share'; readonly name: string; readonly at: number; told: boolean }>();
+	const WAITING_MS = 5000;
+
+	// One `waiting` entry for each ask or share that has gone 5 s unanswered, told once.
+	const tell = (): void => {
+		const now = Date.now();
+		for (const held of open) {
+			if (held.told || now - held.at < WAITING_MS) continue;
+			held.told = true;
+			record(held.kind === 'ask' ? { kind: 'waiting', name: held.name, ms: now - held.at } : { kind: 'waiting', topic: held.name, ms: now - held.at });
+		}
+	};
+
 	const browser = (): Record<string, Primitive> | undefined => {
 		const nav = win.navigator;
 		if (nav === undefined) return undefined;
@@ -260,6 +275,8 @@ export const createLog = (client: Client, options: LogOptions = {}): Log => {
 
 	/** The leaving page's last batches, by the one delivery a browser makes for it. */
 	const beacon = guarded((): void => {
+		// A visitor who reloads a stuck page sends nothing after this, so it says what the page waited on.
+		tell();
 		const nav = win.navigator;
 		for (let batch = batchOf(true); batch !== undefined; batch = batchOf(false)) {
 			const body = JSON.stringify(batch);
@@ -339,6 +356,8 @@ export const createLog = (client: Client, options: LogOptions = {}): Log => {
 		status: client.status,
 		ask: async (name: string, args?: unknown, askOptions?: AskOptions) => {
 			const at = Date.now();
+			const held = { kind: 'ask' as const, name, at, told: false };
+			open.add(held);
 			try {
 				const result = await client.ask(name, args, askOptions);
 				record({ kind: 'ask', name, ms: Date.now() - at, ok: true });
@@ -346,6 +365,8 @@ export const createLog = (client: Client, options: LogOptions = {}): Log => {
 			} catch (error) {
 				record({ kind: 'ask', name, ms: Date.now() - at, ok: false, reason: (error as { reason?: unknown } | null)?.reason, message: (error as Error).message });
 				throw error;
+			} finally {
+				open.delete(held);
 			}
 		},
 		share: <T extends object>(name: string, document?: T, handlers?: ShareHandlers): Handle<T> => {
@@ -355,6 +376,9 @@ export const createLog = (client: Client, options: LogOptions = {}): Log => {
 				fault: (reason, message) => { record({ kind: 'fault', topic: name, reason, message }); handlers?.fault?.(reason, message); },
 			});
 			let off: (() => void) | undefined;
+			const held = { kind: 'share' as const, name, at: Date.now(), told: false };
+			open.add(held);
+			void handle.ready.finally(() => { open.delete(held); }).catch(() => undefined);
 			// Through the wildcard that honours the underscore rule: a private slot never reaches
 			// this watcher, so the recorder holds no rule of its own (design 259).
 			void handle.ready.then((doc) => {
@@ -366,14 +390,17 @@ export const createLog = (client: Client, options: LogOptions = {}): Log => {
 			return {
 				get document() { return handle.document; },
 				ready: handle.ready,
-				stop: () => { off?.(); handle.stop(); },
+				stop: () => { open.delete(held); off?.(); handle.stop(); },
 			};
 		},
 		reconnect: () => { client.reconnect(); },
 		close: () => { client.close(); },
 	};
 
-	const tick = setInterval(() => { if (queue.length > 0) void flush(); }, flushMs);
+	const tick = setInterval(() => {
+		tell();
+		if (queue.length > 0) void flush();
+	}, flushMs);
 	(tick as { unref?: () => void }).unref?.();
 
 	return {
