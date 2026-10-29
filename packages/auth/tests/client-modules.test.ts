@@ -316,9 +316,19 @@ test('auth/SignIn with google on offers Google, sends the page there with its ow
 		const root = document.body.firstChild;
 
 		assert.match(document.body.textContent ?? '', /Google sign-in was cancelled\./, 'a cancelled attempt is said on the form');
+		assert.equal(elements(button(root, 'Continue with Google')).filter((node) => node.localName === 'path').length, 4,
+			'the button carries Google\'s mark in its four colours');
 		fire(button(root, 'Continue with Google'), 'click');
 		assert.deepEqual(assigned, [`/api/auth/google?return=${encodeURIComponent('/notes?tab=2')}`],
 			'the start route, returning to this page less the old answer');
+
+		const email = byName(root, 'email');
+		(email as unknown as Record<string, unknown>)['value'] = 'grace@example.com';
+		fire(email, 'input');
+		fire(button(root, 'Continue'), 'click');
+		await settle();
+		assert.ok(byName(root, 'password') !== undefined, 'the email step is done');
+		assert.equal(button(root, 'Continue with Google'), undefined, 'and Google steps aside once the person picked email');
 
 		global.location = { href: 'http://app.test/join?auth=invite', assign: () => {} };
 		const again = createDocument();

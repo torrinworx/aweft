@@ -83,6 +83,9 @@
 	"Your password is set. Sign in with it.": [
 		"src/client-modules/Reset.tsx"
 	],
+	"or": [
+		"src/client-modules/SignIn.tsx"
+	],
 	"you@example.com": [
 		"src/client-modules/Reset.tsx",
 		"src/client-modules/SignIn.tsx"

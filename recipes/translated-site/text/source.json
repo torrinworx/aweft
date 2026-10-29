@@ -167,6 +167,9 @@
 	"only one file is accepted": [
 		"@aweftjs/ui/text.json"
 	],
+	"or": [
+		"@aweftjs/auth/text.json"
+	],
 	"up to {size}": [
 		"@aweftjs/ui/text.json"
 	],
