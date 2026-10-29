@@ -196,3 +196,20 @@ test('two opens of one name in the same tick share one document', async () => {
 	const back = createStore({ driver: memoryDriver() });
 	await back.stop();
 });
+
+test('a declare that fails before anyone asks reaches the first open, not the process', async () => {
+	const unhandled: unknown[] = [];
+	const listen = (reason: unknown) => { unhandled.push(reason); };
+	process.on('unhandledRejection', listen);
+	try {
+		const down = new Error('connect ECONNREFUSED');
+		const driver: Driver = { ...memoryDriver(), declare: () => Promise.reject(down) };
+		const store = createStore({ driver });
+		await new Promise((done) => { setTimeout(done, 20); });
+		assert.deepEqual(unhandled, [], 'nothing went unhandled while nobody asked');
+		await assert.rejects(store.open('anything'), down);
+		await store.stop();
+	} finally {
+		process.off('unhandledRejection', listen);
+	}
+});

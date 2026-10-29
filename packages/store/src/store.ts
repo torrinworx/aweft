@@ -318,6 +318,9 @@ export const createStore = (
 	// handle is closed. `Promise.all([open(d), open(d)])` is the ordinary shape in a server.
 	const opening_ = new Map<string, Promise<State>>();
 	const declared = driver.declare(declare);
+	// open, find and scan await it and throw a failure there. Marked handled here so a database that
+	// is not up yet when the store is made does not end the process before anyone asks.
+	declared.catch(() => undefined);
 
 	/** Write one commit: rows and tail together, and move the sequence. */
 	// Recompute the declared fields and send only what moved. Reading them is a walk of the
