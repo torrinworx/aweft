@@ -1,9 +1,11 @@
 type AuthContext: interface AuthContext { readonly user: string | null; readonly session: string | null; readonly address?: string | undefined; }
+type ConfirmedBy: interface ConfirmedBy { readonly name?: string | null | undefined; readonly context: AuthContext; }
 type Implies: type Implies = Readonly<Record<string, readonly string[]>>;
 type RefuseSignUp: type RefuseSignUp = (signUp: SignUp) => Refusal | undefined | Promise<Refusal | undefined>;
 type Roles: interface Roles { may(user: string | null, name: string): Promise<boolean>; grant(user: string, ...names: string[]): Promise<void>; revoke(user: string, ...names: string[]): Promise<void>; names(user: string): Promise<string[]>; first(user: string): Promise<boolean>; call(args: unknown, context: unknown): { implies: Implies; }; connection(connection: Connection<AuthContext>): Promise<() => Promise<void>>; }
 type SignUp: interface SignUp { readonly email: string; readonly extra: Readonly<Record<string, unknown>>; readonly context: AuthContext; readonly store: Store; }
 value auth: Source
+value google: Source
 value holds: (granted: readonly string[], implies: Readonly<Record<string, readonly string[]>>, name: string) => boolean
 value mail: Source
 value paths: Readonly<Record<string, readonly string[]>>

@@ -2,11 +2,23 @@
 	"Breadcrumb": [
 		"@aweftjs/ui/text.json"
 	],
+	"Change email": [
+		"@aweftjs/auth/text.json"
+	],
 	"Choose": [
 		"@aweftjs/ui/text.json"
 	],
 	"Close|dialog": [
 		"@aweftjs/ui/text.json"
+	],
+	"Continue": [
+		"@aweftjs/auth/text.json"
+	],
+	"Continue with Google": [
+		"@aweftjs/auth/text.json"
+	],
+	"Create account": [
+		"@aweftjs/auth/text.json"
 	],
 	"Drop a file here, or choose one": [
 		"@aweftjs/ui/text.json"
@@ -17,6 +29,18 @@
 	"Email": [
 		"@aweftjs/auth/text.json",
 		"entry.tsx"
+	],
+	"Enter an email address, like you@example.com.": [
+		"@aweftjs/auth/text.json"
+	],
+	"Enter your password to sign in.": [
+		"@aweftjs/auth/text.json"
+	],
+	"Google has not confirmed that email address. Use your email below instead.": [
+		"@aweftjs/auth/text.json"
+	],
+	"Google sign-in was cancelled.": [
+		"@aweftjs/auth/text.json"
 	],
 	"Hue": [
 		"@aweftjs/ui/text.json"
@@ -30,6 +54,9 @@
 	"Next": [
 		"@aweftjs/ui/text.json"
 	],
+	"No account uses this email yet.": [
+		"@aweftjs/auth/text.json"
+	],
 	"Nothing matches that.": [
 		"@aweftjs/ui/text.json"
 	],
@@ -42,6 +69,9 @@
 	"Password": [
 		"@aweftjs/auth/text.json",
 		"entry.tsx"
+	],
+	"Pick a password to create your account.": [
+		"@aweftjs/auth/text.json"
 	],
 	"Pinned note": [
 		"entry.tsx"
@@ -74,6 +104,12 @@
 	"Sign in first, then ask for the link.": [
 		"@aweftjs/auth/text.json"
 	],
+	"Sign in or create an account": [
+		"@aweftjs/auth/text.json"
+	],
+	"Signing in with Google did not work. Try again, or use your email.": [
+		"@aweftjs/auth/text.json"
+	],
 	"The board": [
 		"entry.tsx"
 	],
@@ -84,6 +120,9 @@
 		"@aweftjs/auth/text.json"
 	],
 	"We will send a link to your email address.": [
+		"@aweftjs/auth/text.json"
+	],
+	"Welcome back.": [
 		"@aweftjs/auth/text.json"
 	],
 	"Your email address is verified.": [

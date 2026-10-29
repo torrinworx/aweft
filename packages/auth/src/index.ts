@@ -1,5 +1,6 @@
-// The battery, as two sources of server modules: the six every application loads, the two
-// that mail and so need notify, and the store paths they query (designs 074, 289, 290).
+// The battery, as three sources of server modules: the six every application loads, the two
+// that mail and so need notify, the one that signs in through Google, and the store paths they
+// query (designs 074, 289, 290, 318).
 
 import { fromBundle } from '@aweftjs/modules';
 import type { Source } from '@aweftjs/modules';
@@ -38,6 +39,18 @@ export const mail: Source = fromBundle({
 });
 
 /**
+ * Sign-in with Google: `auth/Google`, which names `auth/Session` and `auth/Enter` (design 318).
+ * Give it `clientId`, `clientSecret` and `callback` in a same-named file, and turn on the
+ * `google` setting of the page's `auth/SignIn`. Leave this out and nothing of Google loads.
+ *
+ * Example:
+ *   createServer({ sources: [own, auth, google], store, gate: 'auth/Gate', listener });
+ */
+export const google: Source = fromBundle({
+	'./auth/Google.ts': () => import('./modules/Google.ts'),
+});
+
+/**
  * The paths the application declares on its store for these modules to query: `email` on
  * user documents, `user` and `expires` on session and link documents.
  *
@@ -49,5 +62,5 @@ export const paths: Declaration = { email: ['email'], user: ['user'], expires: [
 export { holds } from './names.ts';
 export type { Implies } from './names.ts';
 export type { AuthContext } from './context.ts';
-export type { RefuseSignUp, SignUp } from './modules/Enter.ts';
+export type { ConfirmedBy, RefuseSignUp, SignUp } from './modules/Enter.ts';
 export type { Roles } from './modules/Roles.ts';

@@ -1,5 +1,5 @@
 // auth/Enter: sign in, or sign up when the email is new, and hand the browser its cookie
-// (design 074). The route counts attempts, bounds the hashing in flight and the password's
+// (design 074), or admit an address another party confirmed (design 318). The route counts attempts, bounds the hashing in flight and the password's
 // length before anything is hashed (design 275), and asks the application's sign-up rule at
 // the door (design 291).
 
@@ -10,6 +10,7 @@ import { type Refusal, sliding } from '@aweftjs/server';
 import type { Store } from '@aweftjs/store';
 
 import { type AuthContext, addressOf } from '../context.ts';
+import { VERIFIED } from '../names.ts';
 import { hashPassword, verifyPassword } from '../password.ts';
 import { bodyOf, invalidConfig, json, numberOf, storeOf } from '../props.ts';
 import { findUser, idOfUserDoc, looksLikeEmail, normalEmail, userDoc } from '../users.ts';
@@ -44,7 +45,15 @@ export interface SignUp {
 /** The application's sign-up rule: a refusal closes the door to that sign-up, nothing opens it. */
 export type RefuseSignUp = (signUp: SignUp) => Refusal | undefined | Promise<Refusal | undefined>;
 
-/** What a `user:<id>` document holds. `password` is the hash, never the password. */
+/** What `enterConfirmed` takes beside the address (design 318). */
+export interface ConfirmedBy {
+	/** The person's name as the other party gave it, written on a new account only. */
+	readonly name?: string | null | undefined;
+	/** What the gate identified for the request that brought the address, for `refuseSignUp`. */
+	readonly context: AuthContext;
+}
+
+/** What a `user:<id>` document holds. `password` is the hash, never the password: empty for an account made through `enterConfirmed`, which no password signs in to. */
 export interface UserDocument extends Record<string, unknown> {
 	email: string;
 	name: string | null;
@@ -66,6 +75,24 @@ export interface Enter {
 	 * sets a password elsewhere (design 290).
 	 */
 	checkPassword(password: unknown): Promise<readonly Refusal[]>;
+	/**
+	 * Sign in, or sign up, the holder of an address another party has confirmed, such as Google
+	 * (design 318). A known address is signed in and marked confirmed: `emailVerified` is written
+	 * and `verified` granted. A new one is asked of `refuseSignUp` with an empty `extra`, then made
+	 * with no password, `emailVerified` true and `verified` granted, and the `afterSignUp`
+	 * listeners hear of it. No password is asked: call it only with an address the other party
+	 * vouched for.
+	 *
+	 * Params:
+	 *   email: the confirmed address
+	 *   by: the name the other party gave, and the request's context
+	 *
+	 * Returns: `{ user, created }`, or `{ refused }` with the one reason `refuseSignUp` answered.
+	 *
+	 * Example:
+	 *   const outcome = await Enter.enterConfirmed('ada@example.com', { name: 'Ada', context });
+	 */
+	enterConfirmed(email: string, by: ConfirmedBy): Promise<Entered>;
 	/**
 	 * Hear of every account this module makes, by the route or by `enter()`, once its document is
 	 * settled and `auth/Roles` has made its first grant (design 300). `enter()` waits for every
@@ -127,6 +154,42 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 		return refusePassword !== null && await refusePassword(password as string) ? [notAllowed()] : [];
 	};
 
+	const confirmAlone = async (email: string, by: ConfirmedBy): Promise<Entered> => {
+		const found = await findUser(store, email);
+		if (found === undefined) {
+			if (refuseSignUp !== null) {
+				const refusal = await refuseSignUp({ email: normalEmail(email), extra: {}, context: by.context, store });
+				if (refusal !== undefined) return { refused: [refusal] };
+			}
+			const id = idToText(createId());
+			const handle = await store.open(userDoc(id));
+			const now = Date.now();
+			atomic(() => {
+				Object.assign(handle.root, {
+					email: normalEmail(email), name: by.name ?? null, password: '', emailVerified: true, createdAt: now, modifiedAt: now,
+				} satisfies UserDocument);
+			});
+			await store.settled(handle);
+			await store.close(handle);
+			await Roles.first(id);
+			await Roles.grant(id, VERIFIED);
+			return { user: id, created: true };
+		}
+		const handle = await store.open(found);
+		const root = handle.root as UserDocument;
+		if (root.emailVerified !== true) {
+			atomic(() => {
+				root.emailVerified = true;
+				root.modifiedAt = Date.now();
+			});
+			await store.settled(handle);
+		}
+		await store.close(handle);
+		const user = idOfUserDoc(found);
+		await Roles.grant(user, VERIFIED);
+		return { user, created: false };
+	};
+
 	const admitAlone = async (email: string, password: string): Promise<Entered> => {
 		const found = await findUser(store, email);
 		if (found === undefined) {
@@ -161,14 +224,15 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 	// One admission per email at a time. `admitAlone` looks the email up, hashes, then creates, so two
 	// sign-ups for one address in flight together would both miss and make two accounts.
 	const admitting = new Map<string, Promise<void>>();
-	const admit = (email: string, password: string): Promise<Entered> => {
+	const queued = (email: string, admitOne: () => Promise<Entered>): Promise<Entered> => {
 		const key = normalEmail(email);
-		const turn = (admitting.get(key) ?? Promise.resolve()).then(() => admitAlone(email, password));
+		const turn = (admitting.get(key) ?? Promise.resolve()).then(admitOne);
 		const done = turn.then(() => undefined, () => undefined);
 		admitting.set(key, done);
 		void done.then(() => { if (admitting.get(key) === done) admitting.delete(key); });
 		return turn;
 	};
+	const admit = (email: string, password: string): Promise<Entered> => queued(email, () => admitAlone(email, password));
 
 	const enter = async (email: string, password: string): Promise<Entered> => {
 		const outcome = await admit(email, password);
@@ -179,9 +243,17 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 	const tooMany = (retryAfter: number): Response =>
 		json(429, { reasons: [{ code: 'attempts', message: 'too many sign-in attempts; wait and try again' }] }, { 'retry-after': String(retryAfter) });
 
+	const enterConfirmed = async (email: string, by: ConfirmedBy): Promise<Entered> => {
+		if (typeof email !== 'string' || !looksLikeEmail(normalEmail(email))) return { refused: [{ code: 'email', message: 'email is an address' }] };
+		const outcome = await queued(email, () => confirmAlone(email, by));
+		if ('created' in outcome && outcome.created) await hear(outcome.user);
+		return outcome;
+	};
+
 	return {
 		public: true,
 		enter,
+		enterConfirmed,
 		checkPassword,
 		afterSignUp: (listener) => {
 			// Wrapped, so one function added twice is heard twice and each removal takes its own.

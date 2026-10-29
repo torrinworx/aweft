@@ -4,7 +4,8 @@ The first battery: server modules for who is on a connection and what they may d
 reads `public` and `needs`, sessions as documents in your store, sign-in and sign-up by email
 and password, the names a person holds, and a per-user state document shared on every
 connection of theirs. A second source, `mail`, adds email verification, password change,
-forgot and reset, and needs the notify battery. `@aweftjs/auth/client` is the browser half: who
+forgot and reset, and needs the notify battery. A third, `google`, adds sign-in with Google.
+`@aweftjs/auth/client` is the browser half: who
 the page is, what they hold, signing in and out, that state document, the mail calls, and four
 page modules a stage loads by name.
 
@@ -325,6 +326,55 @@ another does, one that rejects rejects `enter` with the account already made, an
 answers removes the listener. The sign-in route waits for listeners outside its `hashesInFlight`
 count, so a slow listener slows only its own sign-up.
 
+## Sign-in with Google
+
+`google` is one module, `auth/Google`, in a source of its own: list it and people can sign in
+or sign up with their Google account; leave it out and nothing of it loads (design 318). It
+names `auth/Session` and `auth/Enter`, so it goes beside `auth`.
+
+```ts
+import { auth, google } from '@aweftjs/auth';
+
+createServer({ sources: [own, auth, google], store, gate: 'auth/Gate', listener });
+
+// modules/auth/Google.ts: no setting has a default, because a battery picks no URL and holds no secret
+export const config = {
+	clientId: process.env.GOOGLE_CLIENT_ID,
+	clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+	callback: 'https://app.example/api/auth/google/callback',   // listed in the OAuth client's redirect URIs
+};
+
+// page/modules/auth/SignIn.ts, in the page's own source: the form offers Google
+export const config = { google: true };
+```
+
+In Google Cloud, make an OAuth client of type Web application, put the `callback` address under
+its redirect URIs exactly as written here, and ask for no scope beyond `openid`, `email` and
+`profile`, which need no review by Google.
+
+```
+GET /api/auth/google?return=/notes          302 to Google; return is a path on this site, else /
+GET /api/auth/google/callback               Google's answer:
+  302 to the return path, with the session cookie set
+  302 to the return path with ?auth=cancelled | google | unverified | <a sign-up refusal's code>
+```
+
+The flow is OpenID Connect's code flow with PKCE. The start route keeps the state, the code
+verifier and the return path in one HttpOnly cookie on `/api/auth/google` that lives ten
+minutes, so the callback only accepts an answer to a flow this browser began. The code goes to
+Google's token endpoint with the secret and the verifier, and the ID token is read from that
+answer: its issuer must be Google, its audience your `clientId`, it must not have expired, and
+Google must say the address is confirmed. The signature is not checked, because the token came
+straight from Google over TLS. `fetch` in the same file stands in for Google in a test.
+
+**What the address gets** is `auth/Enter`'s `enterConfirmed(email, { name, context })`, which a
+module of yours can call for any provider that confirms an address. A known address signs in to
+its account, which is marked confirmed: `emailVerified` is written and `verified` granted. A new
+one asks your `refuseSignUp` with an empty `extra`, then makes an account with no password,
+`emailVerified` true, `verified` granted and the name Google gave, and every `afterSignUp`
+listener hears it, so `atSignUp` finds it already verified and sends nothing. No password signs
+in to that account; the person sets one through forgot and reset if they want one.
+
 ## The client half
 
 ```ts
@@ -427,7 +477,7 @@ import { authClient } from '@aweftjs/auth/client';
 | module | what it is |
 |---|---|
 | `auth/Session` | `createAuth` over the `client` the stage handed the loader. Its instance is the `Auth` above, so any module of yours that needs to know who the page is names it in `deps` |
-| `auth/SignIn` | an act module: the sign-in and sign-up form, in one, because `enter` does both |
+| `auth/SignIn` | an act module: the sign-in and sign-up form, in one, because `enter` does both. It asks for the email, then says whether it signs in ("Welcome back") or creates an account, with the button to match. `google: true` in its config adds Continue with Google |
 | `auth/Verify` | an act module: with a `token` in the act's parameters or the URL's query it takes the link as it mounts and says what happened; without one it offers a signed-in person the mail |
 | `auth/Reset` | an act module: without a `token` the forgot form, with one the new-password form |
 
@@ -512,7 +562,7 @@ refuses `no-client` too, naming what was missing.
 Six kinds of document in your store, named by prefix:
 
 - `user:<id>`: `email`, `name`, `password` (the scrypt hash, with its parameters and salt
-  written into it; never the password), `emailVerified`, `createdAt`, `modifiedAt`. Never
+  written into it; never the password; empty for an account made through Google), `emailVerified`, `createdAt`, `modifiedAt`. Never
   shared on a link.
 - `session:<token>`: `user`, `expires` (the lifetime's end, the moment of revocation, or null
   for never), `status` (`active` or `revoked`), `createdAt`.
@@ -540,7 +590,8 @@ and no test here measures timing.
 
 Two sign-ups for one email in the same instant can both succeed, because a unique index is
 the store driver's and none ships. A sign-in with a mistyped new email creates an account:
-that is what one module for both means, and `auth/Check` exists so a form can ask first.
+that is what one module for both means, and why `auth/SignIn` asks `auth/Check` first and says
+"No account uses this email yet" before it asks for a password.
 
 The gate puts the peer address in the context beside `user` and `session`, as the listener saw
 it, so a route of yours can count by it the way `auth/Enter` does.
@@ -559,4 +610,5 @@ itself.
 
 The design notes are in
 [`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 071 and 074, 185 and
-245 for the client half, 289 for names and 290 for the mail flows.
+245 for the client half, 289 for names, 290 for the mail flows and 318 for Google and the
+form's two steps.

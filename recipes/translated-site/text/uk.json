@@ -48,5 +48,18 @@
 	"Verify your email": "Підтвердити електронну пошту",
 	"We will send a link to your email address.": "Ми надішлемо посилання на вашу електронну пошту.",
 	"Your email address is verified.": "Вашу електронну пошту підтверджено.",
-	"Your password is set. Sign in with it.": "Пароль встановлено. Увійдіть із ним."
+	"Your password is set. Sign in with it.": "Пароль встановлено. Увійдіть із ним.",
+	"Change email": "Змінити пошту",
+	"Continue": "Далі",
+	"Continue with Google": "Продовжити з Google",
+	"Create account": "Створити обліковий запис",
+	"Enter an email address, like you@example.com.": "Введіть адресу електронної пошти, наприклад you@example.com.",
+	"Enter your password to sign in.": "Введіть пароль, щоб увійти.",
+	"Google has not confirmed that email address. Use your email below instead.": "Google не підтвердив цю адресу. Скористайтеся своєю поштою нижче.",
+	"Google sign-in was cancelled.": "Вхід через Google скасовано.",
+	"No account uses this email yet.": "Жоден обліковий запис ще не використовує цю пошту.",
+	"Pick a password to create your account.": "Виберіть пароль, щоб створити обліковий запис.",
+	"Sign in or create an account": "Увійти або створити обліковий запис",
+	"Signing in with Google did not work. Try again, or use your email.": "Вхід через Google не вдався. Спробуйте ще раз або скористайтеся поштою.",
+	"Welcome back.": "З поверненням."
 }

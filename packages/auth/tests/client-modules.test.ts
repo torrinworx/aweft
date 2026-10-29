@@ -142,45 +142,89 @@ test('a client that is not one is refused as no-client, with the fix on the erro
 	);
 });
 
-test('auth/SignIn calls enter, and shows the refusal it answers with', async () => {
-	const calls: [string, string][] = [];
-	let answer: unknown = { refused: [{ code: 'password', message: 'the password is wrong' }] };
-	const loader = createLoader({
-		sources: [
-			extra({
-				'auth/Session.ts': {
-					default: () => ({
-						enter: async (email: string, password: string) => {
-							calls.push([email, password]);
-							if (answer === 'throw') throw new Error('the server is down');
-							return answer;
-						},
-					}),
+/** A stand-in `auth/Session` for the form: `check` answers from a list, `enter` records and answers. */
+const signInSession = (holders: readonly string[], answer: { value: unknown }, calls: [string, string][], checks: string[] = []) =>
+	extra({
+		'auth/Session.ts': {
+			default: () => ({
+				check: async (email: string) => { checks.push(email); return holders.includes(email); },
+				enter: async (email: string, password: string) => {
+					calls.push([email, password]);
+					if (answer.value === 'throw') throw new Error('the server is down');
+					return answer.value;
 				},
 			}),
-			authClient,
-		],
+		},
 	});
 
-	const act = (await loader.load(['auth/SignIn']))['auth/SignIn'] as {
-		title: unknown;
-		component: () => unknown;
-	};
+/** Type an email and press Continue, the first of the form's two steps. */
+const continueWith = async (root: NodeLike | null, address: string): Promise<void> => {
+	const email = byName(root, 'email');
+	(email as unknown as Record<string, unknown>)['value'] = address;
+	fire(email, 'input');
+	fire(byTag(root, 'button'), 'click');
+	await settle();
+};
+
+/** The button whose text is this, among the form's. */
+const button = (root: NodeLike | null, label: string): LightElement =>
+	elements(root).find((node) => node.localName === 'button' && node.textContent === label)!;
+
+test('auth/SignIn asks for the email first, then says whether it signs in or creates an account', async () => {
+	const calls: [string, string][] = [];
+	const checks: string[] = [];
+	const answer = { value: { user: 'u1', created: false } as unknown };
+	const loader = createLoader({ sources: [signInSession(['ada@example.com'], answer, calls, checks), authClient] });
+	const act = (await loader.load(['auth/SignIn']))['auth/SignIn'] as { title: unknown; component: () => unknown };
 	assert.ok(isText(act.title), 'the act names itself for the live region, as a text token');
-	assert.equal(textOf(context(), act.title), 'Sign in');
+	assert.equal(textOf(context(), act.title), 'Sign in or create an account');
 
 	const document = createDocument();
 	const stop = mount(document.body as never, h(act.component, {}));
+	const root = document.body.firstChild;
+	assert.equal(byName(root, 'password'), undefined, 'no password is asked before the email is known');
+	assert.equal(button(root, 'Continue with Google'), undefined, 'Google is off unless the application turns it on');
 
-	const email = byName(document.body.firstChild, 'email');
-	const password = byName(document.body.firstChild, 'password');
+	await continueWith(root, 'not an address');
+	assert.deepEqual(checks, [], 'a typo is caught on the page and never asked about');
+	assert.match(document.body.textContent ?? '', /Enter an email address/);
+
+	await continueWith(root, ' Ada@Example.com ');
+	assert.deepEqual(checks, ['ada@example.com'], 'Continue asks auth/Check about the normalised address');
+	assert.match(document.body.textContent ?? '', /Welcome back\./, 'a known address is told it signs in');
+	assert.ok(button(root, 'Sign in') !== undefined, 'and the button says Sign in');
+	assert.equal(byName(root, 'password').getAttribute('autocomplete'), 'current-password');
+
+	fire(button(root, 'Change email'), 'click');
+	await settle();
+	assert.equal(byName(root, 'password'), undefined, 'Change email goes back to the first step');
+
+	await continueWith(root, 'grace@example.com');
+	assert.match(document.body.textContent ?? '', /No account uses this email yet\./, 'a new address is told it makes an account');
+	assert.ok(button(root, 'Create account') !== undefined, 'and the button says Create account');
+	assert.equal(button(root, 'Sign in'), undefined, 'never Sign in, whichever will happen');
+	assert.equal(byName(root, 'password').getAttribute('autocomplete'), 'new-password');
+
+	stop();
+	await loader.unload('auth/SignIn');
+});
+
+test('auth/SignIn calls enter, and shows the refusal it answers with', async () => {
+	const calls: [string, string][] = [];
+	const answer = { value: { refused: [{ code: 'password', message: 'the password is wrong' }] } as unknown };
+	const loader = createLoader({ sources: [signInSession(['ada@example.com'], answer, calls), authClient] });
+	const act = (await loader.load(['auth/SignIn']))['auth/SignIn'] as { component: () => unknown };
+
+	const document = createDocument();
+	const stop = mount(document.body as never, h(act.component, {}));
+	const root = document.body.firstChild;
+	await continueWith(root, 'ada@example.com');
+
+	const password = byName(root, 'password');
 	assert.equal(password.getAttribute('type'), 'password', 'the password is typed as one');
-
-	(email as unknown as Record<string, unknown>)['value'] = 'ada@example.com';
-	fire(email, 'input');
 	(password as unknown as Record<string, unknown>)['value'] = 'wrong';
 	fire(password, 'input');
-	fire(byTag(document.body.firstChild, 'button'), 'click');
+	fire(button(root, 'Sign in'), 'click');
 	await settle();
 
 	assert.deepEqual(calls, [['ada@example.com', 'wrong']], 'the submit is one call to enter');
@@ -188,20 +232,20 @@ test('auth/SignIn calls enter, and shows the refusal it answers with', async () 
 		'and the refusal is on the form where the person can read it');
 
 	// A refusal that named no field is still readable: it goes on the form's own alert line.
-	answer = { refused: [{ code: 'locked', message: 'this account is locked' }] };
-	fire(byTag(document.body.firstChild, 'form'), 'submit', { preventDefault: () => undefined });
+	answer.value = { refused: [{ code: 'locked', message: 'this account is locked' }] };
+	fire(byTag(root, 'form'), 'submit', { preventDefault: () => undefined });
 	await settle();
-	assert.equal(calls.length, 2, 'the Enter key reaches the form\'s own handler');
+	assert.equal(calls.length, 2, 'the Enter key reaches the form\'s own handler, and on this step it enters');
 	assert.match(document.body.textContent ?? '', /this account is locked/);
 
 	// The route itself failing is not a refusal, and the person still has to be told something.
-	answer = 'throw';
-	fire(byTag(document.body.firstChild, 'button'), 'click');
+	answer.value = 'throw';
+	fire(button(root, 'Sign in'), 'click');
 	await settle();
 	assert.match(document.body.textContent ?? '', /the server is down/, 'a throw from enter is shown too');
 
-	answer = { user: 'u1', created: false };
-	fire(byTag(document.body.firstChild, 'button'), 'click');
+	answer.value = { user: 'u1', created: false };
+	fire(button(root, 'Sign in'), 'click');
 	await settle();
 	assert.equal(calls.length, 4, 'a fourth submit is a fourth call');
 	assert.doesNotMatch(document.body.textContent ?? '', /locked|down|wrong/,
@@ -214,14 +258,8 @@ test('auth/SignIn calls enter, and shows the refusal it answers with', async () 
 test('auth/SignIn calls the retry it was handed once enter succeeds, and not on a refusal', async () => {
 	// The form still picks no URL. What it does is tell the stage the reason has stopped holding,
 	// so the act the URL chose is built again at the address the visitor asked for (design 244).
-	let answer: unknown = { refused: [{ code: 'password', message: 'the password is wrong' }] };
-	const loader = createLoader({
-		sources: [
-			extra({ 'auth/Session.ts': { default: () => ({ enter: async () => answer }) } }),
-			authClient,
-		],
-	});
-
+	const answer = { value: { refused: [{ code: 'password', message: 'the password is wrong' }] } as unknown };
+	const loader = createLoader({ sources: [signInSession([], answer, []), authClient] });
 	const act = (await loader.load(['auth/SignIn']))['auth/SignIn'] as {
 		component: (props: { retry?: () => void }) => unknown;
 	};
@@ -229,14 +267,16 @@ test('auth/SignIn calls the retry it was handed once enter succeeds, and not on 
 	let retries = 0;
 	const document = createDocument();
 	const stop = mount(document.body as never, h(act.component, { retry: () => { retries += 1; } }));
+	const root = document.body.firstChild;
+	await continueWith(root, 'grace@example.com');
 
-	fire(byTag(document.body.firstChild, 'button'), 'click');
+	fire(button(root, 'Create account'), 'click');
 	await settle();
 	assert.equal(retries, 0, 'a refusal leaves the visitor on the form');
 	assert.match(document.body.textContent ?? '', /the password is wrong/);
 
-	answer = { user: 'u1', created: true };
-	fire(byTag(document.body.firstChild, 'button'), 'click');
+	answer.value = { user: 'u1', created: true };
+	fire(button(root, 'Create account'), 'click');
 	await settle();
 	assert.equal(retries, 1, 'and signing up asks for the act the URL chose');
 
@@ -246,23 +286,50 @@ test('auth/SignIn calls the retry it was handed once enter succeeds, and not on 
 
 test('auth/SignIn handed no retry signs in and does nothing more', async () => {
 	// The act on a URL of its own is not standing in for anything, so there is nothing to rebuild.
-	const loader = createLoader({
-		sources: [
-			extra({ 'auth/Session.ts': { default: () => ({ enter: async () => ({ user: 'u1', created: false }) }) } }),
-			authClient,
-		],
-	});
+	const loader = createLoader({ sources: [signInSession(['ada@example.com'], { value: { user: 'u1', created: false } }, []), authClient] });
 	const act = (await loader.load(['auth/SignIn']))['auth/SignIn'] as { component: (props: object) => unknown };
 	const document = createDocument();
 	const stop = mount(document.body as never, h(act.component, {}));
+	const root = document.body.firstChild;
+	await continueWith(root, 'ada@example.com');
 
-	fire(byTag(document.body.firstChild, 'button'), 'click');
+	fire(button(root, 'Sign in'), 'click');
 	await settle();
 	assert.doesNotMatch(document.body.textContent ?? '', /is not a function|undefined/,
 		'the form survives a success with no retry on its props');
 
 	stop();
 	await loader.unload('auth/SignIn');
+});
+
+test('auth/SignIn with google on offers Google, sends the page there with its own path, and reads what came back', async () => {
+	const global = globalThis as { location?: unknown };
+	const assigned: string[] = [];
+	global.location = { href: 'http://app.test/notes?tab=2&auth=cancelled', assign: (url: string) => { assigned.push(url); } };
+	try {
+		const loader = createLoader({
+			sources: [extra({ 'auth/SignIn.ts': { config: { google: true } } }), signInSession([], { value: null }, []), authClient],
+		});
+		const act = (await loader.load(['auth/SignIn']))['auth/SignIn'] as { component: () => unknown };
+		const document = createDocument();
+		const stop = mount(document.body as never, h(act.component, {}));
+		const root = document.body.firstChild;
+
+		assert.match(document.body.textContent ?? '', /Google sign-in was cancelled\./, 'a cancelled attempt is said on the form');
+		fire(button(root, 'Continue with Google'), 'click');
+		assert.deepEqual(assigned, [`/api/auth/google?return=${encodeURIComponent('/notes?tab=2')}`],
+			'the start route, returning to this page less the old answer');
+
+		global.location = { href: 'http://app.test/join?auth=invite', assign: () => {} };
+		const again = createDocument();
+		const stopAgain = mount(again.body as never, h(act.component, {}));
+		assert.match(again.body.textContent ?? '', /did not work/, 'a code the form does not know still says something');
+		stopAgain();
+		stop();
+		await loader.unload('auth/SignIn');
+	} finally {
+		delete global.location;
+	}
 });
 
 test('a static render of a gated act finishes, and the sign-in act is what its markup holds', async () => {
@@ -307,7 +374,7 @@ test('a static render of a gated act finishes, and the sign-in act is what its m
 		refused: 'join',
 	} as never, h(Stage, {})), { context: context() });
 
-	assert.match(markup, /aria-label="Sign in"/, 'the refused act is what a static render of a gated page holds');
+	assert.match(markup, /aria-label="Sign in or create an account"/, 'the refused act is what a static render of a gated page holds');
 	assert.doesNotMatch(markup, /id="notes"/, 'and the page behind the gate is not in the markup');
 });
 

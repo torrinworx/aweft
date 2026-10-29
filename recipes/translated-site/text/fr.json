@@ -48,5 +48,18 @@
 	"Verify your email": "Vérifier votre courriel",
 	"We will send a link to your email address.": "Nous enverrons un lien à votre adresse de courriel.",
 	"Your email address is verified.": "Votre adresse de courriel est vérifiée.",
-	"Your password is set. Sign in with it.": "Votre mot de passe est défini. Connectez-vous avec."
+	"Your password is set. Sign in with it.": "Votre mot de passe est défini. Connectez-vous avec.",
+	"Change email": "Changer de courriel",
+	"Continue": "Continuer",
+	"Continue with Google": "Continuer avec Google",
+	"Create account": "Créer le compte",
+	"Enter an email address, like you@example.com.": "Entrez une adresse de courriel, comme you@example.com.",
+	"Enter your password to sign in.": "Entrez votre mot de passe pour vous connecter.",
+	"Google has not confirmed that email address. Use your email below instead.": "Google n'a pas confirmé cette adresse. Utilisez plutôt votre courriel ci-dessous.",
+	"Google sign-in was cancelled.": "La connexion avec Google a été annulée.",
+	"No account uses this email yet.": "Aucun compte n'utilise encore ce courriel.",
+	"Pick a password to create your account.": "Choisissez un mot de passe pour créer votre compte.",
+	"Sign in or create an account": "Se connecter ou créer un compte",
+	"Signing in with Google did not work. Try again, or use your email.": "La connexion avec Google n'a pas fonctionné. Réessayez, ou utilisez votre courriel.",
+	"Welcome back.": "Bon retour."
 }

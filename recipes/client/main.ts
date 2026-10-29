@@ -262,7 +262,7 @@ try {
 	// A gated URL while nobody: the act's own gate module throws, and `refused` puts the
 	// battery's form on the page the visitor asked for. The address bar does not move.
 	await view.goto(`${http}/notes`);
-	await view.waitForSelector('form[aria-label="Sign in"]');
+	await view.waitForSelector('form[aria-label="Sign in or create an account"]');
 	check(new URL(view.url()).pathname === '/notes', 'a gated page while anonymous keeps its URL');
 	check(await view.$('#notes') === null, 'and shows the sign-in act instead of the page');
 	await audited('the sign-in form in light mode');
@@ -272,11 +272,16 @@ try {
 	// form still picks no URL: on success it calls the `retry` the stage handed it, so the act
 	// this URL chose is built again where it stands (designs 244, 245). Nobody navigates.
 	await view.fill('input[name="email"]', 'grace@example.com');
+	await view.click('form[aria-label="Sign in or create an account"] button');
+	await view.waitForSelector('input[name="password"]');
+	check(/No account uses this email yet/.test(String(await view.textContent('form[aria-label="Sign in or create an account"]'))),
+		'the form says a new email makes an account before it asks for a password (design 318)');
+	await audited('the sign-in form\'s password step');
 	await view.fill('input[name="password"]', 'correct horse battery staple');
-	await view.click('form[aria-label="Sign in"] button');
+	await view.getByRole('button', { name: 'Create account' }).click();
 	await view.waitForSelector('#notes');
 	check(new URL(view.url()).pathname === '/notes', 'the gated page came back at the URL that was refused');
-	check(await view.$('form[aria-label="Sign in"]') === null, 'and the form is gone');
+	check(await view.$('form[aria-label="Sign in or create an account"]') === null, 'and the form is gone');
 	check(await view.textContent('#notes-title') === 'the notice board',
 		'the gated act loaded, over the document the page shares');
 	const grace = String(await view.textContent('#notes-user'));
@@ -343,10 +348,13 @@ try {
 
 	// Every session is over, so the gated page is behind the form again, and the new password opens it.
 	await view.goto(`${http}/notes`);
-	await view.waitForSelector('form[aria-label="Sign in"]');
+	await view.waitForSelector('form[aria-label="Sign in or create an account"]');
 	await view.fill('input[name="email"]', 'grace@example.com');
+	await view.click('form[aria-label="Sign in or create an account"] button');
+	await view.waitForSelector('input[name="password"]');
+	check(/Welcome back/.test(String(await view.textContent('form[aria-label="Sign in or create an account"]'))), 'and a known email is told it signs in');
 	await view.fill('input[name="password"]', 'a new horse battery');
-	await view.click('form[aria-label="Sign in"] button');
+	await view.getByRole('button', { name: 'Sign in' }).click();
 	await view.waitForSelector('#notes');
 	check(await view.textContent('#notes-user') === grace, 'and the new password signs the same person in');
 
@@ -373,7 +381,7 @@ try {
 	// The same forms, with the operating system asking for dark.
 	await view.emulateMedia({ colorScheme: 'dark' });
 	await view.goto(`${http}/join`);
-	await view.waitForSelector('form[aria-label="Sign in"]');
+	await view.waitForSelector('form[aria-label="Sign in or create an account"]');
 	await audited('the sign-in form in dark mode');
 	await view.goto(`${http}/reset`);
 	await view.waitForSelector('form[aria-label="Reset your password"]');

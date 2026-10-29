@@ -7,6 +7,7 @@ import { type Refusal, sliding } from '@aweftjs/server';
 
 import { type AuthContext, userOf } from '../context.ts';
 import { type Links, NOT_LIVE, TAKEN, links } from '../links.ts';
+import { VERIFIED } from '../names.ts';
 import { type Mailer, type Outcome, mailLink, textOf, urlOf } from '../mail.ts';
 import { bodyOf, invalidConfig, json, numberOf, storeOf } from '../props.ts';
 import { userDoc } from '../users.ts';
@@ -26,8 +27,6 @@ export const defaults = {
 	atSignUp: false,
 };
 
-/** The name a verified person holds. */
-export const VERIFIED = 'verified';
 
 export type Confirmed = { readonly user: string } | { readonly refused: readonly Refusal[] };
 

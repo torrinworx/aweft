@@ -32,7 +32,7 @@ export const noRoles = { first: async () => false, may: async () => false };
 
 /** One module of the battery, through the harness, with real or stubbed dependencies. */
 export const module = async <T>(
-	name: 'Gate' | 'Session' | 'Roles' | 'Enter' | 'Check' | 'State' | 'Verify' | 'Password',
+	name: 'Gate' | 'Session' | 'Roles' | 'Enter' | 'Check' | 'State' | 'Verify' | 'Password' | 'Google',
 	store: Store,
 	imports: Record<string, unknown> = {},
 	config: Record<string, unknown> = {},

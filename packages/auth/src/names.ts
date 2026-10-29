@@ -3,6 +3,9 @@
 // Pure, and shared by both planes: the server module reads the store and hands the list here,
 // the page reads the shared document and does the same, so one function is the answer.
 
+/** The name a person holds once their email address is confirmed, by a link or by a provider (designs 290, 318). */
+export const VERIFIED = 'verified';
+
 /** A table from a name to the names it implies. */
 export type Implies = Readonly<Record<string, readonly string[]>>;
 
