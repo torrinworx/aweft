@@ -422,6 +422,10 @@ test('a zero byte is refused by name, wherever it arrives', async () => {
 	await assert.rejects(() => driver.write({ ...base, doc: 'a', project: { title: zero } }),
 		refused, 'a projected string');
 	await assert.rejects(() => driver.create(zero, ROOT, 'object'), refused, 'a name being created');
+	// A declared field name is left to the database, which refuses it inside the declare's own
+	// transaction, so nothing is half written.
+	await assert.rejects(() => driver.declare({ [zero]: ['title'] }),
+		(e: Error) => (e as { code?: string }).code === '22021', 'a declared field name');
 
 	assert.equal(await driver.head('a'), 0, 'a refused write left something behind');
 	await driver.close();
