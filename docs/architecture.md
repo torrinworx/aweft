@@ -201,6 +201,7 @@ superseded it.
 | Giving up | "In a row" is measured in time, not in commits taken | 052 |
 | Paging | Every hit carries a cursor the driver minted, naming a position in the order asked for; `after` takes it, so a page after a document that was removed or re-ranked carries on from where it was | 060 |
 | Persistence on Postgres | The application hands in a pool, the driver owns its tables in that pool's schema behind a version row, and it tells nobody a document changed | 160, 163 |
+| Persistence on SQLite | The application hands in a `node:sqlite` handle with its pragmas set, the driver keeps the Postgres driver's tables in it, and a write is one `BEGIN IMMEDIATE` transaction with nothing asynchronous inside | 319 |
 | A durable write | One transaction under the document's row lock: the sequence, the slots merged one by one, the edges, the tail entry and the projection, or none of it | 161 |
 | Declaring over stored data | `declare` carries the paths, and a driver fills in the projection for every document it already holds that lacks a declared field before it resolves; `projectionOf` ships so a driver outside the package computes the same one | 162 |
 | Bytes in a slot | A slot may hold bytes and every driver hands them back as bytes; one that keeps slots as JSON tags them | 163 |
