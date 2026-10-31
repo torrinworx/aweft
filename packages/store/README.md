@@ -258,6 +258,57 @@ sizes differ by four times and the numbers do not separate. A declared read agai
 documents is 0.29 to 0.36 ms through the index, and the same script prints the `EXPLAIN` showing
 the index-only scan it takes.
 
+## On SQLite
+
+```ts
+import { DatabaseSync } from 'node:sqlite';
+import { createStore } from '@aweftjs/store';
+import { sqliteDriver } from '@aweftjs/store/sqlite';
+
+const db = new DatabaseSync('app.db');
+db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000');
+const store = createStore({ driver: sqliteDriver(db), declare: { owner: ['ownerId'] } });
+```
+
+**You hand in the handle.** Anything with `exec(sql)` and `prepare(sql)` whose statements answer
+`run`, `get` and `all` will do, which is what `node:sqlite`'s `DatabaseSync` is. Node ships the
+module, so nothing is installed and the subpath imports nothing. The file's path, the journal
+mode, the synchronous level and the busy timeout are yours, set where you open it; the driver
+changes no setting on the handle. `close()` finishes the driver and leaves the handle open, so
+the same handle can carry your own tables in the same file. `node:sqlite` is synchronous, so a
+write waiting for another handle's lock holds the whole thread, event loop included, for up to
+the busy timeout: with 5000, the process answers nothing for up to five seconds.
+
+**The driver makes the same tables as the Postgres driver**, under the same names, on the first
+call, behind the same version row. A shape it does not know is refused before anything is read
+(`unknown-version`). Declaring a new path reads every stored document once inside `declare`, as
+it does on Postgres.
+
+**Every write is one `BEGIN IMMEDIATE` transaction**, so the database's write lock is taken
+before the document's head is read. On one handle, writes take turns because nothing inside a
+transaction waits. Another handle on the same file, in this process or another, waits for the
+lock for as long as its busy timeout says and is refused with `SQLITE_BUSY` after that. The lock
+is the whole file's, so writers to different documents take turns too. Whether two processes
+may write one file is your decision; the driver only makes them take turns when they do. Do not
+leave a transaction of your own open on the shared handle across an `await`: the driver's next
+`BEGIN` fails inside it.
+
+**Nothing is told that a document changed**, here as on Postgres. A store on another handle keeps
+its open copy of a document as it was; close the document and open it again to read the other
+store's writes.
+
+**A string holding a zero byte is refused** with `zero-byte`, in the same places the Postgres
+driver refuses it and in a declared field name, because `node:sqlite` reads text back only as
+far as that byte. Postgres refuses a declared field name holding one with its own error (code
+`22021`) rather than `zero-byte`. Strings order by UTF-8 bytes, which matches every other
+driver for text inside the basic plane.
+
+`node:sqlite` prints an `ExperimentalWarning` once per process on Node 25. The driver leaves the
+process's warnings alone. Tested on Node 25 by
+[`recipes/documents-on-sqlite`](https://github.com/torrinworx/aweft/blob/main/recipes/documents-on-sqlite/main.ts),
+which kills a writer mid-edit, has four processes open one name at once and declares a path after
+the data was written.
+
 ## Writing a driver
 
 A driver is twelve methods: take the declaration, claim a name, write a commit's

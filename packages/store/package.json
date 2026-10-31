@@ -29,6 +29,11 @@
 			"aweft-source": "./src/postgres.ts",
 			"types": "./dist/postgres.d.ts",
 			"default": "./dist/postgres.js"
+		},
+		"./sqlite": {
+			"aweft-source": "./src/sqlite.ts",
+			"types": "./dist/sqlite.d.ts",
+			"default": "./dist/sqlite.js"
 		}
 	},
 	"scripts": {

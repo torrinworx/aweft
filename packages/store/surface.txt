@@ -23,3 +23,6 @@ value projectionOf: (rows: readonly Row[], root: string, declaration: Readonly<R
 ./postgres type Pool: interface Pool { connect(): Promise<PoolClient>; }
 ./postgres type PoolClient: interface PoolClient { query(text: string, values?: readonly unknown[]): Promise<{ rows: unknown[]; rowCount: number | null; }>; release(): void; }
 ./postgres value postgresDriver: (pool: Pool) => Driver
+./sqlite type Database: interface Database { exec(sql: string): void; prepare(sql: string): Statement; }
+./sqlite type Statement: interface Statement { run(...values: (string | number | null | Uint8Array)[]): { changes: number | bigint; }; get(...values: (string | number | null | Uint8Array)[]): unknown; all(...values: (string | number | null | Uint8Array)[]): unknown[]; }
+./sqlite value sqliteDriver: (db: Database) => Driver
