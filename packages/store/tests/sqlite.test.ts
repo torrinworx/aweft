@@ -437,6 +437,39 @@ test('a write naming a root the document does not have is refused and changes no
 	await driver.close();
 });
 
+test('a declaration the backfill refused leaves the driver answering by the one before it', async () => {
+	const db = handle();
+	const first = createStore({ driver: sqliteDriver(db) });
+	const board = await first.open('board');
+	(board.root as Doc).title = 'the board';
+	(board.root as Doc).tasks = createArray<Doc>([createObject<Doc>({ title: 'one' })]);
+	await first.settled(board);
+	await first.stop();
+
+	const driver = sqliteDriver(db);
+	await driver.declare({ title: ['title'] });
+	await assert.rejects(() => driver.declare({ title: ['title'], first: ['tasks', '0'] }),
+		(e: Error) => (e as { reason?: string }).reason === 'array-in-path');
+	await assert.rejects(() => driver.find({ where: { field: 'first', op: 'eq', value: null } }),
+		(e: Error) => (e as { reason?: string }).reason === 'undeclared',
+		'a field whose declaration was refused answers as if it were indexed');
+	await driver.write(bare('later', 1, { title: 'later' }, { title: 'later', first: 'not declared' }));
+	assert.deepEqual((await driver.find({ where: { field: 'title', op: 'eq', value: 'later' } }))[0]!.fields, { title: 'later' },
+		'a write projected a field whose declaration was refused');
+	await driver.close();
+});
+
+test('creating a name that is already held changes nothing it holds', async () => {
+	const driver = sqliteDriver(handle());
+	await driver.declare({ title: ['title'] });
+	await driver.write(bare('a', 1, { title: 'kept' }, { title: 'kept' }));
+	assert.equal(await driver.create('a', ROOT, 'object'), false);
+	assert.deepEqual((await driver.find({ where: { field: 'title', op: 'eq', value: 'kept' } })).map((f) => f.doc), ['a'],
+		'a second create overwrote the projection with nulls');
+	assert.equal(await driver.head('a'), 1);
+	await driver.close();
+});
+
 test('a handle that reads integers as bigints is used as it is', async () => {
 	const db = handle(':memory:', { readBigInts: true });
 	const pragmas = (): unknown[] => ['foreign_keys', 'journal_mode', 'synchronous', 'busy_timeout']
