@@ -202,7 +202,8 @@ export default async (props: ModuleProps): Promise<Visits> => {
 
 	/** Append what fits under the caps, count the errors, and keep the tail to one commit. */
 	const append = async (name: string, entries: readonly Entry[], onRoot?: (root: Root) => void): Promise<number> => {
-		const { handle } = await opened(name);
+		const holding = await opened(name);
+		const { handle } = holding;
 		const root = handle.root as Root;
 		let kept = 0;
 		atomic(() => {
@@ -219,8 +220,21 @@ export default async (props: ModuleProps): Promise<Visits> => {
 				kept += 1;
 			}
 		});
-		await store.settled(handle);
-		await store.truncate(name, 1);
+		try {
+			await store.settled(handle);
+			await store.truncate(name, 1);
+		} catch (error) {
+			// The store raises a failed write on this handle for good, so holding it would fail every
+			// later batch of the visit with the same error. Let it go: the next batch reopens what is stored.
+			// Only the batch that finds it still held closes it: `close` goes by the document's name, so a
+			// batch that lost this race would close the document the next batch reopened.
+			if (held.get(name) === holding) {
+				if (holding.idle !== undefined) clearTimeout(holding.idle);
+				held.delete(name);
+				await store.close(handle).catch(() => undefined);
+			}
+			throw error;
+		}
 		release(name);
 		return kept;
 	};

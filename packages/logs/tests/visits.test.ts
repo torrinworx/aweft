@@ -4,7 +4,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { createStore, memoryDriver } from '@aweftjs/store';
+
+import { settle } from '@aweftjs/testing';
+
 import { module, newStore, reasonOf } from './helpers.ts';
+import { paths } from '../src/index.ts';
 import { entry } from './helpers.ts';
 import type { Visits } from '../src/modules/Visits.ts';
 import { errors as errorsOf, visit as readVisit } from '../src/index.ts';
@@ -241,5 +246,100 @@ test('a config value of the wrong type is refused at load, and a timer setting a
 	await assert.rejects(visits(newStore(), { sweepMs: 2 ** 31 }), (e: unknown) => reasonOf(e) === 'invalid-config');
 	await assert.rejects(visits(newStore(), { idleMs: 2 ** 31 }), (e: unknown) => reasonOf(e) === 'invalid-config');
 	const { stop } = await visits(newStore(), { sweepMs: 2 ** 31 - 1 });
+	await stop();
+});
+
+test('one failed write costs one batch: the next batch of the visit reopens it and lands', async () => {
+	const driver = memoryDriver();
+	const write = driver.write.bind(driver);
+	let failing = 0;
+	driver.write = (async (...args: Parameters<typeof write>) => {
+		if (failing > 0) { failing -= 1; throw new Error('the database went away'); }
+		return write(...args);
+	}) as typeof driver.write;
+	const store = createStore({ driver, declare: paths });
+	const { instance, stop } = await visits(store);
+	await instance.record({ visit: 'v9', entries: [entry('status')] }, null);
+	failing = 1;
+	await assert.rejects(() => instance.record({ visit: 'v9', entries: [entry('status')] }, null), /the database went away/);
+	assert.deepEqual(await instance.record({ visit: 'v9', entries: [entry('error', { message: 'after' })] }, null), { kept: 1 });
+	const seen = await readVisit(store, 'v9');
+	assert.deepEqual(seen?.entries.map((e) => e.kind), ['status', 'error']);
+	failing = 1;
+	await assert.rejects(() => instance.write({ kind: 'failed', name: 'app/X', message: 'lost' }), /the database went away/);
+	await instance.write({ kind: 'failed', name: 'app/X', message: 'kept' });
+	await stop();
+});
+
+test('two batches that fail together cost those two, and the batch after them lands', async () => {
+	const driver = memoryDriver();
+	const write = driver.write.bind(driver);
+	let failing = false;
+	driver.write = (async (...args: Parameters<typeof write>) => {
+		if (failing) throw new Error('the database went away');
+		return write(...args);
+	}) as typeof driver.write;
+	const store = createStore({ driver, declare: paths });
+	const { instance, stop } = await visits(store);
+	await instance.record({ visit: 'v10', entries: [entry('status')] }, null);
+	failing = true;
+	const both = await Promise.allSettled([
+		instance.record({ visit: 'v10', entries: [entry('status')] }, null),
+		instance.record({ visit: 'v10', entries: [entry('status')] }, null),
+	]);
+	assert.deepEqual(both.map((one) => one.status), ['rejected', 'rejected']);
+	failing = false;
+	assert.deepEqual(await instance.record({ visit: 'v10', entries: [entry('error', { message: 'after' })] }, null), { kept: 1 });
+	assert.deepEqual(await instance.record({ visit: 'v10', entries: [entry('error', { message: 'after' })] }, null), { kept: 1 });
+	await stop();
+});
+
+test('a batch whose trim fails costs that batch, and the visit goes on', async () => {
+	const store = newStore();
+	const truncate = store.truncate.bind(store);
+	let failing = false;
+	store.truncate = (async (...args: Parameters<typeof truncate>) => {
+		if (failing) { failing = false; throw new Error('the trim failed'); }
+		return truncate(...args);
+	}) as typeof store.truncate;
+	const close = store.close.bind(store);
+	let closed = 0;
+	store.close = (async (...args: Parameters<typeof close>) => { closed += 1; return close(...args); }) as typeof store.close;
+	const { instance, stop } = await visits(store);
+	await instance.record({ visit: 'v11', entries: [entry('status')] }, null);
+	failing = true;
+	await assert.rejects(() => instance.record({ visit: 'v11', entries: [entry('status')] }, null), /the trim failed/);
+	assert.equal(closed, 1, 'the visit is let go of, or nothing would ever close it');
+	assert.deepEqual(await instance.record({ visit: 'v11', entries: [entry('status')] }, null), { kept: 1 });
+	await stop();
+});
+
+test('a batch that lost the race does not close the document the next batch reopened', async () => {
+	const store = newStore();
+	const truncate = store.truncate.bind(store);
+	const waiting: ((failed: boolean) => void)[] = [];
+	let gated = false;
+	const close = store.close.bind(store);
+	let closed = 0;
+	store.close = (async (...args: Parameters<typeof close>) => { closed += 1; return close(...args); }) as typeof store.close;
+	store.truncate = (async (...args: Parameters<typeof truncate>) => {
+		if (gated && await new Promise<boolean>((resolve) => { waiting.push(resolve); })) throw new Error('the trim failed');
+		return truncate(...args);
+	}) as typeof store.truncate;
+	const { instance, stop } = await visits(store);
+	await instance.record({ visit: 'v12', entries: [entry('status')] }, null);
+	gated = true;
+	const first = instance.record({ visit: 'v12', entries: [entry('status')] }, null);
+	const second = instance.record({ visit: 'v12', entries: [entry('status')] }, null);
+	await settle(50);
+	assert.equal(waiting.length, 2);
+	gated = false;
+	waiting.shift()!(true);
+	await assert.rejects(first, /the trim failed/);
+	await instance.record({ visit: 'v12', entries: [entry('status')] }, null);
+	waiting.shift()!(true);
+	await assert.rejects(second, /the trim failed/);
+	assert.equal(closed, 1, 'only the batch that still held it closed it');
+	assert.deepEqual(await instance.record({ visit: 'v12', entries: [entry('status')] }, null), { kept: 1 });
 	await stop();
 });
