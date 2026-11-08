@@ -1,5 +1,8 @@
 # 111: The theme engine, its layer, and the five fixes
 
+Amended by design 320: what a class list compiles to is kept per theme object across renders. The
+sheet, its class numbers and its `<style>` stay per render.
+
 ## Decision
 
 `Theme.define(definitions)` takes one flat object whose keys are `_`-joined selector paths, and
