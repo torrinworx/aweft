@@ -24,30 +24,38 @@ const INSPECT = Symbol.for('nodejs.util.inspect.custom');
 const LIMIT = 200;
 const short = (markup: string): string => (markup.length > LIMIT ? `${markup.slice(0, LIMIT)}...` : markup);
 
-/** Own but not enumerable: what links a node to the tree is not part of how it prints. */
-const link = (target: object, names: readonly string[]): void => {
-	for (const name of names) Object.defineProperty(target, name, { value: null, writable: true, enumerable: false });
-};
-
 export class LightNode implements NodeLike {
 	readonly nodeType: number;
 	readonly nodeName: string;
-	declare readonly ownerDocument: LightDocument;
-	declare parentNode: LightNode | null;
-	declare nextSibling: LightNode | null;
-	declare previousSibling: LightNode | null;
-	declare firstChild: LightNode | null;
-	declare lastChild: LightNode | null;
+	// Node's assertion messages print every enumerable property to depth 1000, and a tree
+	// whose links are enumerable prints itself once per path through them. A failed
+	// comparison of two nodes once produced a message of tens of gigabytes that way. Private
+	// fields behind accessors keep the links out of every listing, and cost a render nothing:
+	// a non-enumerable own property per link, set with defineProperty, cost 5% of one.
+	#ownerDocument: LightDocument;
+	#parentNode: LightNode | null = null;
+	#nextSibling: LightNode | null = null;
+	#previousSibling: LightNode | null = null;
+	#firstChild: LightNode | null = null;
+	#lastChild: LightNode | null = null;
 
-	constructor(nodeType: number, nodeName: string, ownerDocument: LightDocument) {
+	constructor(nodeType: number, nodeName: string, ownerDocument: LightDocument | null) {
 		this.nodeType = nodeType;
 		this.nodeName = nodeName;
-		// Node's assertion messages print every enumerable property to depth 1000, and a tree
-		// whose links are enumerable prints itself once per path through them. A failed
-		// comparison of two nodes once produced a message of tens of gigabytes that way.
-		link(this, ['ownerDocument', 'parentNode', 'nextSibling', 'previousSibling', 'firstChild', 'lastChild']);
-		(this as { ownerDocument: LightDocument }).ownerDocument = ownerDocument;
+		this.#ownerDocument = ownerDocument ?? (this as unknown as LightDocument);
 	}
+
+	get ownerDocument(): LightDocument { return this.#ownerDocument; }
+	get parentNode(): LightNode | null { return this.#parentNode; }
+	set parentNode(node: LightNode | null) { this.#parentNode = node; }
+	get nextSibling(): LightNode | null { return this.#nextSibling; }
+	set nextSibling(node: LightNode | null) { this.#nextSibling = node; }
+	get previousSibling(): LightNode | null { return this.#previousSibling; }
+	set previousSibling(node: LightNode | null) { this.#previousSibling = node; }
+	get firstChild(): LightNode | null { return this.#firstChild; }
+	set firstChild(node: LightNode | null) { this.#firstChild = node; }
+	get lastChild(): LightNode | null { return this.#lastChild; }
+	set lastChild(node: LightNode | null) { this.#lastChild = node; }
 
 	get childNodes(): LightNode[] {
 		const out: LightNode[] = [];
@@ -279,11 +287,14 @@ export class LightStyle {
 
 /** A class list over the `class` attribute. */
 export class LightClassList {
-	private declare readonly element: LightElement;
+	readonly #element: LightElement;
 
 	constructor(element: LightElement) {
-		link(this, ['element']);
-		(this as unknown as { element: LightElement }).element = element;
+		this.#element = element;
+	}
+
+	private get element(): LightElement {
+		return this.#element;
 	}
 
 	private read(): string[] {
@@ -438,23 +449,24 @@ export class LightElement extends LightNode implements ElementLike {
 }
 
 export class LightDocument extends LightNode implements DocumentLike {
-	declare readonly documentElement: LightElement;
-	declare readonly head: LightElement;
-	declare readonly body: LightElement;
+	// The three roots are reached through the links, so they need not print either.
+	readonly #documentElement: LightElement;
+	readonly #head: LightElement;
+	readonly #body: LightElement;
 
 	constructor() {
-		super(9, '#document', undefined as unknown as LightDocument);
-		(this as { ownerDocument: LightDocument }).ownerDocument = this;
-		// The three roots are reached through the links, so they need not print either.
-		link(this, ['documentElement', 'head', 'body']);
-		const self = this as { documentElement: LightElement; head: LightElement; body: LightElement };
-		self.documentElement = this.createElement('html');
-		self.head = this.createElement('head');
-		self.body = this.createElement('body');
+		super(9, '#document', null);
+		this.#documentElement = this.createElement('html');
+		this.#head = this.createElement('head');
+		this.#body = this.createElement('body');
 		this.documentElement.appendChild(this.head);
 		this.documentElement.appendChild(this.body);
 		this.appendChild(this.documentElement);
 	}
+
+	get documentElement(): LightElement { return this.#documentElement; }
+	get head(): LightElement { return this.#head; }
+	get body(): LightElement { return this.#body; }
 
 	createElement(tag: string): LightElement {
 		return new LightElement(tag.toLowerCase(), HTML, this);
