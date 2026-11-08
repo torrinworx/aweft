@@ -56,6 +56,9 @@ const NESTING = 2;
 // --- the registry ------------------------------------------------------------------------
 
 const registry: Record<string, Entry> = {};
+// The registry as every render sees it, made again only after a definition changes it. One
+// object for every render, so what is read once per object is read once per process.
+let frozen: Definitions | null = null;
 
 const same = (a: unknown, b: unknown): boolean => {
 	if (a === b) return true;
@@ -133,6 +136,7 @@ export const contentKey = (definitions: Definitions): string => {
  *   defineTheme({ button: { background: '$colour' }, button_hovered: { background: '$hover' } });
  */
 export const defineTheme = (entries: Definitions): void => {
+	frozen = null;
 	for (const key of Object.keys(entries)) {
 		// A key is matched segment by segment against a class list that has no empty segments in
 		// it, so a key with one can never match anything and is a typo every time.
@@ -161,11 +165,12 @@ export const defineTheme = (entries: Definitions): void => {
 	}
 };
 
-/** The entries every render starts from. A fresh object each call, so nothing holds the store. */
-export const baseTheme = (): Definitions => ({ ...registry });
+/** The entries every render starts from. Frozen, so nothing holds the store. */
+export const baseTheme = (): Definitions => (frozen ??= Object.freeze({ ...registry }));
 
 /** Forget everything defined so far. A test seam; not exported from the package. */
 export const forgetTheme = (): void => {
+	frozen = null;
 	for (const key of Object.keys(registry)) delete registry[key];
 };
 
@@ -576,6 +581,10 @@ export interface Sheet {
  *   const sheet = createSheet();
  *   sheet.classes(baseTheme(), ['button']);   // 'aw0'
  */
+// What a chain compiles to, with a stand-in for its class name, per theme object.
+const compiles = new WeakMap<Definitions, Map<string, Compiled>>();
+const PLACE = '\u0000';
+
 export const createSheet = (): Sheet => {
 	// Keyed on what a theme says, not on which object said it, so a `<Theme value={{...}}>`
 	// written inline gets one class for every mount rather than one class per mount.
@@ -602,10 +611,19 @@ export const createSheet = (): Sheet => {
 		const held = byChain.get(key);
 		if (held !== undefined) return held;
 
-		const chain = chainOf(definitions, ['*', ...classes]);
 		const className = `aw${counter}`;
 		counter += 1;
-		const out = compileChain(definitions, chain, className);
+		let memo = compiles.get(definitions);
+		if (memo === undefined) {
+			memo = new Map();
+			compiles.set(definitions, memo);
+		}
+		let generic = memo.get(key);
+		if (generic === undefined) {
+			generic = compileChain(definitions, chainOf(definitions, ['*', ...classes]), PLACE);
+			memo.set(key, generic);
+		}
+		const out = { ...generic, rules: generic.rules.map((rule) => rule.replaceAll(`.${PLACE}`, `.${className}`)) };
 		const made = { className, lookup: out.lookup, variables: out.variables };
 		byChain.set(key, made);
 

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 
 import { Theme, context } from '@aweftjs/ui';
 
-import { baseTheme, chainOf, compileChain, createSheet, mergeTheme } from '../src/sheet.ts';
+import { baseTheme, chainOf, compileChain, createSheet, defineTheme, mergeTheme } from '../src/sheet.ts';
 import { type Lookup, parseValue, resolve } from '../src/values.ts';
 import { themeFunctions } from '../src/functions.ts';
 import { readColour, writeColour } from '../src/color.ts';
@@ -55,6 +55,25 @@ test('each theme object is matched against its own entries', () => {
 	assert.deepEqual(chainOf({ ...defs, panel_hovered_wide: { width: '100%' } }, ['*', 'panel', 'hovered', 'wide']),
 		['*', 'panel', 'hovered', 'panel_hovered', 'panel_hovered_wide']);
 	assert.deepEqual(chainOf(defs, ['*', 'panel', 'hovered', 'wide']), ['*', 'panel', 'hovered', 'panel_hovered']);
+});
+
+test('what a chain compiles to is kept across renders, and a definition made after one reaches the next', () => {
+	// Design 320: the CSS a class list compiles to is kept per theme object, and each render
+	// still numbers its own classes from zero and writes its own sheet.
+	const before = baseTheme();
+	const first = createSheet();
+	assert.equal(first.classes(before, ['keptacross']), 'aw0');
+	assert.doesNotMatch(first.markup(), /outline: 3px solid red/);
+	defineTheme({ keptacross: { outline: '3px solid red' } });
+	assert.notEqual(baseTheme(), before, 'a definition makes the base again');
+	const second = createSheet();
+	assert.equal(second.classes(baseTheme(), ['keptacross']), 'aw0');
+	assert.match(second.markup(), /\.aw0[^{]*\{[^}]*outline: 3px solid red/);
+	const third = createSheet();
+	third.classes(baseTheme(), ['panel']);
+	assert.equal(third.classes(baseTheme(), ['keptacross']), 'aw1', 'a kept compile takes the class name of the render it is used in');
+	assert.match(third.markup(), /\.aw1[^{]*\{[^}]*outline: 3px solid red/);
+	assert.doesNotMatch(third.markup(), /\.aw0[^{]*\{[^}]*outline: 3px solid red/);
 });
 
 test('a class token holding an underscore names that entry and not the one it starts with', () => {

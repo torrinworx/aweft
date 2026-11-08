@@ -70,6 +70,7 @@ export const themeRaws = (context: unknown): unknown[] => {
 // written inline would be a new theme on every mount, and every mount would mint a class and
 // append its rules to a list nothing ever shortens.
 const merges = new WeakMap<Definitions, Map<string, Definitions>>();
+const nearest = new WeakMap<Definitions, { readonly base: Definitions; readonly held: Definitions }>();
 
 /**
  * The theme that applies at a point in the tree.
@@ -91,6 +92,11 @@ export const themeAt = (context: unknown): Definitions => {
 	const over = Theme.read(context);
 	if (over === NONE) return base;
 
+	// Asked once per themed element, so the answer is kept per override object too: the content
+	// key is the whole override as text, and a lookup by it compares that text on every hit.
+	const near = nearest.get(over);
+	if (near !== undefined && near.base === base) return near.held;
+
 	let byOverride = merges.get(base);
 	if (byOverride === undefined) {
 		byOverride = new Map();
@@ -102,5 +108,6 @@ export const themeAt = (context: unknown): Definitions => {
 		held = mergeTheme(base, over);
 		byOverride.set(key, held);
 	}
+	nearest.set(over, { base, held });
 	return held;
 };
