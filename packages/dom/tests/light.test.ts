@@ -137,6 +137,20 @@ test('attributes, id, class, classList and style', () => {
 	assert.equal(div.style['unset'], '');
 });
 
+test('a clone keeps its own copy of the style, an unstyled one prints none, and a string set as style is its text', () => {
+	const doc = createDocument();
+	const p = doc.createElement('p');
+	p.style['color'] = 'red';
+	const copy = p.cloneNode(true) as typeof p;
+	assert.equal(copy.style.cssText, 'color: red;');
+	copy.style['color'] = 'blue';
+	assert.equal(p.style.cssText, 'color: red;', 'the copy has a style of its own');
+	assert.equal(toHtml(doc.createElement('i').cloneNode(true) as never), '<i></i>');
+	(p as unknown as { style: string }).style = 'margin: 0';
+	assert.equal(p.style['margin'], '0', 'as in a browser, the string goes to cssText');
+	assert.equal(p.style['color'], '');
+});
+
 test('listeners are kept and dispatchEvent reaches them and the on-property', () => {
 	const doc = createDocument();
 	const button = doc.createElement('button');
