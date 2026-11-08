@@ -340,6 +340,9 @@ export class LightClassList {
 	}
 }
 
+// The element's style as it prints, without making one for an element that has none.
+let styleOf: (element: LightElement) => string;
+
 /**
  * An element in the light tree, named the way a browser names one: `tagName` and `nodeName` are
  * the uppercase name for an HTML element and `localName` is the lowercase one, while an element
@@ -350,23 +353,41 @@ export class LightElement extends LightNode implements ElementLike {
 	readonly tagName: string;
 	readonly namespaceURI: string;
 	readonly attributes = new Map<string, string>();
-	readonly style: LightStyle = new LightStyle();
-	readonly classList: LightClassList;
 	readonly listeners = new Map<string, Set<(event: unknown) => void>>();
+	// Made on first use: most elements of a render never touch either, and a style is a proxy.
+	#style: LightStyle | null = null;
+	#classList: LightClassList | null = null;
 	[property: string]: unknown;
+
+	static {
+		styleOf = (element) => element.#style?.cssText ?? '';
+	}
 
 	constructor(localName: string, namespaceURI: string, ownerDocument: LightDocument) {
 		super(ELEMENT, namespaceURI === HTML ? localName.toUpperCase() : localName, ownerDocument);
 		this.localName = localName;
 		this.tagName = this.nodeName;
 		this.namespaceURI = namespaceURI;
-		this.classList = new LightClassList(this);
+	}
+
+	get style(): LightStyle {
+		return this.#style ??= new LightStyle();
+	}
+
+	// As in a browser, where `style` forwards a write to `cssText`.
+	set style(text: string) {
+		this.style.cssText = String(text);
+	}
+
+	get classList(): LightClassList {
+		return this.#classList ??= new LightClassList(this);
 	}
 
 	protected override cloneSelf(): LightElement {
 		const copy = new LightElement(this.localName, this.namespaceURI, this.ownerDocument);
 		for (const [name, value] of this.attributes) copy.attributes.set(name, value);
-		copy.style.cssText = this.style.cssText;
+		const style = styleOf(this);
+		if (style !== '') copy.style.cssText = style;
 		return copy;
 	}
 
@@ -525,7 +546,7 @@ const serialize = (node: NodeLike, out: string[]): void => {
 		out.push(' ', name);
 		if (value !== '') out.push('="', escapeAttribute(value), '"');
 	}
-	const style = element.style.cssText;
+	const style = styleOf(element);
 	if (style !== '' && !element.attributes.has('style')) out.push(' style="', escapeAttribute(style), '"');
 	out.push('>');
 	if (VOID.has(tag)) return;
