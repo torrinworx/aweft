@@ -227,6 +227,9 @@ const matchAt = (segments: readonly string[], classes: readonly string[]): numbe
 	return -1;
 };
 
+// A theme's entry names by their last segment, read once per object like `contents` above.
+const lasts = new WeakMap<Definitions, Map<string, string[]>>();
+
 /**
  * The entries a class list reaches, lowest precedence first.
  *
@@ -241,8 +244,26 @@ const matchAt = (segments: readonly string[], classes: readonly string[]): numbe
  *   chainOf(defs, ['*', 'button', 'hovered']);   // ['*', 'button', 'button_hovered']
  */
 export const chainOf = (definitions: Definitions, classes: readonly string[]): string[] => {
+	// An entry matches only when its last segment is one of the class list's, so only those are
+	// tried. A site theme has hundreds of entries and an element names a few, and trying every
+	// entry was most of a server render. The last segment, because an app prefixes its entries
+	// (`site_card`, `site_tag`) and the first would let nearly all of them through.
+	let index = lasts.get(definitions);
+	if (index === undefined) {
+		index = new Map();
+		for (const name of Object.keys(definitions)) {
+			const last = name.slice(name.lastIndexOf('_') + 1);
+			const names = index.get(last);
+			if (names === undefined) index.set(last, [name]);
+			else names.push(name);
+		}
+		lasts.set(definitions, index);
+	}
+	const tried = new Set<string>();
+	for (const token of classes) for (const segment of token.split('_')) for (const name of index.get(segment) ?? []) tried.add(name);
+
 	const scored: { name: string; last: number; length: number }[] = [];
-	for (const name of Object.keys(definitions)) {
+	for (const name of tried) {
 		const segments = name.split('_');
 		const last = matchAt(segments, classes);
 		if (last >= 0) scored.push({ name, last, length: segments.length });

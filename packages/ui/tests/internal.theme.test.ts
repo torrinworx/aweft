@@ -48,6 +48,15 @@ const parts = {
 	muted: { color: 'grey' },
 };
 
+test('each theme object is matched against its own entries', () => {
+	// The matcher keeps an index per theme object, so a second theme asked after the first must
+	// not be answered from the first one's entries.
+	assert.deepEqual(chainOf(defs, ['*', 'panel', 'hovered']), ['*', 'panel', 'hovered', 'panel_hovered']);
+	assert.deepEqual(chainOf({ ...defs, panel_hovered_wide: { width: '100%' } }, ['*', 'panel', 'hovered', 'wide']),
+		['*', 'panel', 'hovered', 'panel_hovered', 'panel_hovered_wide']);
+	assert.deepEqual(chainOf(defs, ['*', 'panel', 'hovered', 'wide']), ['*', 'panel', 'hovered', 'panel_hovered']);
+});
+
 test('a class token holding an underscore names that entry and not the one it starts with', () => {
 	// `card_title` is a part: a different element from the component, which must not wear the
 	// component's own layout. Naming it as one token reaches it and leaves `card` alone.
