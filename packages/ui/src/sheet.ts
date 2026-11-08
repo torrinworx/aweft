@@ -78,20 +78,29 @@ const listOf = (value: unknown): string[] => {
 
 // --- what a theme says, as a string --------------------------------------------------------
 
+// Read once per object. A theme written inline is a fresh object on every mount, so what a cache
+// keyed on identity sees is a new theme every time; what this sees is the same one. Every object
+// inside a theme is read once too: each render's base is a fresh copy of the registry, and the
+// entries in it are the registry's own, so a render reads only what it has not met before.
+const contents = new WeakMap<object, string>();
+
 const written = (value: unknown): string => {
+	if (value === null || value === undefined) return 'n';
+	if (typeof value !== 'object' && typeof value !== 'function') return JSON.stringify(value) ?? 'u';
+	const known = contents.get(value);
+	if (known !== undefined) return known;
+	let out: string;
 	// A function is theme data, so two copies of one module define the same function twice. Its
 	// source is what says whether they are the same, as `same()` reads it above.
-	if (typeof value === 'function') return `f${JSON.stringify(String(value))}`;
-	if (value === null || value === undefined) return 'n';
-	if (Array.isArray(value)) return `[${value.map(written).join(',')}]`;
-	if (typeof value !== 'object') return JSON.stringify(value) ?? 'u';
-	const held = value as Record<string, unknown>;
-	return `{${Object.keys(held).sort().map((key) => `${JSON.stringify(key)}:${written(held[key])}`).join(',')}}`;
+	if (typeof value === 'function') out = `f${JSON.stringify(String(value))}`;
+	else if (Array.isArray(value)) out = `[${value.map(written).join(',')}]`;
+	else {
+		const held = value as Record<string, unknown>;
+		out = `{${Object.keys(held).sort().map((key) => `${JSON.stringify(key)}:${written(held[key])}`).join(',')}}`;
+	}
+	contents.set(value, out);
+	return out;
 };
-
-// Read once per object. A theme written inline is a fresh object on every mount, so what a cache
-// keyed on identity sees is a new theme every time; what this sees is the same one.
-const contents = new WeakMap<object, string>();
 
 /**
  * What a theme says, as a string, so two objects that say the same thing key the same.
@@ -103,11 +112,7 @@ const contents = new WeakMap<object, string>();
  * were written in and whatever objects they are. Functions compare by their source.
  */
 export const contentKey = (definitions: Definitions): string => {
-	const held = contents.get(definitions);
-	if (held !== undefined) return held;
-	const key = written(definitions);
-	contents.set(definitions, key);
-	return key;
+	return written(definitions);
 };
 
 /**
