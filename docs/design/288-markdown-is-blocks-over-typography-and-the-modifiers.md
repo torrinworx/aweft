@@ -35,7 +35,10 @@ code span (one or two backticks) as `<code>` on `markdown_inline`; bold italic, 
 (asterisks or underscores) as `<strong>` on `markdown_bold`, `<em>` on `markdown_italic`, and
 the two nested; a link `[text](href)` as `<a>` on `markdown_link` with the `href` as written,
 unless its scheme is one that runs something (anything but `http`, `https`, `mailto`, `tel`),
-in which case the link stays text, as design 274 refuses `javascript:` in a fetched drawing. A
+in which case the link stays text, as design 274 refuses `javascript:` in a fetched drawing. The
+scheme is the one the browser's URL parser reads: it drops C0 control characters and spaces at
+both ends and tabs and newlines anywhere before it reads a scheme, so the check drops them too. A
+check that read the address as written let `\u0001javascript:alert(1)` through as a path. A
 modifier's own text runs the list again below it, because a bold lead sentence with a code span
 in it is the commonest line in this repository's READMEs, and `TextModifiers` renders what a
 modifier returns with no modifiers below (design 181). The application's `modifiers` go in front

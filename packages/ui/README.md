@@ -1154,7 +1154,9 @@ Inline, a code span (one or two backticks, the double form holding a backtick) i
 `markdown_inline`; `**bold**` and `__bold__` are `<strong>` on `markdown_bold`; `*italic*` and
 `_italic_` are `<em>` on `markdown_italic`; `***both***` is the two nested; `[text](href)` is
 `<a>` on `markdown_link` with the `href` as written, unless its scheme is not `http`, `https`,
-`mailto` or `tel`, in which case the link is text. Each is a modifier in `TextModifiers`' shape,
+`mailto` or `tel`, in which case the link is text. The scheme is read as the browser's URL parser
+reads it: control characters and spaces at either end and tabs and newlines inside are dropped
+first, so `\u0001javascript:` is `javascript:` and text. Each is a modifier in `TextModifiers`' shape,
 listed after `modifiers`, so an application's own patterns run inside markdown with nothing
 wired, inside a bold run included:
 

@@ -89,12 +89,17 @@ const DEPTH = 3;
 // A link goes where it says, and a figure shows what it names, unless the scheme is one that runs
 // something: then the characters written stay text, because a markdown string is not trusted to
 // run script on a click. A path with no scheme, relative or root-relative, is a site's own.
-const SCHEME = /^\s*([a-z][a-z0-9+.-]*):/i;
+const SCHEME = /^([a-z][a-z0-9+.-]*):/i;
 const SAFE_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
+// The URL parser drops control characters and spaces from both ends, and tabs and newlines from
+// anywhere, before it reads the scheme, so `\u0001javascript:` is followed as `javascript:`. The
+// check reads the address the browser will; any other leading space is dropped too, to be safe.
+const ENDS = /^[\s\u0000-\u0020]+|[\s\u0000-\u0020]+$/g;
+const INSIDE = /[\t\n\r]/g;
 
 /** Whether a link's `href` or a figure's `src` is one the page may follow. */
 export const isSafeHref = (href: string): boolean => {
-	const scheme = SCHEME.exec(href)?.[1]?.toLowerCase();
+	const scheme = SCHEME.exec(href.replace(ENDS, '').replace(INSIDE, ''))?.[1]?.toLowerCase();
 	return scheme === undefined || SAFE_SCHEMES.has(scheme);
 };
 

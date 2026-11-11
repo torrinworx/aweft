@@ -93,10 +93,9 @@ const ours = (block: Block): Plain => {
 };
 
 /** Whether a link's target is one the design lets the page follow (design 288), for the oracle's images. */
-const safe = (href: string): boolean => {
-	const scheme = /^\s*([a-z][a-z0-9+.-]*):/i.exec(href)?.[1]?.toLowerCase();
-	return scheme === undefined || ['http', 'https', 'mailto', 'tel'].includes(scheme);
-};
+// The URL parser itself, which is what the browser follows: a relative path takes the base's scheme.
+const safe = (href: string): boolean => URL.canParse(href, 'https://base.test/')
+	&& ['http:', 'https:', 'mailto:', 'tel:'].includes(new URL(href, 'https://base.test/').protocol);
 
 /**
  * The second implementation's list token as the same shape. An item's text is what its own text
@@ -534,6 +533,23 @@ test('a two-backtick span holds a backtick, a link holds a parenthesis, and a li
 		'and <a href="mailto:a@b.c">mail</a>.</p>',
 	].join(''));
 	own.stop();
+});
+
+test('an address that starts with a control character or a space is read as the browser reads it, so javascript: behind one is text', () => {
+	// Every C0 control and the space, at the front: the URL parser drops them all and follows javascript:.
+	for (let code = 0; code <= 0x20; code += 1) {
+		const href = `${String.fromCharCode(code)}javascript:alert(1)`;
+		assert.equal(new URL(href, 'https://base.test/').protocol, 'javascript:', `the parser follows U+${code.toString(16).padStart(4, '0')} javascript:`);
+		const own = page(h(Markdown, { source: `[run](${href}) and\n\n![run](${href})` }));
+		const html = elements(own.root.firstChild).map((element) => toHtml(element)).join('');
+		assert.doesNotMatch(html, /<a |<img /, `U+${code.toString(16).padStart(4, '0')} in front of javascript: draws no link and no image`);
+		assert.deepEqual(tags(own.root.firstChild), ['p', 'p']);
+		own.stop();
+	}
+	assert.equal(parseBlocks('![run](\u0001javascript:alert(1))')[0]!.kind, 'paragraph', 'a figure takes the same rule');
+	const kept = page(h(Markdown, { source: '[site](https://example.com/a) [here](/logs/12) [mail](mailto:a@b.c)' }));
+	assert.deepEqual([...toHtml(elements(kept.root.firstChild)[0]!).matchAll(/href="([^"]*)"/g)].map((m) => m[1]), ['https://example.com/a', '/logs/12', 'mailto:a@b.c']);
+	kept.stop();
 });
 
 test('a source that is not text is refused, and the message says what it was', () => {
