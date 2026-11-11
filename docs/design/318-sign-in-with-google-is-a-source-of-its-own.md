@@ -19,8 +19,10 @@ global by default, for a test that stands in for Google.
 - `GET /api/auth/google?return=<path>` mints a state and a code verifier, puts both and the
   return path in one HttpOnly, SameSite=Lax cookie scoped to `/api/auth/google` that lives ten
   minutes, and answers 302 to Google's authorization endpoint with the S256 challenge and the
-  scopes `openid email profile`. `return` is a path on this site: anything that does not start
-  with one `/` is `/`, so the route can never send a person to another host.
+  scopes `openid email profile`. `return` is a path on this site: it is read as
+  the URL parser reads it, and anything whose result is not one `/` and a path here is `/`
+  (`//host`, `/\host`, and `/%2e//host`, which the parser folds to `//host`), so the flow can
+  never send a person to another host. The test is on the string each redirect sends.
 - `GET /api/auth/google/callback` takes Google's answer. The state must equal the cookie's, so
   a callback the browser did not start is refused. The code is exchanged at Google's token
   endpoint with the secret and the verifier, and the ID token in the answer is read without

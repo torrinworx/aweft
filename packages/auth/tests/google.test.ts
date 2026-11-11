@@ -131,6 +131,38 @@ test('a return that is not a path on this site is the home page, so the flow nev
 	}
 });
 
+test('whatever return holds, every redirect of the flow is to a path on this site', async () => {
+	const { store, google } = await rig();
+	const hostile = ['/%2e//evil.com', '/%252e//evil.com', '//evil.com', '/\\evil.com', '/./\\evil.com', '/a/..//evil.com', '/\t/evil.com', '//['];
+	// Each as the query holds it after one decoding, and as written into the address with none.
+	for (const query of hostile.flatMap((one) => [encodeURIComponent(one), one.replace('\t', '%09')])) {
+		for (const extra of [{ code: 'c' }, { error: 'access_denied' }, {}]) {
+			const begun = await route(google, 'GET /api/auth/google')(request(`/api/auth/google?return=${query}`), CONTEXT);
+			const state = new URL(begun.headers.get('location')!).searchParams.get('state')!;
+			const { location } = await callback(google, { state, ...extra }, flowValue(begun.headers.get('set-cookie')!));
+			assert.match(location, /^\/(?![\/\\])/, `${query} ${JSON.stringify(extra)} went to ${location}`);
+			assert.equal(new URL(location, 'https://app.test').origin, 'https://app.test', `${query} ${JSON.stringify(extra)} went to ${location}`);
+		}
+	}
+	// A flow cookie this module never wrote is held to the same rule.
+	const { cookie, state } = await start(google);
+	const forged = `${flowValue(cookie).split('.').slice(0, 2).join('.')}.${encodeURIComponent('/.//evil.com')}`;
+	assert.equal((await callback(google, { state, error: 'access_denied' }, forged)).location, '/?auth=cancelled');
+	assert.equal((await callback(google, { state, code: 'c' }, forged)).location, '/');
+	await store.stop();
+});
+
+test('a return path with dots, a query and a fragment comes back whole', async () => {
+	const { store, google } = await rig();
+	const asked = '/s/smile.io?x=1#frag';
+	const signedIn = await start(google, asked);
+	assert.equal(flowValue(signedIn.cookie).split('.').length, 3, 'the path adds no dot to the cookie\'s three parts');
+	assert.equal((await callback(google, { code: 'c', state: signedIn.state }, flowValue(signedIn.cookie))).location, asked);
+	const cancelled = await start(google, asked);
+	assert.equal((await callback(google, { state: cancelled.state, error: 'access_denied' }, flowValue(cancelled.cookie))).location, '/s/smile.io?x=1&auth=cancelled#frag');
+	await store.stop();
+});
+
 test('a new address Google confirmed makes an account with no password, confirmed and verified, and signs it in', async () => {
 	const { store, google, roles, enter, sent } = await rig();
 	const heard: string[] = [];

@@ -33,10 +33,18 @@ const ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
 const FLOW = 'google_flow';
 const FLOW_PATH = '/api/auth/google';
 const FLOW_SECONDS = 600;
+const HERE = 'http://here';
 
-// A path on this site, or `/`: `//host` and `/\host` are other hosts to a browser.
-const pathOf = (value: string | null): string =>
-	value !== null && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\') ? value : '/';
+// The path, query and fragment a redirect sends, with `auth=<code>` when there is one, or `/` for
+// anything that is not a path on this site. The test is on the string sent, because the URL
+// parser folds `/%2e//host` and `/./\host` to `//host`, which a browser reads as another host.
+// It writes every `\` of a path as `/`, so `/\host` cannot come out either.
+const pathOf = (value: string | null, code: string | null): string => {
+	const url = URL.parse(value !== null && value.startsWith('/') ? value : '/', HERE);
+	if (url === null || url.origin !== HERE || url.pathname.startsWith('//')) return pathOf('/', code);
+	if (code !== null) url.searchParams.set('auth', code);
+	return `${url.pathname}${url.search}${url.hash}`;
+};
 
 const flowCookie = (value: string, request: Request, seconds: number): string => {
 	const parts = [`${FLOW}=${value}`, `Path=${FLOW_PATH}`, 'HttpOnly', 'SameSite=Lax', `Max-Age=${String(seconds)}`];
@@ -45,9 +53,7 @@ const flowCookie = (value: string, request: Request, seconds: number): string =>
 };
 
 const back = (path: string, code: string | null, cookies: readonly string[]): Response => {
-	const url = new URL(path, 'http://here');
-	if (code !== null) url.searchParams.set('auth', code);
-	const headers = new Headers({ location: `${url.pathname}${url.search}${url.hash}` });
+	const headers = new Headers({ location: pathOf(path, code) });
 	for (const cookie of cookies) headers.append('set-cookie', cookie);
 	return new Response(null, { status: 302, headers });
 };
@@ -87,7 +93,7 @@ export default ({ imports, config }: ModuleProps): Google => {
 			'GET /api/auth/google': async (request) => {
 				const state = mintToken();
 				const verifier = `${mintToken()}${mintToken()}`;
-				const path = pathOf(new URL(request.url).searchParams.get('return'));
+				const path = pathOf(new URL(request.url).searchParams.get('return'), null);
 				const url = new URL(AUTHORIZE);
 				url.search = new URLSearchParams({
 					client_id: clientId,
@@ -100,7 +106,8 @@ export default ({ imports, config }: ModuleProps): Google => {
 					prompt: 'select_account',
 				}).toString();
 				const headers = new Headers({ location: url.toString() });
-				headers.append('set-cookie', flowCookie(`${state}.${verifier}.${encodeURIComponent(path)}`, request, FLOW_SECONDS));
+				// The cookie's parts are split on a dot, and encodeURIComponent leaves a path's dots as they are.
+				headers.append('set-cookie', flowCookie(`${state}.${verifier}.${encodeURIComponent(path).replaceAll('.', '%2E')}`, request, FLOW_SECONDS));
 				return new Response(null, { status: 302, headers });
 			},
 			'GET /api/auth/google/callback': async (request, context) => {
@@ -109,7 +116,7 @@ export default ({ imports, config }: ModuleProps): Google => {
 				const [state, verifier, held] = (cookiesOf(request, FLOW)[0] ?? '').split('.');
 				// No flow cookie, or one for another start: this browser did not begin this sign-in.
 				if (state === undefined || verifier === undefined || held === undefined || query.get('state') !== state) return back('/', 'google', [cleared]);
-				const path = pathOf(decodeURIComponent(held));
+				const path = decodeURIComponent(held);
 				if (query.get('error') !== null) return back(path, 'cancelled', [cleared]);
 				const code = query.get('code');
 				if (code === null) return back(path, 'google', [cleared]);
