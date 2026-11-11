@@ -183,7 +183,7 @@ test('toHtml escapes, leaves void elements open and script raw, and prints style
 
 	assert.equal(
 		toHtml(div),
-		'<div title="a &quot;quoted&quot; &amp; <thing>" hidden style="color: red;">1 &lt; 2 &amp; 3 &gt; 2<br>'
+		'<div title="a &quot;quoted&quot; &amp; &lt;thing&gt;" hidden style="color: red;">1 &lt; 2 &amp; 3 &gt; 2<br>'
 		+ '<script>if (a < b && c) {}</script><!-- note --><svg><circle></circle></svg></div>',
 	);
 	assert.equal(svg.nodeName, 'svg', 'a namespaced element keeps its case');
@@ -197,6 +197,19 @@ test('toHtml escapes, leaves void elements open and script raw, and prints style
 	assert.equal(toHtml(doc), '<html><head></head><body></body></html>');
 	assert.equal(div.outerHTML, toHtml(div));
 	assert.equal(div.innerHTML, toHtml(div.childNodes));
+});
+
+test('an attribute value never holds text a string search reads as a tag, and reads back whole', () => {
+	const doc = createDocument();
+	const value = '</head><img src=x onerror=alert(1)>"&';
+	const written = doc.createElement('meta');
+	written.setAttribute('content', value);
+	doc.head.appendChild(written);
+	const html = toHtml(doc);
+	assert.equal(html, '<html><head><meta content="&lt;/head&gt;&lt;img src=x onerror=alert(1)&gt;&quot;&amp;"></head><body></body></html>');
+	assert.equal(html.indexOf('</head>'), html.lastIndexOf('</head>'), 'the only </head> is the element\'s own end');
+	const meta = (parseHtml(html)[0] as ReturnType<typeof doc.createElement>).children[0]!.children[0]!;
+	assert.equal(meta.getAttribute('content'), value);
 });
 
 test('parseHtml reads what toHtml wrote, and the shapes a page writes by hand', () => {

@@ -522,8 +522,10 @@ export const createDocument = (): LightDocument => new LightDocument();
 const escapeText = (text: string): string =>
 	text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// `<` and `>` too, though a parser needs neither: a page spliced at the first `</head>` by a
+// string search must not find one inside a value.
 const escapeAttribute = (text: string): string =>
-	text.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+	text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const serialize = (node: NodeLike, out: string[]): void => {
 	if (node.nodeType === TEXT) {
