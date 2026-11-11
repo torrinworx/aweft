@@ -5,7 +5,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createObject } from '@aweftjs/core';
-import type { Store } from '@aweftjs/store';
+import { paths as authPaths } from '@aweftjs/auth';
+import { createStore, memoryDriver } from '@aweftjs/store';
+import type { Driver, Store } from '@aweftjs/store';
 
 import type { Inbox, Item } from '../src/index.ts';
 
@@ -185,6 +187,27 @@ test('two first writes to one inbox open the document once', async () => {
 	assert.deepEqual(shared.items.map((one) => one.id), ['a', 'b']);
 	// A delivery record for an item that has since fallen off the list writes nothing and throws nothing.
 	await inbox.delivered(user, 'gone', { inbox: { ok: true } });
+	a.socket.close();
+	await running.stop();
+});
+
+test('a write the store failed lets the inbox document go, so the next send lands and the stop is clean', async () => {
+	// A driver whose writes fail while `full` is set, as a full disk does.
+	let full = false;
+	const driver = memoryDriver();
+	const failing: Driver = { ...driver, write: async (w) => { if (full) throw new Error('disk full'); return driver.write(w); } };
+	const store = createStore({ driver: failing, declare: { ...authPaths } });
+	const running = await started({ store, gate: asUser(user) });
+	await running.send.send({ to: { user }, title: 'before' });
+	full = true;
+	const lost = await running.send.send({ to: { user }, title: 'lost' });
+	assert.equal((lost.delivery as { inbox?: { ok: boolean } }).inbox?.ok, false, 'the failed write is reported, not thrown');
+	full = false;
+	const later = await running.send.send({ to: { user }, title: 'after' });
+	assert.equal((later.delivery as { inbox?: { ok: boolean } }).inbox?.ok, true, 'the next write opens the document again and lands');
+	const a = await connectTo(running.handlers);
+	const inbox = await share(a);
+	assert.deepEqual(inbox.items.map((item) => item.title), ['before', 'after']);
 	a.socket.close();
 	await running.stop();
 });

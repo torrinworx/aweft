@@ -123,12 +123,27 @@ export default (props: ModuleProps): Inbox => {
 		try {
 			const root = holding.handle.root as Root;
 			const out = atomic(() => change(root));
-			await store!.settled(holding.handle);
+			try {
+				await store!.settled(holding.handle);
+			} catch (error) {
+				// A failed write is final for the handle that made it (the store's rule), so the inbox
+				// lets that handle go and the next write opens the document again from what is stored.
+				// Kept, every later write and the stop would throw the same failure.
+				drop(name(user), holding);
+				throw error;
+			}
 			await store!.truncate(name(user), 1);
 			return out;
 		} finally {
 			release(user);
 		}
+	};
+
+	const drop = (doc: string, holding: Holding): void => {
+		if (held.get(doc) !== holding) return;
+		held.delete(doc);
+		if (holding.idle !== undefined) clearTimeout(holding.idle);
+		void store?.close(holding.handle).catch(() => undefined);
 	};
 
 	const read = (user: string, ids: readonly string[] | 'all'): Promise<number> => write(user, (root) => {
