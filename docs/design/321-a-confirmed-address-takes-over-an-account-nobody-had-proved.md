@@ -20,7 +20,7 @@ Signing up with a password asks for no proof of the address and gives a session 
 anyone could make an account for `ada@example.com`, wait for Ada to press Sign in with Google,
 and then share her account: the callback marked that account confirmed and signed her in, and
 the stranger's password and open sessions went on working, now on a `verified` account. An audit
-of an application on this stack (2026-11-10) found the path by reading; nobody is known to have
+of an application on this stack found the path by reading; nobody is known to have
 used it.
 
 Design 318 said a report of this would make the sign-in ask for the account's password once.
@@ -44,8 +44,8 @@ inside the queue, which is a change to the route and to `enter()` and is not mad
 ## What would reverse this
 
 A provider that confirms addresses it does not control the mailbox of, so that its word is worth
-less than a password. Or the race above being used, which would move the session's issue inside
-the queue.
+less than a password. Or the race above being used, which would move issuing it inside the
+queue.
 
 Checked by `a confirmed address takes over an account nobody had proved: its password and its
 sessions end` in `packages/auth/tests/google.test.ts`.
