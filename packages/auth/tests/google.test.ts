@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { atomic } from '@aweftjs/core';
 import type { Store } from '@aweftjs/store';
 
 import type { AuthContext, SignUp } from '../src/index.ts';
@@ -13,6 +14,7 @@ import type { Google, GoogleFetch } from '../src/modules/Google.ts';
 import type { Roles } from '../src/modules/Roles.ts';
 import type { Session } from '../src/modules/Session.ts';
 
+import { hashPassword } from '../src/password.ts';
 import { module, newStore, request } from './helpers.ts';
 
 const CLIENT = 'client-1.apps.googleusercontent.com';
@@ -159,6 +161,42 @@ test('a new address Google confirmed makes an account with no password, confirme
 	await store.stop();
 });
 
+// Who a session token signs in, or null once it is over.
+const whoHolds = async (session: Session, token: string): Promise<string | null> => {
+	const identified = await session.whoIs(request('/', { headers: { cookie: `session=${token}` } }));
+	return 'context' in identified ? identified.context.user : null;
+};
+
+test('a confirmed address takes over an account nobody had proved: its password and its sessions end', async () => {
+	const { store, google, roles, enter, session } = await rig();
+	// A stranger signs up with Ada's address, which asks for no proof, and holds a session.
+	const made = await enter.enter('ada@example.com', 'the stranger chose this');
+	assert.ok('user' in made);
+	const theirs = await session.issue(made.user);
+	assert.equal(await whoHolds(session, theirs), made.user);
+
+	const { cookie, state } = await start(google);
+	const answer = await callback(google, { code: 'c', state }, flowValue(cookie));
+	const hers = /session=([^;]+)/.exec(answer.cookies.find((one) => one.startsWith('session='))!)![1]!;
+	assert.equal(await whoHolds(session, hers), made.user, 'Ada is signed in to the one account her address has');
+	assert.equal(await whoHolds(session, theirs), null, 'the session made before she proved the address is over');
+	assert.deepEqual(await enter.enter('ada@example.com', 'the stranger chose this'), { refused: [{ code: 'password', message: 'the password is wrong' }] });
+	assert.equal((await userOf(store, made.user)).password, '');
+	assert.equal(await roles.may(made.user, 'verified'), true);
+
+	// Proved once, the account is its holder's: a password she sets and her sessions outlive the next Google sign-in.
+	const handle = await store.open(`user:${made.user}`);
+	const own = await hashPassword('her own password');
+	atomic(() => { (handle.root as UserDocument).password = own; });
+	await store.settled(handle);
+	await store.close(handle);
+	const again = await start(google);
+	await callback(google, { code: 'c', state: again.state }, flowValue(again.cookie));
+	assert.equal(await whoHolds(session, hers), made.user);
+	assert.deepEqual(await enter.enter('ada@example.com', 'her own password'), { user: made.user, created: false });
+	await store.stop();
+});
+
 test('an address that already has an account signs in to that account, which is now confirmed', async () => {
 	const { store, google, roles, enter } = await rig();
 	const made = await enter.enter('ada@example.com', 'correct horse');
@@ -175,7 +213,7 @@ test('an address that already has an account signs in to that account, which is 
 	assert.equal(doc.name, null, 'a name the person never gave the account is not written over an existing one');
 	assert.equal(await roles.may(made.user, 'verified'), true);
 	assert.deepEqual(heard, [], 'a sign-in is not a sign-up');
-	assert.deepEqual(await enter.enter('ada@example.com', 'correct horse'), { user: made.user, created: false }, 'and the password still works');
+	assert.deepEqual(await enter.enter('ada@example.com', 'correct horse'), { refused: [{ code: 'password', message: 'the password is wrong' }] }, 'a password set before the address was proved is gone (design 321)');
 	await store.stop();
 });
 

@@ -78,7 +78,8 @@ export interface Enter {
 	/**
 	 * Sign in, or sign up, the holder of an address another party has confirmed, such as Google
 	 * (design 318). A known address is signed in and marked confirmed: `emailVerified` is written
-	 * and `verified` granted. A new one is asked of `refuseSignUp` with an empty `extra`, then made
+	 * and `verified` granted. If nobody had confirmed it before, its password is emptied and its
+	 * sessions end first, since a stranger may have made the account (design 321). A new one is asked of `refuseSignUp` with an empty `extra`, then made
 	 * with no password, `emailVerified` true and `verified` granted, and the `afterSignUp`
 	 * listeners hear of it. No password is asked: call it only with an address the other party
 	 * vouched for.
@@ -177,15 +178,22 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 		}
 		const handle = await store.open(found);
 		const root = handle.root as UserDocument;
+		const user = idOfUserDoc(found);
+		// Nobody had proved this address, so whoever made the account may not be its holder. The
+		// password and the sessions it had go before the confirmed person is let in (design 321).
+		// The account is marked confirmed last: a failure part way leaves it unproved, so the next
+		// confirmed sign-in does all of it again.
 		if (root.emailVerified !== true) {
 			atomic(() => {
-				root.emailVerified = true;
+				root.password = '';
 				root.modifiedAt = Date.now();
 			});
 			await store.settled(handle);
+			await Session.revokeAll(user);
+			atomic(() => { root.emailVerified = true; });
+			await store.settled(handle);
 		}
 		await store.close(handle);
-		const user = idOfUserDoc(found);
 		await Roles.grant(user, VERIFIED);
 		return { user, created: false };
 	};

@@ -369,7 +369,9 @@ straight from Google over TLS. `fetch` in the same file stands in for Google in 
 
 **What the address gets** is `auth/Enter`'s `enterConfirmed(email, { name, context })`, which a
 module of yours can call for any provider that confirms an address. A known address signs in to
-its account, which is marked confirmed: `emailVerified` is written and `verified` granted. A new
+its account, which is marked confirmed: `emailVerified` is written and `verified` granted. An
+account nobody had confirmed before loses its password and its sessions first: signing up with a
+password proves nothing about the address, so a stranger may have made it (design 321). A new
 one asks your `refuseSignUp` with an empty `extra`, then makes an account with no password,
 `emailVerified` true, `verified` granted and the name Google gave, and every `afterSignUp`
 listener hears it, so `atSignUp` finds it already verified and sends nothing. No password signs
