@@ -1,6 +1,6 @@
 // logs/Visits: the keeper. The visit and process documents, the entries appended to them, the
 // binding of a connection to a visit, `write` for any module, the caps, and the sweep
-// (design 261).
+// (designs 261, 326).
 
 import { codecError, createId, idToText } from '@aweftjs/codec';
 import { atomic, createArray, createObject } from '@aweftjs/core';
@@ -18,6 +18,7 @@ export const defaults = {
 	perVisit: 10_000,
 	batchesPerMinute: 60,
 	visitsPerMinute: 600,
+	visitsPerAddressPerMinute: 60,
 	idleMs: 60_000,
 	build: null as string | null,
 };
@@ -87,9 +88,13 @@ const malformed = (detail: string): Error =>
 	codecError('malformed', `logs/Visits was handed ${detail}`, 'Send { visit, entries: [{ at, kind, ... }] } as JSON.');
 
 /** A count per key inside a one-minute window. */
-const perMinute = (): { allow(key: string, max: number): boolean } => {
+const perMinute = (): { allow(key: string, max: number): boolean; full(key: string, max: number): boolean } => {
 	const counts = new Map<string, { since: number; count: number }>();
 	return {
+		full: (key, max) => {
+			const held = counts.get(key);
+			return held !== undefined && Date.now() - held.since < 60_000 && held.count >= max;
+		},
 		allow: (key, max) => {
 			const now = Date.now();
 			// Drop windows that have passed before this one grows without bound: the map is keyed
@@ -118,6 +123,7 @@ export default async (props: ModuleProps): Promise<Visits> => {
 	const perVisit = numberOf(config, 'perVisit');
 	const batchesPerMinute = numberOf(config, 'batchesPerMinute');
 	const visitsPerMinute = numberOf(config, 'visitsPerMinute');
+	const visitsPerAddressPerMinute = numberOf(config, 'visitsPerAddressPerMinute');
 	const idleMs = timerOf(config, 'idleMs');
 	if (config.build !== null && typeof config.build !== 'string') {
 		throw refuse(`build ${JSON.stringify(config.build)}`, 'Give build a string, such as a commit hash, or null.');
@@ -140,6 +146,7 @@ export default async (props: ModuleProps): Promise<Visits> => {
 	};
 	const batches = perMinute();
 	const visits = perMinute();
+	const addresses = perMinute();
 
 	/** The document, opened once and held; a visit is let go of `idleMs` after its last use. */
 	const opened = (name: string): Promise<Holding> => {
@@ -263,10 +270,24 @@ export default async (props: ModuleProps): Promise<Visits> => {
 		return `visit:${visit}`;
 	};
 
-	/** A visit not held counts against the new-visit cap: a page that keeps sending is held. */
-	const admit = (name: string): void => {
+	const addressOf = (context: unknown): string | undefined => {
+		const address: unknown = (context as { address?: unknown } | null)?.address;
+		return typeof address === 'string' ? address : undefined;
+	};
+
+	/**
+	 * A visit not held counts against the new-visit caps: a page that keeps sending is held. The
+	 * total is read first and counted last (design 326), so an address past its own cap takes
+	 * nothing from the total, and a full total adds no key to the map of addresses. A context
+	 * with no address is counted against the total alone: a gate that carries none must not find
+	 * every visit sharing one address's cap.
+	 */
+	const admit = (name: string, context: unknown): void => {
 		if (held.has(name)) return;
-		if (!visits.allow('visits', visitsPerMinute)) throw over('new visits this minute');
+		if (visits.full('visits', visitsPerMinute)) throw over('new visits this minute');
+		const address = addressOf(context);
+		if (address !== undefined && !addresses.allow(address, visitsPerAddressPerMinute)) throw over('new visits this minute from one address');
+		visits.allow('visits', visitsPerMinute);
 	};
 
 	const record = async (body: unknown, context: unknown): Promise<{ kept: number }> => {
@@ -282,7 +303,7 @@ export default async (props: ModuleProps): Promise<Visits> => {
 			if (entry === undefined) throw malformed('an entry with no kind');
 			made.push(entry);
 		}
-		admit(name);
+		admit(name, context);
 		if (!batches.allow(name, batchesPerMinute)) throw over('batches this minute for one visit');
 		const user = userOf(context);
 		const session = sessionOf(context);

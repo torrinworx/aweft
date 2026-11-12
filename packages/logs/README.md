@@ -147,11 +147,23 @@ export const config = {
 	batch: 500,          // entries a batch may carry; tell createLog the same when you lower it
 	entry: 4096,         // bytes an entry may take; over it the stack, args, result, paths and reasons go first, then the message is cut
 	perVisit: 10_000,    // entries a visit may hold; the last is capped and the rest are dropped
-	batchesPerMinute: 60,
-	visitsPerMinute: 600,
+	batchesPerMinute: 60,            // for one visit
+	visitsPerMinute: 600,            // new visits, from everyone
+	visitsPerAddressPerMinute: 60,   // new visits, from one address
 	sweepMs: 3_600_000,  // and idleMs: at most 2147483647, what a timer can hold
 };
 ```
+
+A batch for a visit the module does not hold counts as a new visit, against the address it came
+from and against the total (design 326). Over either, the route answers 429 with `capped` and
+stores nothing. An address past its own cap takes nothing more from the total, so one address
+cannot keep everyone else's visits out. The address is the `address` on the request's context,
+which `auth/Session` fills with the listener's peer address. Behind a proxy, start the Node
+listener with `forwarded`, or every visit comes from the proxy's address. Under a gate that
+puts no address in its context, `open` included, this cap does not apply and the total is the
+only bound on new visits: put `address` in the context to have it. The address is a counter's
+key in memory, dropped once its minute has passed and the map of keys has grown large, and is
+never stored.
 
 The process document has the same `perVisit` cap and rotates at it: once the next entry would
 be its sentinel, a fresh `process:<id>` takes over and the full one is swept in its time.
@@ -169,10 +181,7 @@ its gate rule, the way it writes any private module.
 **Whether to record.** Nothing records until the page calls `createLog` and `logs` is in
 `sources`.
 
-**Retention beyond the defaults**, and any per-address cap: the route is handed a request and a
-context, never the peer, so the caps here are per visit and per process. A gate that puts the
-address in its context gives an application what it needs to cap by address in a module of its
-own.
+**Retention beyond the defaults.** The sweep keeps `keep` days and nothing finer.
 
 ## Known limits
 
@@ -189,5 +198,5 @@ own.
 - **A second library that replaces `console.error` after this one wins.** The page puts the
   console back on `stop`.
 
-The design notes are 259 (the `skip(Infinity)` wildcard), 260 (the `observe` hook on `server`)
-and 261 (this battery).
+The design notes are 259 (the `skip(Infinity)` wildcard), 260 (the `observe` hook on `server`),
+261 (this battery) and 326 (the cap on new visits per address).

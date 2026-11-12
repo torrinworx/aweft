@@ -193,6 +193,83 @@ test('too many new visits in a minute is refused, and a held visit does not coun
 	await stop();
 });
 
+test('the new visit over one address\'s cap is refused and stores nothing, another address still gets in, and a held visit is not counted', async () => {
+	const store = newStore();
+	const { instance, stop } = await visits(store, { visitsPerAddressPerMinute: 2 });
+	const ada = { address: '10.0.0.1' };
+	await instance.record({ visit: 'a1', entries: [entry('x')] }, ada);
+	await instance.record({ visit: 'a2', entries: [entry('x')] }, ada);
+	await instance.record({ visit: 'a1', entries: [entry('y')] }, ada);   // held, so free
+	await assert.rejects(instance.record({ visit: 'a3', entries: [entry('x')] }, ada), (e: unknown) => reasonOf(e) === 'capped' && /from one address/.test((e as Error).message));
+	assert.equal(await readVisit(store, 'a3'), undefined, 'the refused visit has no document');
+	await instance.record({ visit: 'b1', entries: [entry('x')] }, { address: '10.0.0.2' });
+	assert.equal((await readVisit(store, 'b1'))?.entries.length, 1, 'another address has its own count');
+	assert.equal((await readVisit(store, 'a1'))?.entries.length, 2, 'the held visit went on taking batches');
+	await stop();
+});
+
+test('an address past its cap takes nothing from the total', async () => {
+	const store = newStore();
+	const { instance, stop } = await visits(store, { visitsPerMinute: 3, visitsPerAddressPerMinute: 1 });
+	const flood = { address: '10.0.0.1' };
+	await instance.record({ visit: 'f0', entries: [entry('x')] }, flood);
+	for (let i = 1; i <= 5; i++) {
+		await assert.rejects(instance.record({ visit: `f${String(i)}`, entries: [entry('x')] }, flood), (e: unknown) => reasonOf(e) === 'capped');
+	}
+	// One of three is taken. Had the five refusals counted, the total would be full.
+	await instance.record({ visit: 'b', entries: [entry('x')] }, { address: '10.0.0.2' });
+	await instance.record({ visit: 'c', entries: [entry('x')] }, { address: '10.0.0.3' });
+	await assert.rejects(instance.record({ visit: 'd', entries: [entry('x')] }, { address: '10.0.0.4' }), (e: unknown) => reasonOf(e) === 'capped' && !/from one address/.test((e as Error).message));
+	await stop();
+});
+
+test('an address over its cap is admitted again the next minute', async (t) => {
+	t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 });
+	const store = newStore();
+	const { instance, stop } = await visits(store, { visitsPerAddressPerMinute: 1 });
+	const ada = { address: '10.0.0.1' };
+	await instance.record({ visit: 'a1', entries: [entry('x')] }, ada);
+	await assert.rejects(instance.record({ visit: 'a2', entries: [entry('x')] }, ada), (e: unknown) => reasonOf(e) === 'capped');
+	t.mock.timers.tick(59_999);
+	await assert.rejects(instance.record({ visit: 'a2', entries: [entry('x')] }, ada), (e: unknown) => reasonOf(e) === 'capped', 'still inside the minute');
+	t.mock.timers.tick(1);
+	await instance.record({ visit: 'a2', entries: [entry('x')] }, ada);
+	assert.equal((await readVisit(store, 'a2'))?.entries.length, 1);
+	await stop();
+});
+
+test('a full total counts nothing against an address', async (t) => {
+	t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 });
+	const store = newStore();
+	const { instance, stop } = await visits(store, { visitsPerMinute: 2, visitsPerAddressPerMinute: 1 });
+	const ada = { address: '10.0.0.1' };
+	const late = { address: '10.0.0.3' };
+	await instance.record({ visit: 'a1', entries: [entry('x')] }, ada);
+	await instance.record({ visit: 'b1', entries: [entry('x')] }, { address: '10.0.0.2' });
+	await assert.rejects(instance.record({ visit: 'a2', entries: [entry('x')] }, ada), (e: unknown) => reasonOf(e) === 'capped');
+	t.mock.timers.tick(30_000);
+	await assert.rejects(instance.record({ visit: 'c1', entries: [entry('x')] }, late), (e: unknown) => reasonOf(e) === 'capped', 'the total is full');
+	t.mock.timers.tick(30_000);
+	// The total's minute and ada's have passed. A count taken for `late` half a minute ago would
+	// still stand, and its cap is one.
+	await instance.record({ visit: 'c2', entries: [entry('x')] }, late);
+	await instance.record({ visit: 'a2', entries: [entry('x')] }, ada);
+	assert.equal((await readVisit(store, 'a2'))?.entries.length, 1);
+	await stop();
+});
+
+test('a context with no address is bounded by the total alone, never by the cap for one address', async () => {
+	const store = newStore();
+	const { instance, stop } = await visits(store, { visitsPerMinute: 4, visitsPerAddressPerMinute: 1 });
+	await instance.record({ visit: 'n1', entries: [entry('x')] }, null);
+	await instance.record({ visit: 'n2', entries: [entry('x')] }, { user: 'u1' });
+	await instance.record({ visit: 'n3', entries: [entry('x')] }, { address: 42 });
+	await instance.record({ visit: 'n4', entries: [entry('x')] }, undefined);
+	assert.equal((await readVisit(store, 'n4'))?.entries.length, 1, 'four past a cap of one for an address');
+	await assert.rejects(instance.record({ visit: 'n5', entries: [entry('x')] }, null), (e: unknown) => reasonOf(e) === 'capped' && !/from one address/.test((e as Error).message), 'the total still holds');
+	await stop();
+});
+
 test('a malformed body or entry is refused, and a visit id has to be a plain id', async () => {
 	const store = newStore();
 	const { instance, stop } = await visits(store);
@@ -242,6 +319,9 @@ test('a store that does not declare startedAt is refused at load, with the fix',
 test('a config value of the wrong type is refused at load, and a timer setting a timer cannot hold', async () => {
 	await assert.rejects(visits(newStore(), { keep: 0 }), (e: unknown) => reasonOf(e) === 'invalid-config');
 	await assert.rejects(visits(newStore(), { build: 42 }), (e: unknown) => reasonOf(e) === 'invalid-config');
+	for (const bad of [0, -1, '60', null]) {
+		await assert.rejects(visits(newStore(), { visitsPerAddressPerMinute: bad }), (e: unknown) => reasonOf(e) === 'invalid-config');
+	}
 	// Over 2^31 - 1 milliseconds Node fires a timer after one millisecond instead.
 	await assert.rejects(visits(newStore(), { sweepMs: 2 ** 31 }), (e: unknown) => reasonOf(e) === 'invalid-config');
 	await assert.rejects(visits(newStore(), { idleMs: 2 ** 31 }), (e: unknown) => reasonOf(e) === 'invalid-config');

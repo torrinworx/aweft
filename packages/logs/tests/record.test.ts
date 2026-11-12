@@ -51,6 +51,19 @@ test('a batch over a cap is 429', async () => {
 	await server.stop();
 });
 
+test('under the auth gate the peer\'s address is the one counted: its new visit over the cap is 429, and another peer posts', async () => {
+	const store = newStore();
+	const { handlers, server } = await started({}, { store, withAuth: true, config: { './logs/Visits.ts': { config: { visitsPerAddressPerMinute: 1 } } } });
+	const post = (visit: string, from = peer) => handlers.request(jsonRequest('/api/logs', { visit, entries: [{ at: 1, kind: 'a' }] }), from);
+	assert.equal((await post('first')).status, 200);
+	const over = await post('second');
+	assert.equal(over.status, 429);
+	assert.equal((await over.json() as { reasons: { code: string }[] }).reasons[0]!.code, 'capped');
+	assert.equal(await readVisit(store, 'second'), undefined, 'nothing was stored for it');
+	assert.equal((await post('third', { address: '10.0.0.9' })).status, 200);
+	await server.stop();
+});
+
 test('the socket binds the connection to a visit, so a server event lands in it', async () => {
 	const store = newStore();
 	const { handlers, server } = await started({
