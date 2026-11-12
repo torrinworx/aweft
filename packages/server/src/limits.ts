@@ -1,5 +1,6 @@
 // A count per key inside a sliding window (design 272). The server counts requests by peer
-// address with one; the auth battery counts sign-in attempts by email and by address with two.
+// address with one and calls on open connections with another (design 325); the auth battery
+// counts sign-in attempts by email and by address with two.
 
 import { serverError } from './contract.ts';
 

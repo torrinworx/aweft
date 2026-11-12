@@ -319,14 +319,18 @@ for (const c of listenerChecks()) test(c.name, () => c.run(() => {
 
 ## Before the gate
 
-Two things are checked before `identify` runs, so a refused request costs no gate work, and
-each has a value here that one option changes.
+Two things are checked before `identify` runs, so a refused request costs no gate work, and a
+third is checked on an open connection before the gate is asked about a call. Each has a value
+here that one option changes.
 
 ```ts
 createServer({
 	sources, store, gate, listener,
-	limits: { requests: { count: 600, windowMs: 60_000 } },   // the value with nothing set
-	origins: ['https://app.example'],                         // beside the request's own host
+	limits: {
+		requests: { count: 600, windowMs: 60_000 },   // the value with nothing set
+		calls: { count: 6000, windowMs: 60_000 },     // the value with nothing set
+	},
+	origins: ['https://app.example'],                 // beside the request's own host
 });
 ```
 
@@ -336,6 +340,26 @@ for a handshake no socket opens. `limits: { requests: false }` removes the count
 is the listener's word: behind a proxy, start the Node listener with `forwarded`, or the proxy
 is the one address every request shares. Clients behind one address share one count. The count
 is coarse on purpose; the sign-in route keeps its own attempt counts (`@aweftjs/auth`).
+
+**`limits.calls`** counts what an open socket asks the server to run: every `call`, and every
+ask for a document a module could `offer`. The count is per peer address over a sliding window,
+across every connection that address holds (design 325). Over the count, a call is refused with
+the reason `limit`, and its message says how many seconds until the next one fits:
+
+```ts
+try {
+	await client.ask('report/Daily', { day: 'mon' });
+} catch (error) {
+	if (error.reason === 'limit') show(error.message);   // "limit: this address has made more calls than the window allows, and the next fits in 12 s. ..."
+}
+```
+
+An ask for an offered document over the count ends the page's share with `limit` the same way.
+Nothing runs for either, and the connection stays open. `limits: { calls: false }` removes the
+count. The link's own frames are not counted: a frame is bounded by `maxPayload` and a commit
+lands only where a share's `accept` allows. The value is ten times the request count, because
+one page load is a few requests and the page then asks a read per cell. People behind one
+address share it, so set your own once you know your pages.
 
 **`origins`** is the Origin rule. A request carrying an `Origin` header is refused with 403
 and the reason `origin` when that origin's host is not the request's own host, port included,
@@ -372,7 +396,7 @@ raised where nothing catches it, and the process says so and ends. Pass a handle
 Who is on a connection, whether it lives, and who may reach a module: the gate's. Who may
 write a commit: `accept`, per share. What a module is for and what it holds: the module's, and
 what it needs is `deps`. Users, sessions, cookies: `@aweftjs/auth`, or whatever you load
-instead. The two bounds above have values so that a server forgotten about is still bounded;
+instead. The three bounds above have values so that a server forgotten about is still bounded;
 every other limit or interval is yours.
 
 It does decide one thing about modules, and only one: everything your sources list is loaded

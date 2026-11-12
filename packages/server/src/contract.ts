@@ -150,8 +150,9 @@ export interface ServerModule<C = unknown> {
 	 * Answer an `ask` naming this module, after the gate allowed it.
 	 *
 	 * Throws: the asks this never sees are refused for the caller instead, with reason
-	 * `closed` when the connection has ended, `missing` when the module is not loaded or has
-	 * no `call`, and `refused` when the gate answered with reasons.
+	 * `closed` when the connection has ended, `limit` when the caller's address is over
+	 * `limits.calls`, `missing` when the module is not loaded or has no `call`, and `refused`
+	 * when the gate answered with reasons.
 	 */
 	call?(args: unknown, context: C, tools: Progress): unknown;
 	/**
@@ -167,7 +168,8 @@ export interface ServerModule<C = unknown> {
 	 * `undefined` to decline, which asks the next module. The modules that declare this are
 	 * asked in load order, behind the gate, once every `connection` hook has run, and the first
 	 * offer wins. When every one declines the page's share waits, as it always has, so a share a
-	 * `call` makes later still pairs with it.
+	 * `call` makes later still pairs with it. An ask from an address over `limits.calls` reaches no
+	 * module, and the page's share ends with `limit`.
 	 *
 	 * Throws: a refusal, an error with a `reason`, to refuse the page: its share ends with that
 	 * reason and message. Anything else is reported to `handlers.failed` under this module's name,
@@ -256,7 +258,7 @@ export interface ServerHandlers {
 	readonly failed?: ((name: string, error: unknown) => void) | undefined;
 }
 
-/** The bounds checked before the gate (design 272). */
+/** The bounds checked before the gate (designs 272, 325). */
 export interface Limits {
 	/**
 	 * How many requests and handshakes one peer address may make inside a sliding window;
@@ -265,6 +267,14 @@ export interface Limits {
 	 * behind a proxy, the listener needs `forwarded`, or every request is one address.
 	 */
 	readonly requests?: { readonly count: number; readonly windowMs: number } | false | undefined;
+	/**
+	 * How many calls and asks for an offered document one peer address may make inside a sliding
+	 * window, over every connection it holds; `{ count: 6000, windowMs: 60000 }` here (design
+	 * 325). Over it, a call is refused with the reason `limit` and a page's share of an offered
+	 * name ends with `limit`; the message says how many seconds to wait, nothing runs, and the
+	 * connection stays open. `false` removes the count. The link's own frames are not counted.
+	 */
+	readonly calls?: { readonly count: number; readonly windowMs: number } | false | undefined;
 }
 
 export interface ServerOptions {
@@ -326,7 +336,8 @@ export interface Server {
  * (a route or a `request` hook answered with something else; reported, never thrown to a
  * caller), `started`,
  * `over-bound` (a request body past the listener's `maxPayload`), `refused` (the gate refused
- * an ask), `closed` (an ask on a connection that has ended), `failed` (the module's `call`
+ * an ask), `limit` (an ask from an address over `limits.calls`), `closed` (an ask on a
+ * connection that has ended), `failed` (the module's `call`
  * threw something that is not a refusal; the caller hears only that, and the error is
  * reported), `invalid-limit` (a count or window that is not a positive number) and
  * `invalid-option` (a listener setting of the wrong shape).

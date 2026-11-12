@@ -73,6 +73,32 @@ test('one connection that asks, is refused, and closes is heard as connection, c
 	assert.deepEqual(heard[0]!.context, { user: null });
 });
 
+test('a call the limit refused is heard as a call whose outcome is the refusal, as a call the gate refused is', async () => {
+	const heard: Heard[] = [];
+	const listening = fakeListener();
+	const server = createServer({
+		sources: [sourceOf({
+			'app/Sum': instance(() => ({ call: (args: unknown) => (args as number[]).reduce((a, b) => a + b, 0) })),
+			'log/Observe': observing('log/Observe', heard),
+		})],
+		gate: open, listener: listening.listener, limits: { calls: { count: 1, windowMs: 60_000 } },
+	});
+	await server.start();
+	const client = asClient(await connectTo(listening.handlers()));
+	assert.equal(await client.asks.ask('app/Sum', [1, 2]), 3);
+	await client.asks.ask('app/Sum', [3, 4]).catch(() => undefined);
+	client.socket.close();
+	await settle();
+	await server.stop();
+
+	assert.deepEqual(kinds(heard), ['connection', 'call', 'call', 'closed']);
+	const over = heard[2]!.event as Extract<ServerEvent, { kind: 'call' }>;
+	assert.equal(over.name, 'app/Sum');
+	assert.deepEqual(over.args, [3, 4]);
+	assert.ok('error' in over.outcome);
+	assert.equal((over.outcome.error as { reason?: unknown }).reason, 'limit');
+});
+
 test('an HTTP answer is heard as request, named after the module whose route or hook answered, unnamed when the server did', async () => {
 	const heard: Heard[] = [];
 	const { handlers, server } = await started({

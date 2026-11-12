@@ -1,12 +1,16 @@
-// The count before the gate, and the sliding window behind it (design 272).
+// The count before the gate, the count on an open connection, and the sliding window behind
+// both (designs 272, 325).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createServer, open, sliding } from '../src/index.ts';
-import type { ServerError, ServerOptions } from '../src/index.ts';
+import { createObject } from '@aweftjs/core';
+import type { RequestError } from '@aweftjs/sync';
 
-import { asClient, connectTo, fakeListener, instance, peer, request, sourceOf } from './helpers.ts';
+import { createServer, open, sliding } from '../src/index.ts';
+import type { Connection, Limits, Offer, ServerError, ServerOptions } from '../src/index.ts';
+
+import { asClient, connectTo, fakeListener, instance, peer, request, settle, sourceOf } from './helpers.ts';
 
 const reasonOf = (e: unknown): string => String((e as { reason?: unknown }).reason);
 
@@ -148,4 +152,163 @@ test('a bad count is refused when the server is made, before anything listens', 
 		(e: unknown) => reasonOf(e) === 'invalid-limit',
 	);
 	assert.equal(listening.started(), 0);
+});
+
+// --- calls on an open connection (design 325) -----------------------------------------------
+
+/**
+ * A server whose one module keeps what it ran and what it was asked to offer. Its hook shares
+ * `board` once `hooked` settles, so a test can have the page's open arrive first.
+ */
+const calling = async (calls: Limits['calls'] | 'unset', hooked: Promise<void> = Promise.resolve()) => {
+	const ran: unknown[] = [];
+	const offered: string[] = [];
+	const failed: string[] = [];
+	const listening = fakeListener();
+	const board = createObject<Record<string, unknown>>({ title: 'board' });
+	const server = createServer({
+		sources: [sourceOf({
+			'app/Run': instance(() => ({
+				call: (args: unknown) => { ran.push(args); return 'ran'; },
+				connection: async ({ link }: Connection) => {
+					await hooked;
+					link.share('board', board, { accept: () => [] });
+				},
+				offer: (name: string): Offer | undefined => {
+					offered.push(name);
+					return name.startsWith('note:') ? { document: createObject({ name }), accept: () => [] } : undefined;
+				},
+			})),
+		})],
+		gate: open, listener: listening.listener,
+		handlers: { failed: (name, error) => failed.push(`${name}: ${String((error as Error).message)}`) },
+		...(calls === 'unset' ? {} : { limits: { calls } }),
+	});
+	await server.start();
+	return { server, handlers: listening.handlers(), ran, offered, failed };
+};
+
+const limited = (wait: number) => (e: RequestError): boolean => e.reason === 'limit' && e.message
+	=== `limit: this address has made more calls than the window allows, and the next fits in ${String(wait)} s. Wait that long and ask again, or raise limits.calls in createServer.`;
+
+test('the call at the count runs, the next is refused with limit and the wait, nothing runs, and the window sliding lets the same connection call again', async (t) => {
+	t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 });
+	const { server, handlers, ran, failed } = await calling({ count: 3, windowMs: 60_000 });
+	const client = asClient(await connectTo(handlers));
+	assert.equal(await client.asks.ask('app/Run', 1), 'ran');
+	t.mock.timers.tick(10_000);
+	assert.equal(await client.asks.ask('app/Run', 2), 'ran');
+	assert.equal(await client.asks.ask('app/Run', 3), 'ran', 'the call at the count');
+	await assert.rejects(client.asks.ask('app/Run', 4), limited(50), 'the first call leaves the window in 50 s');
+	// Refused before the module is looked up, so a name nothing answers is refused the same way.
+	await assert.rejects(client.asks.ask('app/Nothing'), limited(50));
+	assert.deepEqual(ran, [1, 2, 3], 'the refused call did not run');
+	t.mock.timers.tick(49_999);
+	await assert.rejects(client.asks.ask('app/Run', 5), limited(1), 'still inside the window');
+	t.mock.timers.tick(1);
+	assert.equal(await client.asks.ask('app/Run', 6), 'ran', 'the first call has left the window, and the socket was never closed');
+	await assert.rejects(client.asks.ask('app/Run', 7), limited(10), 'and only one left');
+	assert.deepEqual(ran, [1, 2, 3, 6]);
+	assert.deepEqual(failed, [], 'a refusal is the caller\'s to hear, and is not reported');
+	client.socket.close();
+	await server.stop();
+});
+
+test('a second connection from the same address shares the count, another address has its own, and no address is one address', async () => {
+	const { server, handlers, ran } = await calling({ count: 2, windowMs: 60_000 });
+	const first = asClient(await connectTo(handlers));
+	const second = asClient(await connectTo(handlers));
+	assert.equal(await first.asks.ask('app/Run', 'first'), 'ran');
+	assert.equal(await second.asks.ask('app/Run', 'second'), 'ran');
+	await assert.rejects(second.asks.ask('app/Run', 'over'), (e: RequestError) => e.reason === 'limit');
+	await assert.rejects(first.asks.ask('app/Run', 'over'), (e: RequestError) => e.reason === 'limit');
+
+	const elsewhere = asClient(await connectTo(handlers, {}, { address: '10.0.0.9' }));
+	assert.equal(await elsewhere.asks.ask('app/Run', 'elsewhere'), 'ran');
+
+	const nowhere = asClient(await connectTo(handlers, {}, { address: undefined }));
+	const nowhereToo = asClient(await connectTo(handlers, {}, { address: undefined }));
+	assert.equal(await nowhere.asks.ask('app/Run', 'nowhere'), 'ran');
+	assert.equal(await nowhereToo.asks.ask('app/Run', 'nowhere too'), 'ran');
+	await assert.rejects(nowhere.asks.ask('app/Run', 'over'), (e: RequestError) => e.reason === 'limit');
+	assert.deepEqual(ran, ['first', 'second', 'elsewhere', 'nowhere', 'nowhere too']);
+	for (const client of [first, second, elsewhere, nowhere, nowhereToo]) client.socket.close();
+	await server.stop();
+});
+
+test('an ask for an offered document counts with the calls, and over the count the page\'s share ends with limit and no module is asked', async (t) => {
+	t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 });
+	const { server, handlers, ran, offered } = await calling({ count: 2, windowMs: 60_000 });
+	const client = asClient(await connectTo(handlers));
+	assert.equal(await client.asks.ask('app/Run', 1), 'ran');
+	assert.deepEqual(await client.link.share<Record<string, unknown>>('note:1').ready, { name: 'note:1' });
+	const refused = await client.link.share('note:2').ready.then(() => undefined, (error: unknown) => error as RequestError);
+	assert.equal(refused?.reason, 'limit');
+	assert.match(String(refused?.message), /this address has made more calls than the window allows, and the next fits in 60 s/);
+	await assert.rejects(client.asks.ask('app/Run', 2), (e: RequestError) => e.reason === 'limit', 'and a call is over the same count');
+	assert.deepEqual(offered, ['note:1'], 'the refused ask reached no offer');
+	assert.deepEqual(ran, [1]);
+	client.socket.close();
+	await server.stop();
+});
+
+test('a name a connection hook shared and the request named \'\' are not counted', async () => {
+	let release: () => void = () => {};
+	const { server, handlers, ran, offered } = await calling({ count: 1, windowMs: 60_000 }, new Promise((done) => { release = done; }));
+	const client = asClient(await connectTo(handlers));
+	// The page's open is on the server before the hook has shared, which is the order that
+	// asks for an offer.
+	const shared = client.link.share<Record<string, unknown>>('board');
+	await settle();
+	release();
+	assert.equal((await shared.ready).title, 'board');
+	for (let i = 0; i < 5; i++) assert.equal(await client.asks.ask(''), null, 'the probe is answered before any module');
+	await settle();
+	assert.equal(await client.asks.ask('app/Run', 1), 'ran', 'the one call the count allows is still there');
+	await assert.rejects(client.asks.ask('app/Run', 2), (e: RequestError) => e.reason === 'limit');
+	assert.deepEqual(offered, [], 'the hook\'s share paired with the page\'s, so nothing was asked to offer');
+	assert.deepEqual(ran, [1]);
+	client.socket.close();
+	await server.stop();
+});
+
+test('an open for a name when no module declares offer is not counted', async () => {
+	const listening = fakeListener();
+	const server = createServer({
+		sources: [sourceOf({ 'app/Echo': instance(() => ({ call: () => 'hi' })) })],
+		gate: open, listener: listening.listener, limits: { calls: { count: 1, windowMs: 60_000 } },
+	});
+	await server.start();
+	const client = asClient(await connectTo(listening.handlers()));
+	for (const name of ['a', 'b', 'c']) client.link.share(name).ready.catch(() => undefined);
+	await settle();
+	assert.equal(await client.asks.ask('app/Echo'), 'hi', 'the one call the count allows is still there');
+	client.socket.close();
+	await server.stop();
+});
+
+test('the count is 6000 a minute with nothing set, and false removes it', async () => {
+	const { server, handlers } = await calling('unset');
+	const client = asClient(await connectTo(handlers));
+	for (let i = 0; i < 6000; i++) assert.equal(await client.asks.ask('app/Run', i), 'ran');
+	await assert.rejects(client.asks.ask('app/Run', 6000), (e: RequestError) => e.reason === 'limit', 'the 6001st');
+	client.socket.close();
+	await server.stop();
+
+	const unbounded = await calling(false);
+	const free = asClient(await connectTo(unbounded.handlers));
+	for (let i = 0; i < 6100; i++) assert.equal(await free.asks.ask('app/Run', i), 'ran');
+	free.socket.close();
+	await unbounded.server.stop();
+});
+
+test('a bad count for calls is refused when the server is made, before anything listens', () => {
+	for (const bad of [{ count: 0, windowMs: 1 }, { count: 10, windowMs: 0 }, { count: 1.5, windowMs: 1000 }, { count: 10 }]) {
+		const listening = fakeListener();
+		assert.throws(
+			() => createServer({ sources: [], gate: open, listener: listening.listener, limits: { calls: bad as { count: number; windowMs: number } } }),
+			(e: unknown) => reasonOf(e) === 'invalid-limit',
+		);
+		assert.equal(listening.started(), 0);
+	}
 });

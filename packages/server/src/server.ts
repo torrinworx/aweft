@@ -19,8 +19,10 @@ import { routeKey, routeTable } from './routes.ts';
 const json = (status: number, body: unknown, headers: Record<string, string> = {}): Response =>
 	new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
 
-// The values every server starts with (design 272). Each is one option away from another.
+// The values every server starts with (designs 272, 325). Each is one option away from another.
 const REQUESTS = { count: 600, windowMs: 60_000 };
+// Ten times the requests: one page load is a few requests, and the page then asks a read per cell.
+const ASKS = { count: 6000, windowMs: 60_000 };
 
 // Every answer says its type is its type (design 276), unless the module already said so. A
 // redirect's headers cannot be written, so it is rebuilt with the header; a network error has
@@ -57,6 +59,8 @@ const isGate = (instance: unknown): instance is Gate =>
  *   options.handlers.failed: where a hook, a route or the gate that threw is reported
  *   options.limits.requests: how many requests one address may make in a window, before the
  *     gate; 600 a minute here, `false` for none
+ *   options.limits.calls: how many calls and asks for an offered document one address may make
+ *     in a window, over all its connections; 6000 a minute here, `false` for none
  *   options.origins: where a browser may send a state-changing request or a handshake from;
  *     the request's own host here, a list of origins to add, or `'any'`
  *
@@ -67,7 +71,7 @@ const isGate = (instance: unknown): instance is Gate =>
  * so a JavaScript caller cannot start a server with no gate by leaving the field out, or when
  * `gate` is neither a name nor an object carrying `identify` and `access`; `not-an-option`
  * when `loader` or `props` is present, because this builds its own; and `invalid-limit` when
- * `limits.requests` is not `{ count, windowMs }` of positive numbers or `false`.
+ * `limits.requests` or `limits.calls` is not `{ count, windowMs }` of positive numbers or `false`.
  *
  * Example:
  *   const server = createServer({
@@ -113,6 +117,9 @@ export const createServer = (options: ServerOptions): Server => {
 	// made here so a bad number is refused at construction rather than at the first request.
 	const requested = options.limits?.requests;
 	const requests: Sliding | undefined = requested === false ? undefined : sliding(requested ?? REQUESTS);
+	// One counter for every connection, so an address that opens many shares one count (design 325).
+	const called = options.limits?.calls;
+	const calls: Sliding | undefined = called === false ? undefined : sliding(called ?? ASKS);
 	const origins: Origins = options.origins ?? [];
 	const before = (request: Request, peer: Peer, handshake: boolean): Response | undefined => {
 		if (requests !== undefined) {
@@ -237,8 +244,9 @@ export const createServer = (options: ServerOptions): Server => {
 			const who = await identify(request, peer);
 			if (who instanceof Response) return who;
 			if ('refused' in who) return json(401, { reasons: who.refused });
+			const limit = calls === undefined ? undefined : () => calls.take(peer.address ?? 'unknown');
 			return (socket: SocketLike): void => {
-				const connection = openConnection({ socket, request, context: who.context, loader, gate: perUse, report, emit });
+				const connection = openConnection({ socket, request, context: who.context, loader, gate: perUse, limit, report, emit });
 				live.add(connection);
 				void connection.ended.then(() => { live.delete(connection); });
 			};

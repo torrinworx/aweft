@@ -9,6 +9,7 @@ import type { SocketLike, Unshared, WireReason } from '@aweftjs/sync';
 import {
 	type Connection, type Ending, type Gate, type GatedLink, type Offer, type Outcome, type ServerModule, serverError,
 } from './contract.ts';
+import type { Taken } from './limits.ts';
 import type { Emit } from './observe.ts';
 
 export interface Live {
@@ -24,6 +25,8 @@ interface Wiring {
 	readonly context: unknown;
 	readonly loader: Loader;
 	readonly gate: Gate;
+	/** Count one call or offer ask for this connection's address; absent when nothing is counted (design 325). */
+	readonly limit: (() => Taken) | undefined;
 	readonly report: (name: string, error: unknown, context?: unknown, soft?: string) => void;
 	readonly emit: Emit;
 }
@@ -70,7 +73,11 @@ const asking = (reason: string, detail: string, fix: string, reasons?: readonly 
 const isRefusal = (error: unknown): boolean =>
 	error !== null && typeof error === 'object' && typeof (error as { reason?: unknown }).reason === 'string';
 
-export const openConnection = ({ socket, request, context, loader, gate, report, emit }: Wiring): Live => {
+// The one sentence a call and an offer over the count are both refused with.
+const waitOf = (taken: { readonly retryAfter: number }): string =>
+	`this address has made more calls than the window allows, and the next fits in ${String(taken.retryAfter)} s`;
+
+export const openConnection = ({ socket, request, context, loader, gate, limit, report, emit }: Wiring): Live => {
 	const channel = fromWebSocket(socket);
 	// Called once the frame that asked has arrived, which is after this function returned, so
 	// `offering` below is defined by then.
@@ -130,6 +137,9 @@ export const openConnection = ({ socket, request, context, loader, gate, report,
 
 	const answer = async (name: string, args: unknown, progress: (value: unknown) => void): Promise<unknown> => {
 		if (over) throw asking('closed', 'the connection has ended', 'Open a new connection and ask again.');
+		// Before the module is looked up or the gate asked, so a call over the count costs neither.
+		const taken = limit?.();
+		if (taken?.ok === false) throw asking('limit', waitOf(taken), 'Wait that long and ask again, or raise limits.calls in createServer.');
 		const instance = loader.get(name);
 		const call = callOf(instance);
 		if (call === undefined) throw asking('missing', `${name} is not loaded or has no call`, 'Load the module, and give it a call function.');
@@ -168,6 +178,14 @@ export const openConnection = ({ socket, request, context, loader, gate, report,
 	const offering = async (request: Unshared): Promise<void> => {
 		if (!loader.loaded().some((name) => offerOf(loader.get(name)) !== undefined)) return;
 		await ready;
+		// Counted once the hooks have run and only while the open still waits, so a name a hook
+		// shared is not counted and is never refused here.
+		if (over || !request.held()) return;
+		const taken = limit?.();
+		if (taken?.ok === false) {
+			request.refuse('limit', waitOf(taken));
+			return;
+		}
 		for (const name of loader.loaded()) {
 			if (over || !request.held()) return;
 			const instance = loader.get(name);

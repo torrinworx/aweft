@@ -5,7 +5,7 @@ type Ending: type Ending = (() => unknown) | undefined | void;
 type Gate: interface Gate<C = unknown> { identify(request: Request, peer: Peer): Identified<C> | Promise<Identified<C>>; access(module: Named, context: C): readonly Refusal[] | Promise<readonly Refusal[]>; }
 type GatedLink: interface GatedLink { share<T extends object>(name: string, document: T | undefined, handlers: Accepting): Shared<T>; }
 type Identified: type Identified<C> = { readonly context: C; } | { readonly refused: readonly Refusal[]; };
-type Limits: interface Limits { readonly requests?: { readonly count: number; readonly windowMs: number; } | false | undefined; }
+type Limits: interface Limits { readonly requests?: { readonly count: number; readonly windowMs: number; } | false | undefined; readonly calls?: { readonly count: number; readonly windowMs: number; } | false | undefined; }
 type Listener: interface Listener { start(handlers: ListenerHandlers): Promise<void>; stop(): Promise<void>; }
 type ListenerHandlers: interface ListenerHandlers { request(request: Request, peer: Peer): Promise<Response>; socket(request: Request, peer: Peer): Promise<Response | Accept>; }
 type Named: interface Named { readonly name: string; readonly instance: unknown; }
