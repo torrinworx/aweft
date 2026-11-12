@@ -128,6 +128,9 @@
 	"Sign in or create an account": [
 		"@aweftjs/auth/text.json"
 	],
+	"Sign in to confirm this email address.": [
+		"@aweftjs/auth/text.json"
+	],
 	"Signing in with Google did not work. Try again, or use your email.": [
 		"@aweftjs/auth/text.json"
 	],

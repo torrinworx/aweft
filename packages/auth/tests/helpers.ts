@@ -1,6 +1,9 @@
 // What the suites share: a store with the battery's paths, the modules through the harness,
 // and a connection over the harness socket for the integration cases (design 254).
 
+import { createHash, randomBytes } from 'node:crypto';
+
+import { atomic } from '@aweftjs/core';
 import type { Listener, ListenerHandlers, Peer } from '@aweftjs/server';
 import { createStore, memoryDriver } from '@aweftjs/store';
 import type { Store } from '@aweftjs/store';
@@ -17,6 +20,34 @@ export { settle };
 export const reasonOf = (error: unknown): string => String((error as { reason?: unknown } | null)?.reason);
 
 export const newStore = (): Store => createStore({ driver: memoryDriver(), declare: paths });
+
+/**
+ * The name a token's document is stored under: the prefix and the token's SHA-256 in base64url
+ * (design 324). Worked out with Node's own hash here, so what a suite expects does not come
+ * from the code it checks.
+ */
+export const stored = (prefix: string, token: string): string =>
+	`${prefix}:${createHash('sha256').update(token).digest('base64url')}`;
+
+/** A token of the battery's shape that the battery did not mint. */
+export const someToken = (): string => randomBytes(16).toString('base64url');
+
+/** Write a document under the token itself, as the version before design 324 named it. */
+export const writePlain = async (store: Store, prefix: string, token: string, fields: Record<string, unknown>): Promise<void> => {
+	const handle = await store.open(`${prefix}:${token}`);
+	atomic(() => { Object.assign(handle.root, fields); });
+	await store.settled(handle);
+	await store.close(handle);
+};
+
+/** What a document holds, or undefined when it was never written. */
+export const fieldsOf = async (store: Store, name: string): Promise<Record<string, unknown> | undefined> => {
+	if (await store.head(name) === 0) return undefined;
+	const handle = await store.open(name);
+	const held = { ...(handle.root as Record<string, unknown>) };
+	await store.close(handle);
+	return held;
+};
 
 export const request = (path = '/', init: RequestInit = {}): Request => new Request(`http://app.test${path}`, init);
 export const withCookie = (path: string, cookie: string, init: RequestInit = {}): Request =>

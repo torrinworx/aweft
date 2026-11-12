@@ -62,6 +62,8 @@ const where = (): { readonly href: string; assign(url: string): void } | undefin
 interface SignInProps {
 	/** Build the act the URL chose again. Present when this act is what `refused` names. */
 	readonly retry?: () => void;
+	/** An address already known to have an account: the form opens on the password step with it (design 322). */
+	readonly email?: string;
 }
 
 export default ({ imports, config }: { imports: Readonly<Record<string, unknown>>; config: Readonly<Record<string, unknown>> }): {
@@ -72,8 +74,8 @@ export default ({ imports, config }: { imports: Readonly<Record<string, unknown>
 	const google = config['google'] === true;
 
 	const component = (props: SignInProps): unknown => {
-		const step = mutable<Step>('email');
-		const email = mutable('');
+		const step = mutable<Step>(props.email === undefined ? 'email' : 'known');
+		const email = mutable(props.email ?? '');
 		const password = mutable('');
 		const emailProblem = mutable<unknown>('');
 		const passwordProblem = mutable('');

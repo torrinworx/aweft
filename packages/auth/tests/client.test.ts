@@ -19,7 +19,7 @@ import type { Roles } from '../src/index.ts';
 import { createAuth } from '../src/client.ts';
 import type { Auth, FetchResponse } from '../src/client.ts';
 
-import { fakeListener, mailRefused, mailer, newStore, page, reasonOf, settle, tokenIn } from './helpers.ts';
+import { fakeListener, mailer, mailRefused, newStore, page, reasonOf, settle, stored, tokenIn } from './helpers.ts';
 import type { Page } from './helpers.ts';
 
 const PASSWORD = 'correct horse battery staple';
@@ -188,6 +188,35 @@ test('leave refuses when the route does, and changes nothing', async () => {
 
 	auth.stop();
 	client.close();
+	await stop();
+});
+
+test('signing out in one tab drops the other tab of the same session, which comes back as nobody, and no socket is opened after that', async () => {
+	const { seams, stop } = await running();
+	// Reconnecting is on here, as in a page: the second tab is told nothing and has to find out.
+	const one = createClient({ url: URL, open: seams.open });
+	const tabOne = createAuth(one, { origin: ORIGIN, fetch: seams.fetch });
+	const ada = await tabOne.enter('ada@example.com', PASSWORD) as { user: string };
+	const two = createClient({ url: URL, open: seams.open });
+	const tabTwo = createAuth(two, { origin: ORIGIN, fetch: seams.fetch });
+	await settle(20);
+	assert.equal(tabTwo.user.get(), ada.user, 'the second tab holds the same cookie');
+
+	await tabOne.leave();
+	assert.equal(tabOne.user.get(), null);
+	// The client's first retry is half a second after the drop.
+	for (let waited = 0; waited < 3000 && tabTwo.user.get() !== null; waited += 50) await new Promise((done) => setTimeout(done, 50));
+	assert.equal(tabTwo.user.get(), null, 'the server closed the second tab\'s socket, and it came back anonymous');
+
+	const opened = seams.sockets.length;
+	await new Promise((done) => setTimeout(done, 1200));
+	assert.equal(seams.sockets.length, opened, 'each tab settled on one socket: an anonymous connection is never closed, so nothing loops');
+	assert.deepEqual([one.status.get(), two.status.get()], ['open', 'open']);
+
+	tabOne.stop();
+	tabTwo.stop();
+	one.close();
+	two.close();
 	await stop();
 });
 
@@ -376,7 +405,7 @@ test('an identity that changed underneath the page stops the handle the page hol
 	// The server forgets the session while the page holds Ada's state, so the socket the client
 	// opens next carries a cookie that names nothing.
 	const token = seams.cookie().split('=')[1]!;
-	const session = await store.open(`session:${token}`);
+	const session = await store.open(stored('session', token));
 	(session.root as { status: string }).status = 'revoked';
 	await store.settled(session);
 	await store.close(session);
@@ -594,6 +623,28 @@ test('verify sends the mail and takes the link, forgot and reset set the passwor
 
 	mail.answer({ ok: false, error: 'down' });
 	assert.deepEqual(await auth.forgot('ada@example.com'), { refused: [mailRefused('down')] });
+	auth.stop();
+	client.close();
+	await stop();
+});
+
+test('verify hands a page the sign-in refusal with the address, and the same link confirms once the page is signed in as that account', async () => {
+	const { seams, mail, roles, stop } = await running(true);
+	const { client, auth } = connect(seams);
+	const ada = await auth.enter('ada@example.com', PASSWORD) as { user: string };
+	assert.deepEqual(await auth.verify(), { ok: true });
+	const token = tokenIn(mail.sent[0]!.body);
+	const refusal = { refused: [{ code: 'sign-in', message: 'sign in to the account this link was mailed to', email: 'ada@example.com' }] };
+
+	await auth.leave();
+	assert.deepEqual(await auth.verify(token), refusal, 'opened with nobody signed in');
+	await auth.enter('bob@example.com', PASSWORD);
+	assert.deepEqual(await auth.verify(token), refusal, 'and signed in as someone else');
+	assert.equal(await roles.may(ada.user, 'verified'), false);
+
+	await auth.enter('ada@example.com', PASSWORD);
+	assert.deepEqual(await auth.verify(token), { ok: true }, 'the link the refusals left live');
+	assert.equal(await roles.may(ada.user, 'verified'), true);
 	auth.stop();
 	client.close();
 	await stop();

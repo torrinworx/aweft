@@ -11,7 +11,7 @@ import type { Enter } from '../src/modules/Enter.ts';
 import type { Password } from '../src/modules/Password.ts';
 import type { Session } from '../src/modules/Session.ts';
 
-import { jsonRequest, mailRefused, mailer, module, newStore, request, tokenIn, withCookie } from './helpers.ts';
+import { jsonRequest, mailer, mailRefused, module, newStore, request, someToken, stored, tokenIn, withCookie, writePlain } from './helpers.ts';
 
 const url = (token: string): string => `https://app.example/reset?token=${token}`;
 
@@ -77,7 +77,7 @@ test('forgot answers ok for any address, mails a link only to a known one, and r
 
 	assert.deepEqual(await b.password.reset('nope', 'battery staple'), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] });
 	assert.deepEqual(await b.password.reset(token, 'short'), { refused: [{ code: 'password', message: 'password is 8 to 256 characters' }] });
-	assert.notEqual(await store.head(`reset:${token}`), 0, 'a refused password burns no link');
+	assert.notEqual(await store.head(stored('reset', token)), 0, 'a refused password burns no link');
 	assert.deepEqual(await b.password.reset(token, 'battery staple'), { user: ada.user });
 	assert.equal(await b.signsIn('ada@example.com', 'battery staple'), true);
 	assert.equal(await b.signsIn('ada@example.com', 'correct horse'), false);
@@ -85,10 +85,25 @@ test('forgot answers ok for any address, mails a link only to a known one, and r
 	assert.equal(await b.live(second), false);
 	assert.deepEqual(await b.password.reset(token, 'battery staple'), { refused: [{ code: 'taken', message: 'this link has already been used' }] }, 'a second use is told apart from a link that never was (design 294)');
 	assert.deepEqual(await b.password.reset(token, 'short'), { refused: [{ code: 'taken', message: 'this link has already been used' }] }, 'and it is refused before the password is looked at');
-	assert.notEqual(await store.head(`reset:${token}`), 0, 'the link stays, marked, until its end');
+	assert.notEqual(await store.head(stored('reset', token)), 0, 'the link stays, marked, until its end');
 
 	b.mail.answer({ ok: false, error: 'down' });
 	assert.deepEqual(await b.password.forgot('ada@example.com'), { refused: [mailRefused('down')] });
+	await b.stop();
+	await store.stop();
+});
+
+test('a reset link stored under its token still sets the password, once', async () => {
+	const store = newStore();
+	const b = await boot(store);
+	const ada = await b.signUp('ada@example.com');
+	// What the version before design 324 wrote for a link still in someone's inbox.
+	const token = someToken();
+	await writePlain(store, 'reset', token, { user: ada.user, expires: Date.now() + 3_600_000, createdAt: Date.now() });
+
+	assert.deepEqual(await b.password.reset(token, 'battery staple'), { user: ada.user });
+	assert.equal(await b.signsIn('ada@example.com', 'battery staple'), true);
+	assert.deepEqual(await b.password.reset(token, 'another horse'), { refused: [{ code: 'taken', message: 'this link has already been used' }] });
 	await b.stop();
 	await store.stop();
 });

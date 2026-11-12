@@ -1,13 +1,13 @@
-// A one-time link: a token naming a `<prefix>:<token>` document that says who it is for and
-// when it stops being valid (design 290). Verification and reset links are both this. A taken
-// link keeps its document, marked, until its end, so a second opening is told it was taken
-// rather than that it never was (design 294).
+// A one-time link: a token whose hash names a `<prefix>:<hash>` document that says who it is
+// for and when it stops being valid (designs 290, 324). Verification and reset links are both
+// this. A taken link keeps its document, marked, until its end, so a second opening is told it
+// was taken rather than that it never was (design 294).
 
 import { atomic } from '@aweftjs/core';
 import type { Refusal } from '@aweftjs/core';
 import type { Store } from '@aweftjs/store';
 
-import { isToken, mintToken } from './token.ts';
+import { hashToken, isToken, mintToken } from './token.ts';
 
 /** What a link document holds. `user` and `expires` are paths the battery declares, so the sweep is a query. `taken` is set once and queried by nothing. */
 export interface LinkDocument extends Record<string, unknown> {
@@ -44,7 +44,19 @@ export interface Links {
  * was down; the timer never keeps the process alive.
  */
 export const links = (store: Store, prefix: string, lifetimeMs: number, sweepMs: number): Links => {
-	const doc = (token: string): string => `${prefix}:${token}`;
+	const doc = (token: string): string => `${prefix}:${hashToken(token)}`;
+
+	// The document a token names, or undefined for none. A link mailed by the version before
+	// design 324 is named by the token itself; it is read where it lies and not moved, because
+	// it ends within its lifetime. A document that was never written has no commits, and `open`
+	// would create one, so the head stands in for whether it exists.
+	const named = async (token: unknown): Promise<string | undefined> => {
+		if (!isToken(token)) return undefined;
+		for (const name of [doc(token), `${prefix}:${token}`]) {
+			if (await store.head(name) !== 0) return name;
+		}
+		return undefined;
+	};
 
 	const linkOf = (held: Partial<LinkDocument>): Link | undefined => {
 		if (typeof held.user !== 'string' || typeof held.expires !== 'number' || held.expires <= Date.now()) return undefined;
@@ -80,16 +92,17 @@ export const links = (store: Store, prefix: string, lifetimeMs: number, sweepMs:
 			return token;
 		},
 		peek: async (token) => {
-			// A document that was never written has no commits, and `open` would create one.
-			if (!isToken(token) || await store.head(doc(token)) === 0) return undefined;
-			const handle = await store.open(doc(token));
+			const name = await named(token);
+			if (name === undefined) return undefined;
+			const handle = await store.open(name);
 			const link = linkOf(handle.root as Partial<LinkDocument>);
 			await store.close(handle);
 			return link;
 		},
 		take: async (token) => {
-			if (!isToken(token) || await store.head(doc(token)) === 0) return undefined;
-			const handle = await store.open(doc(token));
+			const name = await named(token);
+			if (name === undefined) return undefined;
+			const handle = await store.open(name);
 			const held = handle.root as Partial<LinkDocument>;
 			// Two takes of one token in flight open the same live document, so the first to get
 			// here marks it and the second reads the mark.

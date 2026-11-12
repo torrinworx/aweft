@@ -449,6 +449,88 @@ test('auth/Verify with a token takes it as it mounts and says what happened; wit
 	await loader.unload('auth/Verify');
 });
 
+test('auth/Verify shows the sign-in form on a link opened signed out, and posts the token again once someone signs in', async () => {
+	const calls: unknown[][] = [];
+	const refusal = { refused: [{ code: 'sign-in', message: 'sign in to the account this link was mailed to', email: 'ada@example.com' }] };
+	let answer: unknown = refusal;
+	const who = mutable<string | null | undefined>(undefined);
+	const loader = createLoader({
+		sources: [
+			extra({ 'auth/Session.ts': { default: () => ({ user: who, verify: async (...args: unknown[]) => { calls.push(args); return answer; } }) } }),
+			authClient,
+		],
+	});
+	const act = (await loader.load(['auth/Verify']))['auth/Verify'] as { component: (props: unknown) => unknown };
+	const document = createDocument();
+	const stop = mount(document.body as never, h(act.component, { stage: stageOf({}, { token: 'AAAAAAAAAAAAAAAAAAAAAA' }) }));
+	const form = (): LightElement | undefined => elements(document.body.firstChild).find((node) => node.localName === 'form');
+	await settle();
+
+	assert.deepEqual(calls, [['AAAAAAAAAAAAAAAAAAAAAA']], 'the link is posted as the page mounts');
+	assert.equal(form()?.getAttribute('aria-label'), 'Sign in or create an account', 'the refusal puts the battery\'s own sign-in form on the page');
+	assert.match(document.body.textContent ?? '', /ada@example\.com/, 'with the address the link was mailed to');
+	assert.ok(byName(document.body.firstChild, 'password') !== undefined, 'already on the password step');
+	assert.doesNotMatch(document.body.textContent ?? '', /is verified/);
+	assert.match(document.body.textContent ?? '', /Sign in to confirm this email address\./, 'being asked to sign in is said as the note');
+	assert.doesNotMatch(document.body.textContent ?? '', /this link was mailed to/, 'and not as the alert, in the route\'s words');
+
+	// The socket answering that the page is nobody is not a sign-in, and posts nothing.
+	who.set(null);
+	await settle();
+	assert.equal(calls.length, 1);
+
+	// Signed in as the wrong account: one more post, the same refusal, and the form stays.
+	who.set('u_bob');
+	await settle();
+	assert.equal(calls.length, 2, 'a new identity is one new try');
+	assert.ok(form() !== undefined, 'and the form is still there');
+
+	answer = { ok: true };
+	who.set('u_ada');
+	await settle();
+	assert.deepEqual(calls[2], ['AAAAAAAAAAAAAAAAAAAAAA'], 'the same token, with no second click');
+	assert.match(document.body.textContent ?? '', /Your email address is verified/);
+	assert.equal(form(), undefined, 'and the form is gone');
+
+	who.set('u_cy');
+	await settle();
+	assert.equal(calls.length, 3, 'a verified page posts nothing more');
+	stop();
+
+	// A page taken down while it waited follows `user` no further.
+	answer = refusal;
+	const second = createDocument();
+	const stopSecond = mount(second.body as never, h(act.component, { stage: stageOf({}, { token: 'AAAAAAAAAAAAAAAAAAAAAA' }) }));
+	await settle();
+	assert.equal(calls.length, 4, 'refused, and waiting');
+	stopSecond();
+	who.set('u_di');
+	await settle();
+	assert.equal(calls.length, 4, 'a sign-in after it was taken down posts nothing');
+	await loader.unload('auth/Verify');
+});
+
+test('auth/SignIn handed an email opens on the password step with that address', async () => {
+	const calls: [string, string][] = [];
+	const checks: string[] = [];
+	const loader = createLoader({ sources: [signInSession([], { value: { user: 'u1', created: false } }, calls, checks), authClient] });
+	const act = (await loader.load(['auth/SignIn']))['auth/SignIn'] as { component: (props: { email?: string }) => unknown };
+	const document = createDocument();
+	const stop = mount(document.body as never, h(act.component, { email: 'ada@example.com' }));
+	const root = document.body.firstChild;
+
+	assert.match(document.body.textContent ?? '', /Welcome back\./, 'the address is known: a link was mailed to it');
+	const password = byName(root, 'password');
+	(password as unknown as Record<string, unknown>)['value'] = 'correct horse';
+	fire(password, 'input');
+	fire(button(root, 'Sign in'), 'click');
+	await settle();
+	assert.deepEqual(calls, [['ada@example.com', 'correct horse']], 'enter is called with the address it was handed');
+	assert.deepEqual(checks, [], 'and nothing asked whether the address has an account');
+	stop();
+	await loader.unload('auth/SignIn');
+});
+
 test('auth/Reset without a token asks for the address and calls forgot; with one it asks for the password and calls reset', async () => {
 	const forgot: unknown[][] = [];
 	const reset: unknown[][] = [];

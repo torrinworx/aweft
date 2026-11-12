@@ -46,7 +46,7 @@ naming `notify/Send`.
 | module | public | what it does |
 |---|---|---|
 | `auth/Gate` | | `identify` reads the session cookie; `access` allows a module that declares `public: true` to anyone, one that declares `needs` to a signed-in user holding the name, and any other module only to a signed-in user |
-| `auth/Session` | yes | `issue(user)`, `revoke(token)`, `revokeAll(user, except?)`, `whoIs(request)`, `setCookie(token, request)`, a `call` answering `{ user }` for the asking connection, and `DELETE /api/session` |
+| `auth/Session` | yes | `issue(user)`, `revoke(token)`, `revokeAll(user, except?)`, `whoIs(request)`, `setCookie(token, request)`, a `call` answering `{ user }` for the asking connection, a `connection` hook that closes a session's sockets when it ends, and `DELETE /api/session` |
 | `auth/Roles` | | `may(user, name)`, `grant(user, ...names)`, `revoke(user, ...names)`, `names(user)`; shares `roles:<user>` read-only under the topic `roles`, and a `call` answering the `implies` table |
 | `auth/Enter` | yes | `enter(email, password)` signs in, or signs up when nobody has the email; `checkPassword(password)` answers the reasons the rules refuse one; `afterSignUp(listener)` hears each account it makes; `POST /api/session` does the first and sets the cookie |
 | `auth/Check` | yes | `exists(email)`, and a `call` answering `{ exists }` for `{ email }` |
@@ -56,7 +56,7 @@ And in `mail`, both naming `notify/Send` in their `deps`:
 
 | module | public | what it does |
 |---|---|---|
-| `auth/Verify` | yes | `send(user)` mails a one-time link; `confirm(token)` takes it, writes `emailVerified` and grants the name `verified`; `POST /api/verify/send` and `POST /api/verify` |
+| `auth/Verify` | yes | `send(user)` mails a one-time link; `confirm(token)` takes it, writes `emailVerified` and grants the name `verified`; `POST /api/verify/send`, and `POST /api/verify`, which takes it only for the account it was mailed to |
 | `auth/Password` | yes | `change(user, current, password, keep?)`, `forgot(email)`, `reset(token, password)`; `POST /api/password`, `POST /api/password/forgot`, `POST /api/password/reset` |
 
 **A module of yours declares `public: true`, `needs`, or nothing.** Absent means private: only
@@ -175,6 +175,17 @@ terminates TLS, start the Node listener with `forwarded: true` so the scheme com
 browser then refuses to take it from anywhere else, and refuses it over plain HTTP, which is
 why that is not the name it ships with.
 
+**Ending a session closes its open connections** (design 323). `revoke(token)` closes every
+socket this process holds for that session, and `revokeAll(user, except?)` those of every session
+it ends, leaving the kept one's alone. So a password change drops the person's other devices,
+a reset drops all of them, and `DELETE /api/session` drops the sockets of the session that
+asked, in every tab that shares the cookie. A page whose socket was closed comes back by itself
+through the client's reconnect, and `user` reads `null`. An anonymous connection is never
+closed. What this does not do: it closes only the connections of the process that ran the
+revoke, so with two processes over one store (two versions during a deploy) a socket held by
+the other stays open until it closes for another reason; and a session that reaches the end of
+its `sessionMs` is anonymous to the next request while a socket already open on it stays open.
+
 **A session that ended is swept.** `revoke` writes `expires` as the moment it happened, and
 `auth/Session` removes every session whose end is more than `keep` days ago (30), when the
 module is made and every `sweepMs` (an hour). A session with no lifetime that was never revoked
@@ -276,8 +287,9 @@ export const config = {
 ```
 POST /api/verify/send                          signed in: mails the link
   200 { "ok": true }   401 private   409 verified   429 attempts   502 mail
-POST /api/verify        { "token": "..." }     anyone: takes the link once
+POST /api/verify        { "token": "..." }     signed in as the link's account: takes the link once
   200 { "user": "<id>" }   400 token | taken
+  401 { "reasons": [{ "code": "sign-in", "message": "...", "email": "<the account's address>" }] }
 
 POST /api/password      { "current": "...", "password": "..." }   signed in
   200 { "ok": true }   401 password (the current one is wrong)   400 password (the new one)   429 attempts
@@ -288,8 +300,8 @@ POST /api/password/reset  { "token": "...", "password": "..." }   anyone
 ```
 
 **A link is one use, and lives its lifetime.** A token is what a session token is, sixteen
-random bytes; the document `verify:<token>` or `reset:<token>` names who it is for and when it
-ends. Taking it marks the document `taken`, and the sweep removes it once it has expired,
+random bytes; the document `verify:<hash>` or `reset:<hash>`, named by the token's SHA-256,
+says who it is for and when it ends. Taking it marks the document `taken`, and the sweep removes it once it has expired,
 taken or not. So a token names one of three things: a live link, a taken one (400 `taken`,
 which for a verification link means the address is verified, and a page may say so), or
 nothing (400 `token`, for a link nobody issued or one past its end; design 294). Taking a
@@ -298,6 +310,16 @@ link sets the password and ends every session of the person. A change needs the 
 password, sets the new one, and ends every other session, keeping the one that asked. The new
 password goes through `auth/Enter`'s `checkPassword`, so `passwordMin`, `passwordMax` and
 `refusePassword` apply once.
+
+**A verification link confirms only for the account it was mailed to** (design 322). Signing up
+asks for no proof of the address, so anyone can make an account under someone else's. If the
+link confirmed for whoever opened it, the address's real holder, opening a mail they did not
+expect, would hand a stranger a verified account. So `POST /api/verify` looks at the link first:
+when it is live and the request is anonymous, or signed in as another account, it answers 401
+with the reason `sign-in` and leaves the link untaken. The reason carries `email`, the address
+of the link's account, which whoever holds the token already read it out of. The person signs
+in as that account and the same link then confirms. `Verify.confirm(token)` called from a
+module of yours asks for no session: your server code is trusted, and the route is what checks.
 
 **The mail says one thing and carries one link.** The body is the sentence and the address as
 text, the HTML the same with the address as a link, under `subject`. For a mail of your own,
@@ -430,7 +452,9 @@ anyway changes nothing.
 **`verify`, `change`, `forgot` and `reset` are the mail routes**, each answering `{ ok: true }`
 or `{ refused }` with the route's reasons, and rejecting `<name>-failed` for any other status.
 `verify()` asks for the mail and `verify(token)` takes the link; neither reconnects, and
-`verified` reaches `names` through the share. `change` keeps the session that asked. `reset`
+`verified` reaches `names` through the share. `verify(token)` resolves
+`{ refused: [{ code: 'sign-in', message, email }] }` when the page is not signed in as the
+link's account, and the link stays live. `change` keeps the session that asked. `reset`
 reconnects, because every session of the person is over, this page's included when it was
 theirs, so `user` reads `null` afterwards.
 
@@ -479,8 +503,8 @@ import { authClient } from '@aweftjs/auth/client';
 | module | what it is |
 |---|---|
 | `auth/Session` | `createAuth` over the `client` the stage handed the loader. Its instance is the `Auth` above, so any module of yours that needs to know who the page is names it in `deps` |
-| `auth/SignIn` | an act module: the sign-in and sign-up form, in one, because `enter` does both. It asks for the email, then says whether it signs in ("Welcome back") or creates an account, with the button to match. `google: true` in its config adds Continue with Google |
-| `auth/Verify` | an act module: with a `token` in the act's parameters or the URL's query it takes the link as it mounts and says what happened; without one it offers a signed-in person the mail |
+| `auth/SignIn` | an act module: the sign-in and sign-up form, in one, because `enter` does both. It asks for the email, then says whether it signs in ("Welcome back") or creates an account, with the button to match. Handed an `email` prop it opens on the password step with that address. `google: true` in its config adds Continue with Google |
+| `auth/Verify` | an act module: with a `token` in the act's parameters or the URL's query it takes the link as it mounts and says what happened, and when the link is refused `sign-in` it shows `auth/SignIn` with the address and takes the link again once someone has signed in; without a token it offers a signed-in person the mail. It names `auth/SignIn` in `deps` |
 | `auth/Reset` | an act module: without a `token` the forgot form, with one the new-password form |
 
 **The battery never picks a URL.** `auth/SignIn` lands on the address you name it at, and
@@ -500,6 +524,27 @@ export const config = { origin: 'https://api.example.com' };
 
 **Replacing any of them** is the same rule every battery module has: a module of that name in
 an earlier source wins. A sign-in form of your own is `auth/SignIn` in your own directory.
+
+**A verify page of your own handles `sign-in` the way `auth/Verify` does**, or a person who
+opens the mail in a browser where they are not signed in is told the link did not work. Call
+`verify(token)` as the page mounts. When the answer's `refused` holds a reason whose `code` is
+`sign-in`, keep the token, show your sign-in form with that reason's `email` filled in, and
+follow `user`: each time it becomes a string, call `verify(token)` again. The server decides
+whether it is the right account, so a sign-in as the wrong one is refused the same way and the
+form stays. Stop following when the page is taken down.
+
+```ts
+const wanted = mutable(undefined);          // the address to sign in as, while the link waits
+const take = async () => {
+	const answer = await session.verify(token);
+	wanted.set('refused' in answer ? answer.refused.find((one) => one.code === 'sign-in')?.email : undefined);
+	return answer;                            // { ok: true }, or the reasons to show
+};
+void take();
+cleanup(session.user.watch((who) => {
+	if (typeof who === 'string' && wanted.get() !== undefined) void take();
+}));
+```
 
 **`auth/SignIn` picks no URL after a successful `enter`.** The visitor stays on the address they
 asked for. When the form is what `refused` put there, the stage handed it a `retry`, and it calls
@@ -566,15 +611,27 @@ Six kinds of document in your store, named by prefix:
 - `user:<id>`: `email`, `name`, `password` (the scrypt hash, with its parameters and salt
   written into it; never the password; empty for an account made through Google), `emailVerified`, `createdAt`, `modifiedAt`. Never
   shared on a link.
-- `session:<token>`: `user`, `expires` (the lifetime's end, the moment of revocation, or null
+- `session:<hash>`: `user`, `expires` (the lifetime's end, the moment of revocation, or null
   for never), `status` (`active` or `revoked`), `createdAt`.
 - `roles:<user>`: `names`, what the person was granted, and `modifiedAt`. Shared to its own
   user under `roles`, refusing every commit. `auth:first` is the one-line marker that says a
   first sign-up has been seen.
 - `state:<user>`: whatever you keep per user. `auth/State` shares it under `state`, accepting
   every commit, because it is theirs.
-- `verify:<token>` and `reset:<token>`: `user`, `expires`, `createdAt`, and `taken` once it
+- `verify:<hash>` and `reset:<hash>`: `user`, `expires`, `createdAt`, and `taken` once it
   has been. Removed by the sweep once expired.
+
+**A token is stored as its hash** (design 324). `<hash>` is the SHA-256 of the token in
+base64url, 43 characters. The cookie, the mailed link and `context.session` carry the token; the
+store never does, so a copy of the store (a backup, a dump on a laptop) holds no name that works
+as a cookie or a link. A store written before this holds `session:<token>`, `verify:<token>` and
+`reset:<token>`, and those are still read, so moving to this version signs nobody out and kills
+no mailed link: a session found under its token is copied to its hash and the old document
+removed the first time `whoIs` sees it live, and the timed sweep (every `sweepMs`, not the one
+run as the module is made) moves the rest; a link under its token is read where it lies until
+it ends. A version from before this one finds a session only under its token. So where two
+versions serve side by side, a person whose session this one has moved, or issued, is anonymous
+to the older one.
 
 The state document is an `@aweftjs/core` observable, as every document in the store is: put
 a list in it with `createArray` from `@aweftjs/core`, an object with `createObject`, and group
@@ -612,5 +669,6 @@ itself.
 
 The design notes are in
 [`docs/design/`](https://github.com/torrinworx/aweft/tree/main/docs/design) 071 and 074, 185 and
-245 for the client half, 289 for names, 290 for the mail flows and 318 for Google and the
-form's two steps.
+245 for the client half, 289 for names, 290 for the mail flows, 318 for Google and the
+form's two steps, 322 for whose session a verification link needs, 323 for closing a session's
+connections and 324 for the hashed names.

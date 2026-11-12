@@ -62,6 +62,9 @@
 	"Sign in or create an account": [
 		"src/client-modules/SignIn.tsx"
 	],
+	"Sign in to confirm this email address.": [
+		"src/client-modules/Verify.tsx"
+	],
 	"Signing in with Google did not work. Try again, or use your email.": [
 		"src/client-modules/SignIn.tsx"
 	],

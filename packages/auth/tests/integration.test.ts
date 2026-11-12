@@ -7,8 +7,11 @@ import { fromBundle } from '@aweftjs/modules';
 import { createServer } from '@aweftjs/server';
 import type { Connection } from '@aweftjs/server';
 
+import { loadServer } from '@aweftjs/testing';
+
 import { auth } from '../src/index.ts';
 import type { AuthContext } from '../src/index.ts';
+import type { Session } from '../src/modules/Session.ts';
 
 import { asClient, connectTo, fakeListener, jsonRequest, newStore, peer, reasonOf, request, settle } from './helpers.ts';
 
@@ -106,7 +109,8 @@ test('mail beside the real notify battery: the verification link and the reset l
 	assert.equal(mails[0]!.subject, 'Verify your email address');
 	const verifyToken = mails[0]!.text.slice(mails[0]!.text.indexOf('token=') + 6);
 	assert.ok(mails[0]!.html.includes(`http://app.test/verify?token=${verifyToken}`));
-	const taken = await post('/api/verify', { token: verifyToken });
+	assert.equal((await post('/api/verify', { token: verifyToken })).status, 401, 'opened with no cookie, the link is refused and left (design 322)');
+	const taken = await post('/api/verify', { token: verifyToken }, cookie);
 	assert.equal(taken.status, 200);
 	assert.deepEqual(await taken.json(), { user });
 	const page = asClient(await connectTo(handlers, cookie));
@@ -124,6 +128,61 @@ test('mail beside the real notify battery: the verification link and the reset l
 	assert.equal((await post('/api/session', { email: 'ada@example.com', password: 'battery staple' })).status, 200);
 
 	await server.stop();
+	await store.stop();
+});
+
+test('ending a session closes its open connections, and only those', async () => {
+	const store = newStore();
+	const running = await loadServer({ sources: [auth], store, gate: 'auth/Gate' });
+	const session = running.server.loader.get('auth/Session') as Session;
+	const enter = async (email: string): Promise<{ user: string; cookie: string; token: string }> => {
+		const answer = await running.fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password: 'correct horse' }) });
+		const cookie = answer.headers.getSetCookie()[0]!.split(';')[0]!;
+		return { user: (await answer.json() as { user: string }).user, cookie, token: cookie.slice('session='.length) };
+	};
+	const open = async (cookie?: string) => (await running.open(cookie === undefined ? {} : { headers: { cookie } })).socket;
+	const OPEN = 1;
+	const CLOSED = 3;
+
+	// Ada on three devices, one of them with two tabs; Bo; and a visitor.
+	const [phone, laptop, desk] = [await enter('ada@example.com'), await enter('ada@example.com'), await enter('ada@example.com')];
+	const bo = await enter('bo@example.com');
+	const sockets = {
+		phoneOne: await open(phone.cookie), phoneTwo: await open(phone.cookie),
+		laptop: await open(laptop.cookie), desk: await open(desk.cookie),
+		bo: await open(bo.cookie), visitor: await open(),
+	};
+	await settle();
+	const states = (): Record<string, number> => Object.fromEntries(Object.entries(sockets).map(([name, socket]) => [name, socket.readyState]));
+	assert.deepEqual(states(), { phoneOne: OPEN, phoneTwo: OPEN, laptop: OPEN, desk: OPEN, bo: OPEN, visitor: OPEN });
+
+	assert.equal(await session.revoke(phone.token), true);
+	await settle();
+	assert.deepEqual(states(), { phoneOne: CLOSED, phoneTwo: CLOSED, laptop: OPEN, desk: OPEN, bo: OPEN, visitor: OPEN }, 'revoke closes every connection of that session and no other');
+
+	assert.equal(await session.revokeAll(phone.user, laptop.token), 1);
+	await settle();
+	assert.deepEqual(states(), { phoneOne: CLOSED, phoneTwo: CLOSED, laptop: OPEN, desk: CLOSED, bo: OPEN, visitor: OPEN }, 'revokeAll leaves the kept session connected');
+
+	const tablet = await enter('ada@example.com');
+	const late = await open(tablet.cookie);
+	await settle();
+	assert.equal(await session.revokeAll(phone.user), 2);
+	await settle();
+	assert.deepEqual(states(), { phoneOne: CLOSED, phoneTwo: CLOSED, laptop: CLOSED, desk: CLOSED, bo: OPEN, visitor: OPEN }, 'revokeAll with nothing kept closes them all, and another person and a visitor stay');
+	assert.equal(late.readyState, CLOSED);
+
+	// What a page does next is connect again, and the cookie it still holds names nobody.
+	const back = await running.open({ headers: { cookie: laptop.cookie } });
+	assert.equal(JSON.stringify(await back.asks.ask('auth/Session')), '{"user":null}');
+	back.socket.close();
+
+	assert.equal((await running.fetch('/api/session', { method: 'DELETE', headers: { cookie: bo.cookie } })).status, 200);
+	await settle();
+	assert.deepEqual([sockets.bo.readyState, sockets.visitor.readyState], [CLOSED, OPEN], 'signing out closes the sockets of the session that asked');
+
+	sockets.visitor.close();
+	await running.stop();
 	await store.stop();
 });
 

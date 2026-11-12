@@ -1,5 +1,6 @@
 // auth/Verify: a one-time link by mail, and the name `verified` once it is clicked (design 290),
-// mailed to every new account when `atSignUp` is set (design 300).
+// mailed to every new account when `atSignUp` is set (design 300). The route takes a link only
+// for the account it was mailed to (design 322).
 
 import { atomic } from '@aweftjs/core';
 import type { ModuleProps } from '@aweftjs/modules';
@@ -34,7 +35,10 @@ export interface Verify {
 	readonly public: true;
 	/** Mail the person a link. Refuses `verified` for a person already verified, and `mail` when it did not go. */
 	send(user: string): Promise<Outcome>;
-	/** Take a link: `emailVerified` is written and `verified` granted. Refuses `taken` for a link already used and `token` for one that never was or is past its end. */
+	/**
+	 * Take a link: `emailVerified` is written and `verified` granted. Refuses `taken` for a link already used and `token` for one that never was or is past its end.
+	 * It asks for no session: a module that calls it is the application's own. `POST /api/verify` is what checks who asks (design 322).
+	 */
 	confirm(token: unknown): Promise<Confirmed>;
 	stop(): void;
 	readonly routes: Record<string, (request: Request, context: AuthContext) => Promise<Response>>;
@@ -116,8 +120,18 @@ export default ({ imports, config, ...props }: ModuleProps): Verify => {
 				}
 				return json(200, { ok: true });
 			},
-			'POST /api/verify': async (request) => {
+			'POST /api/verify': async (request, context) => {
 				const body = await bodyOf(request);
+				// Looked at and left, so the link a stranger's session or no session was refused
+				// still confirms once its own account asks. The address goes back because whoever
+				// holds the token read it out of that mailbox (design 322).
+				const link = await held.peek(body?.token);
+				if (link !== undefined && 'user' in link && link.user !== userOf(context)) {
+					const handle = await store.open(userDoc(link.user));
+					const email = (handle.root as Partial<UserDocument>).email;
+					await store.close(handle);
+					return json(401, { reasons: [{ code: 'sign-in', message: 'sign in to the account this link was mailed to', email }] });
+				}
 				const outcome = await confirm(body?.token);
 				if ('refused' in outcome) return json(400, { reasons: outcome.refused });
 				return json(200, outcome);

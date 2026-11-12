@@ -10,7 +10,7 @@ import type { Enter, UserDocument } from '../src/modules/Enter.ts';
 import type { Session } from '../src/modules/Session.ts';
 import type { Verify } from '../src/modules/Verify.ts';
 
-import { jsonRequest, mailRefused, mailer, module, newStore, noRoles, request, tokenIn } from './helpers.ts';
+import { jsonRequest, mailer, mailRefused, module, newStore, noRoles, request, someToken, stored, tokenIn, writePlain } from './helpers.ts';
 
 const url = (token: string): string => `https://app.example/verify?token=${token}`;
 
@@ -48,14 +48,14 @@ test('send writes a link and mails it through notify with the configured url; co
 	const token = tokenIn(one!.body);
 	assert.match(token, /^[A-Za-z0-9_-]{22}$/, 'a token of the battery\'s own shape');
 	assert.ok(one!.html.includes(`<a href="https://app.example/verify?token=${token}">`), 'the html carries the link as a link');
-	assert.notEqual(await store.head(`verify:${token}`), 0, 'the link document exists');
+	assert.notEqual(await store.head(stored('verify', token)), 0, 'the link document exists');
 	assert.deepEqual(await verify.confirm([token]), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] }, 'a token is a string, not a list holding one');
-	assert.notEqual(await store.head(`verify:${token}`), 0, 'and the link still stands');
+	assert.notEqual(await store.head(stored('verify', token)), 0, 'and the link still stands');
 
 	assert.deepEqual(await verify.confirm(token), { user: ada });
 	assert.equal(await verifiedOf(store, ada), true);
 	assert.equal(await roles.may(ada, 'verified'), true, 'the name is granted');
-	assert.notEqual(await store.head(`verify:${token}`), 0, 'the link stays, marked, until its end (design 294)');
+	assert.notEqual(await store.head(stored('verify', token)), 0, 'the link stays, marked, until its end (design 294)');
 	assert.deepEqual(await verify.confirm(token), { refused: [{ code: 'taken', message: 'this link has already been used' }] }, 'a second use is told apart from a link that never was');
 	assert.deepEqual(await verify.confirm('not a token'), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] });
 	assert.deepEqual(await verify.confirm('AAAAAAAAAAAAAAAAAAAAAA'), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] }, 'a token nobody issued');
@@ -84,7 +84,7 @@ test('a link past its lifetime is refused and swept; a mailer that fails or skip
 	const failed = await verify.send(ada);
 	assert.deepEqual(failed, { refused: [mailRefused('the provider said no')] });
 	const standing = tokenIn(mail.sent[1]!.body);
-	assert.notEqual(await store.head(`verify:${standing}`), 0, 'the link is kept for the next try');
+	assert.notEqual(await store.head(stored('verify', standing)), 0, 'the link is kept for the next try');
 	mail.answer({ skipped: 'no address' });
 	assert.deepEqual(await verify.send(ada), { refused: [mailRefused('no address')] });
 	mail.answer(undefined);
@@ -143,13 +143,13 @@ test('POST /api/verify/send is 401 anonymous, 200 sent, 409 already verified, 42
 	assert.equal(bad.status, 400);
 	assert.deepEqual(await bad.json(), { reasons: [{ code: 'token', message: 'this link is not one that can be used' }] });
 	assert.equal((await takeRoute(request('/api/verify', { method: 'POST', body: 'not json' }), asUser(null))).status, 400, 'no body is no token');
-	const taken = await takeRoute(jsonRequest('/api/verify', 'POST', { token: tokenIn(mail.sent[1]!.body) }), asUser(null));
-	assert.equal(taken.status, 200, 'anyone with the link takes it');
+	const taken = await takeRoute(jsonRequest('/api/verify', 'POST', { token: tokenIn(mail.sent[1]!.body) }), asUser(ada));
+	assert.equal(taken.status, 200, 'the account the link was mailed to takes it');
 	assert.deepEqual(await taken.json(), { user: ada });
 	const again = await takeRoute(jsonRequest('/api/verify', 'POST', { token: tokenIn(mail.sent[1]!.body) }), asUser(null));
 	assert.equal(again.status, 400, 'a second opening');
 	assert.deepEqual(await again.json(), { reasons: [{ code: 'taken', message: 'this link has already been used' }] });
-	assert.equal((await takeRoute(jsonRequest('/api/verify', 'POST', { token: tokenIn(mail.sent[0]!.body) }), asUser(null))).status, 200, 'an earlier link still stands');
+	assert.equal((await takeRoute(jsonRequest('/api/verify', 'POST', { token: tokenIn(mail.sent[0]!.body) }), asUser(ada))).status, 200, 'an earlier link still stands');
 
 	const { instance: fresh } = await module<Verify>('Verify', store, { 'auth/Roles': roles, 'notify/Send': mail }, { url });
 	assert.equal((await fresh.routes['POST /api/verify/send']!(request('/api/verify/send', { method: 'POST' }), asUser(ada))).status, 409);
@@ -160,6 +160,68 @@ test('POST /api/verify/send is 401 anonymous, 200 sent, 409 already verified, 42
 	assert.deepEqual(await down.json(), { reasons: [mailRefused('down')] });
 	verify.stop();
 	fresh.stop();
+	await store.stop();
+});
+
+test('POST /api/verify confirms only for the account the link was mailed to, and a refused try leaves the link live', async () => {
+	const store = newStore();
+	const mail = mailer();
+	const { instance: roles } = await module<Roles>('Roles', store);
+	const { instance: verify } = await module<Verify>('Verify', store, { 'auth/Roles': roles, 'notify/Send': mail }, { url });
+	const ada = await signUp(store, 'ada@example.com');
+	const bob = await signUp(store, 'bob@example.com');
+	await verify.send(ada);
+	const token = tokenIn(mail.sent[0]!.body);
+	const post = (who: string | null): Promise<Response> => verify.routes['POST /api/verify']!(jsonRequest('/api/verify', 'POST', { token }), asUser(who));
+
+	// A stranger who signed up with Ada's address holds no session of hers when she opens the
+	// mail, and Bob opening it signed in as himself is no nearer (design 322).
+	for (const who of [null, bob]) {
+		const refused = await post(who);
+		assert.equal(refused.status, 401, String(who));
+		assert.deepEqual(await refused.json(), {
+			reasons: [{ code: 'sign-in', message: 'sign in to the account this link was mailed to', email: 'ada@example.com' }],
+		}, 'the reason names the address, which whoever holds the link read it out of');
+		assert.equal(await verifiedOf(store, ada), false, 'nothing is verified');
+		assert.equal(await roles.may(ada, 'verified'), false);
+	}
+	assert.equal(await verifiedOf(store, bob), false, 'and not the account that asked either');
+
+	const taken = await post(ada);
+	assert.equal(taken.status, 200, 'the refused tries left the link live');
+	assert.deepEqual(await taken.json(), { user: ada });
+	assert.equal(await verifiedOf(store, ada), true);
+	assert.equal(await roles.may(ada, 'verified'), true);
+
+	for (const who of [null, bob, ada]) {
+		const again = await post(who);
+		assert.equal(again.status, 400, 'a taken link says taken, whoever asks');
+		assert.deepEqual(await again.json(), { reasons: [{ code: 'taken', message: 'this link has already been used' }] });
+	}
+
+	// A module of the application's own is trusted: `confirm` asks for no session.
+	await verify.send(bob);
+	assert.deepEqual(await verify.confirm(tokenIn(mail.sent[1]!.body)), { user: bob });
+	verify.stop();
+	await store.stop();
+});
+
+test('a verification link stored under its token is still looked at and taken', async () => {
+	const store = newStore();
+	const { instance: roles } = await module<Roles>('Roles', store);
+	const { instance: verify } = await module<Verify>('Verify', store, { 'auth/Roles': roles, 'notify/Send': mailer() }, { url });
+	const ada = await signUp(store, 'ada@example.com');
+	// What the version before design 324 wrote for a link still in someone's inbox.
+	const token = someToken();
+	await writePlain(store, 'verify', token, { user: ada, expires: Date.now() + 3_600_000, createdAt: Date.now() });
+	const post = (who: string | null): Promise<Response> => verify.routes['POST /api/verify']!(jsonRequest('/api/verify', 'POST', { token }), asUser(who));
+
+	assert.equal((await post(null)).status, 401, 'looked at: it is live, and for someone else');
+	assert.equal((await post(ada)).status, 200, 'and taken');
+	assert.equal(await verifiedOf(store, ada), true);
+	assert.equal((await post(ada)).status, 400, 'once');
+	assert.equal(await store.head(stored('verify', token)), 0, 'a link is not moved: it ends within its lifetime');
+	verify.stop();
 	await store.stop();
 });
 
@@ -201,7 +263,7 @@ test('atSignUp mails every new account its link before enter answers, counted as
 	assert.ok('user' in up && up.created);
 	assert.equal(mail.sent.length, 1, 'the mail went before enter answered');
 	assert.equal(mail.sent[0]!.user, up.user);
-	assert.notEqual(await store.head(`verify:${tokenIn(mail.sent[0]!.body)}`), 0, 'and its link stands');
+	assert.notEqual(await store.head(stored('verify', tokenIn(mail.sent[0]!.body))), 0, 'and its link stands');
 	const soon = await verify.routes['POST /api/verify/send']!(request('/api/verify/send', { method: 'POST' }), asUser(up.user));
 	assert.equal(soon.status, 429, 'the page asking again at once is inside the resend gap');
 

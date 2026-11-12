@@ -109,7 +109,8 @@ export const run = async (
 	check((await post('/api/verify/send', {}, bobCookie)).status === 200, 'bob asks for the verification mail');
 	check(mails.length === 1 && mails[0]!.to === 'bob@example.com', 'notify mailed it to the address on his user document');
 	const verifyToken = linkIn(mails[0]!.text);
-	check((await post('/api/verify', { token: verifyToken })).status === 200, 'the link is taken');
+	check((await post('/api/verify', { token: verifyToken })).status === 401, 'opened with no session, the link is refused and left');
+	check((await post('/api/verify', { token: verifyToken }, bobCookie)).status === 200, 'signed in as bob, the same link is taken');
 	await until(() => (bobNames.names ?? []).includes('verified'), 'verified to reach bob\'s page');
 	check((bobNames.names ?? []).includes('verified'), 'and bob holds verified');
 	check((await post('/api/verify', { token: verifyToken })).status === 400, 'a link is one use');

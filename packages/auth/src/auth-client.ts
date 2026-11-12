@@ -163,8 +163,11 @@ export interface Auth {
 	 * Returns: `{ ok: true }`, or `{ refused }` with the route's reasons: `private` when nobody
 	 * is signed in, `verified` when the email already is, `attempts` when too many were asked
 	 * for, `mail` when the mailer did not take it, `token` when the link is not one that can be
-	 * used, `taken` when it already was. Nothing reconnects: the name `verified` reaches `names`
-	 * through the share.
+	 * used, `taken` when it already was, `sign-in` when the link is live and the page is not
+	 * signed in as the account it was mailed to. That last reason carries `email`, the account's
+	 * address, beside `code` and `message`; the link is left live, so sign in as that account and
+	 * call this again with the same token (design 322). Nothing reconnects: the name `verified`
+	 * reaches `names` through the share.
 	 *
 	 * Rejects with `verify-failed` for any other status, with `stopped` on a stopped auth.
 	 *
@@ -444,7 +447,7 @@ export const createAuth = (client: Client, options: AuthOptions = {}): Auth => {
 
 		verify: async (token) => outcome(token === undefined
 			? await post('verify-failed', VERIFY_FIX, 'verification', '/api/verify/send', undefined, [401, 409, 429, 502])
-			: await post('verify-failed', VERIFY_FIX, 'verification', '/api/verify', { token }, [400])),
+			: await post('verify-failed', VERIFY_FIX, 'verification', '/api/verify', { token }, [400, 401])),
 
 		change: async (current, password) => outcome(await post('change-failed', CHANGE_FIX, 'password change', '/api/password', { current, password }, [400, 401, 429])),
 

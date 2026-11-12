@@ -1,19 +1,22 @@
-// auth/Session: sessions as documents, the cookie, who a request is (design 074), and the
-// sweep that removes a session once it has been over for `keep` days (design 275).
+// auth/Session: sessions as documents, the cookie, who a request is (design 074), the
+// sweep that removes a session once it has been over for `keep` days (design 275), and the
+// closing of a session's open connections when it ends (design 323). A session's document is
+// named by the hash of its token, and one the version before wrote under the token itself is
+// still read, and moved (design 324).
 
 import { codecError } from '@aweftjs/codec';
 import { atomic } from '@aweftjs/core';
 import type { ModuleProps } from '@aweftjs/modules';
-import type { Identified, Peer } from '@aweftjs/server';
+import type { Connection, Ending, Identified, Peer } from '@aweftjs/server';
 
 import { type AuthContext, userOf } from '../context.ts';
 import { cookiesOf, setCookie } from '../cookie.ts';
 import { json, storeOf } from '../props.ts';
-import { isToken, mintToken } from '../token.ts';
+import { hashToken, isToken, mintToken } from '../token.ts';
 
 export const defaults = { cookie: 'session', keep: 30, sweepMs: 3_600_000 };
 
-/** What a `session:<token>` document holds. */
+/** What a `session:<hash>` document holds. */
 export interface SessionDocument extends Record<string, unknown> {
 	user: string;
 	/** When it stopped, or stops, being valid: the lifetime's end, the moment of revocation, or null for never. */
@@ -26,17 +29,19 @@ export interface Session {
 	readonly public: true;
 	/** Mint a session for a user. Returns its token, which is the cookie's value. */
 	issue(user: string): Promise<string>;
-	/** End a session. True when it was active. */
+	/** End a session and close the connections this process holds for it. True when it was active. */
 	revoke(token: string): Promise<boolean>;
-	/** End every active session of a user but the one named. Returns how many it ended. */
+	/** End every active session of a user but the one named, closing their connections. Returns how many it ended. */
 	revokeAll(user: string, except?: string): Promise<number>;
+	/** Keep a signed-in connection's `close` until it ends, so ending its session can call it (design 323). */
+	connection(connection: Connection<AuthContext>): Promise<Ending>;
 	/** Who a request is, from its cookies, and where it came from. Always a context: this gate refuses nobody at the door. */
 	whoIs(request: Request, peer?: Peer): Promise<Identified<AuthContext>>;
 	/** The `Set-Cookie` value that sets the cookie to a token, or clears it for null. */
 	setCookie(token: string | null, request: Request): string;
 	/** Who the asking connection is. The module is public, so an anonymous one hears `{ user: null }`. */
 	call(args: unknown, context: unknown): { user: string | null };
-	/** Remove every session that has been over for longer than `keep` days. Returns how many. */
+	/** Remove every session that has been over for longer than `keep` days, and move any still named by its token to its hash. Returns how many it removed. */
 	sweep(): Promise<number>;
 	stop(): Promise<void>;
 	readonly routes: Record<string, (request: Request, context: AuthContext) => Promise<Response>>;
@@ -65,16 +70,62 @@ export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 	}
 	const keep = config.keep;
 	const sweepMs = config.sweepMs;
-	const doc = (token: string): string => `session:${token}`;
+	const doc = (token: string): string => `session:${hashToken(token)}`;
+	// What the version before design 324 named a session by. Read for the move, never written.
+	const plain = (token: string): string => `session:${token}`;
 
 	// A document that was never written has no commits, and `open` would create it. Nothing
 	// in the store says whether a document exists without opening it, so the head stands in.
-	const read = async (token: string): Promise<SessionDocument | undefined> => {
-		if (await store.head(doc(token)) === 0) return undefined;
-		const handle = await store.open(doc(token));
+	const read = async (name: string): Promise<SessionDocument | undefined> => {
+		if (await store.head(name) === 0) return undefined;
+		const handle = await store.open(name);
 		const held = { ...(handle.root as SessionDocument) };
 		await store.close(handle);
 		return held;
+	};
+
+	const live = (session: SessionDocument | undefined): session is SessionDocument =>
+		session !== undefined && session.status === 'active' && (session.expires === null || session.expires > Date.now());
+
+	// Every signed-in connection this process holds, beside the hash of its session's token. One
+	// set, walked on a revoke, so a session with no connection left has nothing left here either
+	// (design 323).
+	const open = new Set<{ readonly session: string; close(): void }>();
+	const drop = (session: string): void => {
+		for (const held of [...open]) if (held.session === session) held.close();
+	};
+
+	// Copy a plain session to its hashed name as it stands, and remove the plain one. The plain
+	// document stays open across the write and is looked at again after it, so a revoke that
+	// lands on it meanwhile is copied too; and a hashed document already there is left alone,
+	// since it is the newer of the two. Either way nothing that was over comes back (design 324).
+	const move = async (token: string): Promise<void> => {
+		if (await store.head(doc(token)) === 0) {
+			const from = await store.open(plain(token));
+			const to = await store.open(doc(token));
+			const old = from.root as SessionDocument;
+			const next = to.root as SessionDocument;
+			let copied: unknown;
+			do {
+				copied = old.status;
+				atomic(() => { Object.assign(next, { ...old }); });
+				await store.settled(to);
+			} while (copied !== old.status);
+			await store.close(to);
+			await store.close(from);
+		}
+		await store.remove(plain(token));
+	};
+
+	// The session a token names: by its hash, or under the token itself when the version before
+	// wrote it, and that one is moved the first time it is seen live.
+	const sessionOf = async (token: string): Promise<SessionDocument | undefined> => {
+		const held = await read(doc(token));
+		if (held !== undefined) return held;
+		const old = await read(plain(token));
+		if (!live(old)) return old;
+		await move(token);
+		return read(doc(token));
 	};
 
 	const issue = async (user: string): Promise<string> => {
@@ -91,15 +142,16 @@ export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 		return token;
 	};
 
-	const revoke = async (token: string): Promise<boolean> => {
-		if (await store.head(doc(token)) === 0) return false;
-		const handle = await store.open(doc(token));
+	// End the session one document holds, whichever way it is named. True when it was active.
+	const end = async (name: string): Promise<boolean> => {
+		if (await store.head(name) === 0) return false;
+		const handle = await store.open(name);
 		const held = handle.root as SessionDocument;
 		// The sweep can remove the document between the head and the open, and the open then
 		// makes an empty one; a session with no user was never issued, and nothing is written.
 		if (held.user === undefined) {
 			await store.close(handle);
-			await store.remove(doc(token));
+			await store.remove(name);
 			return false;
 		}
 		const was = held.status === 'active';
@@ -116,15 +168,31 @@ export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 		return was;
 	};
 
+	// The plain document first: a move in flight copies what it says until the move removes it,
+	// and by then the hashed one is written and is ended here.
+	const revoke = async (token: string): Promise<boolean> => {
+		const wasPlain = await end(plain(token));
+		const was = await end(doc(token));
+		drop(hashToken(token));
+		return was || wasPlain;
+	};
+
 	// The `user` path is declared for every document, so the answer is filtered to this
-	// battery's own sessions; `revoke` says which of them were still active.
+	// battery's own sessions; `end` says which of them were still active. A stored name is a
+	// hash, or a token when the version before wrote it, and `except` is a token either way.
 	const revokeAll = async (user: string, except?: string): Promise<number> => {
+		const kept = except === undefined ? undefined : hashToken(except);
 		let ended = 0;
 		for (const { doc: name } of await store.find({ where: [{ field: 'user', op: 'eq', value: user }] })) {
 			if (!name.startsWith('session:')) continue;
-			const token = name.slice('session:'.length);
-			if (token === except) continue;
-			if (await revoke(token)) ended += 1;
+			const held = name.slice('session:'.length);
+			if (isToken(held)) {
+				if (hashToken(held) !== kept && await revoke(held)) ended += 1;
+				continue;
+			}
+			if (held === kept) continue;
+			if (await end(name)) ended += 1;
+			drop(held);
 		}
 		return ended;
 	};
@@ -137,9 +205,8 @@ export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 		const address = peer?.address;
 		for (const token of cookiesOf(request, cookie)) {
 			if (!isToken(token)) continue;
-			const session = await read(token);
-			if (session === undefined || session.status !== 'active') continue;
-			if (session.expires !== null && session.expires <= Date.now()) continue;
+			const session = await sessionOf(token);
+			if (!live(session)) continue;
 			return { context: { user: session.user, session: token, address } };
 		}
 		// A fresh object each time: the server hands the same reference to every hook and event
@@ -147,7 +214,7 @@ export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 		return { context: { user: null, session: null, address } };
 	};
 
-	const sweep = async (): Promise<number> => {
+	const removeEnded = async (): Promise<number> => {
 		const cutoff = Date.now() - keep * 86_400_000;
 		let removed = 0;
 		for (const { doc: name, fields } of await store.find({ where: [{ field: 'expires', op: 'lt', value: cutoff }] })) {
@@ -156,6 +223,17 @@ export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 			if (!name.startsWith('session:') || typeof fields.expires !== 'number' || fields.expires >= cutoff) continue;
 			await store.remove(name);
 			removed += 1;
+		}
+		return removed;
+	};
+
+	// Every session still under its token is moved to its hash, so one `sweepMs` after a
+	// process starts no stored name is a working token (design 324). Every document with a
+	// `user` is asked for, because nothing else finds a session whatever its end.
+	const sweep = async (): Promise<number> => {
+		const removed = await removeEnded();
+		for (const { doc: name } of await store.find({ where: [{ field: 'user', op: 'gte', value: '' }] })) {
+			if (name.startsWith('session:') && isToken(name.slice('session:'.length))) await move(name.slice('session:'.length));
 		}
 		return removed;
 	};
@@ -170,7 +248,9 @@ export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 			'Spread paths from @aweftjs/auth into the store\'s declare.',
 		);
 	}
-	await sweep();
+	// Not the whole sweep: during a deploy the version before may still be serving, and it
+	// finds a session only under its token, so nothing is moved until the timer's first run.
+	await removeEnded();
 	const timer = setInterval(() => { void sweep().catch(() => undefined); }, sweepMs);
 	timer.unref?.();
 
@@ -184,6 +264,24 @@ export default async ({ config, ...props }: ModuleProps): Promise<Session> => {
 		// The only moment a page can learn who it is comes after its socket opens, because
 		// identity is fixed at the handshake (design 185).
 		call: (_args, context) => ({ user: userOf(context) }),
+		connection: async ({ context, close }) => {
+			if (context.session === null) return undefined;
+			const held = { session: hashToken(context.session), close };
+			open.add(held);
+			// The session can end between the handshake that read it and this hook. Kept first and
+			// read second, so either the revoke finds the connection or this read finds the revoke.
+			// A read that throws ends the connection in the server, which is handed no ending to run.
+			const still = await (async () => live(await read(doc(context.session!)) ?? await read(plain(context.session!))))().catch((error: unknown) => {
+				open.delete(held);
+				throw error;
+			});
+			if (!still) {
+				open.delete(held);
+				close();
+				return undefined;
+			}
+			return () => { open.delete(held); };
+		},
 		sweep,
 		stop: async () => { clearInterval(timer); },
 		routes: {
