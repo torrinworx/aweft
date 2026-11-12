@@ -234,10 +234,13 @@ superseded it.
 | Who a page is | `auth/client` hands identity as a cell: `undefined`, `null`, or the id, asked over the socket the page opens anyway, and `auth/Session` gains the `call` that answers it. `enter` and `leave` reconnect, because identity is fixed per connection, and `state()` refuses an anonymous connection instead of waiting. `names` is a second cell, following the `roles` share, and `may` runs the server's check over it, for showing and hiding only | 185, 289 |
 | The security standard | ASVS 5.0 at level 2, the WCAG analogue: `docs/security/asvs.csv` gives every level 1 and 2 requirement an owner, a `stack` row names the check that proves it, and `npm run security` fails when the check does not exist | 270 |
 | Proof of a server | `securityChecks()` in `testing`, append-only, one named obligation each citing its requirements, run against a server the caller starts; the auth battery and the scaffold run it against themselves | 271 |
-| Before the gate | A count per address over a sliding window and the Origin rule, both in `createServer` with values, checked before `identify`; a call that throws anything but a refusal answers `failed` and is reported | 272 |
+| Before the gate | A count per address over a sliding window and the Origin rule, both in `createServer` with values, checked before `identify`; a second count per address, of calls and offer asks over every open connection, refused as `limit` with the connection left open; a call that throws anything but a refusal answers `failed` and is reported | 272, 325 |
 | The listener's bounds | A body and a frame at 1 MiB unless `maxPayload` says otherwise, `Infinity` for none; `forwarded` reads the proxy's own entry, or `x-real-ip` | 273 |
 | A drawing from a URL | Refused when it can run or reach out; the resolver throws `unsafe-body` naming the icon | 274 |
 | Sign-in bounded | Attempts per email and per address, hashes in flight, a password of eight to 256 characters of any composition, `refusePassword` for a list; a session that ended is swept after `keep` days; the gate hands the address on | 275 |
+| Whose link it is | `POST /api/verify` takes a verification link only for a request signed in as the link's account; anyone else hears 401 `sign-in` with the account's address and the link stays live; `confirm` from a module asks for no session | 322 |
+| A session's connections | `auth/Session` keeps each signed-in connection's `close` through the `connection` hook, and `revoke` and `revokeAll` call it, in the process that ran them | 323 |
+| What a token is stored as | A session or link document is named by the SHA-256 of its token; the cookie, the mail and the context carry the token; a name written before that is still read, and a session under one is moved | 324 |
 | Nosniff | Every answer from static and from the server carries `X-Content-Type-Options: nosniff` | 276 |
 
 ---
@@ -474,8 +477,11 @@ by naming it in its acts map. No battery picks a URL. Names are `auth/Roles` (de
 person holds names, dotted and covering what is under them, a table in configuration says
 which imply others, the gate reads `needs` off a module against them live, and the page reads
 the same document. The mail flows are a second source, `mail` (design 290), that names
-`notify/Send` in its `deps`: a verification link grants `verified`, a reset link sets the
-password and ends every session, and a change ends every other one.
+`notify/Send` in its `deps`: a verification link grants `verified`, to a request signed in as
+the account it was mailed to (design 322), a reset link sets the password and ends every
+session, and a change ends every other one. Ending a session closes the connections the
+process holds for it (design 323), and a session or a link is stored under the hash of its
+token (design 324).
 
 The static battery is built (design 249). `@aweftjs/static` is a source of one server module,
 `static/Files`, which answers every HTTP request no route matched with a file from a directory:
