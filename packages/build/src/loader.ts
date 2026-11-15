@@ -11,10 +11,10 @@
 //
 // Registered with `--import @aweftjs/build/loader`. Nothing imports it as a module.
 
-import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { register } from 'node:module';
+import { type LoadHookSync, type ResolveHookSync, createRequire, registerHooks } from 'node:module';
 
 import { codecError } from '@aweftjs/codec';
 
@@ -24,22 +24,10 @@ import { type TransformOptions, transform } from './transform.ts';
 /** The scheme a generated icon module answers under. Nothing on disk has it. */
 const SCHEME = 'aweft-icons:';
 
-interface LoadResult {
-	format?: string;
-	source?: string | Uint8Array;
-	shortCircuit?: boolean;
-	responseURL?: string;
-}
-
-type NextLoad = (url: string, context: unknown) => Promise<LoadResult>;
-
-interface ResolveResult {
-	url: string;
-	format?: string | null | undefined;
-	shortCircuit?: boolean;
-}
-
-type NextResolve = (specifier: string, context: unknown) => Promise<ResolveResult>;
+// The hooks are synchronous (design 327), so the icon generator is reached with `require`, which
+// loads an ES module synchronously and through these same hooks.
+const require = createRequire(import.meta.url);
+const icons = (): typeof import('@aweftjs/icons/node') => require('@aweftjs/icons/node');
 
 /**
  * Node's `resolve` hook: claim an icon import, leave everything else to the chain.
@@ -58,20 +46,16 @@ type NextResolve = (specifier: string, context: unknown) => Promise<ResolveResul
  * Example:
  *   import check from '@aweftjs/icons/lucide/check';
  */
-export const resolve = async (
-	specifier: string,
-	context: unknown,
-	nextResolve: NextResolve,
-): Promise<ResolveResult> => {
+export const resolve: ResolveHookSync = (specifier, context, nextResolve) => {
 	const request = iconRequest(specifier);
-	const parent = (context as { parentURL?: string }).parentURL;
+	const parent = context.parentURL;
 	// A file URL is what says where to resolve the set from. Without one there is nothing to
 	// resolve against, so the import goes to the chain and fails where it was written.
 	if (request === null || parent === undefined || !parent.startsWith('file:')) {
-		return await nextResolve(specifier, context);
+		return nextResolve(specifier, context);
 	}
 	const from = dirname(fileURLToPath(parent));
-	const { moduleFor } = await import('@aweftjs/icons/node');
+	const { moduleFor } = icons();
 	// A request the generator does not recognise is not an icon import at all, so it goes back to
 	// the chain and resolves the ordinary way. A set or a name it does recognise but cannot find
 	// is a refusal, and that one is `load`'s to raise, where the module has a name.
@@ -81,7 +65,7 @@ export const resolve = async (
 	} catch {
 		// Claimed, so `load` asks again and refuses there.
 	}
-	if (!known) return await nextResolve(specifier, context);
+	if (!known) return nextResolve(specifier, context);
 	const url = `${SCHEME}${encodeURIComponent(request)}?from=${encodeURIComponent(from)}`;
 	return { url, format: 'module', shortCircuit: true };
 };
@@ -132,7 +116,7 @@ const textOf = (): boolean => {
 // Read here rather than per file, so a process that sets it to something this cannot honour is
 // stopped as it starts rather than at whichever `.tsx` happens to be imported first, or never at
 // all in a run that compiles none. A worker takes its environment when it is made, so the value
-// cannot change under a running process anyway.
+// cannot change under a running process anyway, and one that runs `--import` reads its own.
 const DEFAULT_H = settingOf();
 const TEXT = textOf();
 
@@ -169,10 +153,10 @@ const positionOf = (fault: unknown, source: string): string => {
  * is `AWEFT_TEXT` set to anything but a yes or a no. With `AWEFT_TEXT=1` the text pass runs on
  * every file, as it does under `aweft({ text: true })`.
  */
-export const load = async (url: string, context: unknown, nextLoad: NextLoad): Promise<LoadResult> => {
+export const load: LoadHookSync = (url, context, nextLoad) => {
 	if (url.startsWith(SCHEME)) {
 		const [request, from] = url.slice(SCHEME.length).split('?from=');
-		const { moduleFor } = await import('@aweftjs/icons/node');
+		const { moduleFor } = icons();
 		const source = moduleFor(decodeURIComponent(request ?? ''), decodeURIComponent(from ?? ''));
 		// `resolve` above only made this URL after the same call answered a source, so a null here
 		// is not a request that was let through: it is one that stopped being one.
@@ -181,7 +165,7 @@ export const load = async (url: string, context: unknown, nextLoad: NextLoad): P
 	}
 	if (!url.startsWith('file:') || !url.endsWith('.tsx')) return nextLoad(url, context);
 	const filename = fileURLToPath(url);
-	const source = await readFile(filename, 'utf8');
+	const source = readFileSync(filename, 'utf8');
 	let code: string;
 	try {
 		// Written this way rather than `defaultH: named`, because the repo compiles with
@@ -199,6 +183,6 @@ export const load = async (url: string, context: unknown, nextLoad: NextLoad): P
 	return { format: 'module-typescript', source: code, shortCircuit: true };
 };
 
-// Registering from the module Node was told to `--import` is what makes one flag enough: the
-// hooks have to run on a worker thread, and `register` is what puts them there.
-register(import.meta.url);
+// Registering from the module Node was told to `--import` is what makes one flag enough. The hooks
+// run on the importing thread (design 327).
+registerHooks({ resolve, load });

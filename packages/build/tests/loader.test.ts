@@ -105,9 +105,9 @@ console.log(toHtml(document.body));
 /**
  * Run the driver in a process of its own, with the setting the case is about.
  *
- * A process of its own because the hook runs on a worker thread, and a worker takes its
- * environment when it is made: a variable written after the process started reaches nobody. That
- * is the mechanism, not a limitation of the test.
+ * A process of its own because the loader reads the setting once, when it is imported: a variable
+ * written after the process started reaches nobody. That is the mechanism, not a limitation of the
+ * test.
  */
 const drove = (setting?: string, script = 'driver.ts'): { out: string; error: string; status: number } => {
 	const dir = join(space.dir, `default-h-${setting === undefined ? 'unset' : setting.replace(/\W+/g, '-')}`);
@@ -128,6 +128,14 @@ const drove = (setting?: string, script = 'driver.ts'): { out: string; error: st
 		{ cwd: dir, env, encoding: 'utf8' });
 	return { out: run.stdout ?? '', error: run.stderr ?? '', status: run.status ?? -1 };
 };
+
+test('a process run under the loader writes nothing to stderr of its own', () => {
+	// Node 26 warns once for every `module.register` call (design 327), and a room forwarding its
+	// console counted that warning as a report.
+	const run = drove();
+	assert.equal(run.status, 0, run.error);
+	assert.equal(run.error, '');
+});
 
 test('with nothing set, a file that binds no h gets dom\'s, so theme is a literal attribute', () => {
 	const run = drove();
