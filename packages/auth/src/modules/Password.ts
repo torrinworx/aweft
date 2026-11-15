@@ -80,6 +80,10 @@ export default ({ imports, config, ...props }: ModuleProps): Password => {
 		if (refused.length > 0) return { refused };
 		await rewrite(user, password as string);
 		await Session.revokeAll(user, keep);
+		// A reset link mailed before this is one more way in with the old state of the account,
+		// so it ends with the password it was asked for (design 328). After the sessions, so a
+		// removal that fails leaves nobody signed in who should not be.
+		await held.drop(user);
 		return { ok: true };
 	};
 
@@ -104,6 +108,9 @@ export default ({ imports, config, ...props }: ModuleProps): Password => {
 		const { user } = link;
 		await rewrite(user, password as string);
 		await Session.revokeAll(user);
+		// Every other link mailed for this account ends here. The one just taken stays, marked,
+		// so opening it again is told it was used.
+		await held.drop(user, token);
 		return { user };
 	};
 

@@ -479,7 +479,8 @@ which imply others, the gate reads `needs` off a module against them live, and t
 the same document. The mail flows are a second source, `mail` (design 290), that names
 `notify/Send` in its `deps`: a verification link grants `verified`, to a request signed in as
 the account it was mailed to (design 322), a reset link sets the password and ends every
-session, and a change ends every other one. Ending a session closes the connections the
+session, and a change ends every other one; either ends the account's other reset links
+(design 328). Ending a session closes the connections the
 process holds for it (design 323), and a session or a link is stored under the hash of its
 token (design 324).
 

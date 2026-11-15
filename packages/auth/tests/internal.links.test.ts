@@ -76,3 +76,29 @@ test('two takes of one token in flight together hand the user to one of them', a
 	held.stop();
 	await store.stop();
 });
+
+test('drop removes a user\'s links of this prefix but the one excepted, and leaves other users, other prefixes and sessions', async () => {
+	const store = newStore();
+	const held = links(store, 'reset', 3_600_000, 3_600_000);
+	const other = links(store, 'verify', 3_600_000, 3_600_000);
+	const [a, b, c] = [await held.issue('u_1'), await held.issue('u_1'), await held.issue('u_1')];
+	const theirs = await held.issue('u_2');
+	const verify = await other.issue('u_1');
+	const session = await store.open('session:AAAAAAAAAAAAAAAAAAAAAA');
+	atomic(() => { Object.assign(session.root, { user: 'u_1', expires: Date.now() + 60_000, status: 'active', createdAt: 1 }); });
+	await store.settled(session);
+	await store.close(session);
+
+	assert.equal(await held.drop('u_1', b), 2);
+	assert.equal(await held.peek(a), undefined);
+	assert.equal(await held.peek(c), undefined);
+	assert.deepEqual(await held.peek(b), { user: 'u_1' }, 'the excepted link is left');
+	assert.deepEqual(await held.peek(theirs), { user: 'u_2' });
+	assert.deepEqual(await other.peek(verify), { user: 'u_1' }, 'a link of another prefix is not this one\'s');
+	assert.notEqual(await store.head('session:AAAAAAAAAAAAAAAAAAAAAA'), 0, 'nor is a session');
+	assert.equal(await held.drop('u_1'), 1, 'with no exception, all of them');
+	assert.equal(await held.drop('u_1', 'not a token'), 0);
+	held.stop();
+	other.stop();
+	await store.stop();
+});

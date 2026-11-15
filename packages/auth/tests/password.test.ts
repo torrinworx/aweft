@@ -216,3 +216,54 @@ test('url is required and the numbers are above zero, or the module is refused w
 	await session.stop();
 	await store.stop();
 });
+
+test('a reset ends every other reset link of the account, a change ends them all, and nobody else\'s link is touched (design 328)', async () => {
+	const store = newStore();
+	const b = await boot(store, { forgotPerEmail: 10, forgotPerAddress: 10 });
+	const ada = await b.signUp('ada@example.com');
+	await b.signUp('bob@example.com');
+	const mailed = async (email: string): Promise<string> => {
+		assert.deepEqual(await b.password.forgot(email), { ok: true });
+		return tokenIn(b.mail.sent.at(-1)!.body);
+	};
+	const first = await mailed('ada@example.com');
+	const older = await mailed('ada@example.com');
+	const bobs = await mailed('bob@example.com');
+
+	assert.deepEqual(await b.password.reset(first, 'battery staple'), { user: ada.user });
+	assert.deepEqual(await b.password.reset(older, 'thief was here'), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] }, 'the link mailed before the reset no longer opens');
+	assert.equal(await b.signsIn('ada@example.com', 'battery staple'), true, 'and the password is the one the reset set');
+	assert.deepEqual(await b.password.reset(first, 'battery staple'), { refused: [{ code: 'taken', message: 'this link has already been used' }] }, 'the one that was used still says so');
+
+	const waiting = await mailed('ada@example.com');
+	assert.deepEqual(await b.password.change(ada.user, 'wrong horse', 'another horse'), { refused: [{ code: 'password', message: 'the current password is wrong' }] });
+	assert.notEqual(await store.head(stored('reset', waiting)), 0, 'a refused change ends no link');
+	assert.deepEqual(await b.password.change(ada.user, 'battery staple', 'another horse'), { ok: true });
+	assert.deepEqual(await b.password.reset(waiting, 'thief was here'), { refused: [{ code: 'token', message: 'this link is not one that can be used' }] }, 'a change ends a link mailed before it');
+	assert.equal(await b.signsIn('ada@example.com', 'another horse'), true);
+
+	assert.notEqual(await store.head(stored('reset', bobs)), 0, 'another account\'s link is not touched');
+	assert.ok('user' in await b.password.reset(bobs, 'battery staple'));
+	await b.stop();
+	await store.stop();
+});
+
+test('a change whose link removal fails has already ended the other sessions (design 328)', async () => {
+	const store = newStore();
+	const b = await boot(store);
+	const ada = await b.signUp('ada@example.com');
+	const second = await b.session.issue(ada.user);
+	assert.deepEqual(await b.password.forgot('ada@example.com'), { ok: true });
+	const remove = store.remove.bind(store);
+	store.remove = async (name: string) => {
+		if (name.startsWith('reset:')) throw new Error('the store is down');
+		return remove(name);
+	};
+	await assert.rejects(b.password.change(ada.user, 'correct horse', 'battery staple', ada.token), /the store is down/);
+	assert.equal(await b.signsIn('ada@example.com', 'battery staple'), true, 'the password was written');
+	assert.equal(await b.live(second), false, 'so nobody stays signed in on the old one');
+	assert.equal(await b.live(ada.token), true);
+	store.remove = remove;
+	await b.stop();
+	await store.stop();
+});

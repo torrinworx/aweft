@@ -299,6 +299,10 @@ POST /api/password/reset  { "token": "...", "password": "..." }   anyone
   200 { "user": "<id>" }   400 token | taken | password
 ```
 
+A password that is set ends the account's other reset links (design 328): a change removes
+every unused one, and a reset removes every one but the link it was opened with. A link mailed
+before the password changed answers `token` afterwards.
+
 **A link is one use, and lives its lifetime.** A token is what a session token is, sixteen
 random bytes; the document `verify:<hash>` or `reset:<hash>`, named by the token's SHA-256,
 says who it is for and when it ends. Taking it marks the document `taken`, and the sweep removes it once it has expired,

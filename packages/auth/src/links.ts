@@ -31,6 +31,8 @@ export interface Links {
 	peek(token: unknown): Promise<Link | undefined>;
 	/** Take the link: the user it was for, and the document is marked taken. Undefined as `peek`. */
 	take(token: unknown): Promise<Link | undefined>;
+	/** Remove every link of a user but the one `except` names, taken or not (design 328). Returns how many. */
+	drop(user: string, except?: unknown): Promise<number>;
 	/** Remove every link past its end, taken or not. Returns how many. */
 	sweep(): Promise<number>;
 	/** Stop the sweep timer. */
@@ -113,6 +115,17 @@ export const links = (store: Store, prefix: string, lifetimeMs: number, sweepMs:
 			}
 			await store.close(handle);
 			return link;
+		},
+		drop: async (user, except) => {
+			const kept = await named(except);
+			let removed = 0;
+			for (const { doc: name } of await store.find({ where: [{ field: 'user', op: 'eq', value: user }] })) {
+				// A session holds a `user` too, so the answer is filtered to this prefix.
+				if (!name.startsWith(`${prefix}:`) || name === kept) continue;
+				await store.remove(name);
+				removed += 1;
+			}
+			return removed;
 		},
 		sweep,
 		stop: () => { clearInterval(timer); },
