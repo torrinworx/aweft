@@ -93,7 +93,7 @@ const sent = await imports.Send.send({
 	html: '<p>...</p>',            // the mail's html; the escaped title and body in two paragraphs by default
 	replyTo: 'visitor@example.com',
 	from: 'Acme News <news@acme.test>',   // this mail's sender in place of the configured one
-	headers: { 'List-Unsubscribe': '<https://acme.test/u?t=1>' },   // this mail's own headers; a value has no line break
+	headers: { 'List-Unsubscribe': '<https://acme.test/u?t=1>' },   // this mail's own headers, each value on one line
 	private: false,                // let the push carry the text; the configuration's private by default
 });
 // sent: { id, at, delivery: { inbox: { ok: true }, email: { ok: true, id }, push: { ok: true, devices: 2 } } }
