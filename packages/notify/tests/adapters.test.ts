@@ -20,6 +20,9 @@ test('resend posts the mail with the bearer key and answers the id', async () =>
 	assert.equal('reply_to' in (service.calls[1]!.body as object), false, 'no reply_to when none was given');
 	await send({ to: 'ada@example.com', subject: 'hi', text: 'plain', html: 'h', from: 'Weekly <weekly@example.com>' });
 	assert.equal((service.calls[2]!.body as { from: string }).from, 'Weekly <weekly@example.com>', 'a mail\'s own from replaces the configured one');
+	assert.equal('headers' in (service.calls[2]!.body as object), false, 'no headers when none were given');
+	await send({ to: 'ada@example.com', subject: 'hi', text: 'plain', html: 'h', headers: { 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } });
+	assert.deepEqual((service.calls[3]!.body as { headers: unknown }).headers, { 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' });
 	service.answer(200, 'not json at all');
 	assert.deepEqual(await send({ to: 'a@b.co', subject: 's', text: 't', html: 'h' }), { ok: true, id: null });
 	await service.stop();

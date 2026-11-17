@@ -93,6 +93,7 @@ const sent = await imports.Send.send({
 	html: '<p>...</p>',            // the mail's html; the escaped title and body in two paragraphs by default
 	replyTo: 'visitor@example.com',
 	from: 'Acme News <news@acme.test>',   // this mail's sender in place of the configured one
+	headers: { 'List-Unsubscribe': '<https://acme.test/u?t=1>' },   // this mail's own headers; a value has no line break
 	private: false,                // let the push carry the text; the configuration's private by default
 });
 // sent: { id, at, delivery: { inbox: { ok: true }, email: { ok: true, id }, push: { ok: true, devices: 2 } } }
@@ -187,7 +188,7 @@ export const config = {
 ```
 
 `email` is `{ resend: { key, from } }`, or your own `(mail) => Promise<Delivery>` taking
-`{ to, subject, text, html, replyTo, from }` (`from` only when the send named one), or `null`, in which case the channel answers `{ ok:
+`{ to, subject, text, html, replyTo, from, headers }` (`from` and `headers` only when the send named them), or `null`, in which case the channel answers `{ ok:
 false }` naming the setting. `push` is `{ fcm: { account } }` with the service account key file
 as JSON or base64 on one line (base64 survives an environment file that eats backslashes; JSON
 does not), or your own `(data, endpoints) => Promise<PushOutcome[]>` answering one entry per

@@ -97,6 +97,25 @@ test('an application\'s own email function sees from only on a send that named o
 	await running.stop();
 });
 
+test('a send\'s own headers go out on that mail only', async () => {
+	const mails: Record<string, unknown>[] = [];
+	const running = await started({ gate: asUser(user), config: sendConfig({ email: async (mail: Record<string, unknown>) => { mails.push(mail); return { ok: true, id: null }; } }) });
+	const headers = { 'List-Unsubscribe': '<https://example.com/u?t=1>', 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' };
+	await running.send.send({ to: { email: 'owner@example.com' }, title: 'the issue', channels: ['email'], headers });
+	await running.send.send({ to: { email: 'owner@example.com' }, title: 'a reset link', channels: ['email'] });
+	assert.deepEqual(mails[0]!['headers'], headers);
+	assert.equal('headers' in mails[1]!, false);
+	await running.stop();
+});
+
+test('headers that could add a header of their own are refused', async () => {
+	const running = await started({ gate: asUser(user), config: sendConfig({ email: async () => ({ ok: true, id: null }) }) });
+	for (const headers of [['x'], { 'X-A': 'one\r\nBcc: someone@example.com' }, { 'X-A\nBcc': 'v' }, { 'X A': 'v' }, { 'X-A': 1 }]) {
+		await assert.rejects(running.send.send({ to: { email: 'owner@example.com' }, title: 't', channels: ['email'], headers: headers as never }), (error: unknown) => reasonOf(error) === 'invalid-notification', JSON.stringify(headers));
+	}
+	await running.stop();
+});
+
 test('a server with no store skips the inbox and push and refuses nothing, which is a contact form\'s shape', async () => {
 	const resend = await fake();
 	const running = await started({

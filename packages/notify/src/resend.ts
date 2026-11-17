@@ -13,6 +13,8 @@ export interface Mail {
 	readonly replyTo?: string | undefined;
 	/** The sender for this one mail, in place of the configured one. */
 	readonly from?: string | undefined;
+	/** Headers for this one mail, such as List-Unsubscribe (design 329). */
+	readonly headers?: Readonly<Record<string, string>> | undefined;
 }
 
 /** A sender: the built-in Resend one, or the application's own function in the configuration. */
@@ -57,6 +59,7 @@ export const resend = (settings: ResendSettings, timeoutMs: number): Sender => a
 				text: mail.text,
 				html: mail.html,
 				...(mail.replyTo === undefined ? {} : { reply_to: mail.replyTo }),
+				...(mail.headers === undefined ? {} : { headers: mail.headers }),
 			}),
 			signal: AbortSignal.timeout(timeoutMs),
 		});
