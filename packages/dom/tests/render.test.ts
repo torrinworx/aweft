@@ -111,6 +111,18 @@ test('hydrate sets properties and listeners, and splits a server text that seria
 	assert.equal(label.textContent, 'ab');
 });
 
+test('hydrate pairs an array child in its place among static siblings', async () => {
+	const App = () => h('p', {}, h('span', {}, '1 point'), [h('span', {}, 'by'), h('a', {}, 'ada')], h('span', {}, '|'));
+	const markup = await render(h(App));
+	const { document } = recordingDocument();
+	document.body.innerHTML = markup;
+	const by = (document.body as LightElement).children[0]!.children[1]!;
+	const stop = hydrate(document.body, h(App));
+	assert.equal(toHtml(document.body), `<body>${markup}</body>`, 'nothing in the tree changed');
+	assert.equal((document.body as LightElement).children[0]!.children[1], by, 'the array\'s first item is the server node');
+	stop();
+});
+
 test('hydrate refuses a structural mismatch and heals an attribute or text difference loudly', async () => {
 	// The server renders the same maker the client hydrates, so both sides bracket the same
 	// region (design 157).

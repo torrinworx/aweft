@@ -304,7 +304,12 @@ const nodeHandle = (ctx: Ctx, fresh: NodeLike, signals: Signal[] | null, before:
 		for (const signal of children) {
 			const scope = server === null ? null : (ctx.root.hydration?.scopeOf(signal.parent) ?? null);
 			const inner: Ctx = { root: ctx.root, elem: signal.parent, scope, context: ctx.context, owner: ctx.owner };
-			signal.handle = mountItem(inner, signal.item, beforeOf(signal));
+			// A plain iterable has no markers of its own, so with a static sibling after it it is
+			// bracketed here: without them a hydration pairs that sibling with its items.
+			const item = signal.item;
+			signal.handle = signal.staticNext !== null && isIterable(item) && !isDocumentArray(item) && !isMutableArray(item)
+				? bracketed(inner, beforeOf(signal), (b, scope) => mountItem({ ...inner, scope }, item, b))
+				: mountItem(inner, item, beforeOf(signal));
 		}
 	}
 
