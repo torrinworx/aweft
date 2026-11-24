@@ -108,6 +108,36 @@ test('a send\'s own headers go out on that mail only', async () => {
 	await running.stop();
 });
 
+test('a send\'s own text is the mail\'s text part, whole, and the body is still the notice', async () => {
+	const mails: Record<string, unknown>[] = [];
+	const store = await storeWith('ada@example.com');
+	const running = await started({ store, gate: asUser(user), config: sendConfig({ email: async (mail: Record<string, unknown>) => { mails.push(mail); return { ok: true, id: null }; } }) });
+	// A newsletter's text part: far past the 2000 a notice's body is cut at, and it ends with its footer.
+	const letter = `${'A line of the issue.\n'.repeat(400)}Unsubscribe: https://example.com/u?t=1`;
+	await running.send.send({ to: { user }, title: 'the issue', body: 'This week in the region.', channels: ['inbox', 'email'], html: '<p>the issue</p>', text: letter });
+	assert.equal(mails[0]!['text'], letter);
+	assert.equal(mails[0]!['html'], '<p>the issue</p>');
+	assert.equal((await itemsOf(store))[0]!['body'], 'This week in the region.', 'the inbox keeps the body, not the letter');
+
+	// With no text the mail's text part is the body, cut as the body is.
+	await running.send.send({ to: { email: 'owner@example.com' }, title: 'a long notice', body: letter, channels: ['email'] });
+	assert.equal(mails[1]!['text'], letter.slice(0, 2000));
+	await assert.rejects(running.send.send({ to: { email: 'owner@example.com' }, title: 't', channels: ['email'], text: 5 as never }), (error: unknown) => reasonOf(error) === 'invalid-notification');
+	assert.equal(mails.length, 2);
+	await running.stop();
+});
+
+test('the Resend adapter posts a send\'s own text whole', async () => {
+	const resend = await fake();
+	resend.answer(200, { id: 'msg-1' });
+	const running = await started({ gate: asUser(user), config: sendConfig({ email: { resend: { key: 'k', from: 'Site <site@example.com>', endpoint: resend.url } } }) });
+	const letter = `${'A line of the issue.\n'.repeat(400)}Unsubscribe: https://example.com/u?t=1`;
+	await running.send.send({ to: { email: 'owner@example.com' }, title: 'the issue', body: 'This week.', channels: ['email'], text: letter });
+	assert.equal((resend.calls[0]!.body as { text: string }).text, letter);
+	await running.stop();
+	await resend.stop();
+});
+
 test('headers that could add a header of their own are refused', async () => {
 	const running = await started({ gate: asUser(user), config: sendConfig({ email: async () => ({ ok: true, id: null }) }) });
 	for (const headers of [['x'], { 'X-A': 'one\r\nBcc: someone@example.com' }, { 'X-A\nBcc': 'v' }, { 'X A': 'v' }, { 'X-A': 1 }]) {

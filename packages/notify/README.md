@@ -91,6 +91,7 @@ const sent = await imports.Send.send({
 	url: '/settings/backups',      // kept as given; whether it is a safe link is the page's call
 	tag: 'backups',                // a label of yours: the inbox shows it, a push groups on it
 	html: '<p>...</p>',            // the mail's html; the escaped title and body in two paragraphs by default
+	text: 'A long letter ...',     // the mail's text part, sent whole; the body by default
 	replyTo: 'visitor@example.com',
 	from: 'Acme News <news@acme.test>',   // this mail's sender in place of the configured one
 	headers: { 'List-Unsubscribe': '<https://acme.test/u?t=1>' },   // this mail's own headers, each value on one line

@@ -14,7 +14,7 @@ type PushSetting: type PushSetting = { readonly fcm: { readonly account: string;
 type Pusher: type Pusher = (data: PushData, endpoints: readonly string[]) => Promise<PushOutcome[]>;
 type Recipient: type Recipient = { readonly user: string; } | { readonly email: string; };
 type Send: interface Send { send(options: SendOptions): Promise<Sent>; }
-type SendOptions: interface SendOptions { readonly to: Recipient; readonly title: string; readonly body?: string | undefined; readonly level?: Level | undefined; readonly channels?: readonly Channel[] | undefined; readonly url?: string | null | undefined; readonly tag?: string | null | undefined; readonly html?: string | undefined; readonly replyTo?: string | undefined; readonly from?: string | undefined; readonly headers?: Readonly<Record<string, string>> | undefined; readonly private?: boolean | undefined; }
+type SendOptions: interface SendOptions { readonly to: Recipient; readonly title: string; readonly body?: string | undefined; readonly level?: Level | undefined; readonly channels?: readonly Channel[] | undefined; readonly url?: string | null | undefined; readonly tag?: string | null | undefined; readonly html?: string | undefined; readonly text?: string | undefined; readonly replyTo?: string | undefined; readonly from?: string | undefined; readonly headers?: Readonly<Record<string, string>> | undefined; readonly private?: boolean | undefined; }
 type Sender: type Sender = (mail: Mail) => Promise<Delivery>;
 type Sent: interface Sent { readonly id: string; readonly at: number; readonly delivery: DeliveryRecord; }
 value notify: Source
