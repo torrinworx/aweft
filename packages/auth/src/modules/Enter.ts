@@ -36,6 +36,8 @@ export interface SignUp {
 	readonly email: string;
 	/** Every field of the request body but `email` and `password`: an invite token, a role picked on the form. */
 	readonly extra: Readonly<Record<string, unknown>>;
+	/** True for a sign-up through `enterConfirmed`, whose address another party vouched for; false at the route (design 330). */
+	readonly confirmed: boolean;
 	/** What the gate identified for the request: `user` is null, `address` is the peer's. */
 	readonly context: AuthContext;
 	/** The store the battery writes the user into, for a rule that reads a document of yours. */
@@ -79,7 +81,7 @@ export interface Enter {
 	 * Sign in, or sign up, the holder of an address another party has confirmed, such as Google
 	 * (design 318). A known address is signed in and marked confirmed: `emailVerified` is written
 	 * and `verified` granted. If nobody had confirmed it before, its password is emptied and its
-	 * sessions end first, since a stranger may have made the account (design 321). A new one is asked of `refuseSignUp` with an empty `extra`, then made
+	 * sessions end first, since a stranger may have made the account (design 321). A new one is asked of `refuseSignUp` with an empty `extra` and `confirmed` true, then made
 	 * with no password, `emailVerified` true and `verified` granted, and the `afterSignUp`
 	 * listeners hear of it. No password is asked: call it only with an address the other party
 	 * vouched for.
@@ -159,7 +161,7 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 		const found = await findUser(store, email);
 		if (found === undefined) {
 			if (refuseSignUp !== null) {
-				const refusal = await refuseSignUp({ email: normalEmail(email), extra: {}, context: by.context, store });
+				const refusal = await refuseSignUp({ email: normalEmail(email), extra: {}, confirmed: true, context: by.context, store });
 				if (refusal !== undefined) return { refused: [refusal] };
 			}
 			const id = idToText(createId());
@@ -291,7 +293,7 @@ export default ({ imports, config, ...props }: ModuleProps): Enter => {
 				// is no door to close. After the password rule, so a refused password spends no invite.
 				if (refuseSignUp !== null && await findUser(store, key) === undefined) {
 					const extra = Object.fromEntries(Object.entries(body ?? {}).filter(([name]) => name !== 'email' && name !== 'password'));
-					const refusal = await refuseSignUp({ email: key, extra, context, store });
+					const refusal = await refuseSignUp({ email: key, extra, confirmed: false, context, store });
 					if (refusal !== undefined) return json(403, { reasons: [refusal] });
 				}
 				if (hashing >= hashesInFlight) {

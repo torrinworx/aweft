@@ -288,6 +288,7 @@ test('the application\'s sign-up rule closes the door to a Google sign-up, and a
 	assert.equal(asked.length, 1);
 	assert.equal(asked[0]!.email, 'ada@example.com');
 	assert.deepEqual(asked[0]!.extra, {});
+	assert.equal(asked[0]!.confirmed, true, 'Google vouched for the address, so the rule can tell it from a password sign-up (design 330)');
 	assert.equal(asked[0]!.context, CONTEXT);
 	assert.equal(await enter.enterConfirmed('bad', { context: CONTEXT }).then((one) => 'refused' in one && one.refused[0]!.code), 'email');
 	await store.stop();

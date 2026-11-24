@@ -221,8 +221,9 @@ lookup goes; the battery ships none. Any composition is taken: eight spaces are 
 **Who may sign up is yours** (design 291). `refuseSignUp` is asked once per sign-up, after the
 counts and the password rule and before anything is hashed, with `email` (normalised), `extra`
 (every field of the body but `email` and `password`: an invite token, a role picked on the
-form), `context` (what the gate identified: `user` null, the peer's `address`) and `store`, so
-a rule that reads a document of yours needs no second way to reach it. A refusal it answers is
+form), `confirmed` (false here; true for a sign-up through Google, design 330), `context` (what
+the gate identified: `user` null, the peer's `address`) and `store`, so a rule that reads a
+document of yours needs no second way to reach it. A refusal it answers is
 the route's 403 with that one reason, and nothing is made. A sign-in never asks it, and neither
 does `enter()` called from a module of yours: the rule is the door's, not the function's. A rule
 that throws is the route's 500. The battery ships none; an application that keeps invites in
@@ -398,7 +399,7 @@ module of yours can call for any provider that confirms an address. A known addr
 its account, which is marked confirmed: `emailVerified` is written and `verified` granted. An
 account nobody had confirmed before loses its password and its sessions first: signing up with a
 password proves nothing about the address, so a stranger may have made it (design 321). A new
-one asks your `refuseSignUp` with an empty `extra`, then makes an account with no password,
+one asks your `refuseSignUp` with an empty `extra` and `confirmed` true, then makes an account with no password,
 `emailVerified` true, `verified` granted and the name Google gave, and every `afterSignUp`
 listener hears it, so `atSignUp` finds it already verified and sends nothing. No password signs
 in to that account; the person sets one through forgot and reset if they want one.

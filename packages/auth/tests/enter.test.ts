@@ -242,6 +242,7 @@ test('refuseSignUp is asked of a sign-up only, after the password rule, with the
 	assert.equal(asked.length, 1);
 	assert.equal(asked[0]!.email, 'ada@example.com', 'the address as it will be stored');
 	assert.deepEqual(asked[0]!.extra, { invite: 'nope', position: 'student' }, 'every field but the two');
+	assert.equal(asked[0]!.confirmed, false, 'a sign-up at the route is not one another party vouched for (design 330)');
 	assert.equal(asked[0]!.context.address, '1.1.1.1');
 	assert.equal(asked[0]!.store, store);
 
