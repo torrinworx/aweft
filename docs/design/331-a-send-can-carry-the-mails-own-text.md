@@ -1,4 +1,4 @@
-# 330: A send can carry the mail's own text
+# 331: A send can carry the mail's own text
 
 Amends design 268 (the notify battery). Asked for by an application whose newsletter reached
 readers of the plain-text part cut off after 2000 characters, about a fifth of an issue, with no
