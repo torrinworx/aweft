@@ -21,7 +21,7 @@ import { Stage, StageContext, context, h, isText, mount, render, textOf } from '
 
 import { auth } from '../src/index.ts';
 import { authClient } from '../src/client.ts';
-import type { Auth } from '../src/client.ts';
+import type { Auth, Challenge } from '../src/client.ts';
 
 import { fakeListener, newStore, page, reasonOf, settle } from './helpers.ts';
 
@@ -600,4 +600,69 @@ test('a static render of the three acts finishes with no connection, and holds t
 		const html = await render(h(act.component, { stage: stageOf({}) }));
 		assert.match(html, expected, name);
 	}
+});
+
+test('auth/SignIn with a challenge draws it on the create-account step only, sends its fields with the sign-up, and resets it after a refusal (design 330)', async () => {
+	const sent: unknown[] = [];
+	const answer = { value: { refused: [{ code: 'human', message: 'the check did not pass' }] } as unknown };
+	let built = 0;
+	let resets = 0;
+	let fields: () => Promise<Record<string, unknown>> = async () => ({ answer: 'one' });
+	const session = extra({
+		'auth/Session.ts': {
+			default: () => ({
+				check: async (email: string) => email === 'ada@example.com',
+				enter: async (email: string, password: string, more?: unknown) => { sent.push([email, password, more]); return answer.value; },
+			}),
+		},
+	});
+	const challenge = (): Challenge => {
+		built += 1;
+		return { view: h('p', {}, 'prove you are a person'), fields: () => fields(), reset: () => { resets += 1; } };
+	};
+	const loader = createLoader({ sources: [extra({ 'auth/SignIn.ts': { config: { challenge } } }), session, authClient] });
+	const act = (await loader.load(['auth/SignIn']))['auth/SignIn'] as { component: () => unknown };
+
+	const document = createDocument();
+	const stop = mount(document.body as never, h(act.component, {}));
+	const root = document.body.firstChild;
+	assert.equal(built, 1, 'the challenge is asked for once, as the form is built');
+	assert.doesNotMatch(document.body.textContent ?? '', /prove you are a person/, 'not on the email step');
+
+	await continueWith(root, 'ada@example.com');
+	assert.doesNotMatch(document.body.textContent ?? '', /prove you are a person/, 'not on a sign-in');
+	(byName(root, 'password') as unknown as Record<string, unknown>)['value'] = PASSWORD;
+	fire(byName(root, 'password'), 'input');
+	answer.value = { user: 'u1', created: false };
+	fire(button(root, 'Sign in'), 'click');
+	await settle();
+	assert.deepEqual(sent, [['ada@example.com', PASSWORD, undefined]], 'a sign-in carries no challenge fields');
+
+	fire(button(root, 'Change email'), 'click');
+	await continueWith(root, 'grace@example.com');
+	assert.match(document.body.textContent ?? '', /prove you are a person/, 'the create-account step draws it');
+	(byName(root, 'password') as unknown as Record<string, unknown>)['value'] = PASSWORD;
+	fire(byName(root, 'password'), 'input');
+	answer.value = { refused: [{ code: 'human', message: 'the check did not pass' }] };
+	fire(button(root, 'Create account'), 'click');
+	await settle();
+	assert.deepEqual(sent[1], ['grace@example.com', PASSWORD, { answer: 'one' }], 'its fields go beside the address and the password');
+	assert.match(document.body.textContent ?? '', /the check did not pass/, 'the rule\'s refusal is on the form');
+	assert.equal(resets, 1, 'a refused sign-up resets the challenge, since its answer was spent');
+
+	fields = async () => { throw new Error('the check is still loading'); };
+	fire(button(root, 'Create account'), 'click');
+	await settle();
+	assert.equal(sent.length, 2, 'a throw from fields sends nothing');
+	assert.match(document.body.textContent ?? '', /the check is still loading/, 'and is shown on the form');
+
+	fields = async () => ({ answer: 'two' });
+	answer.value = { user: 'u2', created: true };
+	fire(button(root, 'Create account'), 'click');
+	await settle();
+	assert.deepEqual(sent[2], ['grace@example.com', PASSWORD, { answer: 'two' }]);
+	assert.equal(resets, 2, 'a success spends nothing more; only the failed attempts reset it');
+
+	stop();
+	await loader.unload('auth/SignIn');
 });

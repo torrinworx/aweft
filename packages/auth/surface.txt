@@ -11,6 +11,7 @@ value mail: Source
 value paths: Readonly<Record<string, readonly string[]>>
 ./client type Auth: interface Auth { readonly user: Derived<string | null | undefined>; readonly names: Derived<readonly string[] | undefined>; may(name: string): boolean; enter(email: string, password: string, extra?: Readonly<Record<string, unknown>>): Promise<Entered>; leave(): Promise<void>; state<T extends object>(): Handle<T>; check(email: string): Promise<boolean>; verify(token?: string): Promise<Outcome>; change(current: string, password: string): Promise<Outcome>; forgot(email: string): Promise<Outcome>; reset(token: string, password: string): Promise<Outcome>; stop(): void; }
 ./client type AuthOptions: interface AuthOptions { readonly origin?: string | undefined; readonly fetch?: Fetcher | undefined; }
+./client type Challenge: interface Challenge { readonly view: unknown; fields(): Readonly<Record<string, unknown>> | Promise<Readonly<Record<string, unknown>>>; reset?(): void; }
 ./client type Entered: type Entered = { readonly user: string; readonly created: boolean; } | { readonly refused: readonly Refusal[]; };
 ./client type FetchInit: interface FetchInit { method: string; headers: Record<string, string>; body?: string; credentials: 'same-origin'; }
 ./client type FetchResponse: interface FetchResponse { status: number; ok: boolean; json(): Promise<unknown>; }

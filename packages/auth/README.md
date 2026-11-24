@@ -230,6 +230,31 @@ that throws is the route's 500. The battery ships none; an application that keep
 its store writes the lookup here, and marks the invite used in the same function, since a
 password the rule before it refused never reaches it.
 
+**A human check on new accounts** is a `challenge` on the page's `auth/SignIn` and a rule here
+(design 330). The form calls `challenge()` once as it is built and draws its `view` on the
+create-account step only. Its `fields()` go to `enter` as `extra`, and its `reset()` is called
+after an attempt that made no account. The rule checks the answer and lets a `confirmed` sign-up
+through, since Google sent no form. The battery names no provider and loads no script; which
+check, and what happens when its provider cannot be reached, are yours.
+
+```ts
+// page/modules/auth/SignIn.ts
+export const config = {
+	google: true,
+	challenge: (): Challenge => {
+		const answer = mutable('');
+		return { view: h(Puzzle, { answer }), fields: () => ({ puzzle: answer.get() }), reset: () => answer.set('') };
+	},
+};
+
+// modules/auth/Enter.ts
+export const config = {
+	refuseSignUp: async ({ extra, confirmed }) => confirmed || await solved(extra.puzzle)
+		? undefined
+		: { code: 'human', message: 'solve the puzzle to create an account' },
+};
+```
+
 ```ts
 // modules/auth/Enter.ts: sign-up by invitation
 export const config = {
@@ -508,7 +533,7 @@ import { authClient } from '@aweftjs/auth/client';
 | module | what it is |
 |---|---|
 | `auth/Session` | `createAuth` over the `client` the stage handed the loader. Its instance is the `Auth` above, so any module of yours that needs to know who the page is names it in `deps` |
-| `auth/SignIn` | an act module: the sign-in and sign-up form, in one, because `enter` does both. It asks for the email, then says whether it signs in ("Welcome back") or creates an account, with the button to match. Handed an `email` prop it opens on the password step with that address. `google: true` in its config adds Continue with Google |
+| `auth/SignIn` | an act module: the sign-in and sign-up form, in one, because `enter` does both. It asks for the email, then says whether it signs in ("Welcome back") or creates an account, with the button to match. Handed an `email` prop it opens on the password step with that address. `google: true` in its config adds Continue with Google, and `challenge` adds a check of yours to the create-account step (design 330) |
 | `auth/Verify` | an act module: with a `token` in the act's parameters or the URL's query it takes the link as it mounts and says what happened, and when the link is refused `sign-in` it shows `auth/SignIn` with the address and takes the link again once someone has signed in; without a token it offers a signed-in person the mail. It names `auth/SignIn` in `deps` |
 | `auth/Reset` | an act module: without a `token` the forgot form, with one the new-password form |
 

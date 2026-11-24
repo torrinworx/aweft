@@ -1,7 +1,8 @@
 // auth/SignIn: one form for signing in and signing up, because `enter` does both (design 245). It
 // asks for the email first and says which of the two will happen before it asks for a password
 // (design 318), and with `google` on it offers Google, with its mark, above the email. Once the
-// person has picked email, Google steps aside.
+// person has picked email, Google steps aside. A `challenge` puts the application's own human check
+// on the create-account step and sends its fields with the sign-up (design 330).
 //
 // It decides nothing an application would want back: no URL of its own, no redirect, and no
 // opinion about who may see what. Where to go afterwards is the application's.
@@ -13,7 +14,17 @@ import type { Auth } from '../auth-client.ts';
 
 export const deps = ['auth/Session'];
 
-export const defaults = { google: false };
+export const defaults = { google: false, challenge: null };
+
+/** What `challenge` answers: a check of the application's own on the create-account step (design 330). */
+export interface Challenge {
+	/** Drawn on the create-account step only, above the Create account button. A component call (`h(Box, {})`) is built again each time the step shows. */
+	readonly view: unknown;
+	/** The fields sent beside the address and the password, which `refuseSignUp` reads as `extra`. */
+	fields(): Readonly<Record<string, unknown>> | Promise<Readonly<Record<string, unknown>>>;
+	/** Called after a create-account attempt that made no account, since an answer is usually good for one try. */
+	reset?(): void;
+}
 
 /** What a refusal from `enter` carries: one entry per problem, each naming the field it is about. */
 interface Reason {
@@ -72,6 +83,7 @@ export default ({ imports, config }: { imports: Readonly<Record<string, unknown>
 } => {
 	const session = imports['Session'] as Auth;
 	const google = config['google'] === true;
+	const challengeOf = config['challenge'] as (() => Challenge) | null;
 
 	const component = (props: SignInProps): unknown => {
 		const step = mutable<Step>(props.email === undefined ? 'email' : 'known');
@@ -82,6 +94,7 @@ export default ({ imports, config }: { imports: Readonly<Record<string, unknown>
 		const problem = mutable<unknown>('');
 		const busy = mutable(false);
 		const known = step.map((held) => held === 'known');
+		const challenge = challengeOf === null ? null : challengeOf();
 
 		const page = where();
 		if (page !== undefined) {
@@ -115,7 +128,15 @@ export default ({ imports, config }: { imports: Readonly<Record<string, unknown>
 		});
 
 		const enter = (): Promise<void> => attempt(async () => {
-			const outcome = await session.enter(email.get(), password.get());
+			const signUp = challenge !== null && step.get() === 'new';
+			let outcome;
+			try {
+				outcome = await session.enter(email.get(), password.get(), signUp ? await challenge.fields() : undefined);
+			} catch (error) {
+				if (signUp) challenge.reset?.();
+				throw error;
+			}
+			if (signUp && 'refused' in outcome) challenge.reset?.();
 			if (!('refused' in outcome)) {
 				// This act is standing in for the one the URL asked for, so the thing to do once
 				// the reason has stopped holding is build that act again. The battery still picks
@@ -192,6 +213,7 @@ export default ({ imports, config }: { imports: Readonly<Record<string, unknown>
 							name="password"
 							autocomplete={known.map((held) => (held ? 'current-password' : 'new-password'))}
 						/>
+						{challenge === null ? null : <Shown value={known} invert>{challenge.view}</Shown>}
 						<Button label={known.map((held) => (held ? text('Sign in') : text('Create account')))} loading={busy} disabled={busy} onClick={enter} />
 					</mark.else>
 				</Shown>

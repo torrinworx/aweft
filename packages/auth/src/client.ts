@@ -6,6 +6,7 @@ import type { Source } from '@aweftjs/modules';
 
 export { createAuth } from './auth-client.ts';
 export type { Auth, AuthOptions, Entered, FetchInit, FetchResponse, Fetcher, Outcome } from './auth-client.ts';
+export type { Challenge } from './client-modules/SignIn.tsx';
 
 /**
  * The battery's page modules, for a stage's `sources`.
