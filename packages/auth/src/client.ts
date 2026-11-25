@@ -7,6 +7,7 @@ import type { Source } from '@aweftjs/modules';
 export { createAuth } from './auth-client.ts';
 export type { Auth, AuthOptions, Entered, FetchInit, FetchResponse, Fetcher, Outcome } from './auth-client.ts';
 export type { Challenge } from './client-modules/SignIn.tsx';
+export { googleMark } from './google-mark.ts';
 
 /**
  * The battery's page modules, for a stage's `sources`.

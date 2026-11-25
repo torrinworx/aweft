@@ -19,4 +19,5 @@ value paths: Readonly<Record<string, readonly string[]>>
 ./client type Outcome: type Outcome = { readonly ok: true; } | { readonly refused: Refusals; };
 ./client value authClient: Source
 ./client value createAuth: (client: Client, options?: AuthOptions) => Auth
+./client value googleMark: IconData
 ./text.json data ./text.json

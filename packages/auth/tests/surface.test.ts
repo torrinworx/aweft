@@ -7,8 +7,8 @@ import assert from 'node:assert/strict';
 import * as client from '../src/client.ts';
 import * as auth from '../src/index.ts';
 
-test('the client subpath hands out the function and the source, and nothing else', () => {
-	assert.deepEqual(Object.keys(client).sort(), ['authClient', 'createAuth']);
+test('the client subpath hands out the function, the source and Google\'s mark, and nothing else', () => {
+	assert.deepEqual(Object.keys(client).sort(), ['authClient', 'createAuth', 'googleMark']);
 });
 
 test('the entry hands out the three sources, the paths and the check, and nothing else', () => {
