@@ -699,6 +699,53 @@ test('a call with a body says it is JSON and one without sends no content type, 
 	await stop();
 });
 
+test('after a drop the next socket shares the roles again, and a grant still reaches the page', async () => {
+	const { seams, roles, stop } = await running();
+	const { client, auth } = connect(seams);
+	const ada = await auth.enter('ada@example.com', PASSWORD) as { user: string };
+	await settle();
+	assert.deepEqual(auth.names.get(), []);
+
+	// A phone that slept: the socket dies under a page that is still signed in.
+	seams.sockets[seams.sockets.length - 1]!.close();
+	await settle();
+	client.reconnect();
+	await settle();
+	await roles.grant(ada.user, 'admin');
+	await settle();
+	assert.deepEqual(auth.names.get(), ['admin'], 'the share on the new socket is live');
+
+	auth.stop();
+	client.close();
+	await stop();
+});
+
+test('a socket that comes back as another person follows that person\'s roles', async () => {
+	const { seams, roles, stop } = await running();
+	const { client, auth } = connect(seams);
+	await auth.enter('ada@example.com', PASSWORD);
+	await settle();
+
+	// Another tab signs in as Grace, so the next socket this page opens is hers.
+	const signUp = await seams.fetch(`${ORIGIN}/api/session`, {
+		method: 'POST', headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ email: 'grace@example.com', password: PASSWORD }), credentials: 'same-origin',
+	});
+	const grace = await signUp.json() as { user: string };
+	seams.sockets[seams.sockets.length - 1]!.close();
+	await settle();
+	client.reconnect();
+	await settle();
+	assert.equal(auth.user.get(), grace.user);
+	await roles.grant(grace.user, 'admin');
+	await settle();
+	assert.deepEqual(auth.names.get(), ['admin'], 'her share is live');
+
+	auth.stop();
+	client.close();
+	await stop();
+});
+
 test('a roles module answering no table is held as an empty one, so may reads the names alone', async () => {
 	const { createArray, createObject } = await import('@aweftjs/core');
 	const store = newStore();
