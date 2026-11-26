@@ -3,7 +3,7 @@
 import { codecError } from '@aweftjs/codec';
 import { atomic, createArray } from '@aweftjs/core';
 import type { ModuleProps } from '@aweftjs/modules';
-import type { Connection } from '@aweftjs/server';
+import type { Connection, Offer } from '@aweftjs/server';
 
 import { type AuthContext, userOf } from '../context.ts';
 import { type Implies, holds, isName } from '../names.ts';
@@ -35,6 +35,8 @@ export interface Roles {
 	/** The table, for a page that runs the same check. */
 	call(args: unknown, context: unknown): { implies: Implies };
 	connection(connection: Connection<AuthContext>): Promise<() => Promise<void>>;
+	/** The `roles` topic for every share after the first on a socket. */
+	offer(name: string, context: unknown): Promise<Offer | undefined>;
 }
 
 const refuse = (detail: string, fix: string): Error => codecError('invalid-config', `auth/Roles was given ${detail}`, fix);
@@ -166,6 +168,15 @@ export default async ({ config, ...props }: ModuleProps): Promise<Roles> => {
 			const handle = await store.open(doc(user));
 			link.share('roles', handle.root, READ_ONLY);
 			return async () => { await store.close(handle); };
+		},
+		// The share above answers one ask per socket, and a page that reconnects asks twice: the
+		// client shares its old handle again on the new socket, then the auth client stops it and
+		// shares a fresh one. Every ask after the first is answered here.
+		offer: async (name, context) => {
+			const user = userOf(context);
+			if (name !== 'roles' || user === null) return undefined;
+			const handle = await store.open(doc(user));
+			return { document: handle.root, ...READ_ONLY, fault: () => { void store.close(handle); } };
 		},
 	};
 };

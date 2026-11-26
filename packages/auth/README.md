@@ -47,7 +47,7 @@ naming `notify/Send`.
 |---|---|---|
 | `auth/Gate` | | `identify` reads the session cookie; `access` allows a module that declares `public: true` to anyone, one that declares `needs` to a signed-in user holding the name, and any other module only to a signed-in user |
 | `auth/Session` | yes | `issue(user)`, `revoke(token)`, `revokeAll(user, except?)`, `whoIs(request)`, `setCookie(token, request)`, a `call` answering `{ user }` for the asking connection, a `connection` hook that closes a session's sockets when it ends, and `DELETE /api/session` |
-| `auth/Roles` | | `may(user, name)`, `grant(user, ...names)`, `revoke(user, ...names)`, `names(user)`; shares `roles:<user>` read-only under the topic `roles`, and a `call` answering the `implies` table |
+| `auth/Roles` | | `may(user, name)`, `grant(user, ...names)`, `revoke(user, ...names)`, `names(user)`; shares `roles:<user>` read-only under the topic `roles` on each connection and offers it again to every later share of the topic (a page that reconnects shares it twice), and a `call` answering the `implies` table |
 | `auth/Enter` | yes | `enter(email, password)` signs in, or signs up when nobody has the email; `checkPassword(password)` answers the reasons the rules refuse one; `afterSignUp(listener)` hears each account it makes; `POST /api/session` does the first and sets the cookie |
 | `auth/Check` | yes | `exists(email)`, and a `call` answering `{ exists }` for `{ email }` |
 | `auth/State` | | shares `state:<user>` from the store on the connection, under the topic `state` |
